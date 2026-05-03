@@ -1,0 +1,85 @@
+export type LeadStatus =
+  | 'new'
+  | 'nurturing'
+  | 'warm'
+  | 'hot'
+  | 'process_started'
+  | 'process_completed'
+  | 'closed'
+  | 'lost'
+
+export type AgentSpecialty =
+  | 'hispanic'
+  | 'military'
+  | 'first_buyer'
+  | 'brazilian'
+
+export type LeadSourceType =
+  | 'lead_magnet'
+  | 'web_form'
+  | 'open_house'
+  | 'manual'
+  | 'ads'
+  | 'referral'
+
+export type Language = 'es' | 'en' | 'pt'
+
+export interface Tenant {
+  id: string
+  name: string
+  slug: string
+  logoUrl?: string
+  primaryColor: string
+}
+
+export interface Agent {
+  id: string
+  tenantId: string
+  name: string
+  email: string
+  phone?: string
+  language: Language
+  specialty: AgentSpecialty
+  avatarInitials: string
+  accentColor: string
+  active: boolean
+}
+
+export interface LeadSource {
+  id: string
+  tenantId: string
+  name: string
+  type: LeadSourceType
+}
+
+export interface Lead {
+  id: string
+  tenantId: string
+  agentId: string
+  sourceId: string
+  firstName: string
+  lastName: string
+  email: string
+  phone?: string
+  language: Language
+  status: LeadStatus
+  temperatureScore: number
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LeadEvent {
+  id: string
+  leadId: string
+  type: string
+  description: string
+  createdAt: string
+}
+
+export interface NavItem {
+  label: string
+  href: string
+  icon: string
+  badge?: number
+}

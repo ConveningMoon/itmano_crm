@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── ITMANO Design System ─── */
+:root {
+  /* Backgrounds */
+  --bg-base: #0B0C0E;
+  --bg-surface: #111215;
+  --bg-elevated: #16181C;
+  --bg-overlay: #1C1F24;
+
+  /* Text */
+  --text-primary: #E8E6E1;
+  --text-secondary: #A09D95;
+  --text-muted: #6B6860;
+
+  /* Accents */
+  --accent-gold: #C9A96E;
+  --accent-gold-dim: #A08445;
+  --accent-blue: #5B8EC9;
+  --accent-teal: #5AAFA0;
+  --accent-coral: #C97B6B;
+  --accent-pink: #B87BA3;
+  --accent-green: #6BA368;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-accent: rgba(201, 169, 110, 0.15);
+
+  /* Status colors */
+  --status-new: #5B8EC9;
+  --status-nurturing: #C9A96E;
+  --status-warm: #E07B3A;
+  --status-hot: #E04040;
+  --status-process-started: #9B72CF;
+  --status-process-completed: #6BA368;
+  --status-closed: #4A9B6B;
+  --status-lost: #C97B6B;
+
+  --radius: 8px;
+  --font-sans: 'Inter', system-ui, sans-serif;
+
+  /* shadcn base overrides */
+  --background: #0B0C0E;
+  --foreground: #E8E6E1;
+  --card: #111215;
+  --card-foreground: #E8E6E1;
+  --popover: #16181C;
+  --popover-foreground: #E8E6E1;
+  --primary: #C9A96E;
+  --primary-foreground: #0B0C0E;
+  --secondary: #16181C;
+  --secondary-foreground: #E8E6E1;
+  --muted: #16181C;
+  --muted-foreground: #6B6860;
+  --accent: #1C1F24;
+  --accent-foreground: #E8E6E1;
+  --destructive: #C97B6B;
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: #C9A96E;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* ITMANO custom colors for Tailwind utilities */
+  --color-bg-base: #0B0C0E;
+  --color-bg-surface: #111215;
+  --color-bg-elevated: #16181C;
+  --color-bg-overlay: #1C1F24;
+  --color-accent-gold: #C9A96E;
+  --color-accent-gold-dim: #A08445;
+  --color-accent-blue: #5B8EC9;
+  --color-accent-teal: #5AAFA0;
+  --color-accent-coral: #C97B6B;
+  --color-accent-pink: #B87BA3;
+  --color-accent-green: #6BA368;
+  --color-text-primary: #E8E6E1;
+  --color-text-secondary: #A09D95;
+  --color-text-muted: #6B6860;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
