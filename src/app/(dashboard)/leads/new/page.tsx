@@ -225,6 +225,34 @@ export default function NewLeadPage() {
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  function downloadTemplate() {
+    const headers = [
+      'firstName', 'lastName', 'email', 'phone',
+      'language', 'agentId', 'sourceType', 'lender', 'notes',
+    ]
+    const exampleRow = [
+      'María', 'González', 'maria@email.com', '(757) 555-0100',
+      'es', 'agent-adriana', 'manual', 'Navy Federal', 'Cliente interesada en Virginia Beach',
+    ]
+    const notes = [
+      '# INSTRUCCIONES:',
+      '# language: es | en | pt',
+      '# agentId: agent-adriana | agent-john | agent-melanie | agent-viviane',
+      '# sourceType: lead_magnet | web_form | open_house | manual | ads | referral',
+      '# lender: texto libre (opcional)',
+      '# Elimina estas líneas de comentario antes de importar',
+      '',
+    ]
+    const csv = [...notes, headers.join(','), exampleRow.join(',')].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'plantilla_leads_itmano.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (field in errors) {
@@ -693,7 +721,46 @@ export default function NewLeadPage() {
         )}
 
         {mode === 'import' && (
-          <div>{/* import view — added in Task 6 */}</div>
+          <div style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '16px',
+            overflow: 'hidden',
+            padding: '24px',
+          }}>
+
+            {/* PASO 1: Download template */}
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
+              Paso 1 — Descarga la plantilla
+            </p>
+            <button
+              onClick={downloadTemplate}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                color: 'var(--accent-gold)',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <Download size={14} />
+              Descargar plantilla CSV
+            </button>
+            <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              Columnas: firstName · lastName · email · phone · language · agentId · sourceType · lender · notes
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
+
+            {/* PASO 2: Upload zone — added in Task 8 */}
+
+          </div>
         )}
       </div>
     </>
