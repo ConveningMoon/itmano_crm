@@ -253,6 +253,84 @@ export default function NewLeadPage() {
     URL.revokeObjectURL(url)
   }
 
+  async function handleFileUpload(file: File) {
+    setImportStatus('parsing')
+    setImportError('')
+
+    const extension = file.name.split('.').pop()?.toLowerCase()
+
+    try {
+      let rows: Record<string, string>[] = []
+
+      if (extension === 'csv') {
+        await new Promise<void>((resolve, reject) => {
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            comments: '#',
+            complete: (results) => {
+              rows = results.data as Record<string, string>[]
+              resolve()
+            },
+            error: (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))),
+          })
+        })
+      } else if (extension === 'xlsx') {
+        const buffer = await file.arrayBuffer()
+        const workbook = XLSX.read(buffer, { type: 'array' })
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false })
+      } else {
+        throw new Error('Formato no soportado. Usa .csv o .xlsx')
+      }
+
+      if (rows.length === 0) {
+        throw new Error('El archivo está vacío o no tiene filas de datos')
+      }
+
+      if (rows.length > 500) {
+        throw new Error(`El archivo tiene ${rows.length} filas. El máximo permitido es 500`)
+      }
+
+      const validLanguages = ['es', 'en', 'pt']
+      const validAgentIds = ['agent-adriana', 'agent-john', 'agent-melanie', 'agent-viviane']
+      const validSourceTypes = ['lead_magnet', 'web_form', 'open_house', 'manual', 'ads', 'referral']
+
+      const mapped: ImportedLead[] = rows.map((row, i) => {
+        const errors: string[] = []
+
+        if (!row.firstName?.trim()) errors.push('firstName requerido')
+        if (!row.email?.trim()) errors.push('email requerido')
+        if (row.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) errors.push('email inválido')
+        if (row.language?.trim() && !validLanguages.includes(row.language.trim())) errors.push(`language debe ser: ${validLanguages.join(' | ')}`)
+        if (row.agentId?.trim() && !validAgentIds.includes(row.agentId.trim())) errors.push('agentId inválido')
+        if (row.sourceType?.trim() && !validSourceTypes.includes(row.sourceType.trim())) errors.push('sourceType inválido')
+
+        return {
+          firstName:     row.firstName?.trim()  || '',
+          lastName:      row.lastName?.trim()   || '',
+          email:         row.email?.trim()      || '',
+          phone:         row.phone?.trim()      || '',
+          language:      row.language?.trim()   || 'es',
+          agentId:       row.agentId?.trim()    || 'agent-adriana',
+          sourceType:    row.sourceType?.trim() || 'manual',
+          lender:        row.lender?.trim()     || '',
+          notes:         row.notes?.trim()      || '',
+          _rowIndex:     i + 1,
+          _hasError:     errors.length > 0,
+          _errorMessage: errors.join(', '),
+        }
+      })
+
+      setImportedLeads(mapped)
+      setImportStatus('preview')
+
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Error al procesar el archivo')
+      setImportStatus('error')
+    }
+  }
+
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (field in errors) {
