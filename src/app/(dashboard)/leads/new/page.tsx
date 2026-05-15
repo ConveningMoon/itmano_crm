@@ -138,6 +138,10 @@ const SPECIALTY_LABEL: Record<string, string> = {
 const LANG_FLAG: Record<string, string> = { es: '🇪🇸', en: '🇺🇸', pt: '🇧🇷' }
 const LANG_LABEL: Record<string, string> = { es: 'ES', en: 'EN', pt: 'PT' }
 
+const AGENT_DISPLAY_NAMES: Record<string, string> = Object.fromEntries(
+  MOCK_AGENTS.map(a => [a.id, a.name])
+)
+
 interface SuccessScreenProps {
   form: FormData
   onReset: () => void
@@ -337,13 +341,6 @@ export default function NewLeadPage() {
     setImportStatus('success')
   }
 
-  const agentNames: Record<string, string> = {
-    'agent-adriana': 'Adriana',
-    'agent-john': 'John',
-    'agent-melanie': 'Melanie',
-    'agent-viviane': 'Viviane',
-  }
-
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (field in errors) {
@@ -398,6 +395,9 @@ export default function NewLeadPage() {
 
   const selectedAgent = MOCK_AGENTS.find(a => a.id === form.agentId)
   const isSubmitDisabled = !form.firstName.trim() || !form.email.trim()
+
+  const validCount = importedLeads.filter(l => !l._hasError).length
+  const errorCount = importedLeads.filter(l => l._hasError).length
 
   if (submitted) return <SuccessScreen form={form} onReset={handleReset} />
 
@@ -940,7 +940,7 @@ export default function NewLeadPage() {
                     <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
                       {importedLeads.length} leads detectados
                     </span>
-                    {importedLeads.filter(l => l._hasError).length > 0 && (
+                    {errorCount > 0 && (
                       <span style={{
                         marginLeft: '10px',
                         fontSize: '12px',
@@ -949,7 +949,7 @@ export default function NewLeadPage() {
                         padding: '2px 8px',
                         borderRadius: '4px',
                       }}>
-                        ⚠ {importedLeads.filter(l => l._hasError).length} con errores
+                        ⚠ {errorCount} con errores
                       </span>
                     )}
                   </div>
@@ -965,9 +965,13 @@ export default function NewLeadPage() {
                 <div style={{ overflowY: 'auto', maxHeight: '320px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                     <thead>
-                      <tr style={{ background: 'var(--bg-elevated)', position: 'sticky', top: 0 }}>
+                      <tr style={{ background: 'var(--bg-elevated)' }}>
                         {['#', 'Nombre', 'Email', 'Teléfono', 'Agente', 'Idioma', 'Prestamista', 'Estado'].map(col => (
                           <th key={col} style={{
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 1,
+                            background: 'var(--bg-elevated)',
                             padding: '8px 10px',
                             textAlign: 'left',
                             fontSize: '11px',
@@ -996,7 +1000,7 @@ export default function NewLeadPage() {
                           <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ')}</td>
                           <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.email}</td>
                           <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.phone || '—'}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{agentNames[lead.agentId] || lead.agentId}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{AGENT_DISPLAY_NAMES[lead.agentId] || lead.agentId}</td>
                           <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.language.toUpperCase()}</td>
                           <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.lender || '—'}</td>
                           <td style={{ padding: '8px 10px' }}>
@@ -1014,13 +1018,13 @@ export default function NewLeadPage() {
                 {/* Preview footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {importedLeads.filter(l => !l._hasError).length} leads válidos serán importados
-                    {importedLeads.filter(l => l._hasError).length > 0 &&
-                      ` · ${importedLeads.filter(l => l._hasError).length} con errores serán omitidos`}
+                    {validCount} leads válidos serán importados
+                    {errorCount > 0 &&
+                      ` · ${errorCount} con errores serán omitidos`}
                   </p>
                   <button
                     onClick={handleConfirmImport}
-                    disabled={importedLeads.filter(l => !l._hasError).length === 0}
+                    disabled={validCount === 0}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1032,12 +1036,12 @@ export default function NewLeadPage() {
                       borderRadius: '8px',
                       fontSize: '13px',
                       fontWeight: 600,
-                      cursor: importedLeads.filter(l => !l._hasError).length === 0 ? 'not-allowed' : 'pointer',
-                      opacity: importedLeads.filter(l => !l._hasError).length === 0 ? 0.5 : 1,
+                      cursor: validCount === 0 ? 'not-allowed' : 'pointer',
+                      opacity: validCount === 0 ? 0.5 : 1,
                     }}
                   >
                     <CheckCircle2 size={14} />
-                    Importar {importedLeads.filter(l => !l._hasError).length} leads
+                    Importar {validCount} leads
                   </button>
                 </div>
               </>
@@ -1051,7 +1055,7 @@ export default function NewLeadPage() {
                   ¡Importación completada!
                 </h3>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
-                  {importedLeads.filter(l => !l._hasError).length} leads han sido añadidos al sistema.
+                  {validCount} leads han sido añadidos al sistema.
                 </p>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                   <button
