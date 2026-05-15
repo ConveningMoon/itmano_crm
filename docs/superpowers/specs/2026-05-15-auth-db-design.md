@@ -41,7 +41,9 @@ Creating a new `agent_owner` is a manual `super_admin` operation in Phase 2: cre
 
 ## Database Schema
 
-Six tables. All tables except `tenants` and `user_profiles` have `tenant_id text not null references tenants(id)` for RLS isolation. IDs for `tenants`, `agents`, `lead_sources`, and `leads` are `text` slugs. `lead_events` uses `uuid`.
+Seven tables. All tables except `tenants` and `user_profiles` have `tenant_id text not null references tenants(id)` for RLS isolation. IDs for `tenants`, `agents`, `lead_sources`, `leads`, and `lead_magnets` are `text` slugs. `lead_events` uses `uuid`.
+
+Stats on lead magnets (`totalDownloads`, `leadsGenerated`, etc.) are computed at query time from the `leads` table — not stored as columns.
 
 ```sql
 -- 1. tenants
@@ -105,7 +107,22 @@ create table leads (
   updated_at        timestamptz default now()
 );
 
--- 6. lead_events
+-- 6. lead_magnets
+create table lead_magnets (
+  id          text        primary key,
+  tenant_id   text        not null references tenants(id),
+  agent_id    text        not null references agents(id),
+  title       text        not null,
+  subtitle    text        not null,
+  language    text        not null check (language in ('es', 'en', 'pt')),
+  month_year  text        not null,
+  cover_emoji text        not null,
+  page_url    text        not null,  -- public URL of the funnel landing page
+  active      boolean     not null default true,
+  created_at  timestamptz default now()
+);
+
+-- 7. lead_events
 create table lead_events (
   id          uuid        primary key default gen_random_uuid(),
   lead_id     text        not null references leads(id) on delete cascade,
@@ -138,7 +155,7 @@ returns boolean language sql security definer stable as $$
 $$;
 ```
 
-### Policy Pattern (applied to `agents`, `lead_sources`, `leads`, `lead_events`)
+### Policy Pattern (applied to `agents`, `lead_sources`, `leads`, `lead_magnets`, `lead_events`)
 
 ```sql
 -- SELECT: super_admin sees all; agent_owner sees own tenant
