@@ -55,7 +55,7 @@ create table lead_sources (
 create table lead_magnets (
   id          text        primary key,
   tenant_id   text        not null references tenants(id),
-  agent_id    text        not null references agents(id),
+  agent_id    text        not null references agents(id) on delete cascade,
   title       text        not null,
   subtitle    text        not null,
   language    text        not null check (language in ('es', 'en', 'pt')),
@@ -69,8 +69,8 @@ create table lead_magnets (
 create table leads (
   id                text        primary key,
   tenant_id         text        not null references tenants(id),
-  agent_id          text        not null references agents(id),
-  source_id         text        not null references lead_sources(id),
+  agent_id          text        not null references agents(id) on delete cascade,
+  source_id         text        not null references lead_sources(id) on delete cascade,
   first_name        text        not null,
   last_name         text        not null,
   email             text        not null,
@@ -182,3 +182,30 @@ create policy "lead_events_update" on lead_events
 
 create policy "lead_events_delete" on lead_events
   for delete using (tenant_id = get_my_tenant_id());
+
+-- ─── Triggers ───────────────────────────────────────────────────────────────
+
+create or replace function update_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger leads_updated_at
+  before update on leads
+  for each row execute function update_updated_at();
+
+-- ─── Indexes ────────────────────────────────────────────────────────────────
+
+create index idx_agents_tenant_id on agents(tenant_id);
+create index idx_lead_sources_tenant_id on lead_sources(tenant_id);
+create index idx_lead_magnets_tenant_id on lead_magnets(tenant_id);
+create index idx_lead_magnets_agent_id on lead_magnets(agent_id);
+create index idx_leads_tenant_id on leads(tenant_id);
+create index idx_leads_agent_id on leads(agent_id);
+create index idx_leads_source_id on leads(source_id);
+create index idx_leads_status on leads(status);
+create index idx_lead_events_lead_id on lead_events(lead_id);
+create index idx_lead_events_tenant_id on lead_events(tenant_id);
