@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
 import { MOCK_AGENTS } from '@/lib/mockdata'
 import type { Language } from '@/lib/types'
 import {
@@ -9,6 +11,12 @@ import {
   CheckCircle2,
   Mail,
   Phone,
+  Building2,
+  Upload,
+  PenLine,
+  FileUp,
+  Download,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface FormData {
@@ -19,6 +27,7 @@ interface FormData {
   language: Language | ''
   agentId: string
   sourceType: string
+  lender: string
   referralName: string
   notes: string
 }
@@ -30,6 +39,23 @@ interface FormErrors {
   sourceType?: string
 }
 
+type ImportStatus = 'idle' | 'parsing' | 'preview' | 'success' | 'error'
+
+interface ImportedLead {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  language: string
+  agentId: string
+  sourceType: string
+  lender: string
+  notes: string
+  _rowIndex: number
+  _hasError: boolean
+  _errorMessage?: string
+}
+
 const INITIAL_FORM: FormData = {
   firstName: '',
   lastName: '',
@@ -38,6 +64,7 @@ const INITIAL_FORM: FormData = {
   language: '',
   agentId: '',
   sourceType: '',
+  lender: '',
   referralName: '',
   notes: '',
 }
