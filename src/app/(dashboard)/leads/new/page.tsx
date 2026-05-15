@@ -293,7 +293,7 @@ export default function NewLeadPage() {
       }
 
       const validLanguages = ['es', 'en', 'pt']
-      const validAgentIds = ['agent-adriana', 'agent-john', 'agent-melanie', 'agent-viviane']
+      const validAgentIds = MOCK_AGENTS.map(a => a.id)
       const validSourceTypes = ['lead_magnet', 'web_form', 'open_house', 'manual', 'ads', 'referral']
 
       const mapped: ImportedLead[] = rows.map((row, i) => {
