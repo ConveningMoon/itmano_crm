@@ -1,26 +1,12 @@
 export type LeadStatus =
-  | 'new'
-  | 'nurturing'
-  | 'warm'
-  | 'hot'
-  | 'process_started'
-  | 'process_completed'
-  | 'closed'
-  | 'lost'
+  | 'new' | 'nurturing' | 'warm' | 'hot'
+  | 'process_started' | 'process_completed' | 'closed' | 'lost'
 
 export type AgentSpecialty =
-  | 'hispanic'
-  | 'military'
-  | 'first_buyer'
-  | 'brazilian'
+  | 'hispanic' | 'military' | 'first_buyer' | 'brazilian'
 
 export type LeadSourceType =
-  | 'lead_magnet'
-  | 'web_form'
-  | 'open_house'
-  | 'manual'
-  | 'ads'
-  | 'referral'
+  | 'lead_magnet' | 'web_form' | 'open_house' | 'manual' | 'ads' | 'referral'
 
 export type Language = 'es' | 'en' | 'pt'
 
@@ -30,6 +16,12 @@ export interface Tenant {
   slug: string
   logoUrl?: string
   primaryColor: string
+}
+
+export interface UserProfile {
+  id: string
+  tenantId: string | null
+  role: 'super_admin' | 'agent_owner'
 }
 
 export interface Agent {
@@ -50,6 +42,19 @@ export interface LeadSource {
   tenantId: string
   name: string
   type: LeadSourceType
+}
+
+export interface LeadMagnet {
+  id: string
+  tenantId: string
+  agentId: string
+  title: string
+  subtitle: string
+  language: Language
+  monthYear: string
+  pageUrl: string
+  coverEmoji: string
+  active: boolean
 }
 
 export interface Lead {
