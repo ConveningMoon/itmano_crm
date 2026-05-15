@@ -1,0 +1,60 @@
+# ITMANO CRM — Cursor Rules
+
+## Project summary
+Multi-tenant SaaS CRM for real estate lead management built with Next.js 14 App Router.
+Currently in Phase 1 (UI mockup with static data). No backend yet.
+
+## Stack
+Next.js 14 App Router · TypeScript strict · shadcn/ui · Tailwind CSS · framer-motion · recharts · lucide-react
+
+## Critical rules
+
+### Colors
+- CRM pages: ALWAYS use CSS variables (`var(--accent-gold)`, `var(--text-primary)`, etc.)
+- Funnel pages: ALWAYS use the `C` constant object — never CSS variables
+- Never hardcode hex colors in CRM components
+
+### Components
+- Default to Server Components. Add `'use client'` only when needed (state, effects, framer-motion, recharts)
+- Never import recharts in Server Components
+- Never use AOS library (breaks Next.js SSR)
+
+### Data
+- Phase 1: ALL data from `lib/mockdata.ts` — no fetch(), no API calls, no Supabase
+- Import directly: `import { MOCK_LEADS, MOCK_AGENTS } from '@/lib/mockdata'`
+- TypeScript strict: never use `any`
+
+### Route groups
+- `(dashboard)` → CRM with sidebar + topbar, dark theme, CSS variables
+- `(funnel)` → Public marketing pages, light warm theme, C object
+- `(auth)` → Login page, dark theme
+
+### File structure
+```
+app/(dashboard)/leads/page.tsx         → Leads table + kanban
+app/(dashboard)/leads/new/page.tsx     → Manual lead form + CSV import
+app/(dashboard)/leads/[id]/page.tsx    → Lead detail
+app/(dashboard)/dashboard/page.tsx     → Main dashboard
+app/(dashboard)/analytics/page.tsx     → Server Component, passes data to chart clients
+app/(funnel)/lm/guia-familias-hispanas/page.tsx → Lead magnet funnel
+lib/mockdata.ts                         → All static data
+lib/types.ts                            → Domain types
+```
+
+### Agents and their colors
+```
+agent-adriana → #5B8EC9 blue   (Hispanic families, ES)
+agent-john    → #5AAFA0 teal   (Military, EN)
+agent-melanie → #C97B6B coral  (First buyers, ES/EN)
+agent-viviane → #B87BA3 pink   (Brazilian, PT)
+```
+
+### Lead status flow
+new → nurturing → warm → hot → process_started → process_completed → closed | lost
+
+### DO NOT
+- Add Supabase or any DB connection (Phase 2)
+- Import framer-motion in Server Components
+- Use hardcoded colors in CRM
+- Use CSS variables in funnel pages
+- Use AOS library

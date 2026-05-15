@@ -15,6 +15,11 @@ export default function FunnelLayout({ children }: { children: React.ReactNode }
         href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&display=swap"
         rel="stylesheet"
       />
+      <style>{`
+        @media (prefers-reduced-motion: reduce) {
+          * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+      `}</style>
       <div
         style={{
           background: '#FAFAF8',
