@@ -170,6 +170,11 @@ function SuccessScreen({ form, onReset }: SuccessScreenProps) {
       <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px', maxWidth: '280px' }}>
         La secuencia de email se activará automáticamente.
       </p>
+      {form.lender && (
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          Prestamista: <strong>{form.lender}</strong>
+        </p>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '28px', width: '200px' }}>
         <button
           onClick={() => router.push('/leads')}
@@ -409,6 +414,37 @@ export default function NewLeadPage() {
                   <option value="pt">🇧🇷 Português</option>
                 </select>
                 <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+              </div>
+            </div>
+
+            {/* Lender field — full width */}
+            <div style={{ gridColumn: '1 / -1', marginTop: '12px' }}>
+              <label style={labelStyle}>
+                Prestamista
+                <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
+                  (opcional)
+                </span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Building2
+                  size={15}
+                  style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <input
+                  className="new-lead-input"
+                  type="text"
+                  value={form.lender}
+                  onChange={(e) => updateField('lender', e.target.value)}
+                  placeholder="Ej. Navy Federal, Wells Fargo, prestamista privado..."
+                  style={{ ...inputStyle, paddingLeft: '34px' }}
+                />
               </div>
             </div>
           </div>
