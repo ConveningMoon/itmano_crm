@@ -218,6 +218,7 @@ export default function NewLeadPage() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitted, setSubmitted] = useState(false)
   const [autoAssigned, setAutoAssigned] = useState(false)
+  const [mode, setMode] = useState<'manual' | 'import'>('manual')
 
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -314,6 +315,48 @@ export default function NewLeadPage() {
           </p>
         </div>
 
+        {/* Mode tabs */}
+        <div style={{
+          display: 'flex',
+          gap: '4px',
+          marginBottom: '24px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: '10px',
+          padding: '4px',
+          maxWidth: '400px',
+        }}>
+          {(['manual', 'import'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              style={{
+                flex: 1,
+                padding: '8px 16px',
+                borderRadius: '7px',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: mode === m ? 500 : 400,
+                background: mode === m ? 'var(--bg-elevated)' : 'transparent',
+                color: mode === m ? 'var(--text-primary)' : 'var(--text-muted)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              {m === 'manual'
+                ? <><PenLine size={14} /> Registro Manual</>
+                : <><Upload size={14} /> Importar CSV/XLSX</>
+              }
+            </button>
+          ))}
+        </div>
+
+        {mode === 'manual' && (
+          <>
         {/* Form card */}
         <div style={{
           background: 'var(--bg-surface)',
@@ -641,6 +684,12 @@ export default function NewLeadPage() {
             Registrar lead
           </button>
         </div>
+          </>
+        )}
+
+        {mode === 'import' && (
+          <div>{/* import view — added in Task 6 */}</div>
+        )}
       </div>
     </>
   )
