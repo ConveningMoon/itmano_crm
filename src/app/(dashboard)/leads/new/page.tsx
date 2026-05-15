@@ -219,6 +219,11 @@ export default function NewLeadPage() {
   const [submitted, setSubmitted] = useState(false)
   const [autoAssigned, setAutoAssigned] = useState(false)
   const [mode, setMode] = useState<'manual' | 'import'>('manual')
+  const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
+  const [importedLeads, setImportedLeads] = useState<ImportedLead[]>([])
+  const [importError, setImportError] = useState<string>('')
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
