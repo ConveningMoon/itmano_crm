@@ -77,6 +77,7 @@ export interface Lead {
 
 export interface LeadEvent {
   id: string
+  tenantId: string
   leadId: string
   type: string
   description: string
