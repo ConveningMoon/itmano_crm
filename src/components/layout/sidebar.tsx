@@ -1,9 +1,8 @@
 import { NavItem } from './nav-item'
-import { MOCK_LEADS } from '@/lib/mockdata'
 
 const navItems = [
   { label: 'Dashboard',      href: '/dashboard',     icon: 'LayoutDashboard' },
-  { label: 'Leads',          href: '/leads',         icon: 'Users',    badge: MOCK_LEADS.length },
+  { label: 'Leads',          href: '/leads',         icon: 'Users',    badge: 75 },
   { label: 'Lead Magnets',   href: '/lead-magnets',  icon: 'FileDown' },
   { label: 'Analytics',      href: '/analytics',     icon: 'BarChart2' },
   { label: 'Configuración',  href: '/settings',      icon: 'Settings' },
