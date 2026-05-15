@@ -1,4 +1,6 @@
-import { MOCK_LEADS, MOCK_AGENTS, MOCK_SOURCES, SOURCE_CONFIG } from '@/lib/mockdata'
+import { createClient } from '@/lib/supabase/server'
+import { mapAgent, mapLead, mapSource, type AgentRow, type LeadRow, type LeadSourceRow } from '@/lib/db'
+import { SOURCE_CONFIG } from '@/lib/config'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
@@ -25,40 +27,55 @@ const CARD_SUBTITLE: React.CSSProperties = {
   marginBottom: '16px',
 }
 
-export default function AnalyticsPage() {
+export default async function AnalyticsPage() {
+  const supabase = await createClient()
+
+  const [{ data: rawLeads }, { data: rawAgents }, { data: rawSources }] = await Promise.all([
+    supabase.from('leads').select('*, lead_sources(type)'),
+    supabase.from('agents').select('*'),
+    supabase.from('lead_sources').select('*'),
+  ])
+
+  const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
+  const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+  const sources = (rawSources ?? []).map(r => mapSource(r as LeadSourceRow))
+
   // ─── KPIs ───────────────────────────────────────────────────
-  const totalLeads = MOCK_LEADS.length
-  const hotLeads = MOCK_LEADS.filter(l => l.temperatureScore >= 70).length
-  const closedLeads = MOCK_LEADS.filter(l =>
+  const totalLeads = leads.length
+  const hotLeads = leads.filter(l => l.temperatureScore >= 70).length
+  const closedLeads = leads.filter(l =>
     l.status === 'closed' || l.status === 'process_completed'
   ).length
-  const conversionRate = Math.round((closedLeads / totalLeads) * 100)
-  const avgScore = Math.round(
-    MOCK_LEADS.reduce((sum, l) => sum + l.temperatureScore, 0) / totalLeads
-  )
+  const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
+  const avgScore = totalLeads > 0
+    ? Math.round(leads.reduce((sum, l) => sum + l.temperatureScore, 0) / totalLeads)
+    : 0
 
   // ─── Source donut ────────────────────────────────────────────
   const sourceCounts: Record<string, number> = {}
-  MOCK_LEADS.forEach(lead => {
-    const source = MOCK_SOURCES.find(s => s.id === lead.sourceId)
-    const type = source?.type ?? 'manual'
+  leads.forEach(lead => {
+    const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
+    const type = raw?.lead_sources?.type ?? 'manual'
     sourceCounts[type] = (sourceCounts[type] ?? 0) + 1
   })
-  const sourceData = Object.entries(sourceCounts).map(([type, count]) => ({
-    name: SOURCE_CONFIG[type]?.label ?? type,
-    value: count,
-    emoji: SOURCE_CONFIG[type]?.icon ?? '📌',
-  }))
+  const sourceData = Object.entries(sourceCounts).map(([type, count]) => {
+    const cfg = SOURCE_CONFIG[type as keyof typeof SOURCE_CONFIG]
+    return {
+      name: cfg?.label ?? type,
+      value: count,
+      emoji: cfg?.icon ?? '📌',
+    }
+  })
 
   // ─── Agents bar ──────────────────────────────────────────────
-  const agentData = MOCK_AGENTS.map(agent => {
-    const leads = MOCK_LEADS.filter(l => l.agentId === agent.id)
+  const agentData = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
     return {
       name: agent.name.split(' ')[0],
       fullName: agent.name,
-      total: leads.length,
-      hot: leads.filter(l => l.temperatureScore >= 70).length,
-      closed: leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      total: agentLeads.length,
+      hot: agentLeads.filter(l => l.temperatureScore >= 70).length,
+      closed: agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
       color: agent.accentColor,
     }
   })
@@ -75,28 +92,30 @@ export default function AnalyticsPage() {
   ]
 
   // ─── Status distribution by agent ────────────────────────────
-  const statusData = MOCK_AGENTS.map(agent => {
-    const leads = MOCK_LEADS.filter(l => l.agentId === agent.id)
+  const statusData = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
     return {
       agent: agent.name.split(' ')[0],
-      new:       leads.filter(l => l.status === 'new').length,
-      nurturing: leads.filter(l => l.status === 'nurturing').length,
-      warm:      leads.filter(l => l.status === 'warm').length,
-      hot:       leads.filter(l => l.status === 'hot').length,
-      process:   leads.filter(l => l.status === 'process_started').length,
-      closed:    leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      new:       agentLeads.filter(l => l.status === 'new').length,
+      nurturing: agentLeads.filter(l => l.status === 'nurturing').length,
+      warm:      agentLeads.filter(l => l.status === 'warm').length,
+      hot:       agentLeads.filter(l => l.status === 'hot').length,
+      process:   agentLeads.filter(l => l.status === 'process_started').length,
+      closed:    agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
     }
   })
 
   // ─── Avg temp by agent ───────────────────────────────────────
-  const tempByAgent = MOCK_AGENTS.map(agent => {
-    const leads = MOCK_LEADS.filter(l => l.agentId === agent.id)
-    const avgTemp = Math.round(leads.reduce((s, l) => s + l.temperatureScore, 0) / leads.length)
+  const tempByAgent = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
+    const avgTemp = agentLeads.length > 0
+      ? Math.round(agentLeads.reduce((s, l) => s + l.temperatureScore, 0) / agentLeads.length)
+      : 0
     return {
       agent,
       avgTemp,
-      totalLeads: leads.length,
-      hotLeads: leads.filter(l => l.temperatureScore >= 70).length,
+      totalLeads: agentLeads.length,
+      hotLeads: agentLeads.filter(l => l.temperatureScore >= 70).length,
     }
   }).sort((a, b) => b.avgTemp - a.avgTemp)
 
