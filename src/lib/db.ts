@@ -96,6 +96,7 @@ export function mapLead(r: LeadRow): Lead {
     language: r.language as Lead['language'],
     status: r.status as Lead['status'],
     temperatureScore: r.temperature_score,
+    lender: r.lender ?? undefined,
     notes: r.notes ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

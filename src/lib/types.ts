@@ -69,6 +69,7 @@ export interface Lead {
   language: Language
   status: LeadStatus
   temperatureScore: number
+  lender?: string
   notes?: string
   createdAt: string
   updatedAt: string
