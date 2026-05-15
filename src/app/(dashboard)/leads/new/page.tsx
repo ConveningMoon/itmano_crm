@@ -331,6 +331,19 @@ export default function NewLeadPage() {
     }
   }
 
+  function handleConfirmImport() {
+    const validLeads = importedLeads.filter(l => !l._hasError)
+    console.log('Leads a importar:', validLeads)
+    setImportStatus('success')
+  }
+
+  const agentNames: Record<string, string> = {
+    'agent-adriana': 'Adriana',
+    'agent-john': 'John',
+    'agent-melanie': 'Melanie',
+    'agent-viviane': 'Viviane',
+  }
+
   const updateField = (field: keyof FormData, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (field in errors) {
@@ -911,6 +924,168 @@ export default function NewLeadPage() {
                   </p>
                 )}
               </>
+            )}
+
+            {/* PASO 3: Preview table */}
+            {importStatus === 'preview' && (
+              <>
+                <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
+                <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
+                  Paso 3 — Revisa y confirma
+                </p>
+
+                {/* Preview header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                      {importedLeads.length} leads detectados
+                    </span>
+                    {importedLeads.filter(l => l._hasError).length > 0 && (
+                      <span style={{
+                        marginLeft: '10px',
+                        fontSize: '12px',
+                        color: 'var(--accent-coral)',
+                        background: 'rgba(201,123,107,0.1)',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                      }}>
+                        ⚠ {importedLeads.filter(l => l._hasError).length} con errores
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setImportStatus('idle'); setImportedLeads([]) }}
+                    style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                  >
+                    ✕ Cancelar
+                  </button>
+                </div>
+
+                {/* Preview table */}
+                <div style={{ overflowY: 'auto', maxHeight: '320px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--bg-elevated)', position: 'sticky', top: 0 }}>
+                        {['#', 'Nombre', 'Email', 'Teléfono', 'Agente', 'Idioma', 'Prestamista', 'Estado'].map(col => (
+                          <th key={col} style={{
+                            padding: '8px 10px',
+                            textAlign: 'left',
+                            fontSize: '11px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            color: 'var(--text-muted)',
+                            fontWeight: 500,
+                            borderBottom: '1px solid var(--border-subtle)',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importedLeads.map((lead) => (
+                        <tr
+                          key={lead._rowIndex}
+                          style={{
+                            background: lead._hasError ? 'rgba(201,123,107,0.06)' : 'transparent',
+                            borderLeft: lead._hasError ? '2px solid var(--accent-coral)' : '2px solid transparent',
+                          }}
+                        >
+                          <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{lead._rowIndex}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ')}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.email}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.phone || '—'}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{agentNames[lead.agentId] || lead.agentId}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.language.toUpperCase()}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.lender || '—'}</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {lead._hasError
+                              ? <span style={{ color: 'var(--accent-coral)', fontSize: '11px' }}>{lead._errorMessage}</span>
+                              : <span style={{ color: 'var(--accent-green)' }}>✓</span>
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Preview footer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    {importedLeads.filter(l => !l._hasError).length} leads válidos serán importados
+                    {importedLeads.filter(l => l._hasError).length > 0 &&
+                      ` · ${importedLeads.filter(l => l._hasError).length} con errores serán omitidos`}
+                  </p>
+                  <button
+                    onClick={handleConfirmImport}
+                    disabled={importedLeads.filter(l => !l._hasError).length === 0}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 20px',
+                      background: 'var(--accent-gold)',
+                      color: 'var(--bg-base)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: importedLeads.filter(l => !l._hasError).length === 0 ? 'not-allowed' : 'pointer',
+                      opacity: importedLeads.filter(l => !l._hasError).length === 0 ? 0.5 : 1,
+                    }}
+                  >
+                    <CheckCircle2 size={14} />
+                    Importar {importedLeads.filter(l => !l._hasError).length} leads
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Import success screen */}
+            {importStatus === 'success' && (
+              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+                <CheckCircle2 size={48} style={{ color: 'var(--accent-green)', marginBottom: '16px' }} />
+                <h3 style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  ¡Importación completada!
+                </h3>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
+                  {importedLeads.filter(l => !l._hasError).length} leads han sido añadidos al sistema.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => router.push('/leads')}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-subtle)',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ← Ver todos los leads
+                  </button>
+                  <button
+                    onClick={() => { setImportStatus('idle'); setImportedLeads([]) }}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: 'var(--accent-gold)',
+                      color: 'var(--bg-base)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    + Importar otro archivo
+                  </button>
+                </div>
+              </div>
             )}
 
           </div>
