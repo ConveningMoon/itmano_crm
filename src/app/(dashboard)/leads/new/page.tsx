@@ -836,7 +836,82 @@ export default function NewLeadPage() {
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
 
-            {/* PASO 2: Upload zone — added in Task 8 */}
+            {/* PASO 2: Upload zone */}
+            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
+              Paso 2 — Sube tu archivo completado
+            </p>
+
+            {importStatus !== 'preview' && importStatus !== 'success' && (
+              <>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setIsDragging(false)
+                    const file = e.dataTransfer.files[0]
+                    if (file) handleFileUpload(file)
+                  }}
+                  style={{
+                    border: `2px dashed ${isDragging ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                    borderRadius: '12px',
+                    padding: '48px 24px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    background: isDragging ? 'rgba(201,169,110,0.04)' : 'var(--bg-elevated)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <FileUp size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Arrastra tu archivo aquí, o{' '}
+                    <span style={{ color: 'var(--accent-gold)' }}>haz click para seleccionar</span>
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Formatos aceptados: .csv · .xlsx — Máximo 500 filas
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleFileUpload(file)
+                    }}
+                  />
+                </div>
+
+                {/* Error display */}
+                {importStatus === 'error' && (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px 16px',
+                    background: 'rgba(201,123,107,0.1)',
+                    border: '1px solid rgba(201,123,107,0.3)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                  }}>
+                    <AlertTriangle size={16} style={{ color: 'var(--accent-coral)', flexShrink: 0, marginTop: '1px' }} />
+                    <div>
+                      <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--accent-coral)', marginBottom: '4px' }}>
+                        Error al procesar el archivo
+                      </p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{importError}</p>
+                    </div>
+                  </div>
+                )}
+
+                {importStatus === 'parsing' && (
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '16px' }}>
+                    Procesando archivo...
+                  </p>
+                )}
+              </>
+            )}
 
           </div>
         )}
