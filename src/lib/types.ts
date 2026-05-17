@@ -81,6 +81,18 @@ export interface LeadEvent {
   leadId: string
   type: string
   description: string
+  points: number | null
+  createdAt: string
+}
+
+export interface PurchaseProcess {
+  id: string
+  leadId: string
+  tenantId: string
+  address: string
+  loanType: string
+  closingDate?: string
+  notes?: string
   createdAt: string
 }
 

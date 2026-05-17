@@ -1,4 +1,4 @@
-import type { Agent, Lead, LeadSource, LeadMagnet } from './types'
+import type { Agent, Lead, LeadSource, LeadMagnet, PurchaseProcess } from './types'
 
 // ─── DB row shapes ────────────────────────────────────────────────────────────
 
@@ -100,6 +100,40 @@ export function mapLead(r: LeadRow): Lead {
     notes: r.notes ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+  }
+}
+
+export interface LeadEventRow {
+  id: string
+  lead_id: string
+  tenant_id: string
+  type: string
+  description: string
+  points: number | null
+  created_at: string
+}
+
+export interface PurchaseProcessRow {
+  id: string
+  lead_id: string
+  tenant_id: string
+  address: string
+  loan_type: string
+  closing_date: string | null
+  notes: string | null
+  created_at: string
+}
+
+export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
+  return {
+    id: r.id,
+    leadId: r.lead_id,
+    tenantId: r.tenant_id,
+    address: r.address,
+    loanType: r.loan_type,
+    closingDate: r.closing_date ?? undefined,
+    notes: r.notes ?? undefined,
+    createdAt: r.created_at,
   }
 }
 
