@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
-import { mapAgent, mapLead, mapSource, type AgentRow, type LeadRow, type LeadSourceRow } from '@/lib/db'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { SOURCE_CONFIG } from '@/lib/config'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
@@ -28,17 +28,15 @@ const CARD_SUBTITLE: React.CSSProperties = {
 }
 
 export default async function AnalyticsPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
-  const [{ data: rawLeads }, { data: rawAgents }, { data: rawSources }] = await Promise.all([
+  const [{ data: rawLeads }, { data: rawAgents }] = await Promise.all([
     supabase.from('leads').select('*, lead_sources(type)'),
     supabase.from('agents').select('*'),
-    supabase.from('lead_sources').select('*'),
   ])
 
   const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
-  const sources = (rawSources ?? []).map(r => mapSource(r as LeadSourceRow))
 
   // ─── KPIs ───────────────────────────────────────────────────
   const totalLeads = leads.length
@@ -80,16 +78,30 @@ export default async function AnalyticsPage() {
     }
   })
 
-  // ─── Monthly area chart (enriched mock) ──────────────────────
-  const enrichedMonthlyData = [
-    { month: 'Oct', leads: 68, nurturing: 45, hot: 12, closed: 3 },
-    { month: 'Nov', leads: 12, nurturing: 8,  hot: 3,  closed: 1 },
-    { month: 'Dic', leads: 0,  nurturing: 15, hot: 5,  closed: 2 },
-    { month: 'Ene', leads: 3,  nurturing: 20, hot: 8,  closed: 2 },
-    { month: 'Feb', leads: 0,  nurturing: 18, hot: 9,  closed: 3 },
-    { month: 'Mar', leads: 0,  nurturing: 22, hot: 10, closed: 2 },
-    { month: 'Abr', leads: 0,  nurturing: 25, hot: 12, closed: 3 },
-  ]
+  // ─── Monthly area chart (real data, last 7 months) ───────────
+  const MONTH_LABELS: Record<number, string> = {
+    0: 'Ene', 1: 'Feb', 2: 'Mar', 3: 'Abr', 4: 'May', 5: 'Jun',
+    6: 'Jul', 7: 'Ago', 8: 'Sep', 9: 'Oct', 10: 'Nov', 11: 'Dic',
+  }
+  const now = new Date()
+  const months: { month: string; leads: number; nurturing: number; hot: number; closed: number }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const m = d.getMonth()
+    const monthLeads = leads.filter(l => {
+      const ld = new Date(l.createdAt)
+      return ld.getFullYear() === y && ld.getMonth() === m
+    })
+    months.push({
+      month:     MONTH_LABELS[m],
+      leads:     monthLeads.length,
+      nurturing: monthLeads.filter(l => l.status === 'nurturing').length,
+      hot:       monthLeads.filter(l => l.temperatureScore >= 70).length,
+      closed:    monthLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+    })
+  }
+  const enrichedMonthlyData = months
 
   // ─── Status distribution by agent ────────────────────────────
   const statusData = agents.map(agent => {

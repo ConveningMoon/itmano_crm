@@ -55,3 +55,7 @@ yarn-error.log*
 
 # ESLint cache
 .eslintcache
+
+# AI
+CLAUDE.md
+AGENTS.md

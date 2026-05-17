@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, mapSource, type AgentRow, type LeadRow, type LeadSourceRow } from '@/lib/db'
 import { LeadsClient } from './leads-client'
 
 export default async function LeadsPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const [{ data: rawLeads }, { data: rawAgents }, { data: rawSources }] = await Promise.all([
     supabase.from('leads').select('*').order('created_at', { ascending: false }),

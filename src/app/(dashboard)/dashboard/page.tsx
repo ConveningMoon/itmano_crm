@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
-import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { mapAgent, mapLead, type LeadRow, type AgentRow, type LeadEventRow } from '@/lib/db'
 import { STATUS_CONFIG, SOURCE_CONFIG } from '@/lib/config'
 import type { Agent } from '@/lib/types'
 import {
@@ -18,6 +18,27 @@ type ActivityItem = {
   text: string
   icon: string
   color: string
+}
+
+const EVENT_META: Record<string, { icon: string; color: string }> = {
+  lead_created:   { icon: 'UserPlus',         color: '#5B8EC9' },
+  status_changed: { icon: 'ArrowRightCircle', color: '#9B72CF' },
+  email_sent:     { icon: 'Mail',             color: '#5AAFA0' },
+  download:       { icon: 'FileDown',          color: '#B87BA3' },
+  appointment:    { icon: 'Calendar',          color: '#C9A96E' },
+  process_closed: { icon: 'CheckCircle2',      color: '#6BA368' },
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1)   return 'Ahora mismo'
+  if (mins < 60)  return `Hace ${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `Hace ${hours} hora${hours > 1 ? 's' : ''}`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'Ayer'
+  return `Hace ${days} días`
 }
 
 type AgentStat = {
@@ -54,11 +75,12 @@ function ActivityIcon({ name }: { name: string }) {
 }
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
-  const [{ data: rawLeads }, { data: rawAgents }] = await Promise.all([
+  const [{ data: rawLeads }, { data: rawAgents }, { data: rawEvents }] = await Promise.all([
     supabase.from('leads').select('*, lead_sources(*)').order('created_at', { ascending: false }),
     supabase.from('agents').select('*').eq('active', true),
+    supabase.from('lead_events').select('*').order('created_at', { ascending: false }).limit(10),
   ])
 
   const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))
@@ -108,16 +130,11 @@ export default async function DashboardPage() {
     return { agent, total, hot, percentage, closed }
   })
 
-  const recentActivity: ActivityItem[] = [
-    { time: 'Hace 5 min',   text: 'Norelys Diaz cambió a En Proceso',       icon: 'ArrowRightCircle', color: '#9B72CF' },
-    { time: 'Hace 23 min',  text: 'Greg Ducker abrió el email de VA Loan',  icon: 'Mail',             color: '#5AAFA0' },
-    { time: 'Hace 1 hora',  text: 'Jobany Correa descargó Guia Brasileira', icon: 'FileDown',         color: '#B87BA3' },
-    { time: 'Hace 2 horas', text: 'Amor Juarez agendó una consulta',        icon: 'Calendar',         color: '#C9A96E' },
-    { time: 'Hace 3 horas', text: 'Nuevo lead: Cristina Nazzario',          icon: 'UserPlus',         color: '#5B8EC9' },
-    { time: 'Hace 4 horas', text: 'Abigail Calito cerró proceso',           icon: 'CheckCircle2',     color: '#6BA368' },
-    { time: 'Ayer 18:30',   text: 'Armando Romero recibió email de inicio', icon: 'Mail',             color: '#9B72CF' },
-    { time: 'Ayer 15:00',   text: 'Blanca Lissette pasó a En Proceso',      icon: 'ArrowRightCircle', color: '#9B72CF' },
-  ]
+  const recentActivity: ActivityItem[] = (rawEvents ?? []).map(r => {
+    const event = r as LeadEventRow
+    const meta  = EVENT_META[event.type] ?? { icon: 'ArrowRightCircle', color: '#C9A96E' }
+    return { time: timeAgo(event.created_at), text: event.description, icon: meta.icon, color: meta.color }
+  })
 
   const specialtyLabel: Record<string, string> = {
     hispanic:    'Familias Hispanas',

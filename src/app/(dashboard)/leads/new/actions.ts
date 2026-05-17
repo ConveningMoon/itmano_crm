@@ -1,7 +1,9 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { Language } from '@/lib/types'
+
+const TENANT_ID = 'tenant-aj'
 
 function genId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -19,11 +21,11 @@ interface LeadInput {
   notes:      string | null
 }
 
-async function getOrCreateSource(supabase: Awaited<ReturnType<typeof createClient>>, tenantId: string, type: string) {
+async function getOrCreateSource(supabase: ReturnType<typeof createAdminClient>, type: string) {
   const { data: existing } = await supabase
     .from('lead_sources')
     .select('id')
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', TENANT_ID)
     .eq('type', type)
     .limit(1)
     .single()
@@ -37,27 +39,18 @@ async function getOrCreateSource(supabase: Awaited<ReturnType<typeof createClien
 
   const newId = genId('src')
   await supabase.from('lead_sources').insert({
-    id: newId, tenant_id: tenantId, name: sourceLabels[type] ?? type, type,
+    id: newId, tenant_id: TENANT_ID, name: sourceLabels[type] ?? type, type,
   })
   return newId
 }
 
 export async function createLead(input: LeadInput): Promise<{ error?: string }> {
-  const supabase = await createClient()
-
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('tenant_id')
-    .single()
-
-  if (!profile?.tenant_id) return { error: 'No tenant found for current user' }
-
-  const tenantId = profile.tenant_id
-  const sourceId = await getOrCreateSource(supabase, tenantId, input.sourceType)
+  const supabase = createAdminClient()
+  const sourceId = await getOrCreateSource(supabase, input.sourceType)
 
   const { error } = await supabase.from('leads').insert({
     id:                genId('lead'),
-    tenant_id:         tenantId,
+    tenant_id:         TENANT_ID,
     agent_id:          input.agentId,
     source_id:         sourceId,
     first_name:        input.firstName,
@@ -78,25 +71,16 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
 export async function createLeadsBulk(inputs: LeadInput[]): Promise<{ error?: string }> {
   if (inputs.length === 0) return {}
 
-  const supabase = await createClient()
-
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('tenant_id')
-    .single()
-
-  if (!profile?.tenant_id) return { error: 'No tenant found for current user' }
-
-  const tenantId = profile.tenant_id
+  const supabase = createAdminClient()
 
   const sourceTypeIds: Record<string, string> = {}
   for (const type of [...new Set(inputs.map(i => i.sourceType))]) {
-    sourceTypeIds[type] = await getOrCreateSource(supabase, tenantId, type)
+    sourceTypeIds[type] = await getOrCreateSource(supabase, type)
   }
 
   const rows = inputs.map(input => ({
     id:                genId('lead'),
-    tenant_id:         tenantId,
+    tenant_id:         TENANT_ID,
     agent_id:          input.agentId,
     source_id:         sourceTypeIds[input.sourceType],
     first_name:        input.firstName,

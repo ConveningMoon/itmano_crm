@@ -1,17 +1,3 @@
--- ─── Helper functions ───────────────────────────────────────────────────────
-
-create or replace function get_my_tenant_id()
-returns text language sql security definer stable as $$
-  select tenant_id from user_profiles where id = auth.uid()
-$$;
-
-create or replace function is_super_admin()
-returns boolean language sql security definer stable as $$
-  select exists (
-    select 1 from user_profiles where id = auth.uid() and role = 'super_admin'
-  )
-$$;
-
 -- ─── Tables ─────────────────────────────────────────────────────────────────
 
 create table tenants (
@@ -92,6 +78,20 @@ create table lead_events (
   description text        not null,
   created_at  timestamptz default now()
 );
+
+-- ─── Helper functions (after tables exist) ──────────────────────────────────
+
+create or replace function get_my_tenant_id()
+returns text language sql security definer stable as $$
+  select tenant_id from user_profiles where id = auth.uid()
+$$;
+
+create or replace function is_super_admin()
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from user_profiles where id = auth.uid() and role = 'super_admin'
+  )
+$$;
 
 -- ─── RLS: enable ────────────────────────────────────────────────────────────
 

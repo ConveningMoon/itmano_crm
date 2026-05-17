@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { mapLeadMagnet, mapAgent, type LeadMagnetRow, type AgentRow } from '@/lib/db'
 import type { LeadMagnet, Agent } from '@/lib/types'
 import { LMTabs } from './lm-tabs'
@@ -133,7 +133,7 @@ function HistoryView({ lms, agents }: { lms: LeadMagnet[]; agents: Agent[] }) {
 }
 
 export default async function LeadMagnetsPage() {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const [{ data: rawLMs }, { data: rawAgents }] = await Promise.all([
     supabase.from('lead_magnets').select('*').order('created_at', { ascending: false }),
