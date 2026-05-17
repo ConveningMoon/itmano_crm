@@ -6,9 +6,13 @@ import type { LeadStatus } from '@/lib/types'
 
 const TENANT_ID = 'tenant-aj'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
+
 // ─── Score band helper ────────────────────────────────────────────────────────
 
-function scoreToBand(score: number): 'new' | 'nurturing' | 'warm' | 'hot' {
+function scoreToBand(score: number): Extract<LeadStatus, 'new' | 'nurturing' | 'warm' | 'hot'> {
   if (score >= 60) return 'hot'
   if (score >= 35) return 'warm'
   if (score >= 15) return 'nurturing'
@@ -32,6 +36,8 @@ export async function updateLeadStatus(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
 
@@ -109,8 +115,8 @@ export async function insertScoringEvents(
 
   if (fetchErr || !lead) return { ok: false, error: 'Lead no encontrado' }
 
-  const FROZEN: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
-  if (FROZEN.includes(lead.status as LeadStatus)) {
+  // TODO: move frozen-status guard into the UPDATE WHERE clause for atomicity
+  if (FROZEN_STATUSES.includes(lead.status as LeadStatus)) { // reason: Supabase client returns untyped row without generated schema
     return { ok: false, error: 'El scoring está congelado para este lead' }
   }
 
@@ -126,7 +132,7 @@ export async function insertScoringEvents(
   if (insertErr) return { ok: false, error: insertErr.message }
 
   const pointsSum  = events.reduce((sum, e) => sum + e.points, 0)
-  const current    = (lead.temperature_score as number | null) ?? 0
+  const current    = (lead.temperature_score as number | null) ?? 0 // reason: Supabase client returns untyped row without generated schema
   const newScore   = Math.min(100, Math.max(0, current + pointsSum))
   const newStatus  = scoreToBand(newScore)
 
@@ -138,6 +144,8 @@ export async function insertScoringEvents(
   if (updateErr) return { ok: false, error: updateErr.message }
 
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
 
@@ -168,5 +176,7 @@ export async function startPurchaseProcess(
   if (updateErr) return { ok: false, error: updateErr.message }
 
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
