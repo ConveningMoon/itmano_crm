@@ -68,7 +68,7 @@ export interface Lead {
   phone?: string
   language: Language
   status: LeadStatus
-  temperatureScore: number
+  temperatureScore: number | null
   lender?: string
   notes?: string
   createdAt: string

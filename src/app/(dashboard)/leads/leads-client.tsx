@@ -193,7 +193,7 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
     setPage(1)
   }, [search, filterAgent, filterStatus, filterSource, filterLanguage])
 
-  const hotCount    = filteredLeads.filter(l => l.temperatureScore >= 70).length
+  const hotCount    = filteredLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
   const totalPages  = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE)
   const pagedLeads  = filteredLeads.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
   const hasActiveFilters =
@@ -452,7 +452,7 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
                       </td>
                       {/* Temperatura */}
                       <td style={{ padding: '12px 16px', width: '120px' }}>
-                        <TempBar score={lead.temperatureScore} segments={8} />
+                        <TempBar score={lead.temperatureScore ?? 0} segments={8} />
                       </td>
                       {/* Idioma */}
                       <td style={{ padding: '12px 16px', width: '80px' }}>
@@ -594,7 +594,7 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
                         </div>
                         {/* Row 3: temp bar */}
                         <div style={{ marginBottom: '6px' }}>
-                          <TempBar score={lead.temperatureScore} segments={6} />
+                          <TempBar score={lead.temperatureScore ?? 0} segments={6} />
                         </div>
                         {/* Row 4: language + source */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

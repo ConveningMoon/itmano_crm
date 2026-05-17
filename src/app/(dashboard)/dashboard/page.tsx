@@ -88,14 +88,14 @@ export default async function DashboardPage() {
 
   const stats = {
     total:     leads.length,
-    hot:       leads.filter(l => l.status === 'hot' || l.temperatureScore >= 70).length,
+    hot:       leads.filter(l => l.status === 'hot' || (l.temperatureScore ?? 0) >= 70).length,
     inProcess: leads.filter(l => l.status === 'process_started').length,
     closed:    leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
   }
 
   const hotLeads = leads
-    .filter(l => l.temperatureScore >= 70)
-    .sort((a, b) => b.temperatureScore - a.temperatureScore)
+    .filter(l => (l.temperatureScore ?? 0) >= 70)
+    .sort((a, b) => (b.temperatureScore ?? 0) - (a.temperatureScore ?? 0))
     .slice(0, 6)
 
   const statusCounts = {
@@ -122,7 +122,7 @@ export default async function DashboardPage() {
   const agentStats: AgentStat[] = agents.map(agent => {
     const agentLeads = leads.filter(l => l.agentId === agent.id)
     const total = agentLeads.length
-    const hot = agentLeads.filter(l => l.temperatureScore >= 70).length
+    const hot = agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
     const percentage = Math.round((total / leads.length) * 100)
     const closed = agentLeads.filter(
       l => l.status === 'closed' || l.status === 'process_completed'
@@ -309,8 +309,8 @@ export default async function DashboardPage() {
               const sourceType = raw?.lead_sources?.type ?? 'manual'
               const sourceLabel = SOURCE_CONFIG[sourceType as keyof typeof SOURCE_CONFIG]?.label ?? '—'
               const initials = getInitials(lead.firstName, lead.lastName)
-              const tempColor = getTempColor(lead.temperatureScore)
-              const filled = Math.round(lead.temperatureScore / 10)
+              const tempColor = getTempColor(lead.temperatureScore ?? 0)
+              const filled = Math.round((lead.temperatureScore ?? 0) / 10)
               const cfg = STATUS_CONFIG[lead.status]
               const agentBg = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
 
@@ -352,7 +352,7 @@ export default async function DashboardPage() {
                       ))}
                     </div>
                     <span style={{ fontSize: '13px', color: tempColor, fontWeight: 500, width: '26px', textAlign: 'right' }}>
-                      {lead.temperatureScore}
+                      {lead.temperatureScore ?? '—'}
                     </span>
                   </div>
 

@@ -1,27 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { STATUS_CONFIG, SOURCE_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadSource, LeadEvent, LeadStatus } from '@/lib/types'
+import type { Lead, Agent, LeadSource, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
+import { updateLeadStatus, updateLeadNotes, startPurchaseProcess } from './actions'
 import {
-  ArrowLeft, MoreHorizontal, ChevronDown, X,
+  ArrowLeft, MoreHorizontal, X,
   UserPlus, Mail, FileDown, MousePointer2, Calendar,
   ArrowRightCircle, CheckCircle2, Circle,
-  TrendingUp, TrendingDown,
-  MessageCircle, Flame, XCircle,
+  MessageCircle, XCircle,
+  Phone, Activity,
 } from 'lucide-react'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface TimelineEvent {
-  id: string
-  type: string
-  icon: string
-  color: string
-  description: string
-  date: string
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,108 +28,15 @@ function formatDateTime(dateStr: string): string {
   })
 }
 
-function tempColor(score: number): string {
-  if (score >= 70) return '#E04040'
-  if (score >= 40) return '#E07B3A'
-  return '#C9A96E'
-}
-
-function tempLabel(score: number): string {
-  if (score >= 70) return 'Caliente'
-  if (score >= 40) return 'Tibio'
-  return 'Frío'
-}
-
 function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)
   const l = lastName.charAt(0)
   return (f + l).toUpperCase() || f.toUpperCase()
 }
 
-function generateMockEvents(lead: Lead, sourceName: string): TimelineEvent[] {
-  const events: TimelineEvent[] = []
-  const base = new Date(lead.createdAt)
-
-  events.push({
-    id: '1', type: 'created', icon: 'UserPlus', color: '#5B8EC9',
-    description: `Lead registrado desde ${sourceName}`,
-    date: lead.createdAt,
-  })
-
-  if (lead.temperatureScore > 10) {
-    const d = new Date(base); d.setDate(d.getDate() + 1)
-    events.push({
-      id: '2', type: 'email_opened', icon: 'Mail', color: '#C9A96E',
-      description: 'Abrió el email de bienvenida de la secuencia',
-      date: d.toISOString(),
-    })
-  }
-
-  if (lead.temperatureScore > 25) {
-    const d = new Date(base); d.setDate(d.getDate() + 2)
-    events.push({
-      id: '3', type: 'lm_downloaded', icon: 'FileDown', color: '#5AAFA0',
-      description: `Descargó "${sourceName}"`,
-      date: d.toISOString(),
-    })
-  }
-
-  if (lead.temperatureScore > 40) {
-    const d = new Date(base); d.setDate(d.getDate() + 5)
-    events.push({
-      id: '4', type: 'email_clicked', icon: 'MousePointer2', color: '#C9A96E',
-      description: 'Hizo click en el CTA de la secuencia de email',
-      date: d.toISOString(),
-    })
-  }
-
-  if (lead.temperatureScore > 60) {
-    const d = new Date(base); d.setDate(d.getDate() + 8)
-    events.push({
-      id: '5', type: 'consultation', icon: 'Calendar', color: '#9B72CF',
-      description: 'Agendó consulta gratuita con el agente',
-      date: d.toISOString(),
-    })
-  }
-
-  if (['process_started', 'process_completed', 'closed'].includes(lead.status)) {
-    const d = new Date(base); d.setDate(d.getDate() + 14)
-    events.push({
-      id: '6', type: 'status_changed', icon: 'ArrowRightCircle', color: '#9B72CF',
-      description: 'Proceso de compra iniciado. Email de inicio enviado automáticamente.',
-      date: d.toISOString(),
-    })
-  }
-
-  if (['process_completed', 'closed'].includes(lead.status)) {
-    const d = new Date(base); d.setDate(d.getDate() + 45)
-    events.push({
-      id: '7', type: 'completed', icon: 'CheckCircle2', color: '#6BA368',
-      description: 'Proceso completado. Email de cierre enviado. Reseña solicitada.',
-      date: d.toISOString(),
-    })
-  }
-
-  return events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-}
-
-// ─── Icon renderer for timeline ───────────────────────────────────────────────
-
-function TLIcon({ name }: { name: string }) {
-  const p = { size: 14 }
-  switch (name) {
-    case 'UserPlus':         return <UserPlus {...p} />
-    case 'Mail':             return <Mail {...p} />
-    case 'FileDown':         return <FileDown {...p} />
-    case 'MousePointer2':    return <MousePointer2 {...p} />
-    case 'Calendar':         return <Calendar {...p} />
-    case 'ArrowRightCircle': return <ArrowRightCircle {...p} />
-    case 'CheckCircle2':     return <CheckCircle2 {...p} />
-    default:                 return null
-  }
-}
-
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
 
 const PROCESS_STEPS = [
   { label: 'Oferta aceptada',            done: true },
@@ -171,50 +68,59 @@ const CARD_TITLE: React.CSSProperties = {
   color: 'var(--text-primary)', marginBottom: '16px',
 }
 
+const ACTION_BTN_STYLE: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '8px',
+  width: '100%', textAlign: 'left',
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: '8px', padding: '9px 14px',
+  fontSize: '13px', cursor: 'pointer',
+  color: 'var(--text-secondary)',
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface LeadDetailProps {
   lead: Lead
   agent: Agent | undefined
   source: LeadSource | undefined
+  agents: Agent[]
+  sources: LeadSource[]
   events: LeadEvent[]
+  purchaseProcess: PurchaseProcess | null
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- agents/sources reserved for edit modal (Phase 2 next step)
+export function LeadDetailClient({ lead, agent, source, agents, sources, events, purchaseProcess }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
   const [notes, setNotes]                 = useState(lead.notes ?? '')
   const [savedNotes, setSavedNotes]       = useState(lead.notes ?? '')
-  const [localTempScore, setLocalTempScore] = useState(lead.temperatureScore)
   const [showProcessModal, setShowProcessModal] = useState(false)
   const [modalAddress, setModalAddress]     = useState('')
   const [modalLoanType, setModalLoanType]   = useState('VA Loan')
   const [modalClosingDate, setModalClosingDate] = useState('')
   const [modalNotes, setModalNotes]         = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- edit modal state reserved for the ⋯ modal (next task)
+  const [showEditModal, setShowEditModal]   = useState(false)
+  const [confirmClose, setConfirmClose]     = useState(false)
+  const [confirmLost, setConfirmLost]       = useState(false)
+  const [actionError, setActionError]       = useState<string | null>(null)
+  const [isPending, startTransition]        = useTransition()
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server-prop to local state after router.refresh()
+  useEffect(() => { setCurrentStatus(lead.status) }, [lead.status])
 
   const sourceCfg = source ? SOURCE_CONFIG[source.type] : null
   const langCfg   = LANGUAGE_CONFIG[lead.language]
   const initials  = getInitials(lead.firstName, lead.lastName)
 
-  const sourceName = source?.name ?? 'fuente desconocida'
-  const STATIC_EVENTS = generateMockEvents(lead, sourceName)
-  const displayEvents: TimelineEvent[] = events.length > 0
-    ? events.map(e => ({ id: e.id, type: e.type, icon: 'Circle', color: '#C9A96E', description: e.description, date: e.createdAt }))
-    : STATIC_EVENTS
-
-  const tColor    = tempColor(localTempScore)
-  const filledPills = Math.round(localTempScore / 10)
   const isProcessActive = currentStatus === 'process_started' || currentStatus === 'process_completed'
-
-  const scoringFactors = [
-    { label: 'Abrió 3 emails',       points: '+30', active: localTempScore > 20,  positive: true },
-    { label: 'Descargó 2 guías',     points: '+35', active: localTempScore > 50,  positive: true },
-    { label: 'Agendó consulta',      points: '+30', active: localTempScore > 70,  positive: true },
-    { label: 'Sin actividad 7 días', points: '-10', active: localTempScore < 30,  positive: false },
-  ].filter(f => f.active)
+  const scoreColor = (s: number) => s >= 60 ? '#E04040' : s >= 35 ? '#E07B3A' : '#C9A96E'
+  const isFrozen = lead.temperatureScore === null || FROZEN_STATUSES.includes(currentStatus)
 
   const infoRows = [
     { label: 'Nombre',      value: `${lead.firstName} ${lead.lastName}` },
@@ -237,6 +143,21 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
     display: 'block', marginBottom: '6px',
     textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500,
   }
+
+  const EVENT_ICON_MAP: Record<string, { icon: React.ReactNode; color: string }> = {
+    lead_created:            { icon: <UserPlus size={14} />,          color: '#5B8EC9' },
+    email_opened:            { icon: <Mail size={14} />,              color: '#C9A96E' },
+    email_clicked:           { icon: <MousePointer2 size={14} />,     color: '#C9A96E' },
+    lm_downloaded:           { icon: <FileDown size={14} />,          color: '#5AAFA0' },
+    consultation_scheduled:  { icon: <Calendar size={14} />,          color: '#9B72CF' },
+    consultation_attended:   { icon: <CheckCircle2 size={14} />,      color: '#6BA368' },
+    reply_received:          { icon: <MessageCircle size={14} />,     color: '#5AAFA0' },
+    phone_call:              { icon: <Phone size={14} />,             color: '#5B8EC9' },
+    unsubscribed:            { icon: <XCircle size={14} />,           color: '#C97B6B' },
+    status_changed:          { icon: <ArrowRightCircle size={14} />,  color: '#9B72CF' },
+    score_manual:            { icon: <Activity size={14} />,          color: '#C9A96E' },
+  }
+  const DEFAULT_EVENT = { icon: <Circle size={14} />, color: '#C9A96E' }
 
   return (
     <div style={{ padding: '24px' }}>
@@ -287,39 +208,26 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
             </div>
           </div>
 
-          {/* Status select + more button */}
+          {/* Status badge + more button */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-              <select
-                value={currentStatus}
-                onChange={e => setCurrentStatus(e.target.value as LeadStatus)}
-                style={{
-                  background:   STATUS_CONFIG[currentStatus].bgColor,
-                  color:        STATUS_CONFIG[currentStatus].color,
-                  border:       `1px solid ${STATUS_CONFIG[currentStatus].color}50`,
-                  borderRadius: '8px',
-                  padding:      '6px 32px 6px 12px',
-                  fontSize:     '13px', fontWeight: 500, cursor: 'pointer',
-                  appearance:   'none',
-                }}
-              >
-                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-                  <option key={key} value={key} style={{ background: '#16181C', color: cfg.color }}>
-                    {cfg.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                style={{ position: 'absolute', right: '10px', color: STATUS_CONFIG[currentStatus].color, pointerEvents: 'none' }}
-              />
-            </div>
-            <button style={{
-              width: '32px', height: '32px', borderRadius: '8px',
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-              cursor: 'pointer', color: 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '5px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: 500,
+              background: STATUS_CONFIG[currentStatus].bgColor,
+              color:      STATUS_CONFIG[currentStatus].color,
+              border:     `1px solid ${STATUS_CONFIG[currentStatus].color}40`,
             }}>
+              {STATUS_CONFIG[currentStatus].label}
+            </span>
+            <button
+              onClick={() => setShowEditModal(true)}
+              style={{
+                width: '32px', height: '32px', borderRadius: '8px',
+                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+                cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
               <MoreHorizontal size={16} />
             </button>
           </div>
@@ -362,38 +270,40 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
           <div style={CARD}>
             <div style={CARD_TITLE}>Temperatura del lead</div>
 
-            {/* 10 large pills */}
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-              {Array.from({ length: 10 }, (_, i) => (
-                <div key={i} style={{
-                  flex: 1, height: '12px', borderRadius: '3px',
-                  background: i < filledPills ? tColor : 'var(--bg-overlay)',
-                }} />
-              ))}
-            </div>
-
-            {/* Continuous bar */}
-            <div style={{ width: '100%', height: '6px', background: 'var(--bg-overlay)', borderRadius: '3px', marginBottom: '8px' }}>
-              <div style={{ width: `${localTempScore}%`, height: '100%', background: tColor, borderRadius: '3px' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: scoringFactors.length > 0 ? '16px' : '0' }}>
-              <span style={{ fontSize: '12px', color: tColor }}>{tempLabel(localTempScore)}</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Score {localTempScore}/100</span>
-            </div>
-
-            {scoringFactors.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {scoringFactors.map((f, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {f.positive
-                      ? <TrendingUp  size={14} style={{ color: '#6BA368', flexShrink: 0 }} />
-                      : <TrendingDown size={14} style={{ color: '#C97B6B', flexShrink: 0 }} />
-                    }
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>{f.label}</span>
-                    <span style={{ fontSize: '12px', fontWeight: 500, color: f.positive ? '#6BA368' : '#C97B6B' }}>{f.points}</span>
-                  </div>
-                ))}
+            {isFrozen ? (
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Score congelado — lead {STATUS_CONFIG[currentStatus].label.toLowerCase()}
               </div>
+            ) : (
+              <>
+                {/* 10 large pills */}
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <div key={i} style={{
+                      flex: 1, height: '12px', borderRadius: '3px',
+                      background: i < Math.round((lead.temperatureScore ?? 0) / 10)
+                        ? scoreColor(lead.temperatureScore ?? 0)
+                        : 'var(--bg-overlay)',
+                    }} />
+                  ))}
+                </div>
+
+                {/* Continuous bar */}
+                <div style={{ width: '100%', height: '6px', background: 'var(--bg-overlay)', borderRadius: '3px', marginBottom: '8px' }}>
+                  <div style={{
+                    width: `${lead.temperatureScore ?? 0}%`, height: '100%',
+                    background: scoreColor(lead.temperatureScore ?? 0), borderRadius: '3px',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '12px', color: scoreColor(lead.temperatureScore ?? 0) }}>
+                    {(lead.temperatureScore ?? 0) >= 60 ? 'Caliente' : (lead.temperatureScore ?? 0) >= 35 ? 'Tibio' : 'Frío'}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Score {lead.temperatureScore ?? 0}/100
+                  </span>
+                </div>
+              </>
             )}
           </div>
 
@@ -418,7 +328,13 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
             {notes !== savedNotes && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
                 <button
-                  onClick={() => setSavedNotes(notes)}
+                  onClick={() => {
+                    startTransition(async () => {
+                      const res = await updateLeadNotes(lead.id, notes)
+                      if (res.ok) setSavedNotes(notes)
+                    })
+                  }}
+                  disabled={isPending}
                   style={{
                     background: 'var(--accent-gold)', color: 'var(--bg-base)',
                     border: 'none', borderRadius: '6px',
@@ -446,77 +362,91 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
               )}
             </div>
 
-            {isProcessActive ? (
-              <>
-                {[
-                  { label: 'Propiedad',   value: '123 Ocean View Dr, Norfolk' },
-                  { label: 'Tipo loan',   value: 'VA Loan' },
-                  { label: 'Inicio',      value: '1 Abr 2026' },
-                  { label: 'Cierre est.', value: '30 May 2026' },
-                ].map((row, idx, arr) => (
-                  <div
-                    key={row.label}
-                    style={{
-                      display: 'flex', justifyContent: 'space-between', padding: '6px 0',
-                      borderBottom: idx < arr.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                    }}
-                  >
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '100px' }}>{row.label}</span>
-                    <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{row.value}</span>
-                  </div>
-                ))}
-
-                <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', margin: '16px 0 10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Pasos del proceso
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: currentStatus === 'process_started' ? '16px' : '0' }}>
-                  {PROCESS_STEPS.map((step, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {step.done
-                        ? <CheckCircle2 size={16} style={{ color: '#6BA368', flexShrink: 0 }} />
-                        : <Circle       size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                      }
-                      <span style={{ fontSize: '13px', color: step.done ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                        {step.label}
-                      </span>
+            {(currentStatus === 'closed' || currentStatus === 'lost') && (
+              <div style={{
+                marginBottom: '12px', padding: '8px 12px', borderRadius: '6px',
+                background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
+                fontSize: '12px', color: 'var(--text-muted)',
+              }}>
+                Proceso deshabilitado — lead cerrado.
+              </div>
+            )}
+            <div style={{
+              opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
+              pointerEvents: currentStatus === 'closed' || currentStatus === 'lost' ? 'none' : 'auto',
+            }}>
+              {isProcessActive ? (
+                <>
+                  {[
+                    { label: 'Propiedad',   value: purchaseProcess?.address    ?? '—' },
+                    { label: 'Tipo loan',   value: purchaseProcess?.loanType   ?? '—' },
+                    { label: 'Inicio',      value: purchaseProcess?.createdAt  ? formatFullDate(purchaseProcess.createdAt) : '—' },
+                    { label: 'Cierre est.', value: purchaseProcess?.closingDate ? formatFullDate(purchaseProcess.closingDate) : '—' },
+                  ].map((row, idx, arr) => (
+                    <div
+                      key={row.label}
+                      style={{
+                        display: 'flex', justifyContent: 'space-between', padding: '6px 0',
+                        borderBottom: idx < arr.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                      }}
+                    >
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '100px' }}>{row.label}</span>
+                      <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{row.value}</span>
                     </div>
                   ))}
-                </div>
 
-                {currentStatus === 'process_started' && (
+                  <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', margin: '16px 0 10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Pasos del proceso
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: currentStatus === 'process_started' ? '16px' : '0' }}>
+                    {PROCESS_STEPS.map((step, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {step.done
+                          ? <CheckCircle2 size={16} style={{ color: '#6BA368', flexShrink: 0 }} />
+                          : <Circle       size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                        }
+                        <span style={{ fontSize: '13px', color: step.done ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                          {step.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {currentStatus === 'process_started' && (
+                    <button
+                      onClick={() => setCurrentStatus('process_completed')}
+                      style={{
+                        width: '100%', padding: '8px 16px',
+                        background: 'rgba(107,163,104,0.12)', color: '#6BA368',
+                        border: '1px solid rgba(107,163,104,0.3)',
+                        borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
+                      }}
+                    >
+                      Marcar como Completado
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+                    Este lead aún no tiene un proceso de compra activo.
+                  </p>
                   <button
-                    onClick={() => setCurrentStatus('process_completed')}
+                    onClick={() => setShowProcessModal(true)}
                     style={{
-                      width: '100%', padding: '8px 16px',
-                      background: 'rgba(107,163,104,0.12)', color: '#6BA368',
-                      border: '1px solid rgba(107,163,104,0.3)',
-                      borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '8px 16px', fontSize: '13px',
+                      background: 'rgba(201,169,110,0.08)',
+                      border: '1px solid var(--accent-gold)',
+                      color: 'var(--accent-gold)',
+                      borderRadius: '8px', cursor: 'pointer',
                     }}
                   >
-                    Marcar como Completado
+                    + Iniciar proceso de compra
                   </button>
-                )}
-              </>
-            ) : (
-              <>
-                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
-                  Este lead aún no tiene un proceso de compra activo.
-                </p>
-                <button
-                  onClick={() => setShowProcessModal(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '8px 16px', fontSize: '13px',
-                    background: 'rgba(201,169,110,0.08)',
-                    border: '1px solid var(--accent-gold)',
-                    color: 'var(--accent-gold)',
-                    borderRadius: '8px', cursor: 'pointer',
-                  }}
-                >
-                  + Iniciar proceso de compra
-                </button>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -543,15 +473,7 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
                   </div>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>{agent.email}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>{agent.phone ?? '—'}</div>
-                <button style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '6px 12px', fontSize: '12px',
-                  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                  color: 'var(--text-secondary)', borderRadius: '6px', cursor: 'pointer',
-                }}>
-                  <Calendar size={13} /> Ver Calendly
-                </button>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{agent.phone ?? '—'}</div>
               </>
             ) : (
               <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Sin agente asignado</div>
@@ -581,31 +503,112 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
           {/* Quick actions card */}
           <div style={{ ...CARD, marginBottom: 0 }}>
             <div style={CARD_TITLE}>Acciones</div>
+
+            {/* Email and WhatsApp — placeholders */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {([
-                { icon: <Mail size={14} />,          label: 'Enviar email',         onClick: undefined,                                                     danger: false },
-                { icon: <MessageCircle size={14} />, label: 'WhatsApp',             onClick: undefined,                                                     danger: false },
-                { icon: <Flame size={14} />,         label: 'Marcar como hot',      onClick: () => { setLocalTempScore(85); setCurrentStatus('hot') },       danger: false },
-                { icon: <XCircle size={14} />,       label: 'Marcar como perdido',  onClick: () => setCurrentStatus('lost'),                                  danger: true  },
-              ] as { icon: React.ReactNode; label: string; onClick: (() => void) | undefined; danger: boolean }[]).map((btn, i) => (
+              <button className="action-btn" style={ACTION_BTN_STYLE}>
+                <Mail size={14} /> Enviar email
+              </button>
+              <button className="action-btn" style={ACTION_BTN_STYLE}>
+                <MessageCircle size={14} /> WhatsApp
+              </button>
+
+              {/* Marcar como Cerrado — inline confirm */}
+              {confirmClose ? (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => {
+                      setConfirmClose(false)
+                      startTransition(async () => {
+                        const res = await updateLeadStatus(lead.id, 'closed')
+                        if (res.ok) setCurrentStatus('closed')
+                        else setActionError(res.error)
+                      })
+                    }}
+                    style={{
+                      flex: 1, padding: '9px 14px', fontSize: '13px', fontWeight: 500,
+                      background: 'rgba(74,155,107,0.1)', color: '#4A9B6B',
+                      border: '1px solid rgba(74,155,107,0.3)', borderRadius: '8px', cursor: 'pointer',
+                    }}
+                  >
+                    ¿Confirmar cierre?
+                  </button>
+                  <button
+                    onClick={() => setConfirmClose(false)}
+                    style={{
+                      padding: '9px 12px', fontSize: '13px',
+                      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-muted)', borderRadius: '8px', cursor: 'pointer',
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
                 <button
-                  key={i}
-                  onClick={btn.onClick}
+                  onClick={() => setConfirmClose(true)}
+                  disabled={currentStatus === 'closed' || currentStatus === 'lost'}
                   className="action-btn"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    width: '100%', textAlign: 'left',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px', padding: '9px 14px',
-                    fontSize: '13px', cursor: 'pointer',
-                    color: btn.danger ? 'rgba(201,123,107,0.7)' : 'var(--text-secondary)',
+                    ...ACTION_BTN_STYLE,
+                    opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
+                    cursor: currentStatus === 'closed' || currentStatus === 'lost' ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {btn.icon} {btn.label}
+                  <XCircle size={14} style={{ color: '#4A9B6B' }} /> Marcar como Cerrado
                 </button>
-              ))}
+              )}
+
+              {/* Marcar como Perdido — inline confirm */}
+              {confirmLost ? (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => {
+                      setConfirmLost(false)
+                      startTransition(async () => {
+                        const res = await updateLeadStatus(lead.id, 'lost')
+                        if (res.ok) setCurrentStatus('lost')
+                        else setActionError(res.error)
+                      })
+                    }}
+                    style={{
+                      flex: 1, padding: '9px 14px', fontSize: '13px', fontWeight: 500,
+                      background: 'rgba(201,123,107,0.1)', color: '#C97B6B',
+                      border: '1px solid rgba(201,123,107,0.3)', borderRadius: '8px', cursor: 'pointer',
+                    }}
+                  >
+                    ¿Confirmar pérdida?
+                  </button>
+                  <button
+                    onClick={() => setConfirmLost(false)}
+                    style={{
+                      padding: '9px 12px', fontSize: '13px',
+                      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-muted)', borderRadius: '8px', cursor: 'pointer',
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmLost(true)}
+                  disabled={currentStatus === 'closed' || currentStatus === 'lost'}
+                  className="action-btn"
+                  style={{
+                    ...ACTION_BTN_STYLE, color: 'rgba(201,123,107,0.7)',
+                    opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
+                    cursor: currentStatus === 'closed' || currentStatus === 'lost' ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <XCircle size={14} /> Marcar como Perdido
+                </button>
+              )}
             </div>
+
+            {actionError && (
+              <p style={{ fontSize: '12px', color: '#C97B6B', marginTop: '8px' }}>{actionError}</p>
+            )}
           </div>
         </div>
       </div>
@@ -614,41 +617,56 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px 24px', marginTop: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
           <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Historial de actividad</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{displayEvents.length} eventos</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} eventos</span>
         </div>
 
-        <div style={{ position: 'relative' }}>
-          {/* Vertical connector line */}
-          <div style={{
-            position: 'absolute', left: '13px', top: '14px', bottom: '14px',
-            width: '2px', background: 'var(--border-subtle)',
-          }} />
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {displayEvents.map(event => (
-              <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', paddingBottom: '16px' }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '50%',
-                  background: `${event.color}1F`, color: event.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0, position: 'relative', zIndex: 1,
-                }}>
-                  <TLIcon name={event.icon} />
-                </div>
-                <div style={{ flex: 1, paddingTop: '5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                      {event.description}
-                    </span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      {formatDateTime(event.date)}
-                    </span>
+        {events.length === 0 ? (
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            Sin actividad registrada todavía.
+          </p>
+        ) : (
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: '13px', top: '14px', bottom: '14px', width: '2px', background: 'var(--border-subtle)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {events.map(event => {
+                const { icon, color } = EVENT_ICON_MAP[event.type] ?? DEFAULT_EVENT
+                return (
+                  <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', paddingBottom: '16px' }}>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '50%',
+                      background: `${color}1F`, color,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0, position: 'relative', zIndex: 1,
+                    }}>
+                      {icon}
+                    </div>
+                    <div style={{ flex: 1, paddingTop: '5px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4, flex: 1 }}>
+                          {event.description}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          {event.points !== null && (
+                            <span style={{
+                              fontSize: '11px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
+                              background: event.points > 0 ? 'rgba(107,163,104,0.12)' : 'rgba(201,123,107,0.12)',
+                              color: event.points > 0 ? '#6BA368' : '#C97B6B',
+                            }}>
+                              {event.points > 0 ? `+${event.points}` : event.points} pts
+                            </span>
+                          )}
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            {formatDateTime(event.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── Modal: Iniciar proceso ── */}
@@ -730,6 +748,9 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
             </div>
 
             {/* Modal actions */}
+            {actionError && (
+              <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '8px' }}>{actionError}</p>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
                 onClick={() => setShowProcessModal(false)}
@@ -742,7 +763,26 @@ export function LeadDetailClient({ lead, agent, source, events }: LeadDetailProp
                 Cancelar
               </button>
               <button
-                onClick={() => { setShowProcessModal(false); setCurrentStatus('process_started') }}
+                onClick={() => {
+                  startTransition(async () => {
+                    const res = await startPurchaseProcess(lead.id, {
+                      address:     modalAddress,
+                      loanType:    modalLoanType,
+                      closingDate: modalClosingDate,
+                      notes:       modalNotes,
+                    })
+                    if (res.ok) {
+                      setShowProcessModal(false)
+                      setModalAddress('')
+                      setModalLoanType('VA Loan')
+                      setModalClosingDate('')
+                      setModalNotes('')
+                    } else {
+                      setActionError(res.error)
+                    }
+                  })
+                }}
+                disabled={isPending}
                 style={{
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
                   background: 'var(--accent-gold)', color: 'var(--bg-base)',

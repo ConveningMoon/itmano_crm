@@ -40,13 +40,13 @@ export default async function AnalyticsPage() {
 
   // ─── KPIs ───────────────────────────────────────────────────
   const totalLeads = leads.length
-  const hotLeads = leads.filter(l => l.temperatureScore >= 70).length
+  const hotLeads = leads.filter(l => (l.temperatureScore ?? 0) >= 70).length
   const closedLeads = leads.filter(l =>
     l.status === 'closed' || l.status === 'process_completed'
   ).length
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
   const avgScore = totalLeads > 0
-    ? Math.round(leads.reduce((sum, l) => sum + l.temperatureScore, 0) / totalLeads)
+    ? Math.round(leads.reduce((sum, l) => sum + (l.temperatureScore ?? 0), 0) / totalLeads)
     : 0
 
   // ─── Source donut ────────────────────────────────────────────
@@ -72,7 +72,7 @@ export default async function AnalyticsPage() {
       name: agent.name.split(' ')[0],
       fullName: agent.name,
       total: agentLeads.length,
-      hot: agentLeads.filter(l => l.temperatureScore >= 70).length,
+      hot: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
       closed: agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
       color: agent.accentColor,
     }
@@ -97,7 +97,7 @@ export default async function AnalyticsPage() {
       month:     MONTH_LABELS[m],
       leads:     monthLeads.length,
       nurturing: monthLeads.filter(l => l.status === 'nurturing').length,
-      hot:       monthLeads.filter(l => l.temperatureScore >= 70).length,
+      hot:       monthLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
       closed:    monthLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
     })
   }
@@ -121,13 +121,13 @@ export default async function AnalyticsPage() {
   const tempByAgent = agents.map(agent => {
     const agentLeads = leads.filter(l => l.agentId === agent.id)
     const avgTemp = agentLeads.length > 0
-      ? Math.round(agentLeads.reduce((s, l) => s + l.temperatureScore, 0) / agentLeads.length)
+      ? Math.round(agentLeads.reduce((s, l) => s + (l.temperatureScore ?? 0), 0) / agentLeads.length)
       : 0
     return {
       agent,
       avgTemp,
       totalLeads: agentLeads.length,
-      hotLeads: agentLeads.filter(l => l.temperatureScore >= 70).length,
+      hotLeads: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
     }
   }).sort((a, b) => b.avgTemp - a.avgTemp)
 

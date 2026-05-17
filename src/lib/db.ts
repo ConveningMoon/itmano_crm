@@ -35,7 +35,7 @@ export interface LeadRow {
   phone: string | null
   language: string
   status: string
-  temperature_score: number
+  temperature_score: number | null
   lender: string | null
   notes: string | null
   created_at: string
