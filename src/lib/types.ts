@@ -87,11 +87,11 @@ export interface LeadEvent {
 
 export interface PurchaseProcess {
   id: string
-  leadId: string
   tenantId: string
+  leadId: string
   address: string
   loanType: string
-  closingDate?: string
+  closingDate?: string   // ISO date string "YYYY-MM-DD" from Postgres date column
   notes?: string
   createdAt: string
 }

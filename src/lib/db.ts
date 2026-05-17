@@ -1,4 +1,4 @@
-import type { Agent, Lead, LeadSource, LeadMagnet, PurchaseProcess } from './types'
+import type { Agent, Lead, LeadEvent, LeadSource, LeadMagnet, PurchaseProcess } from './types'
 
 // ─── DB row shapes ────────────────────────────────────────────────────────────
 
@@ -57,6 +57,27 @@ export interface LeadMagnetRow {
   agents?: AgentRow | null
 }
 
+export interface LeadEventRow {
+  id: string
+  lead_id: string
+  tenant_id: string
+  type: string
+  description: string
+  points: number | null
+  created_at: string
+}
+
+export interface PurchaseProcessRow {
+  id: string
+  lead_id: string
+  tenant_id: string
+  address: string
+  loan_type: string
+  closing_date: string | null
+  notes: string | null
+  created_at: string
+}
+
 // ─── Mappers ─────────────────────────────────────────────────────────────────
 
 export function mapAgent(r: AgentRow): Agent {
@@ -103,27 +124,6 @@ export function mapLead(r: LeadRow): Lead {
   }
 }
 
-export interface LeadEventRow {
-  id: string
-  lead_id: string
-  tenant_id: string
-  type: string
-  description: string
-  points: number | null
-  created_at: string
-}
-
-export interface PurchaseProcessRow {
-  id: string
-  lead_id: string
-  tenant_id: string
-  address: string
-  loan_type: string
-  closing_date: string | null
-  notes: string | null
-  created_at: string
-}
-
 export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
   return {
     id: r.id,
@@ -149,5 +149,17 @@ export function mapLeadMagnet(r: LeadMagnetRow): LeadMagnet {
     pageUrl: r.page_url,
     coverEmoji: r.cover_emoji,
     active: r.active,
+  }
+}
+
+export function mapLeadEvent(r: LeadEventRow): LeadEvent {
+  return {
+    id:          r.id,
+    tenantId:    r.tenant_id,
+    leadId:      r.lead_id,
+    type:        r.type,
+    description: r.description,
+    points:      r.points,
+    createdAt:   r.created_at,
   }
 }
