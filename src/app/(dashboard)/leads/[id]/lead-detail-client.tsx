@@ -78,6 +78,35 @@ const ACTION_BTN_STYLE: React.CSSProperties = {
   color: 'var(--text-secondary)',
 }
 
+const INPUT_STYLE: React.CSSProperties = {
+  width: '100%', background: 'var(--bg-overlay)',
+  border: '1px solid var(--border-subtle)', borderRadius: '8px',
+  padding: '8px 12px', color: 'var(--text-primary)',
+  fontSize: '13px', outline: 'none', boxSizing: 'border-box',
+}
+
+const LABEL_STYLE: React.CSSProperties = {
+  fontSize: '12px', color: 'var(--text-muted)',
+  display: 'block', marginBottom: '6px',
+  textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500,
+}
+
+const EVENT_ICON_MAP: Record<string, { icon: React.ReactNode; color: string }> = {
+  lead_created:            { icon: <UserPlus size={14} />,          color: '#5B8EC9' },
+  email_opened:            { icon: <Mail size={14} />,              color: '#C9A96E' },
+  email_clicked:           { icon: <MousePointer2 size={14} />,     color: '#C9A96E' },
+  lm_downloaded:           { icon: <FileDown size={14} />,          color: '#5AAFA0' },
+  consultation_scheduled:  { icon: <Calendar size={14} />,          color: '#9B72CF' },
+  consultation_attended:   { icon: <CheckCircle2 size={14} />,      color: '#6BA368' },
+  reply_received:          { icon: <MessageCircle size={14} />,     color: '#5AAFA0' },
+  phone_call:              { icon: <Phone size={14} />,             color: '#5B8EC9' },
+  unsubscribed:            { icon: <XCircle size={14} />,           color: '#C97B6B' },
+  status_changed:          { icon: <ArrowRightCircle size={14} />,  color: '#9B72CF' },
+  score_manual:            { icon: <Activity size={14} />,          color: '#C9A96E' },
+}
+
+const DEFAULT_EVENT = { icon: <Circle size={14} />, color: '#C9A96E' }
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface LeadDetailProps {
@@ -120,6 +149,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
 
   const isProcessActive = currentStatus === 'process_started' || currentStatus === 'process_completed'
   const scoreColor = (s: number) => s >= 60 ? '#E04040' : s >= 35 ? '#E07B3A' : '#C9A96E'
+  // Primary: status-based freeze; null score is a DB consequence of closed/lost
   const isFrozen = lead.temperatureScore === null || FROZEN_STATUSES.includes(currentStatus)
 
   const infoRows = [
@@ -130,34 +160,6 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
     { label: 'Registrado',  value: formatFullDate(lead.createdAt) },
     { label: 'Última act.', value: formatFullDate(lead.updatedAt) },
   ]
-
-  const INPUT_STYLE: React.CSSProperties = {
-    width: '100%', background: 'var(--bg-overlay)',
-    border: '1px solid var(--border-subtle)', borderRadius: '8px',
-    padding: '8px 12px', color: 'var(--text-primary)',
-    fontSize: '13px', outline: 'none', boxSizing: 'border-box',
-  }
-
-  const LABEL_STYLE: React.CSSProperties = {
-    fontSize: '12px', color: 'var(--text-muted)',
-    display: 'block', marginBottom: '6px',
-    textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500,
-  }
-
-  const EVENT_ICON_MAP: Record<string, { icon: React.ReactNode; color: string }> = {
-    lead_created:            { icon: <UserPlus size={14} />,          color: '#5B8EC9' },
-    email_opened:            { icon: <Mail size={14} />,              color: '#C9A96E' },
-    email_clicked:           { icon: <MousePointer2 size={14} />,     color: '#C9A96E' },
-    lm_downloaded:           { icon: <FileDown size={14} />,          color: '#5AAFA0' },
-    consultation_scheduled:  { icon: <Calendar size={14} />,          color: '#9B72CF' },
-    consultation_attended:   { icon: <CheckCircle2 size={14} />,      color: '#6BA368' },
-    reply_received:          { icon: <MessageCircle size={14} />,     color: '#5AAFA0' },
-    phone_call:              { icon: <Phone size={14} />,             color: '#5B8EC9' },
-    unsubscribed:            { icon: <XCircle size={14} />,           color: '#C97B6B' },
-    status_changed:          { icon: <ArrowRightCircle size={14} />,  color: '#9B72CF' },
-    score_manual:            { icon: <Activity size={14} />,          color: '#C9A96E' },
-  }
-  const DEFAULT_EVENT = { icon: <Circle size={14} />, color: '#C9A96E' }
 
   return (
     <div style={{ padding: '24px' }}>
@@ -330,6 +332,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
                 <button
                   onClick={() => {
                     startTransition(async () => {
+                      setActionError(null)
                       const res = await updateLeadNotes(lead.id, notes)
                       if (res.ok) setSavedNotes(notes)
                     })
@@ -414,7 +417,14 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
 
                   {currentStatus === 'process_started' && (
                     <button
-                      onClick={() => setCurrentStatus('process_completed')}
+                      onClick={() => {
+                        startTransition(async () => {
+                          setActionError(null)
+                          const res = await updateLeadStatus(lead.id, 'process_completed')
+                          if (res.ok) setCurrentStatus('process_completed')
+                          else setActionError(res.error)
+                        })
+                      }}
                       style={{
                         width: '100%', padding: '8px 16px',
                         background: 'rgba(107,163,104,0.12)', color: '#6BA368',
@@ -506,10 +516,10 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
 
             {/* Email and WhatsApp — placeholders */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <button className="action-btn" style={ACTION_BTN_STYLE}>
+              <button disabled className="action-btn" style={{ ...ACTION_BTN_STYLE, opacity: 0.5, cursor: 'not-allowed' }}>
                 <Mail size={14} /> Enviar email
               </button>
-              <button className="action-btn" style={ACTION_BTN_STYLE}>
+              <button disabled className="action-btn" style={{ ...ACTION_BTN_STYLE, opacity: 0.5, cursor: 'not-allowed' }}>
                 <MessageCircle size={14} /> WhatsApp
               </button>
 
@@ -520,6 +530,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
                     onClick={() => {
                       setConfirmClose(false)
                       startTransition(async () => {
+                        setActionError(null)
                         const res = await updateLeadStatus(lead.id, 'closed')
                         if (res.ok) setCurrentStatus('closed')
                         else setActionError(res.error)
@@ -566,6 +577,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
                     onClick={() => {
                       setConfirmLost(false)
                       startTransition(async () => {
+                        setActionError(null)
                         const res = await updateLeadStatus(lead.id, 'lost')
                         if (res.ok) setCurrentStatus('lost')
                         else setActionError(res.error)
@@ -765,6 +777,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
               <button
                 onClick={() => {
                   startTransition(async () => {
+                    setActionError(null)
                     const res = await startPurchaseProcess(lead.id, {
                       address:     modalAddress,
                       loanType:    modalLoanType,
