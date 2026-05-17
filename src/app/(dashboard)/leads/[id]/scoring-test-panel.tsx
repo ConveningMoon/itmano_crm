@@ -70,7 +70,7 @@ const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ScoringTestPanel({ leadId, currentStatus }: ScoringTestPanelProps) {
+export function ScoringTestPanel({ leadId, currentStatus }: ScoringTestPanelProps) {
   const router = useRouter()
   const [checked, setChecked]     = useState<Set<string>>(new Set())
   const [error, setError]         = useState<string | null>(null)

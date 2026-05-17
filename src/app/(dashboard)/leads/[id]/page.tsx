@@ -36,7 +36,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const purchaseProcess: PurchaseProcess | null = rawProcess ? mapPurchaseProcess(rawProcess as PurchaseProcessRow) : null
 
   return (
-    // @ts-expect-error — agents, sources, purchaseProcess props added in next task
     <LeadDetailClient
       lead={lead}
       agent={agents.find(a => a.id === lead.agentId)}

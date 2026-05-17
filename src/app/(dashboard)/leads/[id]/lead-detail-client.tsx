@@ -12,6 +12,8 @@ import {
   MessageCircle, XCircle,
   Phone, Activity,
 } from 'lucide-react'
+import { EditLeadModal } from './edit-lead-modal'
+import { ScoringTestPanel } from './scoring-test-panel'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +123,6 @@ interface LeadDetailProps {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- agents/sources reserved for edit modal (Phase 2 next step)
 export function LeadDetailClient({ lead, agent, source, agents, sources, events, purchaseProcess }: LeadDetailProps) {
   const router = useRouter()
 
@@ -133,7 +134,6 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
   const [modalLoanType, setModalLoanType]   = useState('VA Loan')
   const [modalClosingDate, setModalClosingDate] = useState('')
   const [modalNotes, setModalNotes]         = useState('')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- edit modal state reserved for the ⋯ modal (next task)
   const [showEditModal, setShowEditModal]   = useState(false)
   const [confirmClose, setConfirmClose]     = useState(false)
   const [confirmLost, setConfirmLost]       = useState(false)
@@ -625,6 +625,13 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
         </div>
       </div>
 
+      {/* ── Scoring Test Panel ── */}
+      <ScoringTestPanel
+        leadId={lead.id}
+        currentStatus={currentStatus}
+        currentScore={lead.temperatureScore}
+      />
+
       {/* ── Timeline ── */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px 24px', marginTop: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
@@ -680,6 +687,15 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
           </div>
         )}
       </div>
+
+      {/* ── Modal: Edit Lead ── */}
+      <EditLeadModal
+        lead={lead}
+        agents={agents}
+        sources={sources}
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+      />
 
       {/* ── Modal: Iniciar proceso ── */}
       {showProcessModal && (
