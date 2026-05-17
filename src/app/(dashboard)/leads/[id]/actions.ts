@@ -35,6 +35,16 @@ export async function updateLeadStatus(
   const { error } = await supabase.from('leads').update(update).eq('id', leadId)
   if (error) return { ok: false, error: error.message }
 
+  if (status === 'process_completed') {
+    await supabase.from('lead_events').insert({
+      lead_id:     leadId,
+      tenant_id:   TENANT_ID,
+      type:        'status_changed',
+      description: 'Proceso de compra completado.',
+      points:      0,
+    })
+  }
+
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
   revalidatePath('/dashboard')
@@ -174,6 +184,14 @@ export async function startPurchaseProcess(
     .eq('id', leadId)
 
   if (updateErr) return { ok: false, error: updateErr.message }
+
+  await supabase.from('lead_events').insert({
+    lead_id:     leadId,
+    tenant_id:   TENANT_ID,
+    type:        'status_changed',
+    description: 'Proceso de compra iniciado.',
+    points:      0,
+  })
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')

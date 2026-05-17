@@ -40,14 +40,6 @@ function getInitials(firstName: string, lastName: string): string {
 
 const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
 
-const PROCESS_STEPS = [
-  { label: 'Oferta aceptada',            done: true },
-  { label: 'Inspección completada',       done: true },
-  { label: 'Aprobación del préstamo',    done: false },
-  { label: 'Fecha de cierre confirmada', done: false },
-  { label: 'Cierre',                     done: false },
-]
-
 const LOAN_TYPES = ['VA Loan', 'FHA', 'Convencional', 'USDA', 'Jumbo', 'Cash']
 
 const SPECIALTY_LABEL: Record<string, string> = {
@@ -158,7 +150,8 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
     { label: 'Teléfono',    value: lead.phone || '—' },
     { label: 'Idioma',      value: `${langCfg.flag} ${langCfg.label}` },
     { label: 'Registrado',  value: formatFullDate(lead.createdAt) },
-    { label: 'Última act.', value: formatFullDate(lead.updatedAt) },
+    { label: 'Prestamista', value: lead.lender || '—' },
+	{ label: 'Última act.', value: formatFullDate(lead.updatedAt) },
   ]
 
   return (
@@ -198,8 +191,19 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
               {initials}
             </div>
             <div>
-              <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                {lead.firstName} {lead.lastName}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                  {lead.firstName} {lead.lastName}
+                </span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center',
+                  padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
+                  background: STATUS_CONFIG[currentStatus].bgColor,
+                  color:      STATUS_CONFIG[currentStatus].color,
+                  border:     `1px solid ${STATUS_CONFIG[currentStatus].color}40`,
+                }}>
+                  {STATUS_CONFIG[currentStatus].label}
+                </span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span>{lead.email}</span>
@@ -210,29 +214,18 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
             </div>
           </div>
 
-          {/* Status badge + more button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: '5px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: 500,
-              background: STATUS_CONFIG[currentStatus].bgColor,
-              color:      STATUS_CONFIG[currentStatus].color,
-              border:     `1px solid ${STATUS_CONFIG[currentStatus].color}40`,
-            }}>
-              {STATUS_CONFIG[currentStatus].label}
-            </span>
-            <button
-              onClick={() => setShowEditModal(true)}
-              style={{
-                width: '32px', height: '32px', borderRadius: '8px',
-                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-                cursor: 'pointer', color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <MoreHorizontal size={16} />
-            </button>
-          </div>
+          {/* More button */}
+          <button
+            onClick={() => setShowEditModal(true)}
+            style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+              cursor: 'pointer', color: 'var(--text-muted)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <MoreHorizontal size={16} />
+          </button>
         </div>
       </div>
 
@@ -397,23 +390,6 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
                       <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{row.value}</span>
                     </div>
                   ))}
-
-                  <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', margin: '16px 0 10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Pasos del proceso
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: currentStatus === 'process_started' ? '16px' : '0' }}>
-                    {PROCESS_STEPS.map((step, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {step.done
-                          ? <CheckCircle2 size={16} style={{ color: '#6BA368', flexShrink: 0 }} />
-                          : <Circle       size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                        }
-                        <span style={{ fontSize: '13px', color: step.done ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                          {step.label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
 
                   {currentStatus === 'process_started' && (
                     <button
