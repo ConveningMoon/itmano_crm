@@ -37,7 +37,7 @@ export default function AnalyticsLoading() {
         {[...Array(2)].map((_, i) => (
           <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
             <Skeleton w="120px" h={14} r={4} />
-            <Skeleton w="180px" h={10} r={3} style={{ marginTop: '6px', marginBottom: '16px' }} />
+            <div style={{ marginTop: '6px', marginBottom: '16px' }}><Skeleton w="180px" h={10} r={3} /></div>
             <Skeleton w="100%" h={200} r={8} />
           </div>
         ))}
@@ -46,7 +46,7 @@ export default function AnalyticsLoading() {
       {/* Area chart */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
         <Skeleton w="140px" h={14} r={4} />
-        <Skeleton w="220px" h={10} r={3} style={{ marginTop: '6px', marginBottom: '16px' }} />
+        <div style={{ marginTop: '6px', marginBottom: '16px' }}><Skeleton w="220px" h={10} r={3} /></div>
         <Skeleton w="100%" h={220} r={8} />
       </div>
 
@@ -55,7 +55,7 @@ export default function AnalyticsLoading() {
         {[...Array(2)].map((_, i) => (
           <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
             <Skeleton w="120px" h={14} r={4} />
-            <Skeleton w="180px" h={10} r={3} style={{ marginTop: '6px', marginBottom: '16px' }} />
+            <div style={{ marginTop: '6px', marginBottom: '16px' }}><Skeleton w="180px" h={10} r={3} /></div>
             <Skeleton w="100%" h={180} r={8} />
           </div>
         ))}
