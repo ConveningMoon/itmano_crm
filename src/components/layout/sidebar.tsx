@@ -3,7 +3,7 @@ import { NavItem } from './nav-item'
 const navItems = [
   { label: 'Dashboard',      href: '/dashboard',     icon: 'LayoutDashboard' },
   { label: 'Leads',          href: '/leads',         icon: 'Users' },
-  { label: 'Lead Magnets',   href: '/lead-magnets',  icon: 'FileDown' },
+  { label: 'Fuentes',        href: '/sources',       icon: 'GitBranch' },
   { label: 'Analytics',      href: '/analytics',     icon: 'BarChart2' },
   { label: 'Configuración',  href: '/settings',      icon: 'Settings' },
 ]

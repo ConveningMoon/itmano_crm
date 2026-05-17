@@ -1,11 +1,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { SOURCE_CONFIG } from '@/lib/config'
+import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
 import { StatusDistributionChart } from './charts/status-distribution-chart'
-import { Users, Flame, TrendingUp, Activity } from 'lucide-react'
+import { Users, Flame, TrendingUp, Activity, GitBranch } from 'lucide-react'
+import Link from 'next/link'
 
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -30,9 +32,12 @@ const CARD_SUBTITLE: React.CSSProperties = {
 export default async function AnalyticsPage() {
   const supabase = createAdminClient()
 
-  const [{ data: rawLeads }, { data: rawAgents }] = await Promise.all([
+  const TENANT_ID = 'tenant-aj'
+
+  const [{ data: rawLeads }, { data: rawAgents }, channels] = await Promise.all([
     supabase.from('leads').select('*, lead_sources(type)'),
     supabase.from('agents').select('*'),
+    getChannelsWithMetrics(TENANT_ID, 30),
   ])
 
   const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
@@ -234,7 +239,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* FILA 4 — Stacked bar + Temp table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Estados por Agente</div>
           <div style={CARD_SUBTITLE}>Distribución de pipeline por agente</div>
@@ -320,6 +325,100 @@ export default async function AnalyticsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+      {/* FILA 5 — Canales de adquisición */}
+      <div style={CARD}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <GitBranch size={16} color="var(--accent-gold)" />
+            <span style={CARD_HEADER}>Rendimiento por Canal · 30 días</span>
+          </div>
+          <Link href="/sources" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+            Ver todos →
+          </Link>
+        </div>
+        <div style={{ ...CARD_SUBTITLE, marginBottom: '12px' }}>Leads captados, vistas y conversión por canal de adquisición</div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {['Canal', 'Tipo', 'Vistas', 'Leads', 'Conversión', 'Score prom.'].map(col => (
+                <th key={col} style={{
+                  fontSize: '10px',
+                  fontWeight: 500,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  padding: '0 8px 10px 0',
+                  textAlign: col === 'Canal' ? 'left' : 'center',
+                }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {channels.sort((a, b) => b.metrics.leadsInWindow - a.metrics.leadsInWindow).map((ch, i) => {
+              const typeColors: Record<string, string> = {
+                lead_magnet:   'var(--accent-gold)',
+                event:         'var(--accent-teal)',
+                contact_form:  'var(--accent-blue)',
+                manychat_flow: 'var(--accent-green)',
+                manual:        'var(--text-muted)',
+              }
+              const typeLabels: Record<string, string> = {
+                lead_magnet:   'Lead Magnet',
+                event:         'Evento',
+                contact_form:  'Formulario',
+                manychat_flow: 'ManyChat',
+                manual:        'Manual',
+              }
+              const typeColor = typeColors[ch.channelType] ?? 'var(--text-muted)'
+              return (
+                <tr key={ch.id} style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none' }}>
+                  <td style={{ padding: '10px 8px 10px 0' }}>
+                    <Link href={`/sources/${ch.slug}`} style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
+                      {ch.name}
+                    </Link>
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 500,
+                      color: typeColor,
+                      background: `${typeColor}18`,
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {typeLabels[ch.channelType] ?? ch.channelType}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {ch.metrics.pageViewsInWindow}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {ch.metrics.leadsInWindow}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: ch.metrics.conversionRate >= 15 ? 'var(--accent-green)' : ch.metrics.conversionRate >= 8 ? 'var(--accent-gold)' : 'var(--text-muted)',
+                    }}>
+                      {ch.metrics.conversionRate}%
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 0 10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {ch.metrics.avgTempScore !== null ? ch.metrics.avgTempScore : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
