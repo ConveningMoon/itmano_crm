@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import { LANGUAGE_CONFIG } from '@/lib/config'
@@ -50,6 +50,20 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
   })
   const [error, setError]            = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    setForm({
+      firstName: lead.firstName,
+      lastName:  lead.lastName,
+      email:     lead.email,
+      phone:     lead.phone    ?? '',
+      language:  lead.language,
+      agentId:   lead.agentId,
+      sourceId:  lead.sourceId,
+      lender:    lead.lender   ?? '',
+      notes:     lead.notes    ?? '',
+    })
+  }, [lead.id])
 
   if (!isOpen) return null
 
@@ -180,6 +194,7 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
               <select
                 value={form.language}
                 onChange={set('language')}
+                required
                 className="edit-modal-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
@@ -197,6 +212,7 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
               <select
                 value={form.agentId}
                 onChange={set('agentId')}
+                required
                 className="edit-modal-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
@@ -214,6 +230,7 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
               <select
                 value={form.sourceId}
                 onChange={set('sourceId')}
+                required
                 className="edit-modal-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
