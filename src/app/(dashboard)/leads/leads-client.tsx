@@ -190,6 +190,8 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
   }, [leads, sources, search, filterAgent, filterStatus, filterSource, filterLanguage])
 
   useEffect(() => {
+    // reason: reset pagination on filter change — updating derived state in effect is intentional
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
   }, [search, filterAgent, filterStatus, filterSource, filterLanguage])
 

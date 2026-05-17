@@ -305,6 +305,8 @@ export default async function DashboardPage() {
           <div>
             {hotLeads.map(lead => {
               const agent  = agents.find(a => a.id === lead.agentId)
+              // reason: Supabase returns untyped join data without generated schema
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
               const sourceType = raw?.lead_sources?.type ?? 'manual'
               const sourceLabel = SOURCE_CONFIG[sourceType as keyof typeof SOURCE_CONFIG]?.label ?? '—'

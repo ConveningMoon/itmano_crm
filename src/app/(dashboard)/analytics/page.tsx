@@ -52,6 +52,8 @@ export default async function AnalyticsPage() {
   // ─── Source donut ────────────────────────────────────────────
   const sourceCounts: Record<string, number> = {}
   leads.forEach(lead => {
+    // reason: Supabase returns untyped join data without generated schema
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
     const type = raw?.lead_sources?.type ?? 'manual'
     sourceCounts[type] = (sourceCounts[type] ?? 0) + 1
