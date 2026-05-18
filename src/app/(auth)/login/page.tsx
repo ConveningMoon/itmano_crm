@@ -1,30 +1,39 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export default function LoginPage() {
-  const router = useRouter()
+function LoginForm() {
+  const searchParams = useSearchParams()
+  const nextParam = useRef<string>(searchParams.get('next') ?? '/dashboard')
+
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
 
-  async function handleLogin() {
-    if (!email || !password) return
+  async function handleSend() {
+    if (!email) return
     setLoading(true)
     setError(null)
 
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const next = nextParam.current.startsWith('/') ? nextParam.current : '/dashboard'
+
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    })
 
     if (authError) {
       setError(authError.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
-      router.refresh()
+      setLoading(false)
+      setSent(true)
     }
   }
 
@@ -77,65 +86,98 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Fields */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div>
-            <label style={labelStyle}>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              placeholder="tu@email.com"
-              style={inputStyle}
-            />
+        {sent ? (
+          /* Success state */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div
+              style={{
+                fontSize: '13px',
+                color: 'var(--text-primary)',
+                textAlign: 'center',
+                lineHeight: '1.5',
+              }}
+            >
+              Revisa tu email — te enviamos un enlace de acceso.
+            </div>
+            <button
+              onClick={() => setSent(false)}
+              style={{
+                width: '100%',
+                padding: '11px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor: 'transparent',
+                color: 'var(--text-secondary)',
+                fontSize: '13px',
+                fontWeight: '500',
+                letterSpacing: '0.04em',
+                cursor: 'pointer',
+              }}
+            >
+              Enviar de nuevo
+            </button>
           </div>
-          <div>
-            <label style={labelStyle}>Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              placeholder="••••••••"
-              style={inputStyle}
-            />
-          </div>
-        </div>
+        ) : (
+          /* Form state */
+          <>
+            {/* Fields */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={labelStyle}>Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSend()}
+                  placeholder="tu@email.com"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
 
-        {/* Error */}
-        {error && (
-          <div style={{ fontSize: '12px', color: '#E05C5C', textAlign: 'center' }}>
-            {error}
-          </div>
+            {/* Error */}
+            {error && (
+              <div style={{ fontSize: '12px', color: '#E05C5C', textAlign: 'center' }}>
+                {error}
+              </div>
+            )}
+
+            {/* CTA */}
+            <button
+              onClick={handleSend}
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '11px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: loading ? 'var(--accent-gold-dim)' : 'var(--accent-gold)',
+                color: '#0B0C0E',
+                fontSize: '13px',
+                fontWeight: '600',
+                letterSpacing: '0.06em',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                transition: 'background-color 0.15s',
+              }}
+            >
+              {loading ? 'Enviando...' : 'Enviar enlace de acceso'}
+            </button>
+          </>
         )}
-
-        {/* CTA */}
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '11px',
-            borderRadius: '8px',
-            border: 'none',
-            backgroundColor: loading ? 'var(--accent-gold-dim)' : 'var(--accent-gold)',
-            color: '#0B0C0E',
-            fontSize: '13px',
-            fontWeight: '600',
-            letterSpacing: '0.06em',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            transition: 'background-color 0.15s',
-          }}
-        >
-          {loading ? 'Verificando...' : 'Entrar'}
-        </button>
 
         <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
           ITMANO CRM · A&amp;J Real Estate Group
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
 
