@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     if (!error) {
       // Validate `next` to prevent open redirect — only allow relative paths
-      const redirectTo = next.startsWith('/') ? next : '/dashboard'
+      const redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
       return NextResponse.redirect(`${origin}${redirectTo}`)
     }
   }

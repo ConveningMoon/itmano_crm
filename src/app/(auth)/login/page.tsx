@@ -14,12 +14,12 @@ function LoginForm() {
   const [sent, setSent] = useState(false)
 
   async function handleSend() {
-    if (!email) return
+    if (loading || !email) return
     setLoading(true)
     setError(null)
 
     const supabase = createClient()
-    const next = nextParam.current.startsWith('/') ? nextParam.current : '/dashboard'
+    const next = /^\/[^\/\\]/.test(nextParam.current) || nextParam.current === '/' ? nextParam.current : '/dashboard'
 
     const { error: authError } = await supabase.auth.signInWithOtp({
       email,
@@ -130,6 +130,7 @@ function LoginForm() {
                   onChange={e => setEmail(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSend()}
                   placeholder="tu@email.com"
+                  disabled={loading}
                   style={inputStyle}
                 />
               </div>
@@ -137,7 +138,7 @@ function LoginForm() {
 
             {/* Error */}
             {error && (
-              <div style={{ fontSize: '12px', color: '#E05C5C', textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', color: 'var(--accent-coral)', textAlign: 'center' }}>
                 {error}
               </div>
             )}
@@ -152,7 +153,7 @@ function LoginForm() {
                 borderRadius: '8px',
                 border: 'none',
                 backgroundColor: loading ? 'var(--accent-gold-dim)' : 'var(--accent-gold)',
-                color: '#0B0C0E',
+                color: 'var(--bg-base)',
                 fontSize: '13px',
                 fontWeight: '600',
                 letterSpacing: '0.06em',
@@ -166,7 +167,7 @@ function LoginForm() {
         )}
 
         <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
-          ITMANO CRM · A&amp;J Real Estate Group
+          ITMANO CRM
         </div>
       </div>
     </div>
@@ -175,7 +176,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-base)' }} />}>
       <LoginForm />
     </Suspense>
   )
