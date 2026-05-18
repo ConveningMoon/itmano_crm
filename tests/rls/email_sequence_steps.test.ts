@@ -15,8 +15,8 @@ import {
 
 // UUIDs for per-test fixture rows (email_sequence_steps.id is uuid auto-generated,
 // but we supply static ones for predictable cleanup)
-const STEP_A_UUID = '00000000-0000-0000-0000-00000000sa01'
-const STEP_B_UUID = '00000000-0000-0000-0000-00000000sb01'
+const STEP_A_UUID = '00000000-0000-0000-0000-000000000a03'
+const STEP_B_UUID = '00000000-0000-0000-0000-000000000b03'
 
 describe('RLS: email_sequence_steps', () => {
   beforeAll(async () => {
