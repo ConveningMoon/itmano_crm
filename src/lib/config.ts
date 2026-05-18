@@ -1,4 +1,4 @@
-import type { LeadStatus, LeadSourceType, Language } from './types'
+import type { LeadStatus, Language } from './types'
 
 export const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bgColor: string }> = {
   new:               { label: 'Nuevo',             color: '#5B8EC9', bgColor: 'rgba(91,142,201,0.12)' },
@@ -11,14 +11,6 @@ export const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; b
   lost:              { label: 'Perdido',            color: '#C97B6B', bgColor: 'rgba(201,123,107,0.12)' },
 }
 
-export const SOURCE_CONFIG: Record<LeadSourceType, { label: string; icon: string }> = {
-  lead_magnet: { label: 'Lead Magnet',    icon: '📄' },
-  web_form:    { label: 'Formulario Web', icon: '🌐' },
-  open_house:  { label: 'Open House',    icon: '🏠' },
-  manual:      { label: 'Reg. Manual',   icon: '✍️' },
-  ads:         { label: 'Meta Ads',      icon: '📣' },
-  referral:    { label: 'Referido',      icon: '🤝' },
-}
 
 export const LANGUAGE_CONFIG: Record<Language, { label: string; flag: string }> = {
   es: { label: 'Español',   flag: '🇪🇸' },

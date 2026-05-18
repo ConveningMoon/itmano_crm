@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import type { Agent, Language } from '@/lib/types'
+import type { ChannelOption } from './page'
 import { createLead, createLeadsBulk } from './actions'
 import {
   ArrowLeft,
@@ -20,23 +21,23 @@ import {
 } from 'lucide-react'
 
 interface FormData {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  language: Language | ''
-  agentId: string
-  sourceType: string
-  lender: string
-  referralName: string
-  notes: string
+  firstName:            string
+  lastName:             string
+  email:                string
+  phone:                string
+  language:             Language | ''
+  agentId:              string
+  channelType:          string
+  acquisitionChannelId: string
+  lender:               string
+  notes:                string
 }
 
 interface FormErrors {
-  firstName?: string
-  email?: string
-  agentId?: string
-  sourceType?: string
+  firstName?:            string
+  email?:                string
+  agentId?:             string
+  acquisitionChannelId?: string
 }
 
 type ImportStatus = 'idle' | 'parsing' | 'preview' | 'success' | 'error'
@@ -57,17 +58,27 @@ interface ImportedLead {
 }
 
 const INITIAL_FORM: FormData = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  language: '',
-  agentId: '',
-  sourceType: '',
-  lender: '',
-  referralName: '',
-  notes: '',
+  firstName:            '',
+  lastName:             '',
+  email:                '',
+  phone:                '',
+  language:             '',
+  agentId:              '',
+  channelType:          '',
+  acquisitionChannelId: '',
+  lender:               '',
+  notes:                '',
 }
+
+const CHANNEL_TYPE_LABELS: Record<string, string> = {
+  manual:        'Registro manual',
+  lead_magnet:   'Lead Magnet',
+  event:         'Evento',
+  contact_form:  'Formulario Web',
+  manychat_flow: 'ManyChat',
+}
+
+const CHANNEL_TYPE_ORDER = ['manual', 'lead_magnet', 'event', 'contact_form', 'manychat_flow']
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -212,7 +223,7 @@ function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
   )
 }
 
-export function NewLeadClient({ agents }: { agents: Agent[] }) {
+export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels: ChannelOption[] }) {
   const router = useRouter()
 
   const [form, setForm] = useState<FormData>(INITIAL_FORM)
@@ -395,7 +406,7 @@ export function NewLeadClient({ agents }: { agents: Agent[] }) {
       newErrors.email = 'Email no válido'
     }
     if (!form.agentId) newErrors.agentId = 'Selecciona un agente'
-    if (!form.sourceType) newErrors.sourceType = 'Selecciona el origen'
+    if (!form.acquisitionChannelId) newErrors.acquisitionChannelId = 'Selecciona el origen'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -404,15 +415,16 @@ export function NewLeadClient({ agents }: { agents: Agent[] }) {
     if (!validate()) return
     setIsSubmitting(true)
     const result = await createLead({
-      firstName:  form.firstName,
-      lastName:   form.lastName,
-      email:      form.email,
-      phone:      form.phone || null,
-      language:   form.language as Language,
-      agentId:    form.agentId,
-      sourceType: form.sourceType,
-      lender:     form.lender || null,
-      notes:      form.notes || null,
+      firstName:            form.firstName,
+      lastName:             form.lastName,
+      email:                form.email,
+      phone:                form.phone || null,
+      language:             form.language as Language,
+      agentId:              form.agentId,
+      acquisitionChannelId: form.acquisitionChannelId,
+      channelType:          form.channelType,
+      lender:               form.lender || null,
+      notes:                form.notes || null,
     })
     setIsSubmitting(false)
     if (result.error) {
@@ -427,10 +439,24 @@ export function NewLeadClient({ agents }: { agents: Agent[] }) {
     setErrors({})
     setAutoAssigned(false)
     setSubmitSuccess(false)
+    setImportStatus('idle')
+    setImportedLeads([])
   }
 
   const selectedAgent = agents.find(a => a.id === form.agentId)
   const isSubmitDisabled = !form.firstName.trim() || !form.email.trim() || isSubmitting
+
+  // Channels filtered by type for cascade picker
+  const channelsForType = (type: string) => channels.filter(c => c.channelType === type)
+
+  // When channel type changes: auto-select if only one option, or clear
+  function handleChannelTypeChange(type: string) {
+    const options = channelsForType(type)
+    const autoId  = options.length === 1 ? options[0].id : ''
+    updateField('channelType', type)
+    updateField('acquisitionChannelId', autoId)
+    if (errors.acquisitionChannelId) setErrors(prev => ({ ...prev, acquisitionChannelId: undefined }))
+  }
 
   const validCount = importedLeads.filter(l => !l._hasError).length
   const errorCount = importedLeads.filter(l => l._hasError).length
@@ -733,45 +759,61 @@ export function NewLeadClient({ agents }: { agents: Agent[] }) {
           {/* SECCIÓN 3 — Origen */}
           <div style={sectionHeaderStyle}>Origen</div>
           <div style={{ ...sectionBodyStyle }}>
+            {/* Step 1: Channel type */}
             <label style={labelStyle}>¿Cómo llegó este lead? *</label>
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative', marginBottom: '10px' }}>
               <select
                 className="new-lead-input"
-                value={form.sourceType}
-                onChange={e => updateField('sourceType', e.target.value)}
+                value={form.channelType}
+                onChange={e => handleChannelTypeChange(e.target.value)}
                 style={{
-                  ...(errors.sourceType ? inputErrorStyle : inputStyle),
+                  ...(errors.acquisitionChannelId && !form.channelType ? inputErrorStyle : inputStyle),
                   appearance: 'none',
                   cursor: 'pointer',
                   paddingRight: '32px',
                 }}
               >
-                <option value="">-- Seleccionar origen --</option>
-                <option value="manual">✍️ Registro manual</option>
-                <option value="open_house">🏠 Open House</option>
-                <option value="referral">🤝 Referido</option>
-                <option value="web_form">🌐 Formulario web</option>
-                <option value="lead_magnet">📄 Lead Magnet</option>
-                <option value="ads">📣 Meta Ads</option>
+                <option value="">-- Tipo de origen --</option>
+                {CHANNEL_TYPE_ORDER.map(t => (
+                  <option key={t} value={t}>{CHANNEL_TYPE_LABELS[t]}</option>
+                ))}
               </select>
               <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
             </div>
-            {errors.sourceType && <p style={errorStyle}>{errors.sourceType}</p>}
 
-            {/* Referral name — conditional */}
-            {form.sourceType === 'referral' && (
-              <div style={{ marginTop: '12px', opacity: 1, transition: 'opacity 0.2s' }}>
-                <label style={labelStyle}>Nombre del referido</label>
-                <input
+            {/* Step 2: Specific channel (only for types with multiple options) */}
+            {form.channelType && channelsForType(form.channelType).length > 1 && (
+              <div style={{ position: 'relative' }}>
+                <select
                   className="new-lead-input"
-                  type="text"
-                  placeholder="¿Quién lo refirió?"
-                  value={form.referralName}
-                  onChange={e => updateField('referralName', e.target.value)}
-                  style={inputStyle}
-                />
+                  value={form.acquisitionChannelId}
+                  onChange={e => updateField('acquisitionChannelId', e.target.value)}
+                  style={{
+                    ...(errors.acquisitionChannelId ? inputErrorStyle : inputStyle),
+                    appearance: 'none',
+                    cursor: 'pointer',
+                    paddingRight: '32px',
+                  }}
+                >
+                  <option value="">-- Seleccionar {CHANNEL_TYPE_LABELS[form.channelType]} --</option>
+                  {channelsForType(form.channelType).map(ch => (
+                    <option key={ch.id} value={ch.id}>{ch.name}</option>
+                  ))}
+                </select>
+                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
               </div>
             )}
+
+            {/* Auto-resolved channel name display */}
+            {form.acquisitionChannelId && channelsForType(form.channelType).length === 1 && (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Canal: <span style={{ color: 'var(--accent-gold)' }}>
+                  {channels.find(c => c.id === form.acquisitionChannelId)?.name}
+                </span>
+              </div>
+            )}
+
+            {errors.acquisitionChannelId && <p style={errorStyle}>{errors.acquisitionChannelId}</p>}
           </div>
 
           {/* SECCIÓN 4 — Notas */}

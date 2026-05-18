@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { STATUS_CONFIG, SOURCE_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadSource, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
+import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import type { Lead, Agent, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
+import type { ChannelOption } from '../new/page'
 import { updateLeadStatus, updateLeadNotes, startPurchaseProcess } from './actions'
 import {
   ArrowLeft, MoreHorizontal, X,
@@ -106,16 +107,15 @@ const DEFAULT_EVENT = { icon: <Circle size={14} />, color: '#C9A96E' }
 interface LeadDetailProps {
   lead: Lead
   agent: Agent | undefined
-  source: LeadSource | undefined
   agents: Agent[]
-  sources: LeadSource[]
+  channels: ChannelOption[]
   events: LeadEvent[]
   purchaseProcess: PurchaseProcess | null
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, source, agents, sources, events, purchaseProcess }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, purchaseProcess }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -135,7 +135,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
   // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server-prop to local state after router.refresh()
   useEffect(() => { setCurrentStatus(lead.status) }, [lead.status])
 
-  const sourceCfg = source ? SOURCE_CONFIG[source.type] : null
+  const channel   = channels.find(c => c.id === lead.acquisitionChannelId)
   const langCfg   = LANGUAGE_CONFIG[lead.language]
   const initials  = getInitials(lead.firstName, lead.lastName)
 
@@ -469,13 +469,14 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
           {/* Source card */}
           <div style={CARD}>
             <div style={CARD_TITLE}>Origen del lead</div>
-            {source && sourceCfg ? (
+            {channel ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '20px' }}>{sourceCfg.icon}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{sourceCfg.label}</span>
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  {channel.name}
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>{source.name}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', textTransform: 'capitalize' }}>
+                  {channel.channelType.replace(/_/g, ' ')}
+                </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
                   Registrado
                 </div>
@@ -668,7 +669,7 @@ export function LeadDetailClient({ lead, agent, source, agents, sources, events,
       <EditLeadModal
         lead={lead}
         agents={agents}
-        sources={sources}
+        channels={channels}
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
       />

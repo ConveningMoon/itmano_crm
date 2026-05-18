@@ -62,7 +62,8 @@ export async function updateLead(
     phone: string
     language: string
     agentId: string
-    sourceId: string
+    channelType: string
+    acquisitionChannelId: string
     lender: string
     notes: string
   }
@@ -72,15 +73,15 @@ export async function updateLead(
   const { error } = await supabase
     .from('leads')
     .update({
-      first_name:  fields.firstName,
-      last_name:   fields.lastName,
-      email:       fields.email,
-      phone:       fields.phone   || null,
-      language:    fields.language,
-      agent_id:    fields.agentId,
-      source_id:   fields.sourceId,
-      lender:      fields.lender  || null,
-      notes:       fields.notes   || null,
+      first_name:              fields.firstName,
+      last_name:               fields.lastName,
+      email:                   fields.email,
+      phone:                   fields.phone   || null,
+      language:                fields.language,
+      agent_id:                fields.agentId,
+      acquisition_channel_id:  fields.acquisitionChannelId || null,
+      lender:                  fields.lender  || null,
+      notes:                   fields.notes   || null,
     })
     .eq('id', leadId)
 

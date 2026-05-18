@@ -1,4 +1,4 @@
-import type { Agent, Lead, LeadEvent, LeadSource, LeadMagnet, PurchaseProcess } from './types'
+import type { Agent, Lead, LeadEvent, LeadMagnet, PurchaseProcess } from './types'
 
 // ─── DB row shapes ────────────────────────────────────────────────────────────
 
@@ -16,19 +16,11 @@ export interface AgentRow {
   created_at: string
 }
 
-export interface LeadSourceRow {
-  id: string
-  tenant_id: string
-  name: string
-  type: string
-  created_at: string
-}
-
 export interface LeadRow {
   id: string
   tenant_id: string
   agent_id: string
-  source_id: string
+  acquisition_channel_id: string | null
   first_name: string
   last_name: string
   email: string
@@ -95,21 +87,12 @@ export function mapAgent(r: AgentRow): Agent {
   }
 }
 
-export function mapSource(r: LeadSourceRow): LeadSource {
-  return {
-    id: r.id,
-    tenantId: r.tenant_id,
-    name: r.name,
-    type: r.type as LeadSource['type'],
-  }
-}
-
 export function mapLead(r: LeadRow): Lead {
   return {
     id: r.id,
     tenantId: r.tenant_id,
     agentId: r.agent_id,
-    sourceId: r.source_id,
+    acquisitionChannelId: r.acquisition_channel_id,
     firstName: r.first_name,
     lastName: r.last_name,
     email: r.email,

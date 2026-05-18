@@ -1,9 +1,11 @@
+import Image from 'next/image'
 import { NavItem } from './nav-item'
 
 const navItems = [
   { label: 'Dashboard',      href: '/dashboard',     icon: 'LayoutDashboard' },
   { label: 'Leads',          href: '/leads',         icon: 'Users' },
   { label: 'Fuentes',        href: '/sources',       icon: 'GitBranch' },
+  { label: 'Emails',         href: '/emails',        icon: 'Mail' },
   { label: 'Analytics',      href: '/analytics',     icon: 'BarChart2' },
   { label: 'Configuración',  href: '/settings',      icon: 'Settings' },
 ]
@@ -25,34 +27,34 @@ export function Sidebar() {
         zIndex: 40,
       }}
     >
-      {/* Logo + tenant */}
+      {/* Logo */}
       <div
         style={{
-          padding: '20px 16px 16px',
+          padding: '18px 16px 14px',
           borderBottom: '1px solid var(--border-subtle)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
         }}
       >
+        <Image
+          src="/Logo.PNG"
+          alt="ITMANO"
+          width={120}
+          height={44}
+          priority
+          style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }}
+        />
         <div
           style={{
-            fontSize: '15px',
-            fontWeight: '600',
-            letterSpacing: '0.08em',
-            color: 'var(--accent-gold)',
-            marginBottom: '4px',
-          }}
-        >
-          ITMANO
-        </div>
-        <div
-          style={{
-            fontSize: '11px',
+            fontSize: '10px',
+            fontWeight: 300,
             color: 'var(--text-muted)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
           }}
         >
-          A&amp;J Real Estate Group
+          CRM by ITMANO
         </div>
       </div>
 

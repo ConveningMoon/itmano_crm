@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type LeadRow, type AgentRow, type LeadEventRow } from '@/lib/db'
-import { STATUS_CONFIG, SOURCE_CONFIG } from '@/lib/config'
+import { STATUS_CONFIG } from '@/lib/config'
 import type { Agent } from '@/lib/types'
 import {
   Flame,
@@ -78,7 +78,7 @@ export default async function DashboardPage() {
   const supabase = createAdminClient()
 
   const [{ data: rawLeads }, { data: rawAgents }, { data: rawEvents }] = await Promise.all([
-    supabase.from('leads').select('*, lead_sources(*)').order('created_at', { ascending: false }),
+    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
     supabase.from('agents').select('*').eq('active', true),
     supabase.from('lead_events').select('*').order('created_at', { ascending: false }).limit(10),
   ])
@@ -308,8 +308,7 @@ export default async function DashboardPage() {
               // reason: Supabase returns untyped join data without generated schema
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-              const sourceType = raw?.lead_sources?.type ?? 'manual'
-              const sourceLabel = SOURCE_CONFIG[sourceType as keyof typeof SOURCE_CONFIG]?.label ?? '—'
+              const channelName = raw?.acquisition_channels?.name ?? '—'
               const initials = getInitials(lead.firstName, lead.lastName)
               const tempColor = getTempColor(lead.temperatureScore ?? 0)
               const filled = Math.round((lead.temperatureScore ?? 0) / 10)
@@ -339,7 +338,7 @@ export default async function DashboardPage() {
                       {lead.firstName} {lead.lastName}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {agent?.name ?? '—'} · {sourceLabel}
+                      {agent?.name ?? '—'} · {channelName}
                     </div>
                   </div>
 

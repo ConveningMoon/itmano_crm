@@ -1,12 +1,12 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
-import { SOURCE_CONFIG } from '@/lib/config'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
+import { listSequences } from '@/lib/data/email-sequences'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
 import { StatusDistributionChart } from './charts/status-distribution-chart'
-import { Users, Flame, TrendingUp, Activity, GitBranch } from 'lucide-react'
+import { Users, Flame, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
 import Link from 'next/link'
 
 const CARD: React.CSSProperties = {
@@ -34,10 +34,11 @@ export default async function AnalyticsPage() {
 
   const TENANT_ID = 'tenant-aj'
 
-  const [{ data: rawLeads }, { data: rawAgents }, channels] = await Promise.all([
-    supabase.from('leads').select('*, lead_sources(type)'),
+  const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
+    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)'),
     supabase.from('agents').select('*'),
     getChannelsWithMetrics(TENANT_ID, 30),
+    listSequences(TENANT_ID),
   ])
 
   const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
@@ -54,17 +55,24 @@ export default async function AnalyticsPage() {
     ? Math.round(leads.reduce((sum, l) => sum + (l.temperatureScore ?? 0), 0) / totalLeads)
     : 0
 
-  // ─── Source donut ────────────────────────────────────────────
+  // ─── Channel-type donut ──────────────────────────────────────
+  const CHANNEL_TYPE_LABELS: Record<string, { label: string; icon: string }> = {
+    lead_magnet:   { label: 'Lead Magnet',    icon: '📄' },
+    event:         { label: 'Evento',         icon: '🏠' },
+    contact_form:  { label: 'Formulario',     icon: '🌐' },
+    manychat_flow: { label: 'ManyChat',       icon: '💬' },
+    manual:        { label: 'Manual',         icon: '✍️' },
+  }
   const sourceCounts: Record<string, number> = {}
   leads.forEach(lead => {
     // reason: Supabase returns untyped join data without generated schema
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-    const type = raw?.lead_sources?.type ?? 'manual'
+    const type = raw?.acquisition_channels?.channel_type ?? 'manual'
     sourceCounts[type] = (sourceCounts[type] ?? 0) + 1
   })
   const sourceData = Object.entries(sourceCounts).map(([type, count]) => {
-    const cfg = SOURCE_CONFIG[type as keyof typeof SOURCE_CONFIG]
+    const cfg = CHANNEL_TYPE_LABELS[type]
     return {
       name: cfg?.label ?? type,
       value: count,
@@ -326,7 +334,99 @@ export default async function AnalyticsPage() {
           </table>
         </div>
       </div>
-      {/* FILA 5 — Canales de adquisición */}
+      {/* FILA 5 — Secuencias de email */}
+      {(() => {
+        const totalActive    = sequences.reduce((s, q) => s + q.activeRunCount,    0)
+        const totalCompleted = sequences.reduce((s, q) => s + q.completedRunCount, 0)
+        const totalCancelled = sequences.reduce((s, q) => s + q.cancelledRunCount, 0)
+        const totalRuns      = totalActive + totalCompleted + totalCancelled
+        const completionRate = totalRuns > 0 ? Math.round((totalCompleted / totalRuns) * 100) : 0
+
+        return (
+          <div style={{ ...CARD, marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Mail size={16} color="var(--accent-gold)" />
+                <span style={CARD_HEADER}>Desempeño de Secuencias de Email</span>
+              </div>
+              <Link href="/emails" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+                Ver detalle →
+              </Link>
+            </div>
+            <div style={{ ...CARD_SUBTITLE, marginBottom: '16px' }}>
+              Resumen de runs por secuencia · El envío real se activa en Fase 3 (Resend)
+            </div>
+
+            {/* Summary KPIs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+              {[
+                { label: 'Runs activos',    value: totalActive,    color: 'var(--accent-gold)'  },
+                { label: 'Completados',      value: totalCompleted, color: 'var(--accent-green)' },
+                { label: 'Cancelados',       value: totalCancelled, color: 'var(--accent-coral)' },
+                { label: 'Tasa de completado', value: `${completionRate}%`, color: 'var(--accent-blue)' },
+              ].map(stat => (
+                <div key={stat.label} style={{
+                  background: 'var(--bg-elevated)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Per-sequence table */}
+            {sequences.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    {['Secuencia', 'Fuente', 'Pasos', 'Activos', 'Completados', 'Cancelados'].map(col => (
+                      <th key={col} style={{
+                        fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        padding: '0 8px 10px 0', textAlign: col === 'Secuencia' || col === 'Fuente' ? 'left' : 'center',
+                      }}>
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sequences.map((seq, i) => (
+                    <tr key={seq.id} style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none' }}>
+                      <td style={{ padding: '10px 8px 10px 0' }}>
+                        <Link href={`/emails/${seq.id}`} style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
+                          {seq.name}
+                        </Link>
+                      </td>
+                      <td style={{ padding: '10px 8px' }}>
+                        <Link href={`/sources/${seq.channelSlug}`} style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none' }}>
+                          {seq.channelName}
+                        </Link>
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        {seq.stepCount}
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: 'var(--accent-gold)' }}>
+                        {seq.activeRunCount}
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--accent-green)' }}>
+                        {seq.completedRunCount}
+                      </td>
+                      <td style={{ padding: '10px 0 10px 8px', textAlign: 'center', fontSize: '13px', color: seq.cancelledRunCount > 0 ? 'var(--accent-coral)' : 'var(--text-muted)' }}>
+                        {seq.cancelledRunCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* FILA 7 — Canales de adquisición */}
       <div style={CARD}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

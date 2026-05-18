@@ -5,9 +5,6 @@ export type LeadStatus =
 export type AgentSpecialty =
   | 'hispanic' | 'military' | 'first_buyer' | 'brazilian'
 
-export type LeadSourceType =
-  | 'lead_magnet' | 'web_form' | 'open_house' | 'manual' | 'ads' | 'referral'
-
 export type Language = 'es' | 'en' | 'pt'
 
 export interface Tenant {
@@ -37,13 +34,6 @@ export interface Agent {
   active: boolean
 }
 
-export interface LeadSource {
-  id: string
-  tenantId: string
-  name: string
-  type: LeadSourceType
-}
-
 export interface LeadMagnet {
   id: string
   tenantId: string
@@ -61,7 +51,7 @@ export interface Lead {
   id: string
   tenantId: string
   agentId: string
-  sourceId: string
+  acquisitionChannelId: string | null
   firstName: string
   lastName: string
   email: string

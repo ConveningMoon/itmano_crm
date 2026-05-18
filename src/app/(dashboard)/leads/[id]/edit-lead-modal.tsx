@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import { LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadSource } from '@/lib/types'
+import type { Lead, Agent } from '@/lib/types'
+import type { ChannelOption } from '../new/page'
 import { updateLead } from './actions'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ import { updateLead } from './actions'
 interface EditLeadModalProps {
   lead: Lead
   agents: Agent[]
-  sources: LeadSource[]
+  channels: ChannelOption[]
   isOpen: boolean
   onClose: () => void
 }
@@ -32,21 +33,34 @@ const INPUT_STYLE: React.CSSProperties = {
   fontSize: '13px', outline: 'none', boxSizing: 'border-box',
 }
 
+const CHANNEL_TYPE_LABELS: Record<string, string> = {
+  lead_magnet:   'Lead Magnet',
+  event:         'Evento',
+  contact_form:  'Formulario de Contacto',
+  manychat_flow: 'ManyChat',
+  manual:        'Manual',
+}
+
+const CHANNEL_TYPE_ORDER = ['lead_magnet', 'event', 'contact_form', 'manychat_flow', 'manual']
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLeadModalProps) {
+export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditLeadModalProps) {
   const router = useRouter()
 
+  const initialChannel = channels.find(c => c.id === lead.acquisitionChannelId)
+
   const [form, setForm] = useState({
-    firstName: lead.firstName,
-    lastName:  lead.lastName,
-    email:     lead.email,
-    phone:     lead.phone    ?? '',
-    language:  lead.language,
-    agentId:   lead.agentId,
-    sourceId:  lead.sourceId,
-    lender:    lead.lender   ?? '',
-    notes:     lead.notes    ?? '',
+    firstName:            lead.firstName,
+    lastName:             lead.lastName,
+    email:                lead.email,
+    phone:                lead.phone    ?? '',
+    language:             lead.language,
+    agentId:              lead.agentId,
+    channelType:          initialChannel?.channelType ?? '',
+    acquisitionChannelId: lead.acquisitionChannelId   ?? '',
+    lender:               lead.lender   ?? '',
+    notes:                lead.notes    ?? '',
   })
   const [error, setError]            = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -56,6 +70,19 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm(prev => ({ ...prev, [k]: e.target.value }))
+
+  function channelsForType(type: string) {
+    return channels.filter(c => c.channelType === type)
+  }
+
+  function handleChannelTypeChange(type: string) {
+    const options = channels.filter(c => c.channelType === type)
+    setForm(prev => ({
+      ...prev,
+      channelType:          type,
+      acquisitionChannelId: options.length === 1 ? options[0].id : '',
+    }))
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -126,64 +153,36 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
             {/* Nombre */}
             <div>
               <label style={LABEL_STYLE}>Nombre</label>
-              <input
-                type="text"
-                value={form.firstName}
-                onChange={set('firstName')}
-                required
-                className="edit-modal-input"
-                style={INPUT_STYLE}
-              />
+              <input type="text" value={form.firstName} onChange={set('firstName')} required
+                className="edit-modal-input" style={INPUT_STYLE} />
             </div>
 
             {/* Apellido */}
             <div>
               <label style={LABEL_STYLE}>Apellido</label>
-              <input
-                type="text"
-                value={form.lastName}
-                onChange={set('lastName')}
-                required
-                className="edit-modal-input"
-                style={INPUT_STYLE}
-              />
+              <input type="text" value={form.lastName} onChange={set('lastName')} required
+                className="edit-modal-input" style={INPUT_STYLE} />
             </div>
 
             {/* Email */}
             <div>
               <label style={LABEL_STYLE}>Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={set('email')}
-                required
-                className="edit-modal-input"
-                style={INPUT_STYLE}
-              />
+              <input type="email" value={form.email} onChange={set('email')} required
+                className="edit-modal-input" style={INPUT_STYLE} />
             </div>
 
             {/* Teléfono */}
             <div>
               <label style={LABEL_STYLE}>Teléfono</label>
-              <input
-                type="text"
-                value={form.phone}
-                onChange={set('phone')}
-                className="edit-modal-input"
-                style={INPUT_STYLE}
-              />
+              <input type="text" value={form.phone} onChange={set('phone')}
+                className="edit-modal-input" style={INPUT_STYLE} />
             </div>
 
             {/* Idioma */}
             <div>
               <label style={LABEL_STYLE}>Idioma</label>
-              <select
-                value={form.language}
-                onChange={set('language')}
-                required
-                className="edit-modal-input"
-                style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
-              >
+              <select value={form.language} onChange={set('language')} required
+                className="edit-modal-input" style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}>
                 {Object.entries(LANGUAGE_CONFIG).map(([key, cfg]) => (
                   <option key={key} value={key} style={{ background: '#16181C' }}>
                     {cfg.flag} {cfg.label}
@@ -195,13 +194,8 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
             {/* Agente asignado */}
             <div>
               <label style={LABEL_STYLE}>Agente asignado</label>
-              <select
-                value={form.agentId}
-                onChange={set('agentId')}
-                required
-                className="edit-modal-input"
-                style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
-              >
+              <select value={form.agentId} onChange={set('agentId')} required
+                className="edit-modal-input" style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}>
                 {agents.map(agent => (
                   <option key={agent.id} value={agent.id} style={{ background: '#16181C' }}>
                     {agent.name}
@@ -210,46 +204,68 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
               </select>
             </div>
 
-            {/* Fuente */}
+            {/* Fuente — tipo de canal */}
             <div>
-              <label style={LABEL_STYLE}>Fuente</label>
+              <label style={LABEL_STYLE}>Tipo de fuente</label>
               <select
-                value={form.sourceId}
-                onChange={set('sourceId')}
-                required
+                value={form.channelType}
+                onChange={e => handleChannelTypeChange(e.target.value)}
                 className="edit-modal-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
-                {sources.map(source => (
-                  <option key={source.id} value={source.id} style={{ background: '#16181C' }}>
-                    {source.name}
+                <option value="" style={{ background: '#16181C' }}>— Seleccionar tipo —</option>
+                {CHANNEL_TYPE_ORDER.map(type => (
+                  <option key={type} value={type} style={{ background: '#16181C' }}>
+                    {CHANNEL_TYPE_LABELS[type]}
                   </option>
                 ))}
               </select>
             </div>
 
+            {/* Canal específico — only shown when >1 option for the selected type */}
+            {form.channelType && channelsForType(form.channelType).length > 1 && (
+              <div>
+                <label style={LABEL_STYLE}>Canal específico</label>
+                <select
+                  value={form.acquisitionChannelId}
+                  onChange={set('acquisitionChannelId')}
+                  required
+                  className="edit-modal-input"
+                  style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
+                >
+                  <option value="" style={{ background: '#16181C' }}>— Seleccionar canal —</option>
+                  {channelsForType(form.channelType).map(ch => (
+                    <option key={ch.id} value={ch.id} style={{ background: '#16181C' }}>
+                      {ch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Auto-resolved name when only 1 channel for type */}
+            {form.channelType && channelsForType(form.channelType).length === 1 && (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '2px 0' }}>
+                Canal:{' '}
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {channelsForType(form.channelType)[0].name}
+                </span>
+              </div>
+            )}
+
             {/* Prestamista */}
             <div>
               <label style={LABEL_STYLE}>Prestamista</label>
-              <input
-                type="text"
-                value={form.lender}
-                onChange={set('lender')}
-                className="edit-modal-input"
-                style={INPUT_STYLE}
-              />
+              <input type="text" value={form.lender} onChange={set('lender')}
+                className="edit-modal-input" style={INPUT_STYLE} />
             </div>
 
             {/* Notas */}
             <div>
               <label style={LABEL_STYLE}>Notas</label>
-              <textarea
-                value={form.notes}
-                onChange={set('notes')}
-                rows={4}
+              <textarea value={form.notes} onChange={set('notes')} rows={4}
                 className="edit-modal-input"
-                style={{ ...INPUT_STYLE, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
-              />
+                style={{ ...INPUT_STYLE, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }} />
             </div>
           </div>
 
@@ -263,8 +279,7 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
           {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
             <button
-              type="button"
-              onClick={onClose}
+              type="button" onClick={onClose}
               style={{
                 padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
                 background: 'transparent', border: '1px solid var(--border-subtle)',
@@ -274,8 +289,7 @@ export function EditLeadModal({ lead, agents, sources, isOpen, onClose }: EditLe
               Cancelar
             </button>
             <button
-              type="submit"
-              disabled={isPending}
+              type="submit" disabled={isPending}
               style={{
                 padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
                 background: 'var(--accent-gold)', color: 'var(--bg-base)',

@@ -3,8 +3,17 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, List, LayoutGrid, ChevronDown, X, Users } from 'lucide-react'
-import { STATUS_CONFIG, SOURCE_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadSource, LeadStatus } from '@/lib/types'
+import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import type { Lead, Agent, LeadStatus } from '@/lib/types'
+import type { ChannelOption } from './new/page'
+
+const CHANNEL_TYPE_LABELS: Record<string, string> = {
+  lead_magnet:   'Lead Magnet',
+  event:         'Evento',
+  contact_form:  'Formulario',
+  manychat_flow: 'ManyChat',
+  manual:        'Manual',
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,10 +166,10 @@ const KANBAN_COLUMNS = [
 interface LeadsClientProps {
   leads: Lead[]
   agents: Agent[]
-  sources: LeadSource[]
+  channels: ChannelOption[]
 }
 
-export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
+export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
   const router = useRouter()
 
   const [view, setView]               = useState<'table' | 'kanban'>('table')
@@ -181,13 +190,13 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
 
       const matchAgent    = filterAgent === 'all' || lead.agentId === filterAgent
       const matchStatus   = filterStatus === 'all' || lead.status === filterStatus
-      const source        = sources.find(s => s.id === lead.sourceId)
-      const matchSource   = filterSource === 'all' || source?.type === filterSource
+      const channel       = channels.find(c => c.id === lead.acquisitionChannelId)
+      const matchSource   = filterSource === 'all' || channel?.channelType === filterSource
       const matchLanguage = filterLanguage === 'all' || lead.language === filterLanguage
 
       return matchSearch && matchAgent && matchStatus && matchSource && matchLanguage
     })
-  }, [leads, sources, search, filterAgent, filterStatus, filterSource, filterLanguage])
+  }, [leads, channels, search, filterAgent, filterStatus, filterSource, filterLanguage])
 
   useEffect(() => {
     // reason: reset pagination on filter change — updating derived state in effect is intentional
@@ -222,12 +231,12 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
     ...Object.entries(STATUS_CONFIG).map(([k, v]) => ({ value: k, label: v.label })),
   ]
   const sourceOptions = [
-    { value: 'all',         label: 'Todas las fuentes' },
-    { value: 'lead_magnet', label: 'Lead Magnet' },
-    { value: 'web_form',    label: 'Formulario Web' },
-    { value: 'open_house',  label: 'Open House' },
-    { value: 'manual',      label: 'Registro Manual' },
-    { value: 'ads',         label: 'Meta Ads' },
+    { value: 'all',          label: 'Todas las fuentes' },
+    { value: 'lead_magnet',  label: 'Lead Magnet' },
+    { value: 'event',        label: 'Evento' },
+    { value: 'contact_form', label: 'Formulario' },
+    { value: 'manychat_flow',label: 'ManyChat' },
+    { value: 'manual',       label: 'Manual' },
   ]
   const languageOptions = [
     { value: 'all', label: 'Todos los idiomas' },
@@ -405,11 +414,10 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
                 </tr>
               ) : (
                 pagedLeads.map((lead, idx) => {
-                  const agent     = agents.find(a => a.id === lead.agentId)
-                  const source    = sources.find(s => s.id === lead.sourceId)
-                  const sourceCfg = source ? SOURCE_CONFIG[source.type] : null
-                  const langCfg   = LANGUAGE_CONFIG[lead.language]
-                  const isLast    = idx === pagedLeads.length - 1
+                  const agent      = agents.find(a => a.id === lead.agentId)
+                  const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
+                  const langCfg    = LANGUAGE_CONFIG[lead.language]
+                  const isLast     = idx === pagedLeads.length - 1
 
                   return (
                     <tr
@@ -449,7 +457,7 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
                       {/* Fuente */}
                       <td style={{ padding: '12px 16px', width: '140px' }}>
                         <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          {sourceCfg?.icon ?? ''} {source?.name ?? '—'}
+                          {channel ? `${channel.name}` : '—'}
                         </span>
                       </td>
                       {/* Temperatura */}
@@ -559,10 +567,9 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
                   </div>
                 ) : (
                   colLeads.map(lead => {
-                    const agent     = agents.find(a => a.id === lead.agentId)
-                    const source    = sources.find(s => s.id === lead.sourceId)
-                    const sourceCfg = source ? SOURCE_CONFIG[source.type] : null
-                    const langCfg   = LANGUAGE_CONFIG[lead.language]
+                    const agent   = agents.find(a => a.id === lead.agentId)
+                    const channel = channels.find(c => c.id === lead.acquisitionChannelId)
+                    const langCfg = LANGUAGE_CONFIG[lead.language]
 
                     return (
                       <div
@@ -598,12 +605,12 @@ export function LeadsClient({ leads, agents, sources }: LeadsClientProps) {
                         <div style={{ marginBottom: '6px' }}>
                           <TempBar score={lead.temperatureScore ?? 0} segments={6} />
                         </div>
-                        {/* Row 4: language + source */}
+                        {/* Row 4: language + channel type */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{langCfg.flag}</span>
-                          {sourceCfg && (
+                          {channel && (
                             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                              {sourceCfg.icon} {sourceCfg.label}
+                              {CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType}
                             </span>
                           )}
                         </div>

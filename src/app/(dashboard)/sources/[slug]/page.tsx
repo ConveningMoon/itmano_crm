@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { getChannelBySlug, getChannelLeads } from '@/lib/data/channels'
 import { STATUS_CONFIG } from '@/lib/config'
 import type { LeadStatus } from '@/lib/types'
+import { ChannelActions } from './channel-actions'
 
 const TENANT_ID = 'tenant-aj'
 
@@ -79,7 +80,7 @@ export default async function ChannelDetailPage({
       </div>
 
       {/* Channel header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', marginBottom: '24px' }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
@@ -114,6 +115,11 @@ export default async function ChannelDetailPage({
             {channel.publicId} · slug: {channel.slug}
           </div>
         </div>
+        <ChannelActions
+          channelId={channel.id}
+          channelName={channel.name}
+          channelActive={channel.active}
+        />
       </div>
 
       {/* Metrics row */}
