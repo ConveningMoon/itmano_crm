@@ -28,6 +28,9 @@ export interface LeadRow {
   language: string
   status: string
   temperature_score: number | null
+  peak_score: number | null
+  current_score: number | null
+  last_event_at: string | null
   lender: string | null
   notes: string | null
   created_at: string
@@ -100,6 +103,9 @@ export function mapLead(r: LeadRow): Lead {
     language: r.language as Lead['language'],
     status: r.status as Lead['status'],
     temperatureScore: r.temperature_score,
+    peakScore: r.peak_score ?? null,
+    currentScore: r.current_score ?? null,
+    lastEventAt: r.last_event_at ?? null,
     lender: r.lender ?? undefined,
     notes: r.notes ?? undefined,
     createdAt: r.created_at,

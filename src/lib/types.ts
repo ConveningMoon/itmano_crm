@@ -59,6 +59,9 @@ export interface Lead {
   language: Language
   status: LeadStatus
   temperatureScore: number | null
+  peakScore: number | null
+  currentScore: number | null
+  lastEventAt: string | null
   lender?: string
   notes?: string
   createdAt: string
