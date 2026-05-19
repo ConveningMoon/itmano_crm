@@ -38,13 +38,20 @@ the PR is merged and before running the smoke test.
 2. Click **Add Endpoint**
 3. **Endpoint URL:** `https://app.itmano.com/api/webhooks/resend`
 4. Subscribe to these events:
+   - `email.sent`
    - `email.delivered`
    - `email.opened`
    - `email.clicked`
    - `email.bounced`
    - `email.complained`
-   - `email.unsubscribed`
+   - `email.failed`
+   - `email.suppressed`
+   - `email.received`
 5. Save
+
+> **Note:** `email.unsubscribed` does NOT exist for transactional emails in Resend
+> (it only fires for Audience-based campaigns). Do not subscribe to it — it will
+> never fire for our sends.
 
 ---
 
@@ -103,6 +110,26 @@ Verify the email arrives in the inbox.
 
 Once smoke test passes, delete `src/app/api/test/resend-send/route.ts` and open a
 small cleanup PR (`chore/remove-test-send-endpoint`).
+
+---
+
+## Note — Unsubscribe handling (future PR)
+
+`email.unsubscribed` does not exist for transactional email in Resend. Unsubscribe
+must be handled via a one-click link in each email template that calls our own endpoint:
+
+```
+GET /api/unsubscribe?lead=<lead_id>&token=<hmac_token>
+```
+
+- The `token` is an HMAC-SHA256 of `lead_id` signed with a `UNSUBSCRIBE_SECRET` env var.
+- The template variable `{{ unsubscribe_url }}` is injected at send time by the
+  sequence orchestrator (it knows the `lead_id`).
+- The endpoint verifies the token, cancels active sequence runs
+  (`cancelled_reason = 'unsubscribed'`), writes an `email.unsubscribed` event to
+  `lead_events` (triggering the −50 scoring rule), and renders a confirmation page.
+
+This endpoint is implemented in a future Phase 3 PR, not in `phase3/resend-setup`.
 
 ---
 
