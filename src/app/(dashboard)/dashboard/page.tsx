@@ -1,12 +1,6 @@
-import {
-  MOCK_LEADS,
-  MOCK_AGENTS,
-  STATUS_CONFIG,
-  SOURCE_CONFIG,
-  getLeadsStats,
-  getAgentById,
-  getSourceById,
-} from '@/lib/mockdata'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { mapAgent, mapLead, type LeadRow, type AgentRow, type LeadEventRow } from '@/lib/db'
+import { STATUS_CONFIG } from '@/lib/config'
 import type { Agent } from '@/lib/types'
 import {
   Flame,
@@ -24,6 +18,27 @@ type ActivityItem = {
   text: string
   icon: string
   color: string
+}
+
+const EVENT_META: Record<string, { icon: string; color: string }> = {
+  lead_created:   { icon: 'UserPlus',         color: '#5B8EC9' },
+  status_changed: { icon: 'ArrowRightCircle', color: '#9B72CF' },
+  email_sent:     { icon: 'Mail',             color: '#5AAFA0' },
+  download:       { icon: 'FileDown',          color: '#B87BA3' },
+  appointment:    { icon: 'Calendar',          color: '#C9A96E' },
+  process_closed: { icon: 'CheckCircle2',      color: '#6BA368' },
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1)   return 'Ahora mismo'
+  if (mins < 60)  return `Hace ${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `Hace ${hours} hora${hours > 1 ? 's' : ''}`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'Ayer'
+  return `Hace ${days} días`
 }
 
 type AgentStat = {
@@ -59,23 +74,39 @@ function ActivityIcon({ name }: { name: string }) {
   }
 }
 
-export default function DashboardPage() {
-  const stats = getLeadsStats()
+export default async function DashboardPage() {
+  const supabase = createAdminClient()
 
-  const hotLeads = MOCK_LEADS
-    .filter(l => l.temperatureScore >= 70)
-    .sort((a, b) => b.temperatureScore - a.temperatureScore)
+  const [{ data: rawLeads }, { data: rawAgents }, { data: rawEvents }] = await Promise.all([
+    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
+    supabase.from('agents').select('*').eq('active', true),
+    supabase.from('lead_events').select('*').order('created_at', { ascending: false }).limit(10),
+  ])
+
+  const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))
+  const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+
+  const stats = {
+    total:     leads.length,
+    hot:       leads.filter(l => l.status === 'hot' || (l.temperatureScore ?? 0) >= 70).length,
+    inProcess: leads.filter(l => l.status === 'process_started').length,
+    closed:    leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+  }
+
+  const hotLeads = leads
+    .filter(l => (l.temperatureScore ?? 0) >= 70)
+    .sort((a, b) => (b.temperatureScore ?? 0) - (a.temperatureScore ?? 0))
     .slice(0, 6)
 
   const statusCounts = {
-    new:               MOCK_LEADS.filter(l => l.status === 'new').length,
-    nurturing:         MOCK_LEADS.filter(l => l.status === 'nurturing').length,
-    warm:              MOCK_LEADS.filter(l => l.status === 'warm').length,
-    hot:               MOCK_LEADS.filter(l => l.status === 'hot').length,
-    process_started:   MOCK_LEADS.filter(l => l.status === 'process_started').length,
-    process_completed: MOCK_LEADS.filter(l => l.status === 'process_completed').length,
-    closed:            MOCK_LEADS.filter(l => l.status === 'closed').length,
-    lost:              MOCK_LEADS.filter(l => l.status === 'lost').length,
+    new:               leads.filter(l => l.status === 'new').length,
+    nurturing:         leads.filter(l => l.status === 'nurturing').length,
+    warm:              leads.filter(l => l.status === 'warm').length,
+    hot:               leads.filter(l => l.status === 'hot').length,
+    process_started:   leads.filter(l => l.status === 'process_started').length,
+    process_completed: leads.filter(l => l.status === 'process_completed').length,
+    closed:            leads.filter(l => l.status === 'closed').length,
+    lost:              leads.filter(l => l.status === 'lost').length,
   }
 
   const mainStages = [
@@ -88,27 +119,22 @@ export default function DashboardPage() {
     return Math.max(4, Math.round((count / maxCount) * 48))
   }
 
-  const agentStats: AgentStat[] = MOCK_AGENTS.map(agent => {
-    const agentLeads = MOCK_LEADS.filter(l => l.agentId === agent.id)
+  const agentStats: AgentStat[] = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
     const total = agentLeads.length
-    const hot = agentLeads.filter(l => l.temperatureScore >= 70).length
-    const percentage = Math.round((total / MOCK_LEADS.length) * 100)
+    const hot = agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
+    const percentage = Math.round((total / leads.length) * 100)
     const closed = agentLeads.filter(
       l => l.status === 'closed' || l.status === 'process_completed'
     ).length
     return { agent, total, hot, percentage, closed }
   })
 
-  const recentActivity: ActivityItem[] = [
-    { time: 'Hace 5 min',   text: 'Norelys Diaz cambió a En Proceso',       icon: 'ArrowRightCircle', color: '#9B72CF' },
-    { time: 'Hace 23 min',  text: 'Greg Ducker abrió el email de VA Loan',  icon: 'Mail',             color: '#5AAFA0' },
-    { time: 'Hace 1 hora',  text: 'Jobany Correa descargó Guia Brasileira', icon: 'FileDown',         color: '#B87BA3' },
-    { time: 'Hace 2 horas', text: 'Amor Juarez agendó una consulta',        icon: 'Calendar',         color: '#C9A96E' },
-    { time: 'Hace 3 horas', text: 'Nuevo lead: Cristina Nazzario',          icon: 'UserPlus',         color: '#5B8EC9' },
-    { time: 'Hace 4 horas', text: 'Abigail Calito cerró proceso',           icon: 'CheckCircle2',     color: '#6BA368' },
-    { time: 'Ayer 18:30',   text: 'Armando Romero recibió email de inicio', icon: 'Mail',             color: '#9B72CF' },
-    { time: 'Ayer 15:00',   text: 'Blanca Lissette pasó a En Proceso',      icon: 'ArrowRightCircle', color: '#9B72CF' },
-  ]
+  const recentActivity: ActivityItem[] = (rawEvents ?? []).map(r => {
+    const event = r as LeadEventRow
+    const meta  = EVENT_META[event.type] ?? { icon: 'ArrowRightCircle', color: '#C9A96E' }
+    return { time: timeAgo(event.created_at), text: event.description, icon: meta.icon, color: meta.color }
+  })
 
   const specialtyLabel: Record<string, string> = {
     hispanic:    'Familias Hispanas',
@@ -215,7 +241,7 @@ export default function DashboardPage() {
             fontSize: '11px', color: 'var(--accent-gold)',
             background: 'rgba(201,169,110,0.12)', padding: '2px 8px', borderRadius: '4px',
           }}>
-            {MOCK_LEADS.length} leads
+            {leads.length} leads
           </span>
         </div>
 
@@ -278,11 +304,14 @@ export default function DashboardPage() {
 
           <div>
             {hotLeads.map(lead => {
-              const agent  = getAgentById(lead.agentId)
-              const source = getSourceById(lead.sourceId)
+              const agent  = agents.find(a => a.id === lead.agentId)
+              // reason: Supabase returns untyped join data without generated schema
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
+              const channelName = raw?.acquisition_channels?.name ?? '—'
               const initials = getInitials(lead.firstName, lead.lastName)
-              const tempColor = getTempColor(lead.temperatureScore)
-              const filled = Math.round(lead.temperatureScore / 10)
+              const tempColor = getTempColor(lead.temperatureScore ?? 0)
+              const filled = Math.round((lead.temperatureScore ?? 0) / 10)
               const cfg = STATUS_CONFIG[lead.status]
               const agentBg = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
 
@@ -309,7 +338,7 @@ export default function DashboardPage() {
                       {lead.firstName} {lead.lastName}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {agent?.name ?? '—'} · {source ? SOURCE_CONFIG[source.type]?.label : '—'}
+                      {agent?.name ?? '—'} · {channelName}
                     </div>
                   </div>
 
@@ -324,7 +353,7 @@ export default function DashboardPage() {
                       ))}
                     </div>
                     <span style={{ fontSize: '13px', color: tempColor, fontWeight: 500, width: '26px', textAlign: 'right' }}>
-                      {lead.temperatureScore}
+                      {lead.temperatureScore ?? '—'}
                     </span>
                   </div>
 
@@ -425,7 +454,7 @@ export default function DashboardPage() {
 
               {/* Count */}
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                {total}/{MOCK_LEADS.length}
+                {total}/{leads.length}
               </div>
 
               {/* Specialty + hot */}

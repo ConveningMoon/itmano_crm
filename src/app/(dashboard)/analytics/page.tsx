@@ -1,9 +1,13 @@
-import { MOCK_LEADS, MOCK_AGENTS, MOCK_SOURCES, SOURCE_CONFIG } from '@/lib/mockdata'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
+import { getChannelsWithMetrics } from '@/lib/data/channels'
+import { listSequences } from '@/lib/data/email-sequences'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
 import { StatusDistributionChart } from './charts/status-distribution-chart'
-import { Users, Flame, TrendingUp, Activity } from 'lucide-react'
+import { Users, Flame, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
+import Link from 'next/link'
 
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -25,78 +29,120 @@ const CARD_SUBTITLE: React.CSSProperties = {
   marginBottom: '16px',
 }
 
-export default function AnalyticsPage() {
+export default async function AnalyticsPage() {
+  const supabase = createAdminClient()
+
+  const TENANT_ID = 'tenant-aj'
+
+  const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
+    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)'),
+    supabase.from('agents').select('*'),
+    getChannelsWithMetrics(TENANT_ID, 30),
+    listSequences(TENANT_ID),
+  ])
+
+  const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
+  const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+
   // ─── KPIs ───────────────────────────────────────────────────
-  const totalLeads = MOCK_LEADS.length
-  const hotLeads = MOCK_LEADS.filter(l => l.temperatureScore >= 70).length
-  const closedLeads = MOCK_LEADS.filter(l =>
+  const totalLeads = leads.length
+  const hotLeads = leads.filter(l => (l.temperatureScore ?? 0) >= 70).length
+  const closedLeads = leads.filter(l =>
     l.status === 'closed' || l.status === 'process_completed'
   ).length
-  const conversionRate = Math.round((closedLeads / totalLeads) * 100)
-  const avgScore = Math.round(
-    MOCK_LEADS.reduce((sum, l) => sum + l.temperatureScore, 0) / totalLeads
-  )
+  const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
+  const avgScore = totalLeads > 0
+    ? Math.round(leads.reduce((sum, l) => sum + (l.temperatureScore ?? 0), 0) / totalLeads)
+    : 0
 
-  // ─── Source donut ────────────────────────────────────────────
+  // ─── Channel-type donut ──────────────────────────────────────
+  const CHANNEL_TYPE_LABELS: Record<string, { label: string; icon: string }> = {
+    lead_magnet:   { label: 'Lead Magnet',    icon: '📄' },
+    event:         { label: 'Evento',         icon: '🏠' },
+    contact_form:  { label: 'Formulario',     icon: '🌐' },
+    manychat_flow: { label: 'ManyChat',       icon: '💬' },
+    manual:        { label: 'Manual',         icon: '✍️' },
+  }
   const sourceCounts: Record<string, number> = {}
-  MOCK_LEADS.forEach(lead => {
-    const source = MOCK_SOURCES.find(s => s.id === lead.sourceId)
-    const type = source?.type ?? 'manual'
+  leads.forEach(lead => {
+    // reason: Supabase returns untyped join data without generated schema
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
+    const type = raw?.acquisition_channels?.channel_type ?? 'manual'
     sourceCounts[type] = (sourceCounts[type] ?? 0) + 1
   })
-  const sourceData = Object.entries(sourceCounts).map(([type, count]) => ({
-    name: SOURCE_CONFIG[type]?.label ?? type,
-    value: count,
-    emoji: SOURCE_CONFIG[type]?.icon ?? '📌',
-  }))
+  const sourceData = Object.entries(sourceCounts).map(([type, count]) => {
+    const cfg = CHANNEL_TYPE_LABELS[type]
+    return {
+      name: cfg?.label ?? type,
+      value: count,
+      emoji: cfg?.icon ?? '📌',
+    }
+  })
 
   // ─── Agents bar ──────────────────────────────────────────────
-  const agentData = MOCK_AGENTS.map(agent => {
-    const leads = MOCK_LEADS.filter(l => l.agentId === agent.id)
+  const agentData = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
     return {
       name: agent.name.split(' ')[0],
       fullName: agent.name,
-      total: leads.length,
-      hot: leads.filter(l => l.temperatureScore >= 70).length,
-      closed: leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      total: agentLeads.length,
+      hot: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
+      closed: agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
       color: agent.accentColor,
     }
   })
 
-  // ─── Monthly area chart (enriched mock) ──────────────────────
-  const enrichedMonthlyData = [
-    { month: 'Oct', leads: 68, nurturing: 45, hot: 12, closed: 3 },
-    { month: 'Nov', leads: 12, nurturing: 8,  hot: 3,  closed: 1 },
-    { month: 'Dic', leads: 0,  nurturing: 15, hot: 5,  closed: 2 },
-    { month: 'Ene', leads: 3,  nurturing: 20, hot: 8,  closed: 2 },
-    { month: 'Feb', leads: 0,  nurturing: 18, hot: 9,  closed: 3 },
-    { month: 'Mar', leads: 0,  nurturing: 22, hot: 10, closed: 2 },
-    { month: 'Abr', leads: 0,  nurturing: 25, hot: 12, closed: 3 },
-  ]
+  // ─── Monthly area chart (real data, last 7 months) ───────────
+  const MONTH_LABELS: Record<number, string> = {
+    0: 'Ene', 1: 'Feb', 2: 'Mar', 3: 'Abr', 4: 'May', 5: 'Jun',
+    6: 'Jul', 7: 'Ago', 8: 'Sep', 9: 'Oct', 10: 'Nov', 11: 'Dic',
+  }
+  const now = new Date()
+  const months: { month: string; leads: number; nurturing: number; hot: number; closed: number }[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const y = d.getFullYear()
+    const m = d.getMonth()
+    const monthLeads = leads.filter(l => {
+      const ld = new Date(l.createdAt)
+      return ld.getFullYear() === y && ld.getMonth() === m
+    })
+    months.push({
+      month:     MONTH_LABELS[m],
+      leads:     monthLeads.length,
+      nurturing: monthLeads.filter(l => l.status === 'nurturing').length,
+      hot:       monthLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
+      closed:    monthLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+    })
+  }
+  const enrichedMonthlyData = months
 
   // ─── Status distribution by agent ────────────────────────────
-  const statusData = MOCK_AGENTS.map(agent => {
-    const leads = MOCK_LEADS.filter(l => l.agentId === agent.id)
+  const statusData = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
     return {
       agent: agent.name.split(' ')[0],
-      new:       leads.filter(l => l.status === 'new').length,
-      nurturing: leads.filter(l => l.status === 'nurturing').length,
-      warm:      leads.filter(l => l.status === 'warm').length,
-      hot:       leads.filter(l => l.status === 'hot').length,
-      process:   leads.filter(l => l.status === 'process_started').length,
-      closed:    leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      new:       agentLeads.filter(l => l.status === 'new').length,
+      nurturing: agentLeads.filter(l => l.status === 'nurturing').length,
+      warm:      agentLeads.filter(l => l.status === 'warm').length,
+      hot:       agentLeads.filter(l => l.status === 'hot').length,
+      process:   agentLeads.filter(l => l.status === 'process_started').length,
+      closed:    agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
     }
   })
 
   // ─── Avg temp by agent ───────────────────────────────────────
-  const tempByAgent = MOCK_AGENTS.map(agent => {
-    const leads = MOCK_LEADS.filter(l => l.agentId === agent.id)
-    const avgTemp = Math.round(leads.reduce((s, l) => s + l.temperatureScore, 0) / leads.length)
+  const tempByAgent = agents.map(agent => {
+    const agentLeads = leads.filter(l => l.agentId === agent.id)
+    const avgTemp = agentLeads.length > 0
+      ? Math.round(agentLeads.reduce((s, l) => s + (l.temperatureScore ?? 0), 0) / agentLeads.length)
+      : 0
     return {
       agent,
       avgTemp,
-      totalLeads: leads.length,
-      hotLeads: leads.filter(l => l.temperatureScore >= 70).length,
+      totalLeads: agentLeads.length,
+      hotLeads: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
     }
   }).sort((a, b) => b.avgTemp - a.avgTemp)
 
@@ -201,7 +247,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* FILA 4 — Stacked bar + Temp table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Estados por Agente</div>
           <div style={CARD_SUBTITLE}>Distribución de pipeline por agente</div>
@@ -287,6 +333,192 @@ export default function AnalyticsPage() {
             </tbody>
           </table>
         </div>
+      </div>
+      {/* FILA 5 — Secuencias de email */}
+      {(() => {
+        const totalActive    = sequences.reduce((s, q) => s + q.activeRunCount,    0)
+        const totalCompleted = sequences.reduce((s, q) => s + q.completedRunCount, 0)
+        const totalCancelled = sequences.reduce((s, q) => s + q.cancelledRunCount, 0)
+        const totalRuns      = totalActive + totalCompleted + totalCancelled
+        const completionRate = totalRuns > 0 ? Math.round((totalCompleted / totalRuns) * 100) : 0
+
+        return (
+          <div style={{ ...CARD, marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Mail size={16} color="var(--accent-gold)" />
+                <span style={CARD_HEADER}>Desempeño de Secuencias de Email</span>
+              </div>
+              <Link href="/emails" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+                Ver detalle →
+              </Link>
+            </div>
+            <div style={{ ...CARD_SUBTITLE, marginBottom: '16px' }}>
+              Resumen de runs por secuencia · El envío real se activa en Fase 3 (Resend)
+            </div>
+
+            {/* Summary KPIs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+              {[
+                { label: 'Runs activos',    value: totalActive,    color: 'var(--accent-gold)'  },
+                { label: 'Completados',      value: totalCompleted, color: 'var(--accent-green)' },
+                { label: 'Cancelados',       value: totalCancelled, color: 'var(--accent-coral)' },
+                { label: 'Tasa de completado', value: `${completionRate}%`, color: 'var(--accent-blue)' },
+              ].map(stat => (
+                <div key={stat.label} style={{
+                  background: 'var(--bg-elevated)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Per-sequence table */}
+            {sequences.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    {['Secuencia', 'Fuente', 'Pasos', 'Activos', 'Completados', 'Cancelados'].map(col => (
+                      <th key={col} style={{
+                        fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)',
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        padding: '0 8px 10px 0', textAlign: col === 'Secuencia' || col === 'Fuente' ? 'left' : 'center',
+                      }}>
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sequences.map((seq, i) => (
+                    <tr key={seq.id} style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none' }}>
+                      <td style={{ padding: '10px 8px 10px 0' }}>
+                        <Link href={`/emails/${seq.id}`} style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
+                          {seq.name}
+                        </Link>
+                      </td>
+                      <td style={{ padding: '10px 8px' }}>
+                        <Link href={`/sources/${seq.channelSlug}`} style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none' }}>
+                          {seq.channelName}
+                        </Link>
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        {seq.stepCount}
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: 'var(--accent-gold)' }}>
+                        {seq.activeRunCount}
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--accent-green)' }}>
+                        {seq.completedRunCount}
+                      </td>
+                      <td style={{ padding: '10px 0 10px 8px', textAlign: 'center', fontSize: '13px', color: seq.cancelledRunCount > 0 ? 'var(--accent-coral)' : 'var(--text-muted)' }}>
+                        {seq.cancelledRunCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* FILA 7 — Canales de adquisición */}
+      <div style={CARD}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <GitBranch size={16} color="var(--accent-gold)" />
+            <span style={CARD_HEADER}>Rendimiento por Canal · 30 días</span>
+          </div>
+          <Link href="/sources" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+            Ver todos →
+          </Link>
+        </div>
+        <div style={{ ...CARD_SUBTITLE, marginBottom: '12px' }}>Leads captados, vistas y conversión por canal de adquisición</div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {['Canal', 'Tipo', 'Vistas', 'Leads', 'Conversión', 'Score prom.'].map(col => (
+                <th key={col} style={{
+                  fontSize: '10px',
+                  fontWeight: 500,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  padding: '0 8px 10px 0',
+                  textAlign: col === 'Canal' ? 'left' : 'center',
+                }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {channels.sort((a, b) => b.metrics.leadsInWindow - a.metrics.leadsInWindow).map((ch, i) => {
+              const typeColors: Record<string, string> = {
+                lead_magnet:   'var(--accent-gold)',
+                event:         'var(--accent-teal)',
+                contact_form:  'var(--accent-blue)',
+                manychat_flow: 'var(--accent-green)',
+                manual:        'var(--text-muted)',
+              }
+              const typeLabels: Record<string, string> = {
+                lead_magnet:   'Lead Magnet',
+                event:         'Evento',
+                contact_form:  'Formulario',
+                manychat_flow: 'ManyChat',
+                manual:        'Manual',
+              }
+              const typeColor = typeColors[ch.channelType] ?? 'var(--text-muted)'
+              return (
+                <tr key={ch.id} style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : 'none' }}>
+                  <td style={{ padding: '10px 8px 10px 0' }}>
+                    <Link href={`/sources/${ch.slug}`} style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
+                      {ch.name}
+                    </Link>
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 500,
+                      color: typeColor,
+                      background: `${typeColor}18`,
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {typeLabels[ch.channelType] ?? ch.channelType}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {ch.metrics.pageViewsInWindow}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {ch.metrics.leadsInWindow}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: ch.metrics.conversionRate >= 15 ? 'var(--accent-green)' : ch.metrics.conversionRate >= 8 ? 'var(--accent-gold)' : 'var(--text-muted)',
+                    }}>
+                      {ch.metrics.conversionRate}%
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 0 10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {ch.metrics.avgTempScore !== null ? ch.metrics.avgTempScore : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )

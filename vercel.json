@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/score-decay",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

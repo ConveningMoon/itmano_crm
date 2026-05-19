@@ -8,6 +8,8 @@ import {
   FileDown,
   BarChart2,
   Settings,
+  GitBranch,
+  Mail,
 } from 'lucide-react'
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -16,6 +18,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   FileDown,
   BarChart2,
   Settings,
+  GitBranch,
+  Mail,
 }
 
 interface NavItemProps {
