@@ -1,6 +1,23 @@
 import { Webhook } from 'svix'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Transactional email events Resend fires for our sends.
+// email.unsubscribed does NOT exist for transactional emails (only for Audiences).
+// Unsubscribe handling is a separate /api/unsubscribe endpoint (future PR).
+const RESEND_EMAIL_EVENTS = [
+  'email.sent',
+  'email.delivered',
+  'email.opened',
+  'email.clicked',
+  'email.bounced',
+  'email.complained',
+  'email.failed',
+  'email.suppressed',
+  'email.received',
+] as const
+
+type ResendEmailEvent = { type: typeof RESEND_EMAIL_EVENTS[number]; [key: string]: unknown }
+
 export async function POST(request: NextRequest) {
   const secret = process.env.RESEND_WEBHOOK_SECRET
   if (!secret) {
@@ -32,7 +49,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Phase 3 PR 1: log only — event writes to lead_events in the next PR
-  console.log('[resend-webhook] received event:', JSON.stringify(event, null, 2))
+  const { type } = event as ResendEmailEvent
+  console.log(`[resend-webhook] ${type}`, JSON.stringify(event, null, 2))
 
   return NextResponse.json({ received: true })
 }
