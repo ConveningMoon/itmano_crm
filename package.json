@@ -32,7 +32,6 @@
     "postcss": "^8.5.10"
   },
   "devDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
