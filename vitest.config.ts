@@ -11,11 +11,6 @@ export default defineConfig({
     // Run RLS test files sequentially — they share a remote Supabase database.
     // Parallel execution causes fixture data races where one suite's afterAll
     // deletes rows another suite's tests are still reading.
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    fileParallelism: false,
   },
 })

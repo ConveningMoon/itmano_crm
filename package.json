@@ -18,7 +18,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
-    "next": "16.2.4",
+    "next": "^16.2.6",
     "papaparse": "^5.5.3",
     "react": "19.2.4",
     "react-countup": "^6.5.3",
@@ -33,7 +33,6 @@
     "postcss": "^8.5.10"
   },
   "devDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
@@ -41,14 +40,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "^4.1.6",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "jsonwebtoken": "^9.0.3",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^2.1.9",
+    "vitest": "^4.1.6",
     "ws": "^8.20.1"
   }
 }
