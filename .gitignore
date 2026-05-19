@@ -56,6 +56,11 @@ yarn-error.log*
 # ESLint cache
 .eslintcache
 
-# AI
+# AI / local planning (not shipped)
 CLAUDE.md
 AGENTS.md
+.cursor/
+docs/superpowers/
+
+# db
+supabase/
