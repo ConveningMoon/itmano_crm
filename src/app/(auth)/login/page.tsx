@@ -1,20 +1,34 @@
 'use client'
 
-import { useState, useRef, Suspense } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+
+const COOLDOWN_SECONDS = 60
 
 function LoginForm() {
   const searchParams = useSearchParams()
   const nextParam = useRef<string>(searchParams.get('next') ?? '/dashboard')
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail]     = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [sent, setSent] = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [cooldown, setCooldown] = useState(0)
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const id = setInterval(() => {
+      setCooldown(c => {
+        if (c <= 1) { clearInterval(id); return 0 }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cooldown > 0])
 
   async function handleSend() {
-    if (loading || !email) return
+    if (loading || cooldown > 0 || !email) return
     setLoading(true)
     setError(null)
 
@@ -33,7 +47,7 @@ function LoginForm() {
       setLoading(false)
     } else {
       setLoading(false)
-      setSent(true)
+      setCooldown(COOLDOWN_SECONDS)
     }
   }
 
@@ -86,39 +100,6 @@ function LoginForm() {
           </div>
         </div>
 
-        {sent ? (
-          /* Success state */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div
-              style={{
-                fontSize: '13px',
-                color: 'var(--text-primary)',
-                textAlign: 'center',
-                lineHeight: '1.5',
-              }}
-            >
-              Revisa tu email — te enviamos un enlace de acceso.
-            </div>
-            <button
-              onClick={() => setSent(false)}
-              style={{
-                width: '100%',
-                padding: '11px',
-                borderRadius: '8px',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'transparent',
-                color: 'var(--text-secondary)',
-                fontSize: '13px',
-                fontWeight: '500',
-                letterSpacing: '0.04em',
-                cursor: 'pointer',
-              }}
-            >
-              Enviar de nuevo
-            </button>
-          </div>
-        ) : (
-          /* Form state */
           <>
             {/* Fields */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -130,7 +111,7 @@ function LoginForm() {
                   onChange={e => setEmail(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSend()}
                   placeholder="tu@email.com"
-                  disabled={loading}
+                  disabled={loading || cooldown > 0}
                   style={inputStyle}
                 />
               </div>
@@ -146,25 +127,35 @@ function LoginForm() {
             {/* CTA */}
             <button
               onClick={handleSend}
-              disabled={loading}
+              disabled={loading || cooldown > 0}
               style={{
                 width: '100%',
                 padding: '11px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: loading ? 'var(--accent-gold-dim)' : 'var(--accent-gold)',
+                backgroundColor: (loading || cooldown > 0) ? 'var(--accent-gold-dim)' : 'var(--accent-gold)',
                 color: 'var(--bg-base)',
                 fontSize: '13px',
                 fontWeight: '600',
                 letterSpacing: '0.06em',
-                cursor: loading ? 'not-allowed' : 'pointer',
+                cursor: (loading || cooldown > 0) ? 'not-allowed' : 'pointer',
                 transition: 'background-color 0.15s',
               }}
             >
-              {loading ? 'Enviando...' : 'Enviar enlace de acceso'}
+              {loading
+                ? 'Enviando...'
+                : cooldown > 0
+                  ? `Reintentar en ${cooldown}s...`
+                  : 'Enviar enlace de acceso'}
             </button>
+
+            {/* Success notice — visible during cooldown */}
+            {cooldown > 0 && (
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: '1.5' }}>
+                Revisa tu correo — recibirás el enlace en menos de 1 minuto.
+              </div>
+            )}
           </>
-        )}
 
         <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
           ITMANO CRM
