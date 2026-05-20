@@ -62,5 +62,6 @@ AGENTS.md
 .cursor/
 docs/superpowers/
 
-# db
-supabase/
+# db — local Supabase CLI state only (migrations and seeds are tracked)
+supabase/.branches/
+supabase/.temp/
