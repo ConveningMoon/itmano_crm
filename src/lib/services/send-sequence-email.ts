@@ -1,6 +1,7 @@
 import 'server-only'
 import { resend } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 
 export type PendingRun = {
   run_id:             string
@@ -53,8 +54,7 @@ export async function sendSequenceEmail(
   }
 
   // ── Build template variables ──────────────────────────────────────────────
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
-  const unsubscribeUrl = `${appUrl}/api/unsubscribe?token=${lead_id}`
+  const unsubscribeUrl = generateUnsubscribeUrl(lead_id)
 
   const variables: Record<string, string> = {
     customer_name:    run.first_name,
