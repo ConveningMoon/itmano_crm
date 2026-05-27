@@ -199,6 +199,27 @@ export async function POST(
     }
   }
 
+  // Fire contact_form_question notification (triggers Telegram via DB webhook)
+  if (channel.channel_type === 'contact_form') {
+    const qa       = parsed.quiz_answers
+    const question = (
+      typeof qa?.question === 'string' ? qa.question :
+      typeof qa?.message  === 'string' ? qa.message  :
+      ''
+    ).slice(0, 300)
+
+    const { error: notifError } = await db.from('notifications').insert({
+      tenant_id: tenantId,
+      type:      'contact_form_question',
+      lead_id:   leadId,
+      message:   question,
+    })
+
+    if (notifError) {
+      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'notification_insert_failed', detail: notifError.message }))
+    }
+  }
+
   console.log(JSON.stringify({
     service:    'intake-submit',
     public_id:  publicId,
