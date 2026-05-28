@@ -36,15 +36,16 @@ function buildMessage(
 // notifications INSERT. Always returns 200 so the pg_net queue stays clean.
 
 export async function POST(request: NextRequest) {
-  // Verify webhook secret
-  const secret = process.env.NOTIFICATIONS_WEBHOOK_SECRET
+  // Verify webhook secret — trim guards against copy-paste whitespace in env/Vault
+  const secret = process.env.NOTIFICATIONS_WEBHOOK_SECRET?.trim()
   if (!secret) {
-    console.error(JSON.stringify({ service: 'notifications-dispatch', error: 'NOTIFICATIONS_WEBHOOK_SECRET not configured' }))
+    console.error(JSON.stringify({ service: 'notifications-dispatch', path: 'no_secret' }))
     return new Response(null, { status: 200 })
   }
-  const auth = request.headers.get('Authorization')
-  if (auth !== `Bearer ${secret}`) {
-    console.warn(JSON.stringify({ service: 'notifications-dispatch', result: 'webhook_secret_mismatch' }))
+  const received = request.headers.get('authorization')?.trim()
+  const expected = `Bearer ${secret}`
+  if (received !== expected) {
+    console.warn(JSON.stringify({ service: 'notifications-dispatch', path: 'secret_mismatch', received_length: received?.length ?? 0, expected_length: expected.length }))
     return new Response(null, { status: 200 })
   }
 
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
     if (typeof body.notification_id !== 'string' || !body.notification_id) throw new Error()
     notificationId = body.notification_id
   } catch {
+    console.warn(JSON.stringify({ service: 'notifications-dispatch', path: 'invalid_body' }))
     return new Response(null, { status: 200 })
   }
 
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (!notif) {
+    console.log(JSON.stringify({ service: 'notifications-dispatch', path: 'not_found_or_sent', notification_id: notificationId }))
     return new Response(null, { status: 200 })
   }
 
@@ -89,15 +92,19 @@ export async function POST(request: NextRequest) {
       .maybeSingle(),
   ])
 
-  const lead    = leadResult.data
+  const lead   = leadResult.data
   const profile = profileResult.data
 
+  // Trim chat_id to guard against whitespace artifacts
+  const chatId = profile?.telegram_chat_id?.trim() || null
+
   // No chat_id — mark sent=true to prevent infinite pending state
-  if (!profile?.telegram_chat_id) {
+  if (!chatId) {
     console.log(JSON.stringify({
       service:         'notifications-dispatch',
+      path:            'no_chat_id',
       notification_id: notif.id,
-      result:          'no_telegram_chat_id',
+      tenant_id:       notif.tenant_id,
     }))
     await db
       .from('notifications')
@@ -129,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
   )
 
-  const result = await sendTelegramMessage(profile.telegram_chat_id, text)
+  const result = await sendTelegramMessage(chatId, text)
 
   if (result.ok) {
     await db
@@ -138,17 +145,17 @@ export async function POST(request: NextRequest) {
       .eq('id', notif.id)
     console.log(JSON.stringify({
       service:         'notifications-dispatch',
+      path:            'sent',
       notification_id: notif.id,
       type:            notif.type,
-      result:          'sent',
     }))
   } else {
     // Leave telegram_sent=false — future retry sweep (Phase 5)
     console.error(JSON.stringify({
       service:         'notifications-dispatch',
+      path:            'telegram_failed',
       notification_id: notif.id,
       type:            notif.type,
-      result:          'telegram_failed',
       error:           result.error,
     }))
   }
