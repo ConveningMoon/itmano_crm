@@ -401,9 +401,14 @@ export default async function AnalyticsPage() {
                         </Link>
                       </td>
                       <td style={{ padding: '10px 8px' }}>
-                        <Link href={`/sources/${seq.channelSlug}`} style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none' }}>
-                          {seq.channelName}
-                        </Link>
+                        {seq.channels.length > 0 ? seq.channels.map((ch, i) => (
+                          <span key={ch.id}>
+                            {i > 0 && <span style={{ marginRight: '4px' }}>,</span>}
+                            <Link href={`/sources/${ch.slug}`} style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none' }}>
+                              {ch.name}
+                            </Link>
+                          </span>
+                        )) : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>}
                       </td>
                       <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
                         {seq.stepCount}

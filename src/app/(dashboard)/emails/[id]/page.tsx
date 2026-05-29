@@ -77,12 +77,18 @@ export default async function EmailSequenceDetailPage({ params }: { params: { id
               {sequence.active ? 'Activa' : 'Inactiva'}
             </span>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Fuente:{' '}
-            <Link href={`/sources/${sequence.channelSlug}`} style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>
-              {sequence.channelName}
-            </Link>
-          </p>
+          {sequence.channels.length > 0 && (
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+              {sequence.channels.map((ch, i) => (
+                <span key={ch.id}>
+                  {i > 0 && <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>,</span>}
+                  <Link href={`/sources/${ch.slug}`} style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>
+                    {ch.name}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          )}
         </div>
       </div>
 

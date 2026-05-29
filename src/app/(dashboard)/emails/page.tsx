@@ -74,16 +74,22 @@ export default async function EmailsPage() {
                       <div className="seq-name" style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
                         {seq.name}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Fuente:{' '}
-                        <Link
-                          href={`/sources/${seq.channelSlug}`}
-                          onClick={e => e.stopPropagation()}
-                          style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}
-                        >
-                          {seq.channelName}
-                        </Link>
-                      </div>
+                      {seq.channels.length > 0 && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {seq.channels.map((ch, i) => (
+                            <span key={ch.id}>
+                              {i > 0 && <span style={{ marginRight: '4px' }}>,</span>}
+                              <Link
+                                href={`/sources/${ch.slug}`}
+                                onClick={e => e.stopPropagation()}
+                                style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}
+                              >
+                                {ch.name}
+                              </Link>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -118,7 +124,9 @@ export default async function EmailsPage() {
                           <span style={{ color: 'var(--text-muted)', marginRight: '4px' }}>
                             {delayLabel(step.delayHours)}
                           </span>
-                          {step.subject.length > 30 ? step.subject.slice(0, 30) + '…' : step.subject}
+                          {step.subject
+                            ? (step.subject.length > 30 ? step.subject.slice(0, 30) + '…' : step.subject)
+                            : (step.resendTemplateId ? step.resendTemplateId.slice(0, 20) + '…' : 'Sin asunto')}
                         </div>
                         {i < seq.steps.length - 1 && (
                           <span style={{ color: 'var(--border-subtle)', fontSize: '10px' }}>→</span>
