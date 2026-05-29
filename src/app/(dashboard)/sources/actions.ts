@@ -2,8 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const TENANT_ID = 'tenant-aj'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 
 function genPublicId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -40,6 +39,9 @@ export async function createLeadMagnet(fields: {
 }): Promise<CreateLeadMagnetResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
+  const { tenant_id } = await getCurrentTenantContext()
+  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+
   const supabase  = createAdminClient()
   const publicId  = genPublicId()
   const slug      = fields.slug?.trim() || slugify(fields.name)
@@ -50,7 +52,7 @@ export async function createLeadMagnet(fields: {
   const { data: existing } = await supabase
     .from('acquisition_channels')
     .select('id')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', tenant_id)
     .eq('slug', slug)
     .limit(1)
     .single()
@@ -59,7 +61,7 @@ export async function createLeadMagnet(fields: {
 
   const { error: chErr } = await supabase.from('acquisition_channels').insert({
     id:           channelId,
-    tenant_id:    TENANT_ID,
+    tenant_id,
     public_id:    publicId,
     channel_type: 'lead_magnet',
     name:         fields.name.trim(),
@@ -75,14 +77,14 @@ export async function createLeadMagnet(fields: {
 
   const { error: seqErr } = await supabase.from('email_sequences').insert({
     id:       seqId,
-    tenant_id: TENANT_ID,
+    tenant_id,
     name:     `Secuencia · ${fields.name.trim()}`,
     active:   true,
   })
 
   if (seqErr) return { ok: false, error: seqErr.message }
 
-  // Set back-reference
+  // Link sequence to channel
   await supabase
     .from('acquisition_channels')
     .update({ email_sequence_id: seqId })
@@ -113,12 +115,15 @@ export async function updateChannel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
+  const { tenant_id } = await getCurrentTenantContext()
+  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('acquisition_channels')
     .update({ name: fields.name.trim(), active: fields.active })
     .eq('id', channelId)
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', tenant_id)
 
   if (error) return { ok: false, error: error.message }
 
@@ -133,12 +138,15 @@ export async function updateChannel(
 export async function archiveChannel(
   channelId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { tenant_id } = await getCurrentTenantContext()
+  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('acquisition_channels')
     .update({ active: false, archived_at: new Date().toISOString() })
     .eq('id', channelId)
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', tenant_id)
 
   if (error) return { ok: false, error: error.message }
 
@@ -166,6 +174,9 @@ export async function createEvent(fields: {
 }): Promise<CreateEventResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
+  const { tenant_id } = await getCurrentTenantContext()
+  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+
   const supabase  = createAdminClient()
   const publicId  = genPublicId()
   const slug      = fields.slug?.trim() || slugify(fields.name)
@@ -174,7 +185,7 @@ export async function createEvent(fields: {
   const { data: existing } = await supabase
     .from('acquisition_channels')
     .select('id')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', tenant_id)
     .eq('slug', slug)
     .limit(1)
     .single()
@@ -183,7 +194,7 @@ export async function createEvent(fields: {
 
   const { error: chErr } = await supabase.from('acquisition_channels').insert({
     id:           channelId,
-    tenant_id:    TENANT_ID,
+    tenant_id,
     public_id:    publicId,
     channel_type: 'event',
     name:         fields.name.trim(),

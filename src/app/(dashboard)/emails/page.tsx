@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { listSequences } from '@/lib/data/email-sequences'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { Mail, CheckCircle, XCircle, Clock } from 'lucide-react'
-
-const TENANT_ID = 'tenant-aj'
 
 function delayLabel(hours: number): string {
   if (hours === 0) return 'Inmediato'
@@ -11,7 +10,8 @@ function delayLabel(hours: number): string {
 }
 
 export default async function EmailsPage() {
-  const sequences = await listSequences(TENANT_ID)
+  const { tenant_id } = await getCurrentTenantContext()
+  const sequences = await listSequences(tenant_id ?? '')
 
   return (
     <>

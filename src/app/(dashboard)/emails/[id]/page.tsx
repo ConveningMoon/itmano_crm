@@ -1,9 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { ArrowLeft, Mail, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-
-const TENANT_ID = 'tenant-aj'
 
 function delayLabel(hours: number): string {
   if (hours === 0) return 'Inmediato'
@@ -46,7 +45,8 @@ function CancelReasonLabel({ reason }: { reason: string | null }) {
 }
 
 export default async function EmailSequenceDetailPage({ params }: { params: { id: string } }) {
-  const sequence = await getSequenceWithRuns(TENANT_ID, params.id)
+  const { tenant_id } = await getCurrentTenantContext()
+  const sequence = await getSequenceWithRuns(tenant_id ?? '', params.id)
   if (!sequence) notFound()
 
   const totalRuns = sequence.activeRunCount + sequence.completedRunCount + sequence.cancelledRunCount
