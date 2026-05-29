@@ -2,11 +2,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getChannelBySlug, getChannelLeads } from '@/lib/data/channels'
+import { listSequences } from '@/lib/data/email-sequences'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { STATUS_CONFIG } from '@/lib/config'
 import type { LeadStatus } from '@/lib/types'
 import { ChannelActions } from './channel-actions'
-
-const TENANT_ID = 'tenant-aj'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -31,14 +31,18 @@ export default async function ChannelDetailPage({
 }: {
   params: Promise<{ slug: string }>
 }) {
-  const { slug } = await params
-  const [channel, leads] = await Promise.all([
-    getChannelBySlug(TENANT_ID, slug),
+  const { slug }      = await params
+  const { tenant_id } = await getCurrentTenantContext()
+  const tenantId      = tenant_id ?? ''
+
+  const [channel, leads, sequences] = await Promise.all([
+    getChannelBySlug(tenantId, slug),
     (async () => {
-      const ch = await getChannelBySlug(TENANT_ID, slug)
+      const ch = await getChannelBySlug(tenantId, slug)
       if (!ch) return []
-      return getChannelLeads(TENANT_ID, ch.id)
+      return getChannelLeads(tenantId, ch.id)
     })(),
+    listSequences(tenant_id),
   ])
 
   if (!channel) notFound()
@@ -119,6 +123,8 @@ export default async function ChannelDetailPage({
           channelId={channel.id}
           channelName={channel.name}
           channelActive={channel.active}
+          emailSequenceId={channel.emailSequenceId}
+          sequences={sequences.map(s => ({ id: s.id, name: s.name }))}
         />
       </div>
 

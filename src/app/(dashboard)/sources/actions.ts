@@ -156,6 +156,29 @@ export async function archiveChannel(
   return { ok: true }
 }
 
+// ─── Update channel sequence association ─────────────────────────────────────
+
+export async function updateChannelSequence(
+  channelId: string,
+  emailSequenceId: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { tenant_id } = await getCurrentTenantContext()
+  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('acquisition_channels')
+    .update({ email_sequence_id: emailSequenceId })
+    .eq('id', channelId)
+    .eq('tenant_id', tenant_id)
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/sources')
+  revalidatePath('/emails')
+  return { ok: true }
+}
+
 // ─── Create Event channel ─────────────────────────────────────────────────────
 
 export interface CreateEventResult {

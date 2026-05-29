@@ -3,12 +3,15 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil, Trash2, X } from 'lucide-react'
-import { updateChannel, archiveChannel } from '../actions'
+import Link from 'next/link'
+import { updateChannel, updateChannelSequence, archiveChannel } from '../actions'
 
 interface ChannelActionsProps {
-  channelId: string
-  channelName: string
-  channelActive: boolean
+  channelId:       string
+  channelName:     string
+  channelActive:   boolean
+  emailSequenceId: string | null
+  sequences:       Array<{ id: string; name: string }>
 }
 
 const INPUT: React.CSSProperties = {
@@ -33,19 +36,24 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, emailSequenceId, sequences }: ChannelActionsProps) {
   const router = useRouter()
-  const [mode,    setMode]    = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
-  const [name,    setName]    = useState(channelName)
-  const [active,  setActive]  = useState(channelActive)
-  const [error,   setError]   = useState<string | null>(null)
-  const [pending, start]      = useTransition()
+  const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
+  const [name,       setName]       = useState(channelName)
+  const [active,     setActive]     = useState(channelActive)
+  const [sequenceId, setSequenceId] = useState<string>(emailSequenceId ?? '')
+  const [error,      setError]      = useState<string | null>(null)
+  const [pending,    start]         = useTransition()
 
   function handleSave() {
     setError(null)
     start(async () => {
-      const res = await updateChannel(channelId, { name, active })
-      if (!res.ok) { setError(res.error); return }
+      const [nameRes, seqRes] = await Promise.all([
+        updateChannel(channelId, { name, active }),
+        updateChannelSequence(channelId, sequenceId || null),
+      ])
+      if (!nameRes.ok) { setError(nameRes.error); return }
+      if (!seqRes.ok)  { setError(seqRes.error);  return }
       setMode('idle')
       router.refresh()
     })
@@ -68,7 +76,7 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
       {/* Action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <button
-          onClick={() => { setName(channelName); setActive(channelActive); setMode('edit') }}
+          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setMode('edit') }}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
@@ -124,6 +132,7 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
                   autoFocus
                 />
               </div>
+
               <div>
                 <label style={{ ...LABEL, marginBottom: '10px' }}>Estado</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -150,6 +159,27 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>Secuencia de Email</label>
+                <select
+                  value={sequenceId}
+                  onChange={e => setSequenceId(e.target.value)}
+                  className="ch-act-input"
+                  style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}
+                >
+                  <option value="">Ninguna</option>
+                  {sequences.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                {sequences.length === 0 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                    No hay secuencias disponibles. Crea una en{' '}
+                    <Link href="/emails/new" style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>Secuencias de Email →</Link>
+                  </div>
+                )}
               </div>
             </div>
 

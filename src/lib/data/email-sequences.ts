@@ -9,11 +9,11 @@ export interface SequenceChannel {
 }
 
 export interface SequenceStep {
-  id:         string
-  stepOrder:  number
-  delayHours: number
-  subject:    string | null
-  active:     boolean
+  id:               string
+  stepOrder:        number
+  delayHours:       number
+  subject:          string | null
+  active:           boolean
   resendTemplateId: string | null
 }
 
@@ -31,52 +31,75 @@ export interface SequenceRun {
 }
 
 export interface EmailSequence {
-  id:                 string
-  tenantId:           string
-  name:               string
-  language:           string
-  description:        string | null
-  active:             boolean
-  channels:           SequenceChannel[]   // 0-or-many channels pointing to this sequence
-  steps:              SequenceStep[]
-  stepCount:          number
-  activeRunCount:     number
-  completedRunCount:  number
-  cancelledRunCount:  number
-  createdAt:          string
+  id:                string
+  tenantId:          string
+  tenantName:        string | null   // populated when queried as super_admin (null tenantId filter)
+  name:              string
+  language:          string
+  description:       string | null
+  active:            boolean
+  channels:          SequenceChannel[]
+  steps:             SequenceStep[]
+  stepCount:         number
+  activeRunCount:    number
+  completedRunCount: number
+  cancelledRunCount: number
+  createdAt:         string
 }
 
 // ─── Data access ──────────────────────────────────────────────────────────────
 
-export async function listSequences(tenantId: string): Promise<EmailSequence[]> {
+// tenantId = null → super_admin: no tenant filter, fetches all tenants
+// tenantId = ''   → edge-case: returns empty (no valid tenant)
+export async function listSequences(tenantId: string | null): Promise<EmailSequence[]> {
+  if (tenantId === '') return []
+
   const supabase = createAdminClient()
 
-  const [{ data: seqRows }, { data: stepRows }, { data: runRows }, { data: channelRows }] = await Promise.all([
-    supabase
-      .from('email_sequences')
-      .select('id, tenant_id, name, language, description, active, created_at')
-      .eq('tenant_id', tenantId)
-      .order('created_at'),
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, name, language, description, active, created_at')
+    .order('created_at')
+  if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
 
-    supabase
-      .from('email_sequence_steps')
-      .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
-      .eq('tenant_id', tenantId)
-      .eq('active', true)
-      .order('step_order'),
+  let stepQ = supabase
+    .from('email_sequence_steps')
+    .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
+    .eq('active', true)
+    .order('step_order')
+  if (tenantId) stepQ = stepQ.eq('tenant_id', tenantId)
 
-    supabase
-      .from('lead_sequence_runs')
-      .select('sequence_id, status')
-      .eq('tenant_id', tenantId),
+  let runQ = supabase
+    .from('lead_sequence_runs')
+    .select('sequence_id, status')
+  if (tenantId) runQ = runQ.eq('tenant_id', tenantId)
 
-    // Channels that reference any of the tenant's sequences
-    supabase
-      .from('acquisition_channels')
-      .select('id, name, slug, email_sequence_id')
-      .eq('tenant_id', tenantId)
-      .not('email_sequence_id', 'is', null),
-  ])
+  let channelQ = supabase
+    .from('acquisition_channels')
+    .select('id, name, slug, email_sequence_id')
+    .not('email_sequence_id', 'is', null)
+  if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
+
+  const [
+    { data: seqRows },
+    { data: stepRows },
+    { data: runRows },
+    { data: channelRows },
+  ] = await Promise.all([seqQ, stepQ, runQ, channelQ])
+
+  // For super_admin: look up tenant names
+  const tenantNameMap = new Map<string, string>()
+  if (!tenantId && seqRows && seqRows.length > 0) {
+    const tids = [...new Set((seqRows as { tenant_id: string }[]).map(s => s.tenant_id))]
+    const { data: tenants } = await supabase
+      .from('tenants')
+      .select('id, name')
+      .in('id', tids)
+    for (const t of tenants ?? []) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tenantNameMap.set((t as any).id, (t as any).name)
+    }
+  }
 
   const stepsBySeq = new Map<string, SequenceStep[]>()
   for (const s of stepRows ?? []) {
@@ -106,7 +129,6 @@ export async function listSequences(tenantId: string): Promise<EmailSequence[]> 
     if (row.status === 'cancelled') counts.cancelled++
   }
 
-  // Channels grouped by sequence id
   const channelsBySeq = new Map<string, SequenceChannel[]>()
   for (const c of channelRows ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,6 +147,7 @@ export async function listSequences(tenantId: string): Promise<EmailSequence[]> 
     return {
       id,
       tenantId:          row.tenant_id,
+      tenantName:        tenantNameMap.get(row.tenant_id) ?? null,
       name:              row.name,
       language:          row.language ?? 'es',
       description:       row.description ?? null,
@@ -141,24 +164,31 @@ export async function listSequences(tenantId: string): Promise<EmailSequence[]> 
 }
 
 export async function getSequenceWithRuns(
-  tenantId: string,
+  tenantId: string | null,
   sequenceId: string,
 ): Promise<(EmailSequence & { runs: SequenceRun[] }) | null> {
+  if (tenantId === '') return null
+
   const supabase = createAdminClient()
 
-  const [{ data: seqRow }, { data: stepRows }, { data: runRows }, { data: channelRows }] = await Promise.all([
-    supabase
-      .from('email_sequences')
-      .select('id, tenant_id, name, language, description, active, created_at')
-      .eq('id', sequenceId)
-      .eq('tenant_id', tenantId)
-      .single(),
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, name, language, description, active, created_at')
+    .eq('id', sequenceId)
+  if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
+
+  const [
+    { data: seqRow },
+    { data: stepRows },
+    { data: runRows },
+    { data: channelRows },
+  ] = await Promise.all([
+    seqQ.single(),
 
     supabase
       .from('email_sequence_steps')
       .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
       .eq('sequence_id', sequenceId)
-      .eq('active', true)
       .order('step_order'),
 
     supabase
@@ -170,15 +200,12 @@ export async function getSequenceWithRuns(
         leads!inner (first_name, last_name)
       `)
       .eq('sequence_id', sequenceId)
-      .eq('tenant_id', tenantId)
       .order('started_at', { ascending: false })
       .limit(50),
 
-    // Channels pointing to this sequence
     supabase
       .from('acquisition_channels')
       .select('id, name, slug')
-      .eq('tenant_id', tenantId)
       .eq('email_sequence_id', sequenceId),
   ])
 
@@ -187,6 +214,18 @@ export async function getSequenceWithRuns(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row = seqRow as any
   const id  = row.id as string
+
+  // Tenant name for super_admin
+  let tenantName: string | null = null
+  if (!tenantId) {
+    const { data: t } = await supabase
+      .from('tenants')
+      .select('name')
+      .eq('id', row.tenant_id)
+      .single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tenantName = (t as any)?.name ?? null
+  }
 
   const steps: SequenceStep[] = (stepRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -226,20 +265,19 @@ export async function getSequenceWithRuns(
     if (r.status === 'cancelled') counts.cancelled++
   }
 
-  const channels: SequenceChannel[] = (channelRows ?? []).map(c => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cr = c as any
-    return { id: cr.id, name: cr.name, slug: cr.slug }
-  })
-
   return {
     id,
     tenantId:          row.tenant_id,
+    tenantName,
     name:              row.name,
     language:          row.language ?? 'es',
     description:       row.description ?? null,
     active:            row.active,
-    channels,
+    channels:          (channelRows ?? []).map(c => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cr = c as any
+      return { id: cr.id, name: cr.name, slug: cr.slug }
+    }),
     steps,
     stepCount:         steps.length,
     activeRunCount:    counts.active,
