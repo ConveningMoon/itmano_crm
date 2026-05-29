@@ -74,11 +74,10 @@ export async function createLeadMagnet(fields: {
   if (chErr) return { ok: false, error: chErr.message }
 
   const { error: seqErr } = await supabase.from('email_sequences').insert({
-    id:                    seqId,
-    tenant_id:             TENANT_ID,
-    acquisition_channel_id: channelId,
-    name:                  `Secuencia · ${fields.name.trim()}`,
-    active:                true,
+    id:       seqId,
+    tenant_id: TENANT_ID,
+    name:     `Secuencia · ${fields.name.trim()}`,
+    active:   true,
   })
 
   if (seqErr) return { ok: false, error: seqErr.message }
