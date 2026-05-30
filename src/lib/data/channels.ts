@@ -41,19 +41,25 @@ export interface ChannelLead {
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+// tenantId = null → super_admin: no tenant filter, fetches all tenants
+// tenantId = ''   → invalid/missing tenant: returns empty
 export async function getChannelsWithMetrics(
-  tenantId: string,
+  tenantId: string | null,
   windowDays = 30
 ): Promise<ChannelWithMetrics[]> {
+  if (tenantId === '') return []
+
   const supabase = createAdminClient()
   const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
 
-  const { data: channels, error } = await supabase
+  let channelQ = supabase
     .from('acquisition_channels')
     .select('*')
-    .eq('tenant_id', tenantId)
     .is('archived_at', null)
     .order('created_at', { ascending: false })
+  if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
+
+  const { data: channels, error } = await channelQ
 
   if (error || !channels || channels.length === 0) return []
 
@@ -130,7 +136,7 @@ export async function getChannelsWithMetrics(
 }
 
 export async function getChannelBySlug(
-  tenantId: string,
+  tenantId: string | null,
   slug: string,
   windowDays = 30
 ): Promise<ChannelWithMetrics | null> {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
+import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 
 export function OPTIONS() {
   return corsOptions()
@@ -173,31 +174,12 @@ export async function POST(
   }
 
   // Enroll in email sequence if the channel has one
-  if (channel.email_sequence_id) {
-    const { data: firstStep } = await db
-      .from('email_sequence_steps')
-      .select('step_order, delay_hours')
-      .eq('sequence_id', channel.email_sequence_id)
-      .eq('active', true)
-      .order('step_order', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    if (firstStep) {
-      const nextSendAt = new Date(
-        Date.now() + (firstStep.delay_hours ?? 0) * 60 * 60 * 1000
-      ).toISOString()
-
-      await db.from('lead_sequence_runs').insert({
-        tenant_id:           tenantId,
-        lead_id:             leadId,
-        sequence_id:         channel.email_sequence_id,
-        current_step_order:  firstStep.step_order,
-        status:              'active',
-        next_send_at:        nextSendAt,
-      })
-    }
-  }
+  await enrollLeadInSequence({
+    db,
+    lead_id:                leadId,
+    tenant_id:              tenantId,
+    acquisition_channel_id: channel.id,
+  })
 
   // Fire contact_form_question notification (triggers Telegram via DB webhook)
   if (channel.channel_type === 'contact_form') {

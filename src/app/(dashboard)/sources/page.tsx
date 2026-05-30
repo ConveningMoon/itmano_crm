@@ -1,19 +1,19 @@
 import { getChannelsWithMetrics } from '@/lib/data/channels'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SourcesClient } from './sources-client'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
-
-const TENANT_ID = 'tenant-aj'
 
 export default async function SourcesPage({
   searchParams,
 }: {
   searchParams: Promise<{ window?: string }>
 }) {
+  const { tenant_id }  = await getCurrentTenantContext()
   const { window: windowParam } = await searchParams
   const windowDays = Number(windowParam ?? 30)
   const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
-  const channels = await getChannelsWithMetrics(TENANT_ID, validWindow)
+  const channels = await getChannelsWithMetrics(tenant_id, validWindow)
 
   const totalLeads     = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
   const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
