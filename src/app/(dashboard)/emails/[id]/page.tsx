@@ -1,52 +1,47 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
-import { ArrowLeft, Mail, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { SequenceDetailActions } from './sequence-detail-actions'
+import { StepManager } from './step-manager'
+import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 
-const TENANT_ID = 'tenant-aj'
-
-function delayLabel(hours: number): string {
-  if (hours === 0) return 'Inmediato'
-  if (hours < 24)  return `${hours}h`
-  return `${Math.round(hours / 24)}d`
+const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
+const LANG_COLOR: Record<string, string> = {
+  es: 'var(--accent-gold)',
+  en: 'var(--accent-blue)',
+  pt: 'var(--accent-teal)',
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg: Record<string, { label: string; color: string; bg: string }> = {
-    active:    { label: 'Activo',     color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
-    completed: { label: 'Completado', color: 'var(--accent-green)', bg: 'rgba(107,163,104,0.12)' },
-    cancelled: { label: 'Cancelado',  color: 'var(--accent-coral)', bg: 'rgba(201,123,107,0.12)' },
-    paused:    { label: 'Pausado',    color: 'var(--text-muted)',    bg: 'var(--bg-elevated)'     },
-  }
-  const c = cfg[status] ?? cfg.paused
-  return (
-    <span style={{
-      fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-      letterSpacing: '0.06em', textTransform: 'uppercase',
-      color: c.color, background: c.bg,
-    }}>
-      {c.label}
-    </span>
-  )
+const RUN_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  active:    { label: 'Activo',     color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
+  completed: { label: 'Completado', color: 'var(--accent-green)', bg: 'rgba(107,163,104,0.12)' },
+  cancelled: { label: 'Cancelado',  color: 'var(--accent-coral)', bg: 'rgba(201,123,107,0.12)' },
+  paused:    { label: 'Pausado',    color: 'var(--text-muted)',    bg: 'var(--bg-elevated)'     },
 }
 
-function CancelReasonLabel({ reason }: { reason: string | null }) {
-  if (!reason) return null
-  const labels: Record<string, string> = {
-    unsubscribed: 'Se dio de baja',
-    replied:      'Respondió',
-    lead_closed:  'Lead cerrado',
-    manual:       'Manual',
-  }
-  return (
-    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-      {labels[reason] ?? reason}
-    </span>
-  )
+const CANCEL_LABEL: Record<string, string> = {
+  unsubscribed:     'Se dio de baja',
+  replied:          'Respondió',
+  lead_closed:      'Lead cerrado',
+  manual:           'Manual',
+  sequence_deleted: 'Secuencia eliminada',
 }
 
-export default async function EmailSequenceDetailPage({ params }: { params: { id: string } }) {
-  const sequence = await getSequenceWithRuns(TENANT_ID, params.id)
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+}
+
+export default async function EmailSequenceDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  const { tenant_id, role } = await getCurrentTenantContext()
+  const isSuperAdmin = role === 'super_admin'
+
+  const sequence = await getSequenceWithRuns(tenant_id, id)
   if (!sequence) notFound()
 
   const totalRuns = sequence.activeRunCount + sequence.completedRunCount + sequence.cancelledRunCount
@@ -55,19 +50,30 @@ export default async function EmailSequenceDetailPage({ params }: { params: { id
     <>
       {/* Back nav */}
       <div style={{ marginBottom: '20px' }}>
-        <Link href="/emails" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}>
+        <Link
+          href="/emails"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
+        >
           <ArrowLeft size={13} />
           Secuencias de Email
         </Link>
       </div>
 
       {/* Header */}
-      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
               {sequence.name}
             </h1>
+            <span style={{
+              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: LANG_COLOR[sequence.language] ?? 'var(--text-muted)',
+              background: `${LANG_COLOR[sequence.language] ?? 'var(--text-muted)'}18`,
+            }}>
+              {LANG_LABEL[sequence.language] ?? sequence.language}
+            </span>
             <span style={{
               fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
               letterSpacing: '0.06em', textTransform: 'uppercase',
@@ -77,21 +83,36 @@ export default async function EmailSequenceDetailPage({ params }: { params: { id
               {sequence.active ? 'Activa' : 'Inactiva'}
             </span>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Fuente:{' '}
-            <Link href={`/sources/${sequence.channelSlug}`} style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>
-              {sequence.channelName}
-            </Link>
-          </p>
+          {isSuperAdmin && sequence.tenantName && (
+            <div style={{ marginBottom: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                {sequence.tenantName}
+              </span>
+            </div>
+          )}
+          {sequence.description && (
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+              {sequence.description}
+            </p>
+          )}
         </div>
+
+        <SequenceDetailActions
+          sequenceId={sequence.id}
+          sequenceName={sequence.name}
+          language={sequence.language}
+          description={sequence.description ?? ''}
+          active={sequence.active}
+          activeRunCount={sequence.activeRunCount}
+        />
       </div>
 
-      {/* Summary stats */}
+      {/* Run stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
         {[
-          { label: 'Runs activos',     value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--accent-gold)" /> },
-          { label: 'Completados',       value: sequence.completedRunCount, icon: <CheckCircle size={14} color="var(--accent-green)" /> },
-          { label: 'Cancelados',        value: sequence.cancelledRunCount, icon: <XCircle size={14} color="var(--accent-coral)" /> },
+          { label: 'Runs activos',    value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--accent-gold)" />,  color: 'var(--accent-gold)' },
+          { label: 'Completados',      value: sequence.completedRunCount, icon: <CheckCircle size={14} color="var(--accent-green)" />, color: 'var(--accent-green)' },
+          { label: 'Cancelados',       value: sequence.cancelledRunCount, icon: <XCircle size={14} color="var(--accent-coral)" />,   color: 'var(--accent-coral)' },
         ].map(stat => (
           <div key={stat.label} style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
@@ -100,79 +121,74 @@ export default async function EmailSequenceDetailPage({ params }: { params: { id
           }}>
             {stat.icon}
             <div>
-              <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>{stat.value}</div>
+              <div style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)' }}>{stat.value}</div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{stat.label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Steps */}
-      <div style={{
-        background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-        borderRadius: '12px', overflow: 'hidden', marginBottom: '24px',
-      }}>
+      {/* ── FASE 4 PLACEHOLDER: Email metrics card ──────────────────────────────
+          INSERT HERE: <EmailMetricsCard sequenceId={sequence.id} tenantId={sequence.tenantId} />
+          Card shows: Enviados total, Open %, Click %, Reply %, Bounce %, Unsubscribe %
+          Fetches from: email_sends JOIN lead_events by lead_id + event_type
+      ─────────────────────────────────────────────────────────────────────── */}
+
+      {/* Channels */}
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Pasos de la secuencia
+          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Canales asociados
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-            {sequence.stepCount} {sequence.stepCount === 1 ? 'email' : 'emails'}
+            {sequence.channels.length} {sequence.channels.length === 1 ? 'canal' : 'canales'}
           </span>
         </div>
-        {sequence.steps.length === 0 ? (
-          <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            Sin pasos configurados todavía.
+        {sequence.channels.length === 0 ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+            Esta secuencia no está vinculada a ningún canal.{' '}
+            <Link href="/sources" style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>
+              Vincúlala desde Fuentes →
+            </Link>
           </div>
         ) : (
-          sequence.steps.map((step, i) => (
-            <div key={step.id} style={{
-              padding: '14px 20px',
-              borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,
-              display: 'flex', alignItems: 'center', gap: '14px',
-            }}>
-              {/* Step number */}
-              <div style={{
-                width: '28px', height: '28px', borderRadius: '50%',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '11px', fontWeight: 600, color: 'var(--accent-gold)',
-                flexShrink: 0,
-              }}>
-                {step.stepOrder}
-              </div>
-
-              {/* Delay */}
-              <div style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                borderRadius: '6px', padding: '3px 8px',
-                fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace',
-                flexShrink: 0,
-              }}>
-                {delayLabel(step.delayHours)}
-              </div>
-
-              {/* Subject */}
-              <div style={{ flex: 1, fontSize: '13px', color: 'var(--text-primary)' }}>
-                {step.subject}
-              </div>
-
-              {/* Mail icon */}
-              <Mail size={13} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-            </div>
-          ))
+          <div style={{ padding: '14px 20px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {sequence.channels.map(ch => (
+              <Link
+                key={ch.id}
+                href={`/sources/${ch.slug}`}
+                style={{
+                  fontSize: '12px', color: 'var(--accent-gold)',
+                  background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.2)',
+                  borderRadius: '6px', padding: '4px 10px', textDecoration: 'none',
+                }}
+              >
+                {ch.name}
+              </Link>
+            ))}
+          </div>
         )}
       </div>
 
+      {/* Steps — managed by client island */}
+      <div style={{ marginBottom: '20px' }}>
+        <StepManager
+          sequenceId={sequence.id}
+          steps={sequence.steps}
+        />
+      </div>
+
+      {/* ── FASE 4 PLACEHOLDER: Per-step metrics table ─────────────────────────
+          REPLACE the plain step list in StepManager with a version that adds
+          inline columns: Enviados | Open % | Click % | Reply %
+          These come from a server fetch in this page passed as stepMetrics prop.
+      ─────────────────────────────────────────────────────────────────────── */}
+
       {/* Runs table */}
-      <div style={{
-        background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-        borderRadius: '12px', overflow: 'hidden',
-      }}>
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Runs recientes
+          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Runs
           </span>
           {totalRuns > 50 && (
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Mostrando 50 más recientes</span>
@@ -181,50 +197,58 @@ export default async function EmailSequenceDetailPage({ params }: { params: { id
 
         {sequence.runs.length === 0 ? (
           <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            <AlertCircle size={20} style={{ marginBottom: '8px', opacity: 0.4 }} />
+            <AlertCircle size={20} style={{ marginBottom: '8px', opacity: 0.4 }} color="var(--text-muted)" />
             <div>Ningún lead ha entrado en esta secuencia todavía.</div>
-            <div style={{ fontSize: '12px', marginTop: '4px' }}>Los runs se crean automáticamente cuando un lead se registra desde la fuente asociada.</div>
+            <div style={{ fontSize: '12px', marginTop: '4px' }}>
+              Los runs se crean automáticamente cuando un lead se registra desde un canal vinculado.
+            </div>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                {['Lead', 'Estado', 'Paso actual', 'Iniciado', 'Último envío'].map(h => (
-                  <th key={h} style={{ padding: '10px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
+                {['Lead', 'Estado', 'Paso actual', 'Próximo envío', 'Iniciado', 'Último envío'].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sequence.runs.map((run, i) => (
-                <tr key={run.id} style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined }}>
-                  <td style={{ padding: '12px 20px' }}>
-                    <Link href={`/leads/${run.leadId}`} style={{ fontSize: '13px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500 }}>
-                      {run.leadName}
-                    </Link>
-                    {run.cancelledReason && (
-                      <div style={{ marginTop: '2px' }}>
-                        <CancelReasonLabel reason={run.cancelledReason} />
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 20px' }}>
-                    <StatusBadge status={run.status} />
-                  </td>
-                  <td style={{ padding: '12px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    {run.status === 'active' ? `Paso ${run.currentStepOrder + 1} / ${sequence.stepCount}` : '—'}
-                  </td>
-                  <td style={{ padding: '12px 20px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {new Date(run.startedAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                  </td>
-                  <td style={{ padding: '12px 20px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {run.lastSentAt
-                      ? new Date(run.lastSentAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
-                      : '—'}
-                  </td>
-                </tr>
-              ))}
+              {sequence.runs.map((run, i) => {
+                const cfg = RUN_STATUS_CFG[run.status] ?? RUN_STATUS_CFG.paused
+                return (
+                  <tr key={run.id} style={{ borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <Link href={`/leads/${run.leadId}`} style={{ fontSize: '13px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500 }}>
+                        {run.leadName}
+                      </Link>
+                      {run.cancelledReason && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '2px' }}>
+                          {CANCEL_LABEL[run.cancelledReason] ?? run.cancelledReason}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: cfg.color, background: cfg.bg }}>
+                        {cfg.label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {run.status === 'active' ? `Paso ${run.currentStepOrder + 1} / ${sequence.stepCount}` : '—'}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {run.nextSendAt ? formatDate(run.nextSendAt) : '—'}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {formatDate(run.startedAt)}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {run.lastSentAt ? formatDate(run.lastSentAt) : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

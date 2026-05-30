@@ -222,19 +222,18 @@ export async function createFixtures(): Promise<{
     { onConflict: 'id' }
   )
 
-  // 7. Create email sequences (UUID primary keys, 1:1 with acquisition_channel)
+  // 7. Create email sequences (UUID primary keys; acquisition_channel_id was dropped
+  //    in migration 023 — relationship is now acquisition_channels.email_sequence_id)
   await adminClient.from('email_sequences').upsert(
     [
       {
         id: SEQ_A_UUID,
         tenant_id: TENANT_A_ID,
-        acquisition_channel_id: CHANNEL_A_UUID,
         name: 'RLS Seq A',
       },
       {
         id: SEQ_B_UUID,
         tenant_id: TENANT_B_ID,
-        acquisition_channel_id: CHANNEL_B_UUID,
         name: 'RLS Seq B',
       },
     ],

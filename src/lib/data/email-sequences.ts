@@ -2,71 +2,104 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface SequenceChannel {
+  id:   string
+  name: string
+  slug: string
+}
+
 export interface SequenceStep {
-  id: string
-  stepOrder: number
-  delayHours: number
-  subject: string
-  active: boolean
+  id:               string
+  stepOrder:        number
+  delayHours:       number
+  subject:          string | null
+  active:           boolean
+  resendTemplateId: string | null
 }
 
 export interface SequenceRun {
-  id: string
-  leadId: string
-  leadName: string
-  status: 'active' | 'paused' | 'completed' | 'cancelled'
-  cancelledReason: string | null
+  id:               string
+  leadId:           string
+  leadName:         string
+  status:           'active' | 'paused' | 'completed' | 'cancelled'
+  cancelledReason:  string | null
   currentStepOrder: number
-  nextSendAt: string | null
-  startedAt: string
-  lastSentAt: string | null
-  completedAt: string | null
+  nextSendAt:       string | null
+  startedAt:        string
+  lastSentAt:       string | null
+  completedAt:      string | null
 }
 
 export interface EmailSequence {
-  id: string
-  tenantId: string
-  name: string
-  active: boolean
-  channelId: string
-  channelName: string
-  channelSlug: string
-  steps: SequenceStep[]
-  stepCount: number
-  activeRunCount: number
+  id:                string
+  tenantId:          string
+  tenantName:        string | null   // populated when queried as super_admin (null tenantId filter)
+  name:              string
+  language:          string
+  description:       string | null
+  active:            boolean
+  channels:          SequenceChannel[]
+  steps:             SequenceStep[]
+  stepCount:         number
+  activeRunCount:    number
   completedRunCount: number
   cancelledRunCount: number
-  createdAt: string
+  createdAt:         string
 }
 
 // ─── Data access ──────────────────────────────────────────────────────────────
 
-export async function listSequences(tenantId: string): Promise<EmailSequence[]> {
+// tenantId = null → super_admin: no tenant filter, fetches all tenants
+// tenantId = ''   → edge-case: returns empty (no valid tenant)
+export async function listSequences(tenantId: string | null): Promise<EmailSequence[]> {
+  if (tenantId === '') return []
+
   const supabase = createAdminClient()
 
-  const [{ data: seqRows }, { data: stepRows }, { data: runRows }] = await Promise.all([
-    supabase
-      .from('email_sequences')
-      .select(`
-        id, tenant_id, name, active, created_at,
-        acquisition_channel_id,
-        acquisition_channels!inner (name, slug)
-      `)
-      .eq('tenant_id', tenantId)
-      .order('created_at'),
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, name, language, description, active, created_at')
+    .order('created_at')
+  if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
 
-    supabase
-      .from('email_sequence_steps')
-      .select('id, sequence_id, step_order, delay_hours, subject, active')
-      .eq('tenant_id', tenantId)
-      .eq('active', true)
-      .order('step_order'),
+  let stepQ = supabase
+    .from('email_sequence_steps')
+    .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
+    .eq('active', true)
+    .order('step_order')
+  if (tenantId) stepQ = stepQ.eq('tenant_id', tenantId)
 
-    supabase
-      .from('lead_sequence_runs')
-      .select('sequence_id, status')
-      .eq('tenant_id', tenantId),
-  ])
+  let runQ = supabase
+    .from('lead_sequence_runs')
+    .select('sequence_id, status')
+  if (tenantId) runQ = runQ.eq('tenant_id', tenantId)
+
+  let channelQ = supabase
+    .from('acquisition_channels')
+    .select('id, name, slug, email_sequence_id')
+    .not('email_sequence_id', 'is', null)
+  if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
+
+  const [
+    { data: seqRows },
+    { data: stepRows },
+    { data: runRows },
+    { data: channelRows },
+  ] = await Promise.all([seqQ, stepQ, runQ, channelQ])
+
+  // For super_admin: look up tenant names
+  const tenantNameMap = new Map<string, string>()
+  if (!tenantId && seqRows && seqRows.length > 0) {
+    const tids = [...new Set((seqRows as { tenant_id: string }[]).map(s => s.tenant_id))]
+    const { data: tenants } = await supabase
+      .from('tenants')
+      .select('id, name')
+      .in('id', tids)
+    for (const t of tenants ?? []) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tenantNameMap.set((t as any).id, (t as any).name)
+    }
+  }
 
   const stepsBySeq = new Map<string, SequenceStep[]>()
   for (const s of stepRows ?? []) {
@@ -74,11 +107,12 @@ export async function listSequences(tenantId: string): Promise<EmailSequence[]> 
     const row = s as any
     if (!stepsBySeq.has(row.sequence_id)) stepsBySeq.set(row.sequence_id, [])
     stepsBySeq.get(row.sequence_id)!.push({
-      id:         row.id,
-      stepOrder:  row.step_order,
-      delayHours: row.delay_hours,
-      subject:    row.subject,
-      active:     row.active,
+      id:               row.id,
+      stepOrder:        row.step_order,
+      delayHours:       row.delay_hours,
+      subject:          row.subject,
+      active:           row.active,
+      resendTemplateId: row.resend_template_id,
     })
   }
 
@@ -95,54 +129,66 @@ export async function listSequences(tenantId: string): Promise<EmailSequence[]> 
     if (row.status === 'cancelled') counts.cancelled++
   }
 
+  const channelsBySeq = new Map<string, SequenceChannel[]>()
+  for (const c of channelRows ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = c as any
+    const sid = row.email_sequence_id as string
+    if (!channelsBySeq.has(sid)) channelsBySeq.set(sid, [])
+    channelsBySeq.get(sid)!.push({ id: row.id, name: row.name, slug: row.slug })
+  }
+
   return (seqRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row = s as any
-    const ch  = row.acquisition_channels
-    const id  = row.id as string
+    const row    = s as any
+    const id     = row.id as string
     const counts = runCountsBySeq.get(id) ?? { active: 0, completed: 0, cancelled: 0 }
     const steps  = stepsBySeq.get(id) ?? []
     return {
       id,
-      tenantId:            row.tenant_id,
-      name:                row.name,
-      active:              row.active,
-      channelId:           row.acquisition_channel_id,
-      channelName:         ch?.name ?? '',
-      channelSlug:         ch?.slug ?? '',
+      tenantId:          row.tenant_id,
+      tenantName:        tenantNameMap.get(row.tenant_id) ?? null,
+      name:              row.name,
+      language:          row.language ?? 'es',
+      description:       row.description ?? null,
+      active:            row.active,
+      channels:          channelsBySeq.get(id) ?? [],
       steps,
-      stepCount:           steps.length,
-      activeRunCount:      counts.active,
-      completedRunCount:   counts.completed,
-      cancelledRunCount:   counts.cancelled,
-      createdAt:           row.created_at,
+      stepCount:         steps.length,
+      activeRunCount:    counts.active,
+      completedRunCount: counts.completed,
+      cancelledRunCount: counts.cancelled,
+      createdAt:         row.created_at,
     }
   })
 }
 
 export async function getSequenceWithRuns(
-  tenantId: string,
+  tenantId: string | null,
   sequenceId: string,
 ): Promise<(EmailSequence & { runs: SequenceRun[] }) | null> {
+  if (tenantId === '') return null
+
   const supabase = createAdminClient()
 
-  const [{ data: seqRow }, { data: stepRows }, { data: runRows }] = await Promise.all([
-    supabase
-      .from('email_sequences')
-      .select(`
-        id, tenant_id, name, active, created_at,
-        acquisition_channel_id,
-        acquisition_channels!inner (name, slug)
-      `)
-      .eq('id', sequenceId)
-      .eq('tenant_id', tenantId)
-      .single(),
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, name, language, description, active, created_at')
+    .eq('id', sequenceId)
+  if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
+
+  const [
+    { data: seqRow },
+    { data: stepRows },
+    { data: runRows },
+    { data: channelRows },
+  ] = await Promise.all([
+    seqQ.single(),
 
     supabase
       .from('email_sequence_steps')
-      .select('id, sequence_id, step_order, delay_hours, subject, active')
+      .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
       .eq('sequence_id', sequenceId)
-      .eq('active', true)
       .order('step_order'),
 
     supabase
@@ -154,27 +200,43 @@ export async function getSequenceWithRuns(
         leads!inner (first_name, last_name)
       `)
       .eq('sequence_id', sequenceId)
-      .eq('tenant_id', tenantId)
       .order('started_at', { ascending: false })
       .limit(50),
+
+    supabase
+      .from('acquisition_channels')
+      .select('id, name, slug')
+      .eq('email_sequence_id', sequenceId),
   ])
 
   if (!seqRow) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row = seqRow as any
-  const ch  = row.acquisition_channels
   const id  = row.id as string
+
+  // Tenant name for super_admin
+  let tenantName: string | null = null
+  if (!tenantId) {
+    const { data: t } = await supabase
+      .from('tenants')
+      .select('name')
+      .eq('id', row.tenant_id)
+      .single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tenantName = (t as any)?.name ?? null
+  }
 
   const steps: SequenceStep[] = (stepRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sr = s as any
     return {
-      id:         sr.id,
-      stepOrder:  sr.step_order,
-      delayHours: sr.delay_hours,
-      subject:    sr.subject,
-      active:     sr.active,
+      id:               sr.id,
+      stepOrder:        sr.step_order,
+      delayHours:       sr.delay_hours,
+      subject:          sr.subject,
+      active:           sr.active,
+      resendTemplateId: sr.resend_template_id,
     }
   })
 
@@ -206,11 +268,16 @@ export async function getSequenceWithRuns(
   return {
     id,
     tenantId:          row.tenant_id,
+    tenantName,
     name:              row.name,
+    language:          row.language ?? 'es',
+    description:       row.description ?? null,
     active:            row.active,
-    channelId:         row.acquisition_channel_id,
-    channelName:       ch?.name ?? '',
-    channelSlug:       ch?.slug ?? '',
+    channels:          (channelRows ?? []).map(c => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cr = c as any
+      return { id: cr.id, name: cr.name, slug: cr.slug }
+    }),
     steps,
     stepCount:         steps.length,
     activeRunCount:    counts.active,

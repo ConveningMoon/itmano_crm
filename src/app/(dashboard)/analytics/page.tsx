@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { listSequences } from '@/lib/data/email-sequences'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
@@ -30,15 +31,18 @@ const CARD_SUBTITLE: React.CSSProperties = {
 }
 
 export default async function AnalyticsPage() {
+  const { tenant_id } = await getCurrentTenantContext()
   const supabase = createAdminClient()
+  const tid = tenant_id ?? ''
 
-  const TENANT_ID = 'tenant-aj'
+  const leadsQ  = supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)')
+  const agentsQ = supabase.from('agents').select('*')
 
   const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
-    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)'),
-    supabase.from('agents').select('*'),
-    getChannelsWithMetrics(TENANT_ID, 30),
-    listSequences(TENANT_ID),
+    tid ? leadsQ.eq('tenant_id', tid)  : leadsQ,
+    tid ? agentsQ.eq('tenant_id', tid) : agentsQ,
+    getChannelsWithMetrics(tid, 30),
+    listSequences(tid),
   ])
 
   const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
@@ -401,9 +405,14 @@ export default async function AnalyticsPage() {
                         </Link>
                       </td>
                       <td style={{ padding: '10px 8px' }}>
-                        <Link href={`/sources/${seq.channelSlug}`} style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none' }}>
-                          {seq.channelName}
-                        </Link>
+                        {seq.channels.length > 0 ? seq.channels.map((ch, i) => (
+                          <span key={ch.id}>
+                            {i > 0 && <span style={{ marginRight: '4px' }}>,</span>}
+                            <Link href={`/sources/${ch.slug}`} style={{ fontSize: '12px', color: 'var(--text-muted)', textDecoration: 'none' }}>
+                              {ch.name}
+                            </Link>
+                          </span>
+                        )) : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>}
                       </td>
                       <td style={{ padding: '10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
                         {seq.stepCount}
