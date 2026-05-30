@@ -26,12 +26,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     { data: rawEvents },
     { data: rawProcess },
     { data: rawChannels },
+    { data: rawActiveRuns },
   ] = await Promise.all([
     supabase.from('leads').select('*').eq('id', id).single(),
     supabase.from('agents').select('*'),
     supabase.from('lead_events').select('*').eq('lead_id', id).order('created_at', { ascending: false }),
     supabase.from('purchase_processes').select('*').eq('lead_id', id).maybeSingle(),
     supabase.from('acquisition_channels').select('id, channel_type, name, slug').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
+    supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
   ])
 
   if (!rawLead) notFound()
@@ -47,6 +49,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     name:        r.name as string,
     slug:        r.slug as string,
   }))
+  const hasActiveSequenceRun = (rawActiveRuns ?? []).length > 0
 
   return (
     <LeadDetailClient
@@ -56,6 +59,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       channels={channels}
       purchaseProcess={purchaseProcess}
       events={events}
+      hasActiveSequenceRun={hasActiveSequenceRun}
     />
   )
 }

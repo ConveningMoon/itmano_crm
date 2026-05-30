@@ -38,6 +38,7 @@ export interface EmailSequence {
   language:          string
   description:       string | null
   active:            boolean
+  activationType:    'form' | 'manual'
   channels:          SequenceChannel[]
   steps:             SequenceStep[]
   stepCount:         number
@@ -58,7 +59,7 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, created_at')
     .order('created_at')
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
 
@@ -152,6 +153,7 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
       language:          row.language ?? 'es',
       description:       row.description ?? null,
       active:            row.active,
+      activationType:    (row.activation_type ?? 'form') as 'form' | 'manual',
       channels:          channelsBySeq.get(id) ?? [],
       steps,
       stepCount:         steps.length,
@@ -173,7 +175,7 @@ export async function getSequenceWithRuns(
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, created_at')
     .eq('id', sequenceId)
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
 
@@ -273,6 +275,7 @@ export async function getSequenceWithRuns(
     language:          row.language ?? 'es',
     description:       row.description ?? null,
     active:            row.active,
+    activationType:    (row.activation_type ?? 'form') as 'form' | 'manual',
     channels:          (channelRows ?? []).map(c => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cr = c as any

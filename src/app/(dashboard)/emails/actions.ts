@@ -27,10 +27,11 @@ function revalidateEmails() {
 // ─── Sequence CRUD ────────────────────────────────────────────────────────────
 
 const SequenceSchema = z.object({
-  name:        z.string().min(1).max(100),
-  language:    z.enum(['es', 'en', 'pt']),
-  description: z.string().max(500).optional().nullable(),
-  tenantId:    z.string().optional(), // required for super_admin
+  name:           z.string().min(1).max(100),
+  language:       z.enum(['es', 'en', 'pt']),
+  description:    z.string().max(500).optional().nullable(),
+  activationType: z.enum(['form', 'manual']).default('form'),
+  tenantId:       z.string().optional(), // required for super_admin
 })
 
 export async function createSequence(
@@ -46,11 +47,12 @@ export async function createSequence(
   const { data, error } = await supabase
     .from('email_sequences')
     .insert({
-      tenant_id:   tenantId,
-      name:        parsed.data.name.trim(),
-      language:    parsed.data.language,
-      description: parsed.data.description?.trim() || null,
-      active:      true,
+      tenant_id:       tenantId,
+      name:            parsed.data.name.trim(),
+      language:        parsed.data.language,
+      description:     parsed.data.description?.trim() || null,
+      activation_type: parsed.data.activationType,
+      active:          true,
     })
     .select('id')
     .single()
@@ -318,4 +320,94 @@ export async function moveStep(
 
   revalidateEmails()
   return { ok: true }
+}
+
+// ─── Manual enrollment ────────────────────────────────────────────────────────
+
+export interface BulkEnrollResult {
+  enrolled: number
+  skipped:  number
+  errors:   Array<{ leadId: string; reason: string }>
+}
+
+export async function addLeadsToSequence(
+  leadIds:    string[],
+  sequenceId: string,
+): Promise<{ ok: true; result: BulkEnrollResult } | { ok: false; error: string }> {
+  if (leadIds.length === 0) return { ok: true, result: { enrolled: 0, skipped: 0, errors: [] } }
+
+  const ctx      = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  // Verify sequence exists, belongs to tenant, and is manual-type
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, activation_type, active')
+    .eq('id', sequenceId)
+  if (ctx.tenant_id) seqQ = seqQ.eq('tenant_id', ctx.tenant_id)
+
+  const { data: seq } = await seqQ.single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seqRow = seq as any
+  if (!seqRow) return { ok: false, error: 'Secuencia no encontrada' }
+  if ((seqRow.activation_type as string) !== 'manual') {
+    return { ok: false, error: 'Solo se pueden agregar leads manualmente a secuencias de tipo manual' }
+  }
+  if (!seqRow.active) return { ok: false, error: 'La secuencia está inactiva' }
+
+  // Fetch the first active step
+  const { data: firstStepRows } = await supabase
+    .from('email_sequence_steps')
+    .select('step_order, delay_hours')
+    .eq('sequence_id', sequenceId)
+    .eq('active', true)
+    .order('step_order', { ascending: true })
+    .limit(1)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const firstStep = (firstStepRows as any[])?.[0] ?? null
+  if (!firstStep) return { ok: false, error: 'La secuencia no tiene pasos activos' }
+
+  // Fetch leads that already have an active run in this sequence (to skip)
+  const { data: activeRunRows } = await supabase
+    .from('lead_sequence_runs')
+    .select('lead_id')
+    .eq('sequence_id', sequenceId)
+    .eq('status', 'active')
+    .in('lead_id', leadIds)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const alreadyActive = new Set((activeRunRows as any[] ?? []).map((r: any) => r.lead_id as string))
+
+  const nextSendAt = new Date(
+    Date.now() + (firstStep.delay_hours ?? 0) * 60 * 60 * 1000
+  ).toISOString()
+
+  const result: BulkEnrollResult = { enrolled: 0, skipped: 0, errors: [] }
+
+  for (const leadId of leadIds) {
+    if (alreadyActive.has(leadId)) {
+      result.skipped++
+      continue
+    }
+
+    const { error } = await supabase.from('lead_sequence_runs').insert({
+      tenant_id:          seqRow.tenant_id as string,
+      lead_id:            leadId,
+      sequence_id:        sequenceId,
+      current_step_order: firstStep.step_order,
+      status:             'active',
+      next_send_at:       nextSendAt,
+    })
+
+    if (error) {
+      result.errors.push({ leadId, reason: error.message })
+    } else {
+      result.enrolled++
+    }
+  }
+
+  revalidateEmails()
+  revalidatePath('/leads')
+  return { ok: true, result }
 }

@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const dryRun = searchParams.get('dry_run') === 'true'
+  const dryRun  = searchParams.get('dry_run')  === 'true'
+  const leadId  = searchParams.get('lead_id')  ?? null   // optional: limit to one lead's runs
 
   const db = createAdminClient()
 
@@ -22,13 +23,17 @@ export async function POST(request: NextRequest) {
   // lead_sequence_runs was created in production without a migration file
   // (schema drift) so it has no FK constraints — PostgREST can't resolve
   // any implicit relationships from it. All lookups are done explicitly.
-  const { data: runs, error: runsError } = await db
+  let runsQ = db
     .from('lead_sequence_runs')
     .select('id, tenant_id, lead_id, sequence_id, current_step_order')
     .lte('next_send_at', new Date().toISOString())
     .eq('status', 'active')
     .order('next_send_at', { ascending: true })
     .limit(100)
+
+  if (leadId) runsQ = runsQ.eq('lead_id', leadId)
+
+  const { data: runs, error: runsError } = await runsQ
 
   if (runsError) {
     console.error(JSON.stringify({ service: 'sequence-orchestrator', error: runsError.message }))

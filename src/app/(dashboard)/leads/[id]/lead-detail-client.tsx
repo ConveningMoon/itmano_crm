@@ -111,11 +111,12 @@ interface LeadDetailProps {
   channels: ChannelOption[]
   events: LeadEvent[]
   purchaseProcess: PurchaseProcess | null
+  hasActiveSequenceRun: boolean
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, purchaseProcess }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, purchaseProcess, hasActiveSequenceRun }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -138,12 +139,34 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, purcha
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isDeleting,  startDelete]    = useTransition()
 
+  // Force-next-send
+  const [forceResult,   setForceResult]   = useState<string | null>(null)
+  const [isForceSending, startForceSend]  = useTransition()
+
   function handleDeleteConfirm() {
     setDeleteError(null)
     startDelete(async () => {
       const res = await deleteLead(lead.id)
       if (!res.ok) { setDeleteError(res.error); return }
       router.push('/leads')
+    })
+  }
+
+  function handleForceSend() {
+    setForceResult(null)
+    startForceSend(async () => {
+      try {
+        const res = await fetch(`/api/leads/${lead.id}/force-next-send`, { method: 'POST' })
+        const json = await res.json() as Record<string, unknown>
+        if (!res.ok) {
+          setForceResult(`Error: ${(json.error as string) ?? 'Error desconocido'}`)
+          return
+        }
+        const sent = (json.sent as number) ?? 0
+        setForceResult(sent > 0 ? `Email enviado (paso procesado)` : `Sin emails enviados — revisa el run`)
+      } catch (err) {
+        setForceResult(`Error de red: ${err instanceof Error ? err.message : String(err)}`)
+      }
     })
   }
 
@@ -529,6 +552,32 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, purcha
               <button disabled className="action-btn" style={{ ...ACTION_BTN_STYLE, opacity: 0.5, cursor: 'not-allowed' }}>
                 <MessageCircle size={14} /> WhatsApp
               </button>
+
+              {/* Force-next-send — visible only when lead has an active sequence run */}
+              {hasActiveSequenceRun && (
+                <button
+                  onClick={handleForceSend}
+                  disabled={isForceSending}
+                  className="action-btn"
+                  style={{
+                    ...ACTION_BTN_STYLE,
+                    color: isForceSending ? 'var(--text-muted)' : 'var(--accent-teal)',
+                    borderColor: 'rgba(90,175,160,0.3)',
+                    cursor: isForceSending ? 'not-allowed' : 'pointer',
+                    opacity: isForceSending ? 0.7 : 1,
+                  }}
+                >
+                  <Activity size={14} /> {isForceSending ? 'Enviando...' : 'Mandar siguiente ahora'}
+                </button>
+              )}
+              {forceResult && (
+                <p style={{
+                  fontSize: '11px', margin: '2px 0 0',
+                  color: forceResult.startsWith('Error') ? '#C97B6B' : 'var(--accent-green)',
+                }}>
+                  {forceResult}
+                </p>
+              )}
 
               {/* Marcar como Cerrado — inline confirm */}
               {confirmClose ? (
