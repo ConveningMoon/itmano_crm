@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
-import { updateLeadStatus, updateLeadNotes, startPurchaseProcess } from './actions'
+import { updateLeadStatus, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
 import {
-  ArrowLeft, MoreHorizontal, X,
+  ArrowLeft, MoreHorizontal, X, Trash2,
   UserPlus, Mail, FileDown, MousePointer2, Calendar,
   ArrowRightCircle, CheckCircle2, Circle,
   MessageCircle, XCircle,
@@ -132,6 +132,21 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, purcha
   const [actionError, setActionError]       = useState<string | null>(null)
   const [isPending, startTransition]        = useTransition()
 
+  // Delete lead — two-step confirmation
+  const [deleteStep,  setDeleteStep]  = useState<0 | 1 | 2>(0)
+  const [deleteInput, setDeleteInput] = useState('')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isDeleting,  startDelete]    = useTransition()
+
+  function handleDeleteConfirm() {
+    setDeleteError(null)
+    startDelete(async () => {
+      const res = await deleteLead(lead.id)
+      if (!res.ok) { setDeleteError(res.error); return }
+      router.push('/leads')
+    })
+  }
+
   // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server-prop to local state after router.refresh()
   useEffect(() => { setCurrentStatus(lead.status) }, [lead.status])
 
@@ -214,18 +229,33 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, purcha
             </div>
           </div>
 
-          {/* More button */}
-          <button
-            onClick={() => setShowEditModal(true)}
-            style={{
-              width: '32px', height: '32px', borderRadius: '8px',
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-              cursor: 'pointer', color: 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <MoreHorizontal size={16} />
-          </button>
+          {/* Header actions */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <button
+              onClick={() => setShowEditModal(true)}
+              style={{
+                width: '32px', height: '32px', borderRadius: '8px',
+                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+                cursor: 'pointer', color: 'var(--text-muted)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="Editar lead"
+            >
+              <MoreHorizontal size={16} />
+            </button>
+            <button
+              onClick={() => { setDeleteStep(1); setDeleteInput(''); setDeleteError(null) }}
+              style={{
+                width: '32px', height: '32px', borderRadius: '8px',
+                background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.25)',
+                cursor: 'pointer', color: 'var(--accent-coral)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="Eliminar lead"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -796,6 +826,91 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, purcha
                 }}
               >
                 Iniciar proceso →
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Modal: Eliminar lead — Step 1: first confirmation ── */}
+      {deleteStep === 1 && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setDeleteStep(0)} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
+            borderRadius: '16px', padding: '24px', width: '440px', maxWidth: '90vw', zIndex: 51,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar lead</span>
+              <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
+              ¿Estás seguro de eliminar a <strong style={{ color: 'var(--text-primary)' }}>{lead.firstName} {lead.lastName}</strong>?
+              Esta acción eliminará todos sus eventos, runs de secuencia y notificaciones relacionadas.{' '}
+              <strong style={{ color: 'var(--accent-coral)' }}>No se puede deshacer.</strong>
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={() => { setDeleteStep(2); setDeleteInput('') }} style={{
+                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+                background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
+                border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
+              }}>Continuar →</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Modal: Eliminar lead — Step 2: type confirmation ── */}
+      {deleteStep === 2 && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setDeleteStep(0)} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+            background: 'var(--bg-surface)', border: '1px solid rgba(201,123,107,0.35)',
+            borderRadius: '16px', padding: '24px', width: '420px', maxWidth: '90vw', zIndex: 51,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--accent-coral)' }}>Confirmar eliminación</span>
+              <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+              Para confirmar, escribe <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>ELIMINAR</strong> en el campo:
+            </p>
+            <input
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              placeholder="ELIMINAR"
+              autoFocus
+              style={{
+                width: '100%', background: 'var(--bg-overlay)',
+                border: '1px solid rgba(201,123,107,0.3)', borderRadius: '8px',
+                padding: '9px 12px', color: 'var(--text-primary)', fontSize: '14px',
+                outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace',
+                marginBottom: '16px',
+              }}
+            />
+            {deleteError && (
+              <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+                {deleteError}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteInput !== 'ELIMINAR' || isDeleting}
+                style={{
+                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+                  background: deleteInput === 'ELIMINAR' ? 'rgba(201,123,107,0.2)' : 'var(--bg-elevated)',
+                  color: deleteInput === 'ELIMINAR' ? 'var(--accent-coral)' : 'var(--text-muted)',
+                  border: deleteInput === 'ELIMINAR' ? '1px solid rgba(201,123,107,0.4)' : '1px solid var(--border-subtle)',
+                  cursor: (deleteInput !== 'ELIMINAR' || isDeleting) ? 'not-allowed' : 'pointer',
+                  opacity: isDeleting ? 0.7 : 1,
+                }}
+              >
+                {isDeleting ? 'Eliminando...' : 'Eliminar definitivamente'}
               </button>
             </div>
           </div>
