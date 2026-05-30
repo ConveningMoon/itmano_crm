@@ -1,6 +1,8 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import type { Language } from '@/lib/types'
 
 const TENANT_ID = 'tenant-aj'
@@ -34,9 +36,10 @@ interface LeadInput {
 export async function createLead(input: LeadInput): Promise<{ error?: string }> {
   const supabase      = createAdminClient()
   const baselineScore = BASELINE_SCORES[input.channelType] ?? 10
+  const leadId        = genId('lead')
 
   const { error } = await supabase.from('leads').insert({
-    id:                    genId('lead'),
+    id:                    leadId,
     tenant_id:             TENANT_ID,
     agent_id:              input.agentId,
     acquisition_channel_id: input.acquisitionChannelId || null,
@@ -53,6 +56,18 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
   })
 
   if (error) return { error: error.message }
+
+  // Enroll in email sequence if the channel has one.
+  // Failure is logged but never rolls back the lead creation.
+  await enrollLeadInSequence({
+    db:                     supabase,
+    lead_id:                leadId,
+    tenant_id:              TENANT_ID,
+    acquisition_channel_id: input.acquisitionChannelId || null,
+  })
+
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return {}
 }
 
@@ -116,5 +131,12 @@ export async function createLeadsBulk(inputs: BulkLeadInput[]): Promise<{ error?
 
   const { error } = await supabase.from('leads').insert(rows)
   if (error) return { error: error.message }
+
+  // Bulk imports go to the manual channel which typically has no sequence.
+  // Enrollment is intentionally skipped for bulk — it would create hundreds
+  // of simultaneous runs which is not the expected behavior for HubSpot imports.
+
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
   return {}
 }

@@ -33,16 +33,15 @@ const CARD_SUBTITLE: React.CSSProperties = {
 export default async function AnalyticsPage() {
   const { tenant_id } = await getCurrentTenantContext()
   const supabase = createAdminClient()
-  const tid = tenant_id ?? ''
 
   const leadsQ  = supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)')
   const agentsQ = supabase.from('agents').select('*')
 
   const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
-    tid ? leadsQ.eq('tenant_id', tid)  : leadsQ,
-    tid ? agentsQ.eq('tenant_id', tid) : agentsQ,
-    getChannelsWithMetrics(tid, 30),
-    listSequences(tid),
+    tenant_id ? leadsQ.eq('tenant_id', tenant_id)  : leadsQ,
+    tenant_id ? agentsQ.eq('tenant_id', tenant_id) : agentsQ,
+    getChannelsWithMetrics(tenant_id, 30),
+    listSequences(tenant_id),
   ])
 
   const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))

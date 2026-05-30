@@ -88,6 +88,7 @@ export async function updateLead(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
   return { ok: true }
 }
 
@@ -107,6 +108,7 @@ export async function updateLeadNotes(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
   return { ok: true }
 }
 

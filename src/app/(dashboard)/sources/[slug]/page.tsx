@@ -33,14 +33,13 @@ export default async function ChannelDetailPage({
 }) {
   const { slug }      = await params
   const { tenant_id } = await getCurrentTenantContext()
-  const tenantId      = tenant_id ?? ''
 
   const [channel, leads, sequences] = await Promise.all([
-    getChannelBySlug(tenantId, slug),
+    getChannelBySlug(tenant_id, slug),
     (async () => {
-      const ch = await getChannelBySlug(tenantId, slug)
+      const ch = await getChannelBySlug(tenant_id, slug)
       if (!ch) return []
-      return getChannelLeads(tenantId, ch.id)
+      return getChannelLeads(ch.tenantId, ch.id)
     })(),
     listSequences(tenant_id),
   ])
