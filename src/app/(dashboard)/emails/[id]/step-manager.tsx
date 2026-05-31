@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, X, AlertTriangle, Mail } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, AlertTriangle, Mail } from 'lucide-react'
 import type { SequenceStep } from '@/lib/data/email-sequences'
 import type { StepMetric } from '@/lib/services/email-metrics'
-import { addStep, updateStep, deleteStep, moveStep } from '../actions'
+import { addStep, updateStep, deleteStep } from '../actions'
 
 const INPUT: React.CSSProperties = {
   width: '100%',
@@ -115,13 +115,6 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
     })
   }
 
-  function handleMove(stepId: string, direction: 'up' | 'down') {
-    start(async () => {
-      await moveStep(stepId, sequenceId, direction)
-      router.refresh()
-    })
-  }
-
   return (
     <>
       <style>{`
@@ -216,7 +209,6 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
                     <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                       {[
                         { label: 'Env',   value: String(sm.totalSends), color: 'var(--text-muted)' },
-                        { label: 'Open',  value: `${sm.openRate}%`,  color: sm.openRate  > 0 ? 'var(--accent-teal)'  : 'var(--text-muted)' },
                         { label: 'Click', value: `${sm.clickRate}%`, color: sm.clickRate > 0 ? 'var(--accent-blue)'  : 'var(--text-muted)' },
                         { label: 'Reply', value: `${sm.replyRate}%`, color: sm.replyRate > 0 ? 'var(--accent-green)' : 'var(--text-muted)' },
                       ].map(chip => (
@@ -232,22 +224,6 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
 
               {/* Controls */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                <button
-                  onClick={() => handleMove(step.id, 'up')}
-                  disabled={idx === 0 || pending}
-                  title="Mover arriba"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: idx === 0 ? 'var(--border-subtle)' : 'var(--text-muted)', cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
-                >
-                  <ChevronUp size={13} />
-                </button>
-                <button
-                  onClick={() => handleMove(step.id, 'down')}
-                  disabled={idx === steps.length - 1 || pending}
-                  title="Mover abajo"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: idx === steps.length - 1 ? 'var(--border-subtle)' : 'var(--text-muted)', cursor: idx === steps.length - 1 ? 'not-allowed' : 'pointer' }}
-                >
-                  <ChevronDown size={13} />
-                </button>
                 <button
                   onClick={() => openEdit(step)}
                   title="Editar"

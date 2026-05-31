@@ -1,5 +1,5 @@
 import { getSequenceMetrics } from '@/lib/services/email-metrics'
-import { Send, Eye, MousePointer2, MessageCircle, AlertCircle, UserMinus } from 'lucide-react'
+import { Send, MousePointer2, MessageCircle, AlertCircle, UserMinus } from 'lucide-react'
 
 interface Props {
   sequenceId: string
@@ -17,13 +17,6 @@ export async function EmailMetricsCard({ sequenceId }: Props) {
       icon:  <Send size={14} />,
       color: 'var(--accent-gold)',
       isRate: false,
-    },
-    {
-      label: 'Open rate',
-      value: `${m.openRate}%`,
-      icon:  <Eye size={14} />,
-      color: 'var(--accent-teal)',
-      isRate: true,
     },
     {
       label: 'Click rate',
@@ -75,7 +68,7 @@ export async function EmailMetricsCard({ sequenceId }: Props) {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', padding: '16px 20px', gap: '0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', padding: '16px 20px', gap: '0' }}>
           {stats.map((stat, i) => (
             <div
               key={stat.label}
