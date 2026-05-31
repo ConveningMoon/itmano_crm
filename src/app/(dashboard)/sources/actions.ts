@@ -115,16 +115,17 @@ export async function updateChannel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
-  const { tenant_id } = await getCurrentTenantContext()
-  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
 
   const supabase = createAdminClient()
-  const { error } = await supabase
+  let q = supabase
     .from('acquisition_channels')
     .update({ name: fields.name.trim(), active: fields.active })
     .eq('id', channelId)
-    .eq('tenant_id', tenant_id)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
 
+  const { error } = await q
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/sources')
@@ -138,16 +139,17 @@ export async function updateChannel(
 export async function archiveChannel(
   channelId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { tenant_id } = await getCurrentTenantContext()
-  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
 
   const supabase = createAdminClient()
-  const { error } = await supabase
+  let q = supabase
     .from('acquisition_channels')
     .update({ active: false, archived_at: new Date().toISOString() })
     .eq('id', channelId)
-    .eq('tenant_id', tenant_id)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
 
+  const { error } = await q
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/sources')
@@ -162,16 +164,17 @@ export async function updateChannelSequence(
   channelId: string,
   emailSequenceId: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { tenant_id } = await getCurrentTenantContext()
-  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
 
   const supabase = createAdminClient()
-  const { error } = await supabase
+  let q = supabase
     .from('acquisition_channels')
     .update({ email_sequence_id: emailSequenceId })
     .eq('id', channelId)
-    .eq('tenant_id', tenant_id)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
 
+  const { error } = await q
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/sources')
