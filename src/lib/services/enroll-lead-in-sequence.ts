@@ -1,4 +1,5 @@
 import 'server-only'
+import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface EnrollResult {
@@ -25,10 +26,11 @@ export interface EnrollResult {
  *    The caller MUST NOT rollback the lead creation on enrollment failure.
  *
  * First-email behavior:
- *  After inserting the run, triggers the orchestrator via fire-and-forget
- *  POST so the first email sends in seconds, not on the next hourly cron.
- *  If the trigger fails, the hourly cron will still pick it up — no data
- *  is lost, only timing degrades.
+ *  After inserting the run, uses next/server `after()` to trigger the
+ *  orchestrator after the response has been sent. `after()` keeps the
+ *  Vercel function alive until the promise settles — unlike a bare
+ *  fire-and-forget fetch which gets cancelled when the function terminates.
+ *  If the trigger fails, the hourly cron will still pick it up.
  */
 export async function enrollLeadInSequence(args: {
   db:                     SupabaseClient
@@ -103,47 +105,50 @@ export async function enrollLeadInSequence(args: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const runId = (run as any).id as string
 
-  // 5. Fire-and-forget: trigger orchestrator immediately so the first
-  //    email sends in seconds rather than waiting for the next hourly cron.
+  // 5. Trigger orchestrator after the response is sent.
+  //    `after()` keeps the Vercel function alive until the promise settles,
+  //    unlike a bare fetch() which gets killed when the function terminates.
   //    Scoped to this lead via ?lead_id= to avoid processing unrelated runs.
-  //    If this fails, the hourly cron will still process the run — no data loss.
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL
       ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     const orchestratorUrl = `${baseUrl}/api/cron/sequence-orchestrator?lead_id=${encodeURIComponent(lead_id)}`
 
-    fetch(orchestratorUrl, {
-      method:  'POST',
-      headers: { authorization: `Bearer ${cronSecret}` },
-    })
-      .then(res => {
-        if (res.ok) {
-          console.log(JSON.stringify({
+    after(
+      fetch(orchestratorUrl, {
+        method:  'POST',
+        headers: { authorization: `Bearer ${cronSecret}` },
+      })
+        .then(async res => {
+          if (res.ok) {
+            console.info(JSON.stringify({
+              service: 'enroll-lead-in-sequence',
+              result:  'orchestrator_triggered_ok',
+              run_id:  runId,
+              lead_id,
+            }))
+          } else {
+            console.warn(JSON.stringify({
+              service:     'enroll-lead-in-sequence',
+              result:      'orchestrator_trigger_failed',
+              run_id:      runId,
+              lead_id,
+              http_status: res.status,
+              body:        await res.text(),
+            }))
+          }
+        })
+        .catch(err => {
+          console.warn(JSON.stringify({
             service: 'enroll-lead-in-sequence',
-            result:  'orchestrator_triggered',
+            result:  'orchestrator_trigger_failed',
             run_id:  runId,
             lead_id,
+            error:   err instanceof Error ? err.message : String(err),
           }))
-        } else {
-          console.warn(JSON.stringify({
-            service:     'enroll-lead-in-sequence',
-            result:      'orchestrator_trigger_failed',
-            run_id:      runId,
-            lead_id,
-            http_status: res.status,
-          }))
-        }
-      })
-      .catch(err => {
-        console.warn(JSON.stringify({
-          service: 'enroll-lead-in-sequence',
-          result:  'orchestrator_trigger_failed',
-          run_id:  runId,
-          lead_id,
-          error:   err instanceof Error ? err.message : String(err),
-        }))
-      })
+        })
+    )
   }
 
   return { enrolled: true, sequence_run_id: runId }
