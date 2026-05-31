@@ -77,7 +77,23 @@ export async function POST(
     const body = await request.json()
     const result = SubmitSchema.safeParse(body)
     if (!result.success) {
-      return err('Invalid request', 400)
+      const issues = result.error.issues.map(i => ({
+        field:    i.path.join('.') || '(root)',
+        code:     i.code,
+        message:  i.message,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        received: 'received' in i ? (i as any).received : undefined,
+      }))
+      console.warn(JSON.stringify({
+        service:    'intake-submit',
+        result:     'validation_failed',
+        public_id:  publicId,
+        issues,
+      }))
+      return NextResponse.json(
+        { ok: false, error: 'Invalid request', issues },
+        { status: 400, headers: CORS_HEADERS }
+      )
     }
     parsed = result.data
   } catch {
