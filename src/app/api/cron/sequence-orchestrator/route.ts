@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const dryRun = searchParams.get('dry_run') === 'true'
+  const dryRun  = searchParams.get('dry_run')  === 'true'
+  const leadId  = searchParams.get('lead_id')  ?? null   // optional: limit to one lead's runs
 
   const db = createAdminClient()
 
@@ -22,13 +23,17 @@ export async function POST(request: NextRequest) {
   // lead_sequence_runs was created in production without a migration file
   // (schema drift) so it has no FK constraints — PostgREST can't resolve
   // any implicit relationships from it. All lookups are done explicitly.
-  const { data: runs, error: runsError } = await db
+  let runsQ = db
     .from('lead_sequence_runs')
     .select('id, tenant_id, lead_id, sequence_id, current_step_order')
     .lte('next_send_at', new Date().toISOString())
     .eq('status', 'active')
     .order('next_send_at', { ascending: true })
     .limit(100)
+
+  if (leadId) runsQ = runsQ.eq('lead_id', leadId)
+
+  const { data: runs, error: runsError } = await runsQ
 
   if (runsError) {
     console.error(JSON.stringify({ service: 'sequence-orchestrator', error: runsError.message }))
@@ -48,7 +53,7 @@ export async function POST(request: NextRequest) {
   const tenantIds   = [...new Set(runs.map(r => r.tenant_id))]
   const sequenceIds = [...new Set(runs.map(r => r.sequence_id))]
 
-  const [leadsRes, tenantsRes, stepsRes, seqRes] = await Promise.all([
+  const [leadsRes, tenantsRes, stepsRes] = await Promise.all([
     // leads + their assigned agent in one join (leads → agents IS a proper FK)
     db.from('leads')
       .select('id, first_name, email, agent_id, agents(id, name, email)')
@@ -63,18 +68,12 @@ export async function POST(request: NextRequest) {
       .select('id, sequence_id, step_order, resend_template_id, delay_hours')
       .in('sequence_id', sequenceIds)
       .eq('active', true),
-
-    // Sequences — just the acquisition_channel_id pointer; channel name is
-    // fetched in Stage 3 to avoid PostgREST ambiguity (bidirectional FK).
-    db.from('email_sequences')
-      .select('id, acquisition_channel_id')
-      .in('id', sequenceIds),
   ])
 
   // Surface any bulk-fetch errors
   for (const [label, res] of [
     ['leads', leadsRes], ['tenants', tenantsRes],
-    ['steps', stepsRes], ['sequences', seqRes],
+    ['steps', stepsRes],
   ] as const) {
     if (res.error) {
       console.error(JSON.stringify({ service: 'sequence-orchestrator', error: res.error.message, query: label }))
@@ -82,15 +81,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ── Stage 3: fetch channel names (separate query to avoid FK ambiguity) ───
-  const channelIds = [...new Set(
-    (seqRes.data ?? [])
-      .map(s => s.acquisition_channel_id)
-      .filter((id): id is string => id !== null)
-  )]
-
-  const channelsRes = channelIds.length > 0
-    ? await db.from('acquisition_channels').select('id, name').in('id', channelIds)
+  // ── Stage 3: fetch channel names via the forward FK ───────────────────────
+  // acquisition_channels.email_sequence_id → email_sequences.id
+  // (email_sequences.acquisition_channel_id was dropped in migration 023)
+  const channelsRes = sequenceIds.length > 0
+    ? await db
+        .from('acquisition_channels')
+        .select('id, name, email_sequence_id')
+        .in('email_sequence_id', sequenceIds)
     : { data: [], error: null }
 
   if (channelsRes.error) {
@@ -104,13 +102,16 @@ export async function POST(request: NextRequest) {
   const stepsMap   = new Map(
     (stepsRes.data ?? []).map(s => [`${s.sequence_id}:${s.step_order}`, s])
   )
-  // seq_id → channel name (via two-step: seq → channel_id → channel.name)
-  const channelBySeqMap = new Map(
-    (seqRes.data ?? []).map(s => {
-      const ch = (channelsRes.data ?? []).find(c => c.id === s.acquisition_channel_id)
-      return [s.id, ch?.name ?? null]
-    })
-  )
+  // seq_id → channel name (first channel wins when multiple channels share a sequence)
+  const channelBySeqMap = new Map<string, string>()
+  for (const ch of channelsRes.data ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seqId = (ch as any).email_sequence_id as string
+    if (seqId && !channelBySeqMap.has(seqId)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      channelBySeqMap.set(seqId, (ch as any).name as string)
+    }
+  }
 
   // ── Assemble PendingRun objects ───────────────────────────────────────────
   const pending: PendingRun[] = runs.map((r) => {

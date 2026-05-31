@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SequenceDetailActions } from './sequence-detail-actions'
 import { StepManager } from './step-manager'
-import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { ManualLeadPicker, type PickerLead } from './manual-lead-picker'
+import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus } from 'lucide-react'
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {
@@ -46,6 +48,29 @@ export default async function EmailSequenceDetailPage({
 
   const totalRuns = sequence.activeRunCount + sequence.completedRunCount + sequence.cancelledRunCount
 
+  // For manual sequences: fetch leads eligible to be added (exclude those with active run in this seq)
+  let eligibleLeads: PickerLead[] = []
+  if (sequence.activationType === 'manual') {
+    const supabase = createAdminClient()
+    const [leadsRes, activeRunsRes] = await Promise.all([
+      (() => {
+        let q = supabase.from('leads').select('id, first_name, last_name, email').order('created_at', { ascending: false })
+        if (tenant_id) q = q.eq('tenant_id', tenant_id)
+        return q
+      })(),
+      supabase.from('lead_sequence_runs').select('lead_id').eq('sequence_id', id).eq('status', 'active'),
+    ])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const activeLeadIds = new Set((activeRunsRes.data ?? []).map((r: any) => r.lead_id as string))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    eligibleLeads = (leadsRes.data ?? []).filter((l: any) => !activeLeadIds.has(l.id as string)).map((l: any) => ({
+      id:        l.id as string,
+      firstName: l.first_name as string,
+      lastName:  l.last_name as string,
+      email:     l.email as string,
+    }))
+  }
+
   return (
     <>
       {/* Back nav */}
@@ -81,6 +106,14 @@ export default async function EmailSequenceDetailPage({
               background: sequence.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
             }}>
               {sequence.active ? 'Activa' : 'Inactiva'}
+            </span>
+            <span style={{
+              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: sequence.activationType === 'manual' ? 'var(--accent-blue)' : 'var(--accent-teal)',
+              background: sequence.activationType === 'manual' ? 'rgba(91,142,201,0.12)' : 'rgba(90,175,160,0.12)',
+            }}>
+              {sequence.activationType === 'manual' ? 'Manual' : 'Formulario'}
             </span>
           </div>
           {isSuperAdmin && sequence.tenantName && (
@@ -170,6 +203,30 @@ export default async function EmailSequenceDetailPage({
         )}
       </div>
 
+      {/* Manual enrollment — only shown for activation_type='manual' */}
+      {sequence.activationType === 'manual' && (
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <UserPlus size={14} color="var(--accent-blue)" />
+            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+              Agregar leads manualmente
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '4px' }}>
+              {eligibleLeads.length} disponibles
+            </span>
+          </div>
+          <div style={{ padding: '16px 20px' }}>
+            {eligibleLeads.length === 0 ? (
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+                Todos los leads ya tienen un run activo en esta secuencia.
+              </p>
+            ) : (
+              <ManualLeadPicker sequenceId={sequence.id} leads={eligibleLeads} />
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Steps — managed by client island */}
       <div style={{ marginBottom: '20px' }}>
         <StepManager
@@ -200,7 +257,9 @@ export default async function EmailSequenceDetailPage({
             <AlertCircle size={20} style={{ marginBottom: '8px', opacity: 0.4 }} color="var(--text-muted)" />
             <div>Ningún lead ha entrado en esta secuencia todavía.</div>
             <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              Los runs se crean automáticamente cuando un lead se registra desde un canal vinculado.
+              {sequence.activationType === 'manual'
+                ? 'Agrega leads desde la sección de arriba.'
+                : 'Los runs se crean automáticamente cuando un lead se registra desde un canal vinculado.'}
             </div>
           </div>
         ) : (

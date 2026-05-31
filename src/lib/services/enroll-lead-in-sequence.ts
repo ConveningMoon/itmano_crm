@@ -41,6 +41,16 @@ export async function enrollLeadInSequence(args: {
 
   if (!channel?.email_sequence_id) return { enrolled: false }
 
+  // 1b. Check activation_type — skip if 'manual' (manual sequences require explicit enrollment)
+  const { data: seqMeta } = await db
+    .from('email_sequences')
+    .select('activation_type')
+    .eq('id', channel.email_sequence_id)
+    .maybeSingle()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((seqMeta as any)?.activation_type === 'manual') return { enrolled: false }
+
   // 2. Fetch the first active step (lowest step_order)
   const { data: firstStep } = await db
     .from('email_sequence_steps')

@@ -123,7 +123,7 @@ export default async function ChannelDetailPage({
           channelName={channel.name}
           channelActive={channel.active}
           emailSequenceId={channel.emailSequenceId}
-          sequences={sequences.map(s => ({ id: s.id, name: s.name }))}
+          sequences={sequences.filter(s => s.activationType === 'form').map(s => ({ id: s.id, name: s.name }))}
         />
       </div>
 

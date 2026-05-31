@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import type { LeadStatus } from '@/lib/types'
 
 const TENANT_ID = 'tenant-aj'
@@ -197,6 +198,28 @@ export async function startPurchaseProcess(
   })
 
   revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+// ─── Delete lead ──────────────────────────────────────────────────────────────
+
+export async function deleteLead(
+  leadId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx      = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  let q = supabase.from('leads').delete().eq('id', leadId)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+
+  const { error } = await q
+  if (error) {
+    console.error(JSON.stringify({ service: 'deleteLead', lead_id: leadId, error: error.message }))
+    return { ok: false, error: error.message }
+  }
+
   revalidatePath('/leads')
   revalidatePath('/dashboard')
   return { ok: true }

@@ -34,12 +34,13 @@ interface Props {
 
 export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props) {
   const router = useRouter()
-  const [name,        setName]        = useState('')
-  const [language,    setLanguage]    = useState<'es' | 'en' | 'pt'>('es')
-  const [description, setDescription] = useState('')
-  const [tenantId,    setTenantId]    = useState(fixedTenantId ?? tenants[0]?.id ?? '')
-  const [error,       setError]       = useState<string | null>(null)
-  const [pending,     start]          = useTransition()
+  const [name,           setName]           = useState('')
+  const [language,       setLanguage]       = useState<'es' | 'en' | 'pt'>('es')
+  const [description,    setDescription]    = useState('')
+  const [activationType, setActivationType] = useState<'form' | 'manual'>('form')
+  const [tenantId,       setTenantId]       = useState(fixedTenantId ?? tenants[0]?.id ?? '')
+  const [error,          setError]          = useState<string | null>(null)
+  const [pending,        start]             = useTransition()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -48,8 +49,9 @@ export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props)
       const res = await createSequence({
         name,
         language,
-        description: description.trim() || null,
-        tenantId: isSuperAdmin ? tenantId : undefined,
+        description:    description.trim() || null,
+        activationType,
+        tenantId:       isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
       router.push(`/emails/${res.id}`)
@@ -117,6 +119,33 @@ export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props)
                 }}
               >
                 {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label style={LABEL}>Tipo de activación <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {([
+              { v: 'form',   label: 'Formulario',  desc: 'Auto-enrola al registrarse en un canal' },
+              { v: 'manual', label: 'Manual',       desc: 'Solo por asignación explícita' },
+            ] as const).map(opt => (
+              <button
+                key={opt.v}
+                type="button"
+                onClick={() => setActivationType(opt.v)}
+                title={opt.desc}
+                style={{
+                  flex: 1, padding: '8px 12px', fontSize: '12px', fontWeight: 500,
+                  borderRadius: '8px', cursor: 'pointer', textAlign: 'left',
+                  background: activationType === opt.v ? 'rgba(201,169,110,0.15)' : 'var(--bg-elevated)',
+                  color: activationType === opt.v ? 'var(--accent-gold)' : 'var(--text-muted)',
+                  border: activationType === opt.v ? '1px solid rgba(201,169,110,0.3)' : '1px solid var(--border-subtle)',
+                }}
+              >
+                <div>{opt.label}</div>
+                <div style={{ fontSize: '11px', fontWeight: 400, marginTop: '2px', opacity: 0.8 }}>{opt.desc}</div>
               </button>
             ))}
           </div>
