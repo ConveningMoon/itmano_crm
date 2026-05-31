@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useMemo, useEffect, useTransition } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, List, LayoutGrid, ChevronDown, X, Users, Mail } from 'lucide-react'
+import { Search, List, LayoutGrid, ChevronDown, X, Users } from 'lucide-react'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadStatus } from '@/lib/types'
 import type { ChannelOption } from './new/page'
-import { addLeadsToSequence } from '../emails/actions'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -165,13 +164,12 @@ const KANBAN_COLUMNS = [
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 interface LeadsClientProps {
-  leads:           Lead[]
-  agents:          Agent[]
-  channels:        ChannelOption[]
-  manualSequences: Array<{ id: string; name: string }>
+  leads:    Lead[]
+  agents:   Agent[]
+  channels: ChannelOption[]
 }
 
-export function LeadsClient({ leads, agents, channels, manualSequences }: LeadsClientProps) {
+export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
   const router = useRouter()
 
   const [view, setView]               = useState<'table' | 'kanban'>('table')
@@ -181,48 +179,6 @@ export function LeadsClient({ leads, agents, channels, manualSequences }: LeadsC
   const [filterSource, setFilterSource]   = useState('all')
   const [filterLanguage, setFilterLanguage] = useState('all')
   const [page, setPage] = useState(1)
-
-  // Bulk selection + sequence assignment
-  const [selected,        setSelected]        = useState<Set<string>>(new Set())
-  const [bulkSequenceId,  setBulkSequenceId]  = useState('')
-  const [bulkResult,      setBulkResult]      = useState<string | null>(null)
-  const [bulkPending,     startBulk]          = useTransition()
-
-  function toggleLead(id: string) {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else { next.add(id) }
-      return next
-    })
-  }
-
-  function toggleAllVisible() {
-    const ids = pagedLeads.map(l => l.id)
-    const allSel = ids.every(id => selected.has(id))
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (allSel) { ids.forEach(id => next.delete(id)) }
-      else        { ids.forEach(id => next.add(id)) }
-      return next
-    })
-  }
-
-  function handleBulkEnroll() {
-    if (!bulkSequenceId || selected.size === 0) return
-    setBulkResult(null)
-    startBulk(async () => {
-      const res = await addLeadsToSequence([...selected], bulkSequenceId)
-      if (!res.ok) { setBulkResult(`Error: ${res.error}`); return }
-      const { enrolled, skipped, errors } = res.result
-      const parts: string[] = []
-      if (enrolled > 0) parts.push(`${enrolled} ${enrolled === 1 ? 'lead agregado' : 'leads agregados'}`)
-      if (skipped  > 0) parts.push(`${skipped} omitido${skipped > 1 ? 's' : ''} (ya activos)`)
-      if (errors.length > 0) parts.push(`${errors.length} error${errors.length > 1 ? 'es' : ''}`)
-      setBulkResult(parts.join(' · '))
-      setSelected(new Set())
-      setBulkSequenceId('')
-    })
-  }
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
@@ -419,81 +375,12 @@ export function LeadsClient({ leads, agents, channels, manualSequences }: LeadsC
         </div>
       )}
 
-      {/* ── Bulk action bar — table-view only, appears when leads selected ── */}
-      {view === 'table' && selected.size > 0 && manualSequences.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px',
-          padding: '8px 14px', background: 'rgba(201,169,110,0.06)',
-          border: '1px solid rgba(201,169,110,0.2)', borderRadius: '8px', flexWrap: 'wrap',
-        }}>
-          <Mail size={13} color="var(--accent-gold)" />
-          <span style={{ fontSize: '12px', color: 'var(--accent-gold)', fontWeight: 500 }}>
-            {selected.size} seleccionado{selected.size > 1 ? 's' : ''}
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>·  Agregar a secuencia:</span>
-          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-            <select
-              value={bulkSequenceId}
-              onChange={e => setBulkSequenceId(e.target.value)}
-              style={{
-                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-                borderRadius: '6px', padding: '5px 28px 5px 10px', fontSize: '12px',
-                color: 'var(--text-primary)', appearance: 'none', cursor: 'pointer',
-                minWidth: '180px',
-              }}
-            >
-              <option value="">Selecciona una secuencia…</option>
-              {manualSequences.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-            <ChevronDown size={12} style={{ position: 'absolute', right: '8px', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-          </div>
-          <button
-            onClick={handleBulkEnroll}
-            disabled={!bulkSequenceId || bulkPending}
-            style={{
-              padding: '5px 14px', fontSize: '12px', fontWeight: 500, borderRadius: '6px',
-              background: !bulkSequenceId || bulkPending ? 'var(--bg-elevated)' : 'var(--accent-gold)',
-              color: !bulkSequenceId || bulkPending ? 'var(--text-muted)' : 'var(--bg-base)',
-              border: 'none', cursor: !bulkSequenceId || bulkPending ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {bulkPending ? 'Agregando…' : 'Agregar'}
-          </button>
-          <button
-            onClick={() => { setSelected(new Set()); setBulkResult(null) }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: '4px' }}
-          >
-            <X size={13} />
-          </button>
-          {bulkResult && (
-            <span style={{
-              fontSize: '11px', marginLeft: '4px',
-              color: bulkResult.startsWith('Error') ? '#E04040' : 'var(--accent-green)',
-            }}>
-              {bulkResult}
-            </span>
-          )}
-        </div>
-      )}
-
       {/* ── ZONA 3A: Table view ── */}
       {view === 'table' && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
-                {/* Checkbox header */}
-                <th style={{ padding: '10px 8px 10px 16px', width: '36px' }}>
-                  <input
-                    type="checkbox"
-                    checked={pagedLeads.length > 0 && pagedLeads.every(l => selected.has(l.id))}
-                    ref={el => { if (el) el.indeterminate = pagedLeads.some(l => selected.has(l.id)) && !pagedLeads.every(l => selected.has(l.id)) }}
-                    onChange={toggleAllVisible}
-                    style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
-                  />
-                </th>
                 {['Lead', 'Agente', 'Estado', 'Fuente', 'Temperatura', 'Idioma', 'Fecha'].map(h => (
                   <th
                     key={h}
@@ -512,7 +399,7 @@ export function LeadsClient({ leads, agents, channels, manualSequences }: LeadsC
             <tbody>
               {pagedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={7}>
                     <div style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center',
                       justifyContent: 'center', padding: '60px 20px', gap: '12px',
@@ -539,19 +426,9 @@ export function LeadsClient({ leads, agents, channels, manualSequences }: LeadsC
                       style={{
                         borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
                         cursor: 'pointer',
-                        background: selected.has(lead.id) ? 'rgba(201,169,110,0.04)' : undefined,
                       }}
                       onClick={() => router.push(`/leads/${lead.id}`)}
                     >
-                      {/* Checkbox */}
-                      <td style={{ padding: '12px 8px 12px 16px', width: '36px' }} onClick={e => { e.stopPropagation(); toggleLead(lead.id) }}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(lead.id)}
-                          onChange={() => toggleLead(lead.id)}
-                          style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
-                        />
-                      </td>
                       {/* Lead */}
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
