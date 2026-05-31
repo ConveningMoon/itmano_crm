@@ -17,18 +17,20 @@ export async function POST(
   const { data: lead } = await leadQ.maybeSingle()
   if (!lead) return NextResponse.json({ error: 'Lead no encontrado' }, { status: 404 })
 
-  // Set next_send_at = NOW() for all active runs of this lead
-  const { error: updateErr, count } = await supabase
+  // Set next_send_at = NOW() for all active runs of this lead.
+  // Use .select() so we can check the actual rows updated (count: null without it).
+  const { data: updated, error: updateErr } = await supabase
     .from('lead_sequence_runs')
     .update({ next_send_at: new Date().toISOString() })
     .eq('lead_id', leadId)
     .eq('status', 'active')
+    .select('id')
 
   if (updateErr) {
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
-  if ((count ?? 0) === 0) {
+  if ((updated?.length ?? 0) === 0) {
     return NextResponse.json({ error: 'Este lead no tiene runs activos en ninguna secuencia' }, { status: 400 })
   }
 
@@ -38,9 +40,9 @@ export async function POST(
     return NextResponse.json({ error: 'CRON_SECRET no configurado' }, { status: 500 })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
+  // Fix: explicit parentheses to give NEXT_PUBLIC_APP_URL priority over VERCEL_URL
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
   const orchestratorUrl = `${baseUrl}/api/cron/sequence-orchestrator?lead_id=${encodeURIComponent(leadId)}`
 

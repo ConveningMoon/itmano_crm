@@ -5,6 +5,19 @@ import {
   type PendingRun,
 } from '@/lib/services/send-sequence-email'
 
+// Resend template IDs are UUIDs; anything else is likely a placeholder
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+interface DryRunDetail {
+  run_id:        string
+  lead_email:    string
+  sequence_name: string
+  step_order:    number
+  action:        'would_send' | 'paused'
+  reason:        string
+  details?:      string
+}
+
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -45,6 +58,7 @@ export async function POST(request: NextRequest) {
       ok: true, dry_run: dryRun,
       processed: 0, sent: 0, completed: 0, paused: 0,
       ts: new Date().toISOString(),
+      ...(dryRun && { runs: [] }),
     })
   }
 
@@ -53,7 +67,7 @@ export async function POST(request: NextRequest) {
   const tenantIds   = [...new Set(runs.map(r => r.tenant_id))]
   const sequenceIds = [...new Set(runs.map(r => r.sequence_id))]
 
-  const [leadsRes, tenantsRes, stepsRes] = await Promise.all([
+  const [leadsRes, tenantsRes, stepsRes, seqNamesRes] = await Promise.all([
     // leads + their assigned agent in one join (leads → agents IS a proper FK)
     db.from('leads')
       .select('id, first_name, email, agent_id, agents(id, name, email)')
@@ -68,12 +82,17 @@ export async function POST(request: NextRequest) {
       .select('id, sequence_id, step_order, resend_template_id, delay_hours')
       .in('sequence_id', sequenceIds)
       .eq('active', true),
+
+    // Sequence names for dry_run diagnostics (cheap, always fetch)
+    db.from('email_sequences')
+      .select('id, name')
+      .in('id', sequenceIds),
   ])
 
   // Surface any bulk-fetch errors
   for (const [label, res] of [
     ['leads', leadsRes], ['tenants', tenantsRes],
-    ['steps', stepsRes],
+    ['steps', stepsRes], ['sequences', seqNamesRes],
   ] as const) {
     if (res.error) {
       console.error(JSON.stringify({ service: 'sequence-orchestrator', error: res.error.message, query: label }))
@@ -102,6 +121,8 @@ export async function POST(request: NextRequest) {
   const stepsMap   = new Map(
     (stepsRes.data ?? []).map(s => [`${s.sequence_id}:${s.step_order}`, s])
   )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seqNameMap = new Map((seqNamesRes.data ?? []).map((s: any) => [s.id as string, s.name as string]))
   // seq_id → channel name (first channel wins when multiple channels share a sequence)
   const channelBySeqMap = new Map<string, string>()
   for (const ch of channelsRes.data ?? []) {
@@ -143,46 +164,88 @@ export async function POST(request: NextRequest) {
 
   // ── Process each run independently ───────────────────────────────────────
   let sent = 0, completed = 0, paused = 0
+  const dryRunDetails: DryRunDetail[] = []
 
   for (const run of pending) {
-    try {
-      const result = await sendSequenceEmail(db, run, dryRun)
+    if (dryRun) {
+      // ── Dry-run: diagnose guards without side effects ─────────────────────
+      let reason: string
+      let details: string | undefined
 
-      if (result.ok) {
-        sent++
-        if (result.outcome === 'completed') completed++
-        console.log(JSON.stringify({
-          service:         'sequence-orchestrator',
-          run_id:          run.run_id,
-          lead_id:         run.lead_id,
-          step_order:      run.current_step_order,
-          result:          result.outcome,
-          resend_email_id: result.resendEmailId,
-          dry_run:         dryRun,
-        }))
+      if (!run.step_id) {
+        reason  = 'no_step'
+        details = `No active step at order ${run.current_step_order}`
+      } else if (!run.resend_template_id) {
+        reason  = 'no_template'
+        details = 'resend_template_id is null on this step'
+      } else if (!UUID_RE.test(run.resend_template_id)) {
+        reason  = 'invalid_template_id'
+        details = `'${run.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`
+      } else if (!run.email_from_address) {
+        reason  = 'no_from_address'
+        details = 'tenant.email_from_address is null'
+      } else if (!run.lead_email) {
+        reason  = 'no_lead_email'
+        details = 'lead.email is null'
+      } else if (!run.agent_email) {
+        reason  = 'no_agent'
+        details = 'agent.email is null'
       } else {
+        reason = 'would_send'
+      }
+
+      const action: DryRunDetail['action'] = reason === 'would_send' ? 'would_send' : 'paused'
+      if (action === 'would_send') { sent++ } else { paused++ }
+
+      const detail: DryRunDetail = {
+        run_id:        run.run_id,
+        lead_email:    run.lead_email,
+        sequence_name: seqNameMap.get(run.sequence_id) ?? run.sequence_id,
+        step_order:    run.current_step_order,
+        action,
+        reason,
+      }
+      if (details) detail.details = details
+      dryRunDetails.push(detail)
+
+    } else {
+      // ── Production mode: send and log ─────────────────────────────────────
+      try {
+        const result = await sendSequenceEmail(db, run, false)
+
+        if (result.ok) {
+          sent++
+          if (result.outcome === 'completed') completed++
+          console.log(JSON.stringify({
+            service:         'sequence-orchestrator',
+            run_id:          run.run_id,
+            lead_id:         run.lead_id,
+            step_order:      run.current_step_order,
+            result:          result.outcome,
+            resend_email_id: result.resendEmailId,
+          }))
+        } else {
+          paused++
+          console.log(JSON.stringify({
+            service:    'sequence-orchestrator',
+            run_id:     run.run_id,
+            lead_id:    run.lead_id,
+            step_order: run.current_step_order,
+            result:     'paused',
+            reason:     result.reason,
+          }))
+        }
+      } catch (err) {
         paused++
-        console.log(JSON.stringify({
+        console.error(JSON.stringify({
           service:    'sequence-orchestrator',
           run_id:     run.run_id,
           lead_id:    run.lead_id,
           step_order: run.current_step_order,
-          result:     'paused',
-          reason:     result.reason,
-          dry_run:    dryRun,
+          result:     'error',
+          error:      err instanceof Error ? err.message : String(err),
         }))
       }
-    } catch (err) {
-      paused++
-      console.error(JSON.stringify({
-        service:    'sequence-orchestrator',
-        run_id:     run.run_id,
-        lead_id:    run.lead_id,
-        step_order: run.current_step_order,
-        result:     'error',
-        error:      err instanceof Error ? err.message : String(err),
-        dry_run:    dryRun,
-      }))
     }
   }
 
@@ -194,5 +257,6 @@ export async function POST(request: NextRequest) {
     completed,
     paused,
     ts:        new Date().toISOString(),
+    ...(dryRun && { runs: dryRunDetails }),
   })
 }
