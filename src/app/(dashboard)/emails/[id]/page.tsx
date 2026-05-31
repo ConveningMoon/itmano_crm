@@ -6,6 +6,8 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SequenceDetailActions } from './sequence-detail-actions'
 import { StepManager } from './step-manager'
 import { ManualLeadPicker, type PickerLead } from './manual-lead-picker'
+import { EmailMetricsCard } from './email-metrics-card'
+import { getStepMetrics } from '@/lib/services/email-metrics'
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus } from 'lucide-react'
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
@@ -70,6 +72,8 @@ export default async function EmailSequenceDetailPage({
       email:     l.email as string,
     }))
   }
+
+  const stepMetrics = await getStepMetrics(sequence.id)
 
   return (
     <>
@@ -161,11 +165,7 @@ export default async function EmailSequenceDetailPage({
         ))}
       </div>
 
-      {/* ── FASE 4 PLACEHOLDER: Email metrics card ──────────────────────────────
-          INSERT HERE: <EmailMetricsCard sequenceId={sequence.id} tenantId={sequence.tenantId} />
-          Card shows: Enviados total, Open %, Click %, Reply %, Bounce %, Unsubscribe %
-          Fetches from: email_sends JOIN lead_events by lead_id + event_type
-      ─────────────────────────────────────────────────────────────────────── */}
+      <EmailMetricsCard sequenceId={sequence.id} tenantId={sequence.tenantId} />
 
       {/* Channels */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
@@ -232,14 +232,9 @@ export default async function EmailSequenceDetailPage({
         <StepManager
           sequenceId={sequence.id}
           steps={sequence.steps}
+          stepMetrics={stepMetrics}
         />
       </div>
-
-      {/* ── FASE 4 PLACEHOLDER: Per-step metrics table ─────────────────────────
-          REPLACE the plain step list in StepManager with a version that adds
-          inline columns: Enviados | Open % | Click % | Reply %
-          These come from a server fetch in this page passed as stepMetrics prop.
-      ─────────────────────────────────────────────────────────────────────── */}
 
       {/* Runs table */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
