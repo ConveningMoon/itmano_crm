@@ -402,6 +402,12 @@ public/                       — static assets
 
 **LM analytics vs email analytics**: Lead-magnet analytics (channels, page views, conversions) live in `src/lib/data/channels.ts` and the `(dashboard)/analytics/page.tsx` FILA 7. Email send/engagement analytics live in `email-metrics.ts` and `(dashboard)/analytics/emails/page.tsx`. Do not mix these.
 
+**Sequence email send timing — bifurcated behavior:**
+- **First email (step 0):** Sent immediately on enrollment. `enrollLeadInSequence` fires a fire-and-forget POST to `/api/cron/sequence-orchestrator?lead_id=X` right after inserting the run. First email reaches the inbox in seconds, not on the next hourly cron.
+- **Subsequent emails (step 1+):** Sent by the hourly cron-job.org trigger. After each successful send, `sendSequenceEmail` sets `next_send_at = sent_at + next_step.delay_hours`. The orchestrator picks it up when `next_send_at <= NOW()`.
+- **Fallback:** If the fire-and-forget fails (network error, cold start), the hourly cron will still process the run. No data is lost, only timing degrades to worst-case 1 hour.
+- **Scoping:** The immediate trigger passes `?lead_id=` so only this lead's new run is processed, not all other pending runs.
+
 ---
 
 ## Route Groups & Layouts
