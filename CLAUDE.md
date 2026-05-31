@@ -367,6 +367,11 @@ src/
     mockdata.ts               — Phase 1 only; deprecated as data sources move to Supabase
     supabase/                 — Phase 2: server.ts, client.ts, middleware helpers
     data/                     — Phase 2: typed data-access functions per entity
+    services/
+      email-metrics.ts        — getSequenceMetrics, getStepMetrics, getGlobalEmailMetrics
+      enroll-lead-in-sequence.ts
+      send-sequence-email.ts
+      unsubscribe-url.ts
     utils.ts
   middleware.ts               — Phase 2: route protection
 supabase/
@@ -377,12 +382,34 @@ public/                       — static assets
 
 ---
 
+## Email Analytics — Source of Truth
+
+**`email_sends`** is the authoritative table of sent emails. Each row represents one email sent to one lead at one step of one sequence.
+
+**Metric derivation** — all rates are distinct-lead-based (never count-based) to avoid inflation from Apple Mail pre-fetch and email forwarding:
+- **Open rate**: `COUNT(DISTINCT lead_id with 'email_opened' event after sent_at) / unique_leads_sent`
+- **Click rate**: same pattern with `'email_clicked'`
+- **Reply rate**: `'email_replied'`
+- **Bounce rate**: `'email_hard_bounce'` — flag >5% as high
+- **Unsubscribe rate**: `'email_unsubscribed'` — flag >3% as high
+
+**Helper: `src/lib/services/email-metrics.ts`**
+- `getSequenceMetrics(sequenceId)` → `SequenceMetrics` for one sequence
+- `getStepMetrics(sequenceId)` → `StepMetric[]` grouped by `step_order`
+- `getGlobalEmailMetrics(tenantId | null)` → aggregate + per-sequence breakdown; `null` = super_admin, sees all tenants
+
+**Implementation**: pure TypeScript server functions (no RPC). Fetches runs → sends → events in 3 queries, computes in-process. Suitable for current data volumes; add a Postgres `email_metrics_view` if query time exceeds 500ms at scale.
+
+**LM analytics vs email analytics**: Lead-magnet analytics (channels, page views, conversions) live in `src/lib/data/channels.ts` and the `(dashboard)/analytics/page.tsx` FILA 7. Email send/engagement analytics live in `email-metrics.ts` and `(dashboard)/analytics/emails/page.tsx`. Do not mix these.
+
+---
+
 ## Route Groups & Layouts
 
 | Group | Path prefix | Theme | Auth |
 |---|---|---|---|
 | `(auth)` | `/login` | Dark | Public |
-| `(dashboard)` | `/dashboard`, `/leads`, `/analytics`, `/lead-magnets`, `/settings` | Dark premium (CSS vars) | Protected (Phase 2) |
+| `(dashboard)` | `/dashboard`, `/leads`, `/analytics`, `/analytics/emails`, `/emails`, `/lead-magnets`, `/settings` | Dark premium (CSS vars) | Protected (Phase 2) |
 
 The `(dashboard)` layout wraps content in a fixed 220px `Sidebar` + `Topbar` + main area. This is the only design system in the app.
 

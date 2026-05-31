@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, X, AlertTriangle, Mail } from 'lucide-react'
 import type { SequenceStep } from '@/lib/data/email-sequences'
+import type { StepMetric } from '@/lib/services/email-metrics'
 import { addStep, updateStep, deleteStep, moveStep } from '../actions'
 
 const INPUT: React.CSSProperties = {
@@ -41,11 +42,12 @@ interface StepFormState {
 }
 
 interface Props {
-  sequenceId: string
-  steps:      SequenceStep[]
+  sequenceId:  string
+  steps:       SequenceStep[]
+  stepMetrics?: StepMetric[]
 }
 
-export function StepManager({ sequenceId, steps: initialSteps }: Props) {
+export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Props) {
   const router   = useRouter()
   const [mode,    setMode]    = useState<'idle' | 'add' | 'edit' | 'confirm_delete'>('idle')
   const [target,  setTarget]  = useState<string | null>(null)   // stepId for edit/delete
@@ -55,6 +57,8 @@ export function StepManager({ sequenceId, steps: initialSteps }: Props) {
 
   // Sort by step_order for display
   const steps = [...initialSteps].sort((a, b) => a.stepOrder - b.stepOrder)
+
+  const metricsMap = new Map((stepMetrics ?? []).map(m => [m.stepOrder, m]))
 
   function openAdd() {
     setForm({ delayHours: steps.length === 0 ? 0 : 72, resendTemplateId: '' })
@@ -189,7 +193,7 @@ export function StepManager({ sequenceId, steps: initialSteps }: Props) {
                 {delayLabel(step.delayHours)}
               </div>
 
-              {/* Template ID */}
+              {/* Template ID + step metrics */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 {step.resendTemplateId ? (
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
@@ -205,6 +209,25 @@ export function StepManager({ sequenceId, steps: initialSteps }: Props) {
                     {step.subject}
                   </span>
                 )}
+                {(() => {
+                  const sm = metricsMap.get(step.stepOrder)
+                  if (!sm || sm.totalSends === 0) return null
+                  return (
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                      {[
+                        { label: 'Env',   value: String(sm.totalSends), color: 'var(--text-muted)' },
+                        { label: 'Open',  value: `${sm.openRate}%`,  color: sm.openRate  > 0 ? 'var(--accent-teal)'  : 'var(--text-muted)' },
+                        { label: 'Click', value: `${sm.clickRate}%`, color: sm.clickRate > 0 ? 'var(--accent-blue)'  : 'var(--text-muted)' },
+                        { label: 'Reply', value: `${sm.replyRate}%`, color: sm.replyRate > 0 ? 'var(--accent-green)' : 'var(--text-muted)' },
+                      ].map(chip => (
+                        <span key={chip.label} style={{ fontSize: '10px', color: chip.color, fontWeight: 500, display: 'flex', gap: '3px', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{chip.label}</span>
+                          {chip.value}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Controls */}

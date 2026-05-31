@@ -352,12 +352,18 @@ export default async function AnalyticsPage() {
                 <Mail size={16} color="var(--accent-gold)" />
                 <span style={CARD_HEADER}>Desempeño de Secuencias de Email</span>
               </div>
-              <Link href="/emails" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
-                Ver detalle →
-              </Link>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Link href="/analytics/emails" style={{ fontSize: '12px', color: 'var(--accent-blue)', textDecoration: 'none', fontWeight: 500 }}>
+                  Métricas →
+                </Link>
+                <Link href="/emails" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+                  Ver detalle →
+                </Link>
+              </div>
             </div>
             <div style={{ ...CARD_SUBTITLE, marginBottom: '16px' }}>
-              Resumen de runs por secuencia · El envío real se activa en Fase 3 (Resend)
+              Resumen de runs por secuencia · métricas de envío en{' '}
+              <Link href="/analytics/emails" style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>Analítica de Email</Link>
             </div>
 
             {/* Summary KPIs */}
