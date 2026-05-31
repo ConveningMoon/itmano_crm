@@ -52,8 +52,8 @@ function scoreToStatus(score: number): string {
   return 'new'
 }
 
-function ok(): NextResponse {
-  return NextResponse.json({ ok: true }, { headers: CORS_HEADERS })
+function ok(extra?: Record<string, unknown>): NextResponse {
+  return NextResponse.json({ ok: true, ...extra }, { headers: CORS_HEADERS })
 }
 
 function err(message: string, status: number): NextResponse {
@@ -99,7 +99,7 @@ export async function POST(
   // Resolve channel
   const { data: channel } = await db
     .from('acquisition_channels')
-    .select('id, tenant_id, channel_type, email_sequence_id, metadata')
+    .select('id, name, tenant_id, channel_type, email_sequence_id, metadata')
     .eq('public_id', publicId)
     .eq('active', true)
     .maybeSingle()
@@ -108,10 +108,14 @@ export async function POST(
     return err('Channel not found', 404)
   }
 
-  const tenantId = channel.tenant_id as string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channelRow = channel as any
+  const tenantId   = channelRow.tenant_id as string
+  const channelId  = channelRow.id as string
+  const channelName = channelRow.name as string
 
   // Resolve agent — explicit routing first, then language-based fallback
-  const channelMeta = (channel.metadata ?? {}) as Record<string, unknown>
+  const channelMeta = (channelRow.metadata ?? {}) as Record<string, unknown>
   let agentId: string | null = typeof channelMeta.default_agent_id === 'string'
     ? channelMeta.default_agent_id
     : null
@@ -145,11 +149,73 @@ export async function POST(
     return err('Configuration error', 500)
   }
 
-  const baseline = BASELINE_SCORE[channel.channel_type as string] ?? 0
+  // ── Duplicate check — same tenant + email ─────────────────────────────────
+
+  const { data: existingLead } = await db
+    .from('leads')
+    .select('id, status, first_name, last_name, phone, language')
+    .eq('tenant_id', tenantId)
+    .eq('email', parsed.email)
+    .maybeSingle()
+
+  if (existingLead) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = existingLead as any
+
+    // a) Merge non-empty changed fields
+    const updates: Record<string, string> = {}
+    if (parsed.first_name && parsed.first_name !== existing.first_name) updates.first_name = parsed.first_name
+    if (parsed.last_name  && parsed.last_name  !== existing.last_name)  updates.last_name  = parsed.last_name
+    if (parsed.phone      && parsed.phone      !== existing.phone)      updates.phone      = parsed.phone
+    if (parsed.language   && parsed.language   !== existing.language)   updates.language   = parsed.language
+
+    if (Object.keys(updates).length > 0) {
+      await db.from('leads').update(updates).eq('id', existing.id)
+    }
+
+    // b) Log re-engagement event
+    await db.from('lead_events').insert({
+      lead_id:     existing.id,
+      tenant_id:   tenantId,
+      type:        'lead_resubmitted',
+      description: `Lead re-submitted via intake form (channel: ${channelName})`,
+      points:      5,
+    })
+
+    // c) Re-enroll in sequence only if no active run exists
+    const { data: activeRuns } = await db
+      .from('lead_sequence_runs')
+      .select('id')
+      .eq('lead_id', existing.id)
+      .eq('status', 'active')
+      .limit(1)
+
+    if (!activeRuns?.length) {
+      await enrollLeadInSequence({
+        db,
+        lead_id:                existing.id,
+        tenant_id:              tenantId,
+        acquisition_channel_id: channelId,
+      })
+    }
+
+    console.log(JSON.stringify({
+      service:    'intake-submit',
+      public_id:  publicId,
+      lead_id:    existing.id,
+      tenant_id:  tenantId,
+      result:     'duplicate',
+    }))
+
+    return ok({ duplicate: true })
+  }
+
+  // ── New lead ──────────────────────────────────────────────────────────────
+
+  const baseline = BASELINE_SCORE[channelRow.channel_type as string] ?? 0
   const leadId   = crypto.randomUUID()
   const utms     = parsed.utms
 
-  // Insert lead
   const { error: leadError } = await db.from('leads').insert({
     id:                   leadId,
     tenant_id:            tenantId,
@@ -160,7 +226,7 @@ export async function POST(
     phone:                parsed.phone ?? null,
     language:             parsed.language,
     status:               scoreToStatus(baseline),
-    acquisition_channel_id: channel.id,
+    acquisition_channel_id: channelId,
     traffic_source:       resolveTrafficSource(utms),
     traffic_source_detail: Object.keys(utms).length > 0 ? utms : null,
     peak_score:           baseline,
@@ -178,11 +244,11 @@ export async function POST(
     db,
     lead_id:                leadId,
     tenant_id:              tenantId,
-    acquisition_channel_id: channel.id,
+    acquisition_channel_id: channelId,
   })
 
   // Fire contact_form_question notification (triggers Telegram via DB webhook)
-  if (channel.channel_type === 'contact_form') {
+  if (channelRow.channel_type === 'contact_form') {
     const qa       = parsed.quiz_answers
     const question = (
       typeof qa?.question === 'string' ? qa.question :
