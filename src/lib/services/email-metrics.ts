@@ -2,11 +2,15 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
+//
+// Open rate is intentionally NOT tracked. Apple Mail Privacy Protection
+// pre-fetches tracking pixels, inflating open rates by >50% in many cases,
+// making the metric unreliable. Click rate is our primary engagement proxy:
+// every ITMANO email carries a CTA link, so a click is a real signal.
 
 export interface SequenceMetrics {
   totalSends:      number
   uniqueLeads:     number
-  openRate:        number  // 0–100, distinct-lead-based
   clickRate:       number
   replyRate:       number
   bounceRate:      number
@@ -16,7 +20,6 @@ export interface SequenceMetrics {
 export interface StepMetric {
   stepOrder:  number
   totalSends: number
-  openRate:   number
   clickRate:  number
   replyRate:  number
 }
@@ -25,7 +28,6 @@ export interface SequenceSummary {
   sequenceId:      string
   sequenceName:    string
   totalSends:      number
-  openRate:        number
   clickRate:       number
   replyRate:       number
   bounceRate:      number
@@ -35,7 +37,6 @@ export interface SequenceSummary {
 export interface GlobalEmailMetrics {
   totalSends:      number
   uniqueLeads:     number
-  openRate:        number
   clickRate:       number
   replyRate:       number
   bounceRate:      number
@@ -77,7 +78,6 @@ function distinctLeadsWithEvent(sends: SendRow[], events: EventRow[], eventType:
 function buildMetrics(sends: SendRow[], events: EventRow[]): Omit<SequenceMetrics, 'totalSends' | 'uniqueLeads'> {
   const uniqueLeads = new Set(sends.map(s => s.lead_id)).size
   return {
-    openRate:        pct(distinctLeadsWithEvent(sends, events, 'email_opened'),       uniqueLeads),
     clickRate:       pct(distinctLeadsWithEvent(sends, events, 'email_clicked'),      uniqueLeads),
     replyRate:       pct(distinctLeadsWithEvent(sends, events, 'email_replied'),      uniqueLeads),
     bounceRate:      pct(distinctLeadsWithEvent(sends, events, 'email_hard_bounce'),  uniqueLeads),
@@ -86,7 +86,7 @@ function buildMetrics(sends: SendRow[], events: EventRow[]): Omit<SequenceMetric
 }
 
 const EMAIL_EVENT_TYPES = [
-  'email_opened', 'email_clicked', 'email_replied',
+  'email_clicked', 'email_replied',
   'email_hard_bounce', 'email_unsubscribed',
 ]
 
@@ -130,7 +130,7 @@ export async function getSequenceMetrics(sequenceId: string): Promise<SequenceMe
   const sends  = await fetchSendsForRuns(db, runIds)
 
   if (sends.length === 0) {
-    return { totalSends: 0, uniqueLeads: 0, openRate: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0 }
+    return { totalSends: 0, uniqueLeads: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0 }
   }
 
   const leadIds = [...new Set(sends.map(s => s.lead_id))]
@@ -167,7 +167,6 @@ export async function getStepMetrics(sequenceId: string): Promise<StepMetric[]> 
       return {
         stepOrder,
         totalSends: stepSends.length,
-        openRate:   pct(distinctLeadsWithEvent(stepSends, events, 'email_opened'),  uniqueLeads),
         clickRate:  pct(distinctLeadsWithEvent(stepSends, events, 'email_clicked'), uniqueLeads),
         replyRate:  pct(distinctLeadsWithEvent(stepSends, events, 'email_replied'), uniqueLeads),
       }
@@ -184,7 +183,7 @@ export async function getGlobalEmailMetrics(tenantId: string | null): Promise<Gl
   const { data: seqRows } = await seqQ
 
   if (!seqRows || seqRows.length === 0) {
-    return { totalSends: 0, uniqueLeads: 0, openRate: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0, bySequence: [] }
+    return { totalSends: 0, uniqueLeads: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0, bySequence: [] }
   }
 
   // For each sequence, get runs → sends → events
@@ -198,7 +197,7 @@ export async function getGlobalEmailMetrics(tenantId: string | null): Promise<Gl
     const runIds = await fetchRunIdsForSequence(db, seq.id)
     const sends  = await fetchSendsForRuns(db, runIds)
     if (sends.length === 0) {
-      allSummaries.push({ sequenceId: seq.id, sequenceName: seq.name, totalSends: 0, openRate: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0 })
+      allSummaries.push({ sequenceId: seq.id, sequenceName: seq.name, totalSends: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0 })
       continue
     }
     sends.forEach(s => allLeadIds.add(s.lead_id))

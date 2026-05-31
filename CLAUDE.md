@@ -386,10 +386,11 @@ public/                       — static assets
 
 **`email_sends`** is the authoritative table of sent emails. Each row represents one email sent to one lead at one step of one sequence.
 
-**Metric derivation** — all rates are distinct-lead-based (never count-based) to avoid inflation from Apple Mail pre-fetch and email forwarding:
-- **Open rate**: `COUNT(DISTINCT lead_id with 'email_opened' event after sent_at) / unique_leads_sent`
-- **Click rate**: same pattern with `'email_clicked'`
-- **Reply rate**: `'email_replied'`
+**Open rate is intentionally NOT tracked.** Apple Mail Privacy Protection pre-fetches tracking pixels, inflating open rates by >50% in many cases. The metric is unreliable and was removed from all analytics surfaces. **Click rate is the primary engagement metric** — every ITMANO email carries a CTA link, so a click is a real, actionable signal. `email_opened` events are still logged (they contribute +2 to scoring per the Lead Scoring Model) but are never surfaced as a rate.
+
+**Metric derivation** — all rates are distinct-lead-based (never count-based) to avoid inflation from email forwarding:
+- **Click rate**: `COUNT(DISTINCT lead_id with 'email_clicked' event after sent_at) / unique_leads_sent` — primary engagement proxy
+- **Reply rate**: same pattern with `'email_replied'`
 - **Bounce rate**: `'email_hard_bounce'` — flag >5% as high
 - **Unsubscribe rate**: `'email_unsubscribed'` — flag >3% as high
 

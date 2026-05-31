@@ -1,7 +1,7 @@
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getGlobalEmailMetrics } from '@/lib/services/email-metrics'
 import Link from 'next/link'
-import { ArrowLeft, Send, Eye, MousePointer2, MessageCircle, AlertCircle, UserMinus, TrendingDown } from 'lucide-react'
+import { ArrowLeft, Send, MousePointer2, MessageCircle, AlertCircle, UserMinus, TrendingDown } from 'lucide-react'
 
 const CARD: React.CSSProperties = {
   background:   'var(--bg-surface)',
@@ -34,12 +34,6 @@ export default async function EmailAnalyticsPage() {
       sub:   metrics.uniqueLeads > 0 ? `${metrics.uniqueLeads} leads únicos` : undefined,
       icon:  <Send size={16} />,
       color: 'var(--accent-gold)',
-    },
-    {
-      label: 'Open rate',
-      value: `${metrics.openRate}%`,
-      icon:  <Eye size={16} />,
-      color: pctColor(metrics.openRate, 20, 10),
     },
     {
       label: 'Click rate',
@@ -95,7 +89,7 @@ export default async function EmailAnalyticsPage() {
       </div>
 
       {/* Global KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '24px' }}>
         {kpis.map(kpi => (
           <div key={kpi.label} style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
@@ -134,7 +128,7 @@ export default async function EmailAnalyticsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                {['Secuencia', 'Enviados', 'Open %', 'Click %', 'Reply %', 'Bounce %', 'Unsub %'].map((col, i) => (
+                {['Secuencia', 'Enviados', 'Click %', 'Reply %', 'Bounce %', 'Unsub %'].map((col, i) => (
                   <th key={col} style={{
                     padding: '0 8px 10px', textAlign: i === 0 ? 'left' : 'center',
                     fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)',
@@ -157,7 +151,6 @@ export default async function EmailAnalyticsPage() {
                     {seq.totalSends > 0 ? seq.totalSends : '—'}
                   </td>
                   {[
-                    { v: seq.openRate,        good: 20, bad: 10 },
                     { v: seq.clickRate,       good:  5, bad:  2 },
                     { v: seq.replyRate,       good:  3, bad:  1 },
                     { v: seq.bounceRate,      good:  2, bad:  5, inv: true },
