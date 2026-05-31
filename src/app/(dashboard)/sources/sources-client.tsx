@@ -283,19 +283,27 @@ function SnippetBlock({ code }: { code: string }) {
 
 // ─── Lead Magnet modal ─────────────────────────────────────────────────────────
 
-function LeadMagnetModal({ onClose }: { onClose: () => void }) {
-  const [name,    setName]    = useState('')
-  const [slug,    setSlug]    = useState('')
-  const [lpUrl,   setLpUrl]   = useState('')
-  const [fileUrl, setFileUrl] = useState('')
-  const [error,   setError]   = useState<string | null>(null)
-  const [result,  setResult]  = useState<{ publicId: string; slug: string; sequenceId: string; embedSnippet: string } | null>(null)
-  const [pending, startTransition] = useTransition()
+function LeadMagnetModal({ onClose, isSuperAdmin, tenants }: {
+  onClose:     () => void
+  isSuperAdmin: boolean
+  tenants:     Array<{ id: string; name: string }>
+}) {
+  const [name,     setName]     = useState('')
+  const [slug,     setSlug]     = useState('')
+  const [lpUrl,    setLpUrl]    = useState('')
+  const [fileUrl,  setFileUrl]  = useState('')
+  const [tenantId, setTenantId] = useState(tenants[0]?.id ?? '')
+  const [error,    setError]    = useState<string | null>(null)
+  const [result,   setResult]   = useState<{ publicId: string; slug: string; sequenceId: string; embedSnippet: string } | null>(null)
+  const [pending,  startTransition] = useTransition()
 
   function handleSubmit() {
     setError(null)
     startTransition(async () => {
-      const res = await createLeadMagnet({ name, slug: slug || undefined, lpUrl: lpUrl || undefined, fileUrl: fileUrl || undefined })
+      const res = await createLeadMagnet({
+        name, slug: slug || undefined, lpUrl: lpUrl || undefined, fileUrl: fileUrl || undefined,
+        tenantId: isSuperAdmin ? tenantId : undefined,
+      })
       if (!res.ok) { setError(res.error); return }
       setResult({ publicId: res.publicId, slug: res.slug, sequenceId: res.sequenceId, embedSnippet: res.embedSnippet })
     })
@@ -330,6 +338,14 @@ function LeadMagnetModal({ onClose }: { onClose: () => void }) {
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {!result ? (
             <>
+              {isSuperAdmin && (
+                <div>
+                  <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                  <select value={tenantId} onChange={e => setTenantId(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={LABEL}>Nombre *</label>
                 <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Guía para Primeros Compradores" autoFocus />
@@ -355,7 +371,7 @@ function LeadMagnetModal({ onClose }: { onClose: () => void }) {
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
                 <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-                <button onClick={handleSubmit} disabled={!name.trim() || pending} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending) ? 0.6 : 1 }}>
+                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
                   {pending ? 'Creando…' : 'Crear Lead Magnet'}
                 </button>
               </div>
@@ -393,11 +409,16 @@ function LeadMagnetModal({ onClose }: { onClose: () => void }) {
 
 // ─── Event modal ───────────────────────────────────────────────────────────────
 
-function EventModal({ onClose }: { onClose: () => void }) {
+function EventModal({ onClose, isSuperAdmin, tenants }: {
+  onClose:      () => void
+  isSuperAdmin: boolean
+  tenants:      Array<{ id: string; name: string }>
+}) {
   const [name,      setName]      = useState('')
   const [slug,      setSlug]      = useState('')
   const [eventDate, setEventDate] = useState('')
   const [location,  setLocation]  = useState('')
+  const [tenantId,  setTenantId]  = useState(tenants[0]?.id ?? '')
   const [error,     setError]     = useState<string | null>(null)
   const [result,    setResult]    = useState<{ publicId: string; slug: string; formSnippet: string } | null>(null)
   const [pending,   startTransition] = useTransition()
@@ -405,7 +426,10 @@ function EventModal({ onClose }: { onClose: () => void }) {
   function handleSubmit() {
     setError(null)
     startTransition(async () => {
-      const res = await createEvent({ name, slug: slug || undefined, eventDate: eventDate || undefined, location: location || undefined })
+      const res = await createEvent({
+        name, slug: slug || undefined, eventDate: eventDate || undefined, location: location || undefined,
+        tenantId: isSuperAdmin ? tenantId : undefined,
+      })
       if (!res.ok) { setError(res.error); return }
       setResult({ publicId: res.publicId, slug: res.slug, formSnippet: res.formSnippet })
     })
@@ -439,6 +463,14 @@ function EventModal({ onClose }: { onClose: () => void }) {
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {!result ? (
             <>
+              {isSuperAdmin && (
+                <div>
+                  <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                  <select value={tenantId} onChange={e => setTenantId(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={LABEL}>Nombre del evento *</label>
                 <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Open House Virginia Beach Jun 2026" autoFocus />
@@ -466,7 +498,7 @@ function EventModal({ onClose }: { onClose: () => void }) {
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
                 <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-                <button onClick={handleSubmit} disabled={!name.trim() || pending} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending) ? 0.6 : 1 }}>
+                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
                   {pending ? 'Creando…' : 'Crear Evento'}
                 </button>
               </div>
@@ -505,11 +537,13 @@ function EventModal({ onClose }: { onClose: () => void }) {
 // ─── Main client component ────────────────────────────────────────────────────
 
 interface Props {
-  channels: ChannelWithMetrics[]
-  windowDays: number
+  channels:     ChannelWithMetrics[]
+  windowDays:   number
+  isSuperAdmin: boolean
+  tenants:      Array<{ id: string; name: string }>
 }
 
-export function SourcesClient({ channels, windowDays }: Props) {
+export function SourcesClient({ channels, windowDays, isSuperAdmin, tenants }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<ChannelType | 'all'>('all')
@@ -530,8 +564,8 @@ export function SourcesClient({ channels, windowDays }: Props) {
       <style>{`
         .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
       `}</style>
-      {openModal === 'lead_magnet' && <LeadMagnetModal onClose={() => { setOpenModal(null); router.refresh() }} />}
-      {openModal === 'event'       && <EventModal      onClose={() => { setOpenModal(null); router.refresh() }} />}
+      {openModal === 'lead_magnet' && <LeadMagnetModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} />}
+      {openModal === 'event'       && <EventModal      onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} />}
 
       {/* Create buttons */}
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>

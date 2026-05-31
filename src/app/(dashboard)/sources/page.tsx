@@ -1,3 +1,4 @@
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SourcesClient } from './sources-client'
@@ -8,12 +9,22 @@ export default async function SourcesPage({
 }: {
   searchParams: Promise<{ window?: string }>
 }) {
-  const { tenant_id }  = await getCurrentTenantContext()
+  const { tenant_id, role } = await getCurrentTenantContext()
+  const isSuperAdmin = role === 'super_admin'
   const { window: windowParam } = await searchParams
   const windowDays = Number(windowParam ?? 30)
   const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
   const channels = await getChannelsWithMetrics(tenant_id, validWindow)
+
+  // super_admin needs tenant list for create-modal selects
+  let tenants: Array<{ id: string; name: string }> = []
+  if (isSuperAdmin) {
+    const supabase = createAdminClient()
+    const { data } = await supabase.from('tenants').select('id, name').order('name')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
+  }
 
   const totalLeads     = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
   const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
@@ -79,7 +90,12 @@ export default async function SourcesPage({
       </div>
 
       {/* Client: tabs + window selector + cards */}
-      <SourcesClient channels={channels} windowDays={validWindow} />
+      <SourcesClient
+        channels={channels}
+        windowDays={validWindow}
+        isSuperAdmin={isSuperAdmin}
+        tenants={tenants}
+      />
     </>
   )
 }

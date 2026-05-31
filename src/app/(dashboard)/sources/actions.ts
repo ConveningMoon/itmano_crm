@@ -32,15 +32,19 @@ export interface CreateLeadMagnetResult {
 }
 
 export async function createLeadMagnet(fields: {
-  name:    string
-  slug?:   string
-  lpUrl?:  string
+  name:     string
+  slug?:    string
+  lpUrl?:   string
   fileUrl?: string
+  tenantId?: string  // required when caller is super_admin
 }): Promise<CreateLeadMagnetResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
-  const { tenant_id } = await getCurrentTenantContext()
-  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+
+  const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
+  if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
 
   const supabase  = createAdminClient()
   const publicId  = genPublicId()
@@ -193,15 +197,19 @@ export interface CreateEventResult {
 }
 
 export async function createEvent(fields: {
-  name:      string
-  slug?:     string
+  name:       string
+  slug?:      string
   eventDate?: string
-  location?: string
+  location?:  string
+  tenantId?:  string  // required when caller is super_admin
 }): Promise<CreateEventResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
-  const { tenant_id } = await getCurrentTenantContext()
-  if (!tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+
+  const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
+  if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
 
   const supabase  = createAdminClient()
   const publicId  = genPublicId()
