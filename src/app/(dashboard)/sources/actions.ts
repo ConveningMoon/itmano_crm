@@ -164,14 +164,8 @@ export async function archiveChannel(
 
   const supabase = createAdminClient()
 
-  // Fetch channel details before archiving — for the notification (name/type/tenant)
-  let chQ = supabase
-    .from('acquisition_channels')
-    .select('name, channel_type, tenant_id')
-    .eq('id', channelId)
-  if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
-  const { data: ch } = await chQ.maybeSingle()
-
+  // Archiving is silent — no notification. Notifications fire only on creation
+  // and on permanent deletion (see deleteChannelPermanently).
   let q = supabase
     .from('acquisition_channels')
     .update({ active: false, archived_at: new Date().toISOString() })
@@ -181,16 +175,64 @@ export async function archiveChannel(
   const { error } = await q
   if (error) return { ok: false, error: error.message }
 
-  // Notify only for event & lead_magnet channels (the source types we surface)
-  if (ch) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const c = ch as any
-    if (c.channel_type === 'event') {
-      await insertSourceNotification(supabase, c.tenant_id, 'event_deleted', `Evento archivado: ${c.name}`)
-    } else if (c.channel_type === 'lead_magnet') {
-      await insertSourceNotification(supabase, c.tenant_id, 'lm_deleted', `Lead magnet archivado: ${c.name}`)
-    }
+  revalidatePath('/sources')
+  revalidatePath('/emails')
+  revalidatePath('/analytics')
+  return { ok: true }
+}
+
+// ─── Permanently delete an archived channel (orphans its leads) ──────────────
+
+export async function deleteChannelPermanently(
+  channelId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+
+  const supabase = createAdminClient()
+
+  // Fetch channel (tenant-scoped for agent_owner) — capture name/type BEFORE
+  // deleting, since the notification must be self-contained.
+  let chQ = supabase
+    .from('acquisition_channels')
+    .select('id, name, channel_type, tenant_id, archived_at')
+    .eq('id', channelId)
+  if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
+  const { data: ch } = await chQ.maybeSingle()
+  if (!ch) return { ok: false, error: 'Fuente no encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = ch as any
+  // Guard: only archived channels may be permanently deleted.
+  if (!c.archived_at) {
+    return { ok: false, error: 'Primero archiva la fuente antes de eliminarla permanentemente.' }
   }
+
+  // a) Orphan the leads — they stay, they just lose channel attribution.
+  //    (The FK is ON DELETE SET NULL too; this is explicit for clarity.)
+  const { error: orphanErr } = await supabase
+    .from('leads')
+    .update({ acquisition_channel_id: null })
+    .eq('acquisition_channel_id', channelId)
+  if (orphanErr) return { ok: false, error: orphanErr.message }
+
+  // b) Delete page-view rows (the FK cascades too; explicit for clarity).
+  await supabase.from('channel_page_views').delete().eq('channel_id', channelId)
+
+  // c) No other child tables reference the channel — lead_events,
+  //    lead_sequence_runs and email_sends reference lead_id and stay with the
+  //    now-orphaned leads (their active sequences keep running).
+
+  // d) Notify (only for the surfaced source types) BEFORE deleting the row.
+  if (c.channel_type === 'event') {
+    await insertSourceNotification(supabase, c.tenant_id, 'event_deleted', `Evento eliminado permanentemente: ${c.name}`)
+  } else if (c.channel_type === 'lead_magnet') {
+    await insertSourceNotification(supabase, c.tenant_id, 'lm_deleted', `Lead magnet eliminado permanentemente: ${c.name}`)
+  }
+
+  // e) Delete the channel row.
+  const { error: delErr } = await supabase.from('acquisition_channels').delete().eq('id', channelId)
+  if (delErr) return { ok: false, error: delErr.message }
 
   revalidatePath('/sources')
   revalidatePath('/emails')

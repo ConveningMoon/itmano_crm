@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getChannelsWithMetrics } from '@/lib/data/channels'
+import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/data/channels'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SourcesClient } from './sources-client'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
@@ -15,7 +15,8 @@ export default async function SourcesPage({
   const windowDays = Number(windowParam ?? 30)
   const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
-  const channels = await getChannelsWithMetrics(tenant_id, validWindow)
+  const channels         = await getChannelsWithMetrics(tenant_id, validWindow)
+  const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow)
 
   // super_admin needs tenant list for create-modal selects
   let tenants: Array<{ id: string; name: string }> = []
@@ -92,6 +93,7 @@ export default async function SourcesPage({
       {/* Client: tabs + window selector + cards */}
       <SourcesClient
         channels={channels}
+        archivedChannels={archivedChannels}
         windowDays={validWindow}
         isSuperAdmin={isSuperAdmin}
         tenants={tenants}
