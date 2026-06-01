@@ -85,6 +85,14 @@ function log(fields: {
   console.log(JSON.stringify({ service: 'resend-webhook', ...fields }))
 }
 
+// Inbound `from` may arrive as "Name <email@x.com>" or a bare address.
+// Extract the bare email and lowercase it to match leads.email (which the
+// intake route stores lowercased). Without this, replies never match a lead.
+function extractEmail(raw: string): string {
+  const m = raw.match(/<([^>]+)>/)
+  return (m ? m[1] : raw).trim().toLowerCase()
+}
+
 // ─── Outbound event handler ───────────────────────────────────────────────────
 // Handles the 7 outbound event types. Looks up email_sends by resend_email_id,
 // then inserts a lead_events row so the scoring trigger can process it.
@@ -160,12 +168,15 @@ async function handleInboundEvent(
   event: ResendEvent,
   svixId: string,
 ) {
-  const fromAddress = event.data.from
+  const fromRaw = event.data.from
 
-  if (!fromAddress) {
+  if (!fromRaw) {
     log({ event_type: event.type, event_id: svixId, result: 'validation_error' })
     return
   }
+
+  // Normalize "Name <email>" → "email" (lowercased) so the lookup matches leads.email
+  const fromAddress = extractEmail(fromRaw)
 
   const { data: matches, error: lookupError } = await db
     .from('leads')
@@ -201,7 +212,7 @@ async function handleInboundEvent(
     description: EVENT_DESCRIPTIONS['email_replied'],
     dedup_key:   svixId,
     created_at:  event.created_at,
-    metadata:    { from: fromAddress, subject: event.data.subject ?? null },
+    metadata:    { from: fromAddress, from_raw: fromRaw, subject: event.data.subject ?? null },
   })
 
   if (insertError) {
