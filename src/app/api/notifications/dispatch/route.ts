@@ -30,6 +30,11 @@ function buildMessage(
     return `📬 <b>Nuevo contacto con pregunta</b>\n${name}\n"${excerpt}"\n<a href="${url}">Ver lead</a>`
   }
 
+  if (type === 'contact_us') {
+    // message already reads "Nueva pregunta de <nombre>: <texto>"
+    return `📬 <b>Contact Us</b>\n${body || name}\n<a href="${url}">Ver lead</a>`
+  }
+
   // Self-contained notifications (no live lead → message body carries everything)
   if (type === 'lead_deleted') {
     return `🗑️ <b>Lead eliminado</b>\n${body || name}`
