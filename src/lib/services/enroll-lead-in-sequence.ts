@@ -1,6 +1,6 @@
 import 'server-only'
-import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { processSequenceRun } from '@/lib/services/process-sequence-run'
 
 export interface EnrollResult {
   enrolled:        boolean
@@ -20,17 +20,17 @@ export interface EnrollResult {
  *  - If the channel has no email_sequence_id → enrolled: false (no-op)
  *  - If the sequence has no active steps → enrolled: false (no-op)
  *  - If the sequence has activation_type='manual' → enrolled: false (no-op)
- *  - On success → inserts lead_sequence_runs row, fires orchestrator for
- *    immediate first send, returns enrolled: true
+ *  - On success → inserts lead_sequence_runs row, processes the first email
+ *    in-process, returns enrolled: true
  *  - On DB error → logs the error, returns enrolled: false, error: message
  *    The caller MUST NOT rollback the lead creation on enrollment failure.
  *
  * First-email behavior:
- *  After inserting the run, uses next/server `after()` to trigger the
- *  orchestrator after the response has been sent. `after()` keeps the
- *  Vercel function alive until the promise settles — unlike a bare
- *  fire-and-forget fetch which gets cancelled when the function terminates.
- *  If the trigger fails, the hourly cron will still pick it up.
+ *  After inserting the run, processSequenceRun is called DIRECTLY (in-process,
+ *  same DB connection) so the first email sends in seconds. The run is already
+ *  committed by the Supabase insert, so there's no row-visibility race and no
+ *  HTTP hop — the previous fetch()/after() self-call approach was unreliable
+ *  on Vercel. Subsequent steps are still driven by the hourly cron.
  */
 export async function enrollLeadInSequence(args: {
   db:                     SupabaseClient
@@ -105,50 +105,28 @@ export async function enrollLeadInSequence(args: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const runId = (run as any).id as string
 
-  // 5. Trigger orchestrator after the response is sent.
-  //    `after()` keeps the Vercel function alive until the promise settles,
-  //    unlike a bare fetch() which gets killed when the function terminates.
-  //    Scoped to this lead via ?lead_id= to avoid processing unrelated runs.
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret) {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
-      ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-    const orchestratorUrl = `${baseUrl}/api/cron/sequence-orchestrator?lead_id=${encodeURIComponent(lead_id)}`
-
-    after(
-      fetch(orchestratorUrl, {
-        method:  'POST',
-        headers: { authorization: `Bearer ${cronSecret}` },
-      })
-        .then(async res => {
-          if (res.ok) {
-            console.info(JSON.stringify({
-              service: 'enroll-lead-in-sequence',
-              result:  'orchestrator_triggered_ok',
-              run_id:  runId,
-              lead_id,
-            }))
-          } else {
-            console.warn(JSON.stringify({
-              service:     'enroll-lead-in-sequence',
-              result:      'orchestrator_trigger_failed',
-              run_id:      runId,
-              lead_id,
-              http_status: res.status,
-              body:        await res.text(),
-            }))
-          }
-        })
-        .catch(err => {
-          console.warn(JSON.stringify({
-            service: 'enroll-lead-in-sequence',
-            result:  'orchestrator_trigger_failed',
-            run_id:  runId,
-            lead_id,
-            error:   err instanceof Error ? err.message : String(err),
-          }))
-        })
-    )
+  // 5. Process the first email in-process. The run is already committed, so
+  //    there's no row-visibility race. await blocks the response ~1-2s (the
+  //    Resend call) which is acceptable for a form submit / manual add.
+  //    A failure here never rolls back enrollment — the hourly cron retries.
+  try {
+    const result = await processSequenceRun({ db, runId })
+    console.info(JSON.stringify({
+      service: 'enroll-lead-in-sequence',
+      result:  'first_email_processed',
+      run_id:  runId,
+      lead_id,
+      action:  result.action,
+      reason:  result.reason,
+    }))
+  } catch (err) {
+    console.warn(JSON.stringify({
+      service: 'enroll-lead-in-sequence',
+      result:  'first_email_failed',
+      run_id:  runId,
+      lead_id,
+      error:   err instanceof Error ? err.message : String(err),
+    }))
   }
 
   return { enrolled: true, sequence_run_id: runId }

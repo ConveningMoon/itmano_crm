@@ -1,0 +1,147 @@
+import 'server-only'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { sendSequenceEmail, type PendingRun } from '@/lib/services/send-sequence-email'
+
+// Resend template IDs are UUIDs; anything else is a placeholder.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export interface ProcessRunResult {
+  action:        'sent' | 'completed' | 'paused' | 'skipped'
+  reason:        string
+  emailSendId?:  string
+  // Diagnostic context (used by the orchestrator dry-run response + logging)
+  leadEmail?:    string
+  sequenceName?: string
+  stepOrder?:    number
+  details?:      string
+}
+
+/**
+ * Process a SINGLE sequence run by its ID: send the email for the run's
+ * current step, then advance (or complete) the run.
+ *
+ * This is the shared unit of work between two callers:
+ *  - The hourly orchestrator cron: queries eligible runs, then calls this
+ *    per run.
+ *  - enrollLeadInSequence: calls this directly, in-process, right after
+ *    inserting the run, so the first email sends immediately.
+ *
+ * It does NOT filter by next_send_at — the caller decides eligibility.
+ * It only verifies the run is still 'active'. Assembles all joined data
+ * (lead, agent, tenant, step, channel) for the one run, then delegates the
+ * actual send to sendSequenceEmail.
+ */
+export async function processSequenceRun(params: {
+  db:      SupabaseClient
+  runId:   string
+  dryRun?: boolean
+}): Promise<ProcessRunResult> {
+  const { db, runId, dryRun = false } = params
+
+  // ── Fetch the run ──────────────────────────────────────────────────────────
+  const { data: run } = await db
+    .from('lead_sequence_runs')
+    .select('id, tenant_id, lead_id, sequence_id, current_step_order, status')
+    .eq('id', runId)
+    .maybeSingle()
+
+  if (!run) return { action: 'skipped', reason: 'run_not_found' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = run as any
+  if (r.status !== 'active') return { action: 'skipped', reason: `run_status_${r.status}` }
+
+  const tenantId   = r.tenant_id as string
+  const leadId     = r.lead_id as string
+  const sequenceId = r.sequence_id as string
+  const stepOrder  = r.current_step_order as number
+
+  // ── Bulk-fetch related entities in parallel ────────────────────────────────
+  const [leadRes, tenantRes, stepRes, channelRes, seqRes] = await Promise.all([
+    db.from('leads')
+      .select('id, first_name, email, agent_id, agents(id, name, email)')
+      .eq('id', leadId)
+      .maybeSingle(),
+    db.from('tenants')
+      .select('id, email_from_address')
+      .eq('id', tenantId)
+      .maybeSingle(),
+    db.from('email_sequence_steps')
+      .select('id, sequence_id, step_order, resend_template_id, delay_hours')
+      .eq('sequence_id', sequenceId)
+      .eq('step_order', stepOrder)
+      .eq('active', true)
+      .maybeSingle(),
+    db.from('acquisition_channels')
+      .select('name, email_sequence_id')
+      .eq('email_sequence_id', sequenceId)
+      .limit(1)
+      .maybeSingle(),
+    db.from('email_sequences')
+      .select('name')
+      .eq('id', sequenceId)
+      .maybeSingle(),
+  ])
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lead    = leadRes.data as any
+  const agent   = lead ? (Array.isArray(lead.agents) ? lead.agents[0] : lead.agents) : null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenant  = tenantRes.data as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const step    = stepRes.data as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channel = channelRes.data as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seqName = (seqRes.data as any)?.name as string | undefined
+
+  const pending: PendingRun = {
+    run_id:             runId,
+    lead_id:            leadId,
+    sequence_id:        sequenceId,
+    current_step_order: stepOrder,
+    tenant_id:          tenantId,
+    step_id:            step?.id ?? null,
+    resend_template_id: step?.resend_template_id ?? null,
+    next_delay_hours:   step?.delay_hours ?? null,
+    first_name:         lead?.first_name ?? '',
+    lead_email:         lead?.email ?? '',
+    agent_id:           lead?.agent_id ?? '',
+    email_from_address: tenant?.email_from_address ?? null,
+    agent_name:         agent?.name ?? '',
+    agent_email:        agent?.email ?? '',
+    channel_name:       channel?.name ?? null,
+  }
+
+  const diag = { leadEmail: pending.lead_email, sequenceName: seqName ?? sequenceId, stepOrder }
+
+  // ── Dry-run: diagnose guards without side effects ──────────────────────────
+  if (dryRun) {
+    if (!pending.step_id) {
+      return { action: 'paused', reason: 'no_step', details: `No active step at order ${stepOrder}`, ...diag }
+    }
+    if (!pending.resend_template_id) {
+      return { action: 'paused', reason: 'no_template', details: 'resend_template_id is null on this step', ...diag }
+    }
+    if (!UUID_RE.test(pending.resend_template_id)) {
+      return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
+    }
+    if (!pending.email_from_address) {
+      return { action: 'paused', reason: 'no_from_address', details: 'tenant.email_from_address is null', ...diag }
+    }
+    if (!pending.lead_email) {
+      return { action: 'paused', reason: 'no_lead_email', details: 'lead.email is null', ...diag }
+    }
+    if (!pending.agent_email) {
+      return { action: 'paused', reason: 'no_agent', details: 'agent.email is null', ...diag }
+    }
+    return { action: 'sent', reason: 'would_send', ...diag }
+  }
+
+  // ── Production: delegate the actual send to sendSequenceEmail ───────────────
+  const result = await sendSequenceEmail(db, pending, false)
+
+  if (result.ok) {
+    return { action: result.outcome, reason: result.outcome, emailSendId: result.resendEmailId, ...diag }
+  }
+  return { action: 'paused', reason: result.reason, ...diag }
+}

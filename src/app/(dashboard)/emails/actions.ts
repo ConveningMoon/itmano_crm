@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { processSequenceRun } from '@/lib/services/process-sequence-run'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -391,19 +392,44 @@ export async function addLeadsToSequence(
       continue
     }
 
-    const { error } = await supabase.from('lead_sequence_runs').insert({
+    const { data: inserted, error } = await supabase.from('lead_sequence_runs').insert({
       tenant_id:          seqRow.tenant_id as string,
       lead_id:            leadId,
       sequence_id:        sequenceId,
       current_step_order: firstStep.step_order,
       status:             'active',
       next_send_at:       nextSendAt,
-    })
+    }).select('id').single()
 
     if (error) {
       result.errors.push({ leadId, reason: error.message })
-    } else {
-      result.enrolled++
+      continue
+    }
+    result.enrolled++
+
+    // Send the first email immediately, in-process (same pattern as
+    // enrollLeadInSequence). A failure never rolls back the enrollment —
+    // the hourly cron will retry.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const runId = (inserted as any).id as string
+    try {
+      const proc = await processSequenceRun({ db: supabase, runId })
+      console.info(JSON.stringify({
+        service: 'add-leads-to-sequence',
+        result:  'first_email_processed',
+        run_id:  runId,
+        lead_id: leadId,
+        action:  proc.action,
+        reason:  proc.reason,
+      }))
+    } catch (err) {
+      console.warn(JSON.stringify({
+        service: 'add-leads-to-sequence',
+        result:  'first_email_failed',
+        run_id:  runId,
+        lead_id: leadId,
+        error:   err instanceof Error ? err.message : String(err),
+      }))
     }
   }
 

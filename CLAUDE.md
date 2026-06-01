@@ -403,11 +403,18 @@ public/                       — static assets
 
 **LM analytics vs email analytics**: Lead-magnet analytics (channels, page views, conversions) live in `src/lib/data/channels.ts` and the `(dashboard)/analytics/page.tsx` FILA 7. Email send/engagement analytics live in `email-metrics.ts` and `(dashboard)/analytics/emails/page.tsx`. Do not mix these.
 
-**Sequence email send timing — bifurcated behavior:**
-- **First email (step 0):** Sent immediately on enrollment. `enrollLeadInSequence` fires a fire-and-forget POST to `/api/cron/sequence-orchestrator?lead_id=X` right after inserting the run. First email reaches the inbox in seconds, not on the next hourly cron.
-- **Subsequent emails (step 1+):** Sent by the hourly cron-job.org trigger. After each successful send, `sendSequenceEmail` sets `next_send_at = sent_at + next_step.delay_hours`. The orchestrator picks it up when `next_send_at <= NOW()`.
-- **Fallback:** If the fire-and-forget fails (network error, cold start), the hourly cron will still process the run. No data is lost, only timing degrades to worst-case 1 hour.
-- **Scoping:** The immediate trigger passes `?lead_id=` so only this lead's new run is processed, not all other pending runs.
+**Sequence processing architecture — `processSequenceRun` is the shared unit of work.**
+`src/lib/services/process-sequence-run.ts` processes ONE run by ID: it assembles the run's joined data (lead, agent, tenant, current step, channel), runs the validation guards, and on the production path delegates the actual send to `sendSequenceEmail` (Resend call → insert `email_sends` → advance/complete the run). It does NOT filter by `next_send_at` — the caller decides eligibility. Two callers share it:
+- **Hourly orchestrator** (`/api/cron/sequence-orchestrator`): queries eligible runs (`next_send_at <= NOW()`, `status='active'`, optional `?lead_id=`), then loops calling `processSequenceRun` per run. Supports `?dry_run=true` for a per-run diagnostic report.
+- **Enrollment** (`enrollLeadInSequence` and `addLeadsToSequence`): after inserting the run, calls `processSequenceRun` **directly, in-process** (same DB connection, `await`) so the first email sends in seconds.
+
+**Why in-process, not an HTTP self-call:** earlier versions POSTed to the orchestrator endpoint (with and without `after()`/`waitUntil`). That was unreliable on Vercel — a separate serverless invocation re-ran the `next_send_at <= NOW()` query against a different connection (row-visibility race) plus an unnecessary network hop. Calling `processSequenceRun` directly on the just-committed run eliminates both. No `CRON_SECRET` needed in the enrollment path anymore.
+
+**Send timing — bifurcated behavior:**
+- **First email:** Sent immediately on enrollment via the direct in-process call. Reaches the inbox in seconds.
+- **Subsequent emails (step 1+):** Sent by the hourly cron-job.org trigger. After each successful send, `sendSequenceEmail` sets `next_send_at = sent_at + next_step.delay_hours`; the orchestrator picks it up when due.
+- **No double-send:** after the immediate send, the run is advanced (`current_step_order++`, `next_send_at` moved to the future) or marked `completed` — so the next cron tick does not reprocess it.
+- **Fallback:** if the in-process first send throws, enrollment still succeeds (never rolled back) and the hourly cron processes the run later. Worst-case timing degrades to 1 hour; no data lost.
 
 ---
 
