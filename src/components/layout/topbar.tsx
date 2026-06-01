@@ -1,17 +1,18 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import { Plus, Bell } from 'lucide-react'
 
 const PAGE_TITLES: Record<string, string> = {
-  '/dashboard':    'Dashboard',
-  '/leads':        'Leads',
-  '/lead-magnets': 'Lead Magnets',
-  '/analytics':    'Analytics',
-  '/settings':     'Configuración',
+  '/dashboard':     'Dashboard',
+  '/leads':         'Leads',
+  '/lead-magnets':  'Lead Magnets',
+  '/analytics':     'Analytics',
+  '/notifications': 'Notificaciones',
+  '/settings':      'Configuración',
 }
 
-export function Topbar() {
+export function Topbar({ unreadCount = 0 }: { unreadCount?: number }) {
   const pathname = usePathname()
   const router = useRouter()
   const title = PAGE_TITLES[pathname] ?? 'ITMANO CRM'
@@ -40,6 +41,57 @@ export function Topbar() {
       </h1>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Notification bell */}
+        <button
+          aria-label="Notificaciones"
+          onClick={() => router.push('/notifications')}
+          style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '34px',
+            height: '34px',
+            borderRadius: '8px',
+            border: '1px solid var(--border-subtle)',
+            backgroundColor: 'transparent',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'background-color 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-elevated)'
+            ;(e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
+            ;(e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
+          }}
+        >
+          <Bell size={16} strokeWidth={2} />
+          {unreadCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '-5px',
+                right: '-5px',
+                minWidth: '17px',
+                height: '17px',
+                padding: '0 4px',
+                borderRadius: '9px',
+                backgroundColor: 'var(--accent-coral)',
+                color: '#0B0C0E',
+                fontSize: '10px',
+                fontWeight: 700,
+                lineHeight: '17px',
+                textAlign: 'center',
+              }}
+            >
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+
         <button
           style={{
             display: 'flex',

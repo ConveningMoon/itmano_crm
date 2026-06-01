@@ -1,11 +1,16 @@
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { getUnreadCount } from '@/lib/data/notifications'
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const ctx         = await getCurrentTenantContext()
+  const unreadCount = await getUnreadCount(ctx.tenant_id)
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
       <Sidebar />
@@ -18,7 +23,7 @@ export default function DashboardLayout({
           minHeight: '100vh',
         }}
       >
-        <Topbar />
+        <Topbar unreadCount={unreadCount} />
         <main style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
           {children}
         </main>
