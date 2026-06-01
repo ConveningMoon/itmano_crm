@@ -1,0 +1,169 @@
+import 'server-only'
+import type { createAdminClient } from '@/lib/supabase/admin'
+
+type AdminClient = ReturnType<typeof createAdminClient>
+
+// The resolved channel the contact submission is attributed to. Both callers
+// (the x-contact-secret backup endpoint and the native Webflow webhook) resolve
+// this by public_id before calling in.
+export interface ContactChannel {
+  id:        string
+  tenant_id: string
+  name:      string
+}
+
+export interface ContactSubmissionParams {
+  db:          AdminClient
+  channel:     ContactChannel
+  first_name:  string
+  last_name?:  string
+  email:       string
+  phone?:      string
+  message:     string
+  language?:   'es' | 'en' | 'pt'
+}
+
+// Baseline score for a contact-form lead (from the lead scoring model in CLAUDE.md).
+// The +20 from the 'contact_us_question' event is applied separately by the
+// apply_lead_event_scoring trigger — do NOT hand-adjust the score here.
+const CONTACT_BASELINE = 20
+
+function scoreToStatus(score: number): string {
+  if (score >= 60) return 'hot'
+  if (score >= 35) return 'warm'
+  if (score >= 15) return 'nurturing'
+  return 'new'
+}
+
+// Core contact-submission logic shared by all contact entry points:
+// dedup by (tenant_id, email) with field merge, always log a high-intent
+// contact_us_question scoring event (+20 via trigger), and notify contact_us.
+// Never enrolls in an email sequence.
+export async function handleContactSubmission(
+  params: ContactSubmissionParams
+): Promise<{ ok: true; duplicate: boolean }> {
+  const { db, channel } = params
+  const language   = params.language ?? 'es'
+  const firstName  = params.first_name.trim()
+  const lastName   = (params.last_name ?? '').trim()
+  const email      = params.email.toLowerCase().trim()
+  const phone      = params.phone?.trim() || null
+  const message    = params.message.slice(0, 2000)
+  const tenantId   = channel.tenant_id
+
+  // ── Resolve agent — language-based, Melanie (first_buyer) is manual-only ──────
+  let agentId: string | null = null
+  {
+    const { data: agent } = await db
+      .from('agents')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('language', language)
+      .neq('specialty', 'first_buyer')
+      .limit(1)
+      .maybeSingle()
+    agentId = agent?.id ?? null
+  }
+  if (!agentId) {
+    const { data: fallback } = await db
+      .from('agents')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('active', true)
+      .limit(1)
+      .maybeSingle()
+    agentId = fallback?.id ?? null
+  }
+  if (!agentId) {
+    console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, error: 'no_agent_found' }))
+    throw new Error('No agent available for tenant')
+  }
+
+  // ── Dedup by (tenant_id, email) ───────────────────────────────────────────────
+  const { data: existingLead } = await db
+    .from('leads')
+    .select('id, first_name, last_name, phone, language')
+    .eq('tenant_id', tenantId)
+    .eq('email', email)
+    .maybeSingle()
+
+  let leadId: string
+  let duplicate = false
+
+  if (existingLead) {
+    duplicate = true
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = existingLead as any
+    leadId = existing.id as string
+
+    // Merge non-empty changed fields
+    const updates: Record<string, string> = {}
+    if (firstName && firstName !== existing.first_name) updates.first_name = firstName
+    if (lastName  && lastName  !== existing.last_name)  updates.last_name  = lastName
+    if (phone     && phone     !== existing.phone)      updates.phone      = phone
+    if (language  && language  !== existing.language)   updates.language   = language
+    if (Object.keys(updates).length > 0) {
+      await db.from('leads').update(updates).eq('id', leadId)
+    }
+  } else {
+    leadId = crypto.randomUUID()
+    const { error: leadError } = await db.from('leads').insert({
+      id:                     leadId,
+      tenant_id:              tenantId,
+      agent_id:               agentId,
+      first_name:             firstName,
+      last_name:              lastName,
+      email,
+      phone,
+      language,
+      status:                 scoreToStatus(CONTACT_BASELINE),
+      acquisition_channel_id: channel.id,
+      // traffic_source is the *arrival* source (constrained set), not the channel
+      // type. A contact submission has no UTM context → 'direct'.
+      traffic_source:         'direct',
+      peak_score:             CONTACT_BASELINE,
+      current_score:          CONTACT_BASELINE,
+    })
+    if (leadError) {
+      console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, error: leadError.message }))
+      throw new Error(`Lead insert failed: ${leadError.message}`)
+    }
+  }
+
+  // ── Always log the question as a scoring event ───────────────────────────────
+  // Each question is its own event (dedup_key null). The apply_lead_event_scoring
+  // trigger applies the +20 from lead_score_rules and may auto-promote / notify.
+  const { error: eventError } = await db.from('lead_events').insert({
+    lead_id:     leadId,
+    tenant_id:   tenantId,
+    type:        'contact_us_question',
+    description: message,
+    points:      20,
+    metadata:    { channel_id: channel.id, source: 'contact_us' },
+  })
+  if (eventError) {
+    console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'event_insert_failed', detail: eventError.message }))
+  }
+
+  // ── Notify Telegram via the notifications webhook trigger ─────────────────────
+  const name = `${firstName} ${lastName}`.trim() || 'Lead'
+  const { error: notifError } = await db.from('notifications').insert({
+    tenant_id: tenantId,
+    type:      'contact_us',
+    lead_id:   leadId,
+    message:   `Nueva pregunta de ${name}: ${message.slice(0, 100)}`,
+  })
+  if (notifError) {
+    console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'notification_insert_failed', detail: notifError.message }))
+  }
+
+  console.log(JSON.stringify({
+    service:   'handle-contact-submission',
+    channel:   channel.name,
+    lead_id:   leadId,
+    tenant_id: tenantId,
+    duplicate,
+  }))
+
+  return { ok: true, duplicate }
+}
