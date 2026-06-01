@@ -55,20 +55,6 @@ export default async function ChannelDetailPage({
     manual:        'var(--text-muted)',
   }[channel.channelType] ?? 'var(--text-muted)'
 
-  // Status funnel breakdown
-  const statusCounts: Record<string, number> = {}
-  for (const l of leads) {
-    statusCounts[l.status] = (statusCounts[l.status] ?? 0) + 1
-  }
-
-  // Traffic source breakdown
-  const sourceCounts: Record<string, number> = {}
-  for (const l of leads) {
-    const src = l.trafficSource ?? 'unknown'
-    sourceCounts[src] = (sourceCounts[src] ?? 0) + 1
-  }
-  const sortedSources = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])
-
   return (
     <>
       {/* Back nav */}
@@ -142,58 +128,6 @@ export default async function ChannelDetailPage({
             <div style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)' }}>{m.value}</div>
           </div>
         ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        {/* Status funnel */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Estado de leads</span>
-          </div>
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {Object.entries(statusCounts).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
-              const cfg = STATUS_CONFIG[status as LeadStatus] ?? { label: status, color: 'var(--text-muted)', bgColor: 'var(--bg-overlay)' }
-              return (
-                <div key={status} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{
-                    fontSize: '11px',
-                    color: cfg.color,
-                    background: cfg.bgColor,
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontWeight: 500,
-                  }}>
-                    {cfg.label}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{count}</span>
-                </div>
-              )
-            })}
-            {Object.keys(statusCounts).length === 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sin leads atribuidos</span>
-            )}
-          </div>
-        </div>
-
-        {/* Traffic sources */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Fuente de tráfico</span>
-          </div>
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {sortedSources.map(([src, count]) => (
-              <div key={src} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {TRAFFIC_SOURCE_LABELS[src] ?? src}
-                </span>
-                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{count}</span>
-              </div>
-            ))}
-            {sortedSources.length === 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sin datos de tráfico</span>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Leads table */}
