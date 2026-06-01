@@ -20,6 +20,20 @@ function slugify(name: string): string {
     .slice(0, 60)
 }
 
+// Insert a source-CRUD notification (no lead_id). Triggers Telegram via the
+// notifications webhook. Failure is logged, never blocks the parent action.
+async function insertSourceNotification(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  type: 'event_added' | 'event_deleted' | 'lm_added' | 'lm_deleted',
+  message: string,
+) {
+  const { error } = await supabase.from('notifications').insert({ tenant_id: tenantId, type, message })
+  if (error) {
+    console.error(JSON.stringify({ service: 'sources-actions', type, error: error.message }))
+  }
+}
+
 // ─── Create Lead Magnet channel + empty email sequence ────────────────────────
 
 export interface CreateLeadMagnetResult {
@@ -94,6 +108,8 @@ export async function createLeadMagnet(fields: {
     .update({ email_sequence_id: seqId })
     .eq('id', channelId)
 
+  await insertSourceNotification(supabase, tenant_id, 'lm_added', `Nuevo lead magnet: ${fields.name.trim()}`)
+
   revalidatePath('/sources')
   revalidatePath('/emails')
   revalidatePath('/analytics')
@@ -147,6 +163,15 @@ export async function archiveChannel(
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
 
   const supabase = createAdminClient()
+
+  // Fetch channel details before archiving — for the notification (name/type/tenant)
+  let chQ = supabase
+    .from('acquisition_channels')
+    .select('name, channel_type, tenant_id')
+    .eq('id', channelId)
+  if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
+  const { data: ch } = await chQ.maybeSingle()
+
   let q = supabase
     .from('acquisition_channels')
     .update({ active: false, archived_at: new Date().toISOString() })
@@ -155,6 +180,17 @@ export async function archiveChannel(
 
   const { error } = await q
   if (error) return { ok: false, error: error.message }
+
+  // Notify only for event & lead_magnet channels (the source types we surface)
+  if (ch) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const c = ch as any
+    if (c.channel_type === 'event') {
+      await insertSourceNotification(supabase, c.tenant_id, 'event_deleted', `Evento archivado: ${c.name}`)
+    } else if (c.channel_type === 'lead_magnet') {
+      await insertSourceNotification(supabase, c.tenant_id, 'lm_deleted', `Lead magnet archivado: ${c.name}`)
+    }
+  }
 
   revalidatePath('/sources')
   revalidatePath('/emails')
@@ -241,6 +277,8 @@ export async function createEvent(fields: {
   })
 
   if (chErr) return { ok: false, error: chErr.message }
+
+  await insertSourceNotification(supabase, tenant_id, 'event_added', `Nuevo evento: ${fields.name.trim()}`)
 
   revalidatePath('/sources')
   revalidatePath('/analytics')

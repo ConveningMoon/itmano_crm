@@ -12,12 +12,14 @@ function buildMessage(
   firstName: string,
   lastName: string,
   leadId: string,
-  opts: { score?: number | null; channelName?: string; question?: string }
+  opts: { score?: number | null; channelName?: string; question?: string; message?: string }
 ): string {
   const name = `${firstName} ${lastName}`.trim() || 'Lead'
   const url  = `${APP_URL}/leads/${leadId}`
+  const body = opts.message?.trim() || ''
 
-  if (type === 'score_threshold') {
+  // Lead-linked notifications (have a live lead → include a "Ver lead" link)
+  if (type === 'hot_lead') {
     const score       = opts.score ?? '?'
     const channelLine = opts.channelName ? `\nFuente: ${opts.channelName}` : ''
     return `🔥 <b>Lead caliente</b>\n${name} alcanzó score ${score}/100${channelLine}\n<a href="${url}">Ver lead</a>`
@@ -28,12 +30,24 @@ function buildMessage(
     return `📬 <b>Nuevo contacto con pregunta</b>\n${name}\n"${excerpt}"\n<a href="${url}">Ver lead</a>`
   }
 
-  if (type === 'lead_created') {
-    const channelLine = opts.channelName ? `\nFuente: ${opts.channelName}` : ''
-    return `👤 <b>Nuevo lead</b>\n${name}${channelLine}\n<a href="${url}">Ver lead</a>`
+  // Self-contained notifications (no live lead → message body carries everything)
+  if (type === 'lead_deleted') {
+    return `🗑️ <b>Lead eliminado</b>\n${body || name}`
+  }
+  if (type === 'event_added') {
+    return `📅 <b>Nuevo evento</b>\n${body}`
+  }
+  if (type === 'event_deleted') {
+    return `🗑️ <b>Evento archivado</b>\n${body}`
+  }
+  if (type === 'lm_added') {
+    return `📄 <b>Nuevo lead magnet</b>\n${body}`
+  }
+  if (type === 'lm_deleted') {
+    return `🗑️ <b>Lead magnet archivado</b>\n${body}`
   }
 
-  return `📋 <b>Nueva notificación</b>\n${name}\n<a href="${url}">Ver lead</a>`
+  return `📋 <b>Nueva notificación</b>\n${body || name}`
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -118,9 +132,9 @@ export async function POST(request: NextRequest) {
     return new Response(null, { status: 200 })
   }
 
-  // Resolve channel name for score_threshold / lead_created (extra query only when needed)
+  // Resolve channel name for hot_lead (extra query only when needed)
   let channelName = ''
-  if ((notif.type === 'score_threshold' || notif.type === 'lead_created') && lead?.acquisition_channel_id) {
+  if (notif.type === 'hot_lead' && lead?.acquisition_channel_id) {
     const { data: channel } = await db
       .from('acquisition_channels')
       .select('name')
@@ -138,6 +152,7 @@ export async function POST(request: NextRequest) {
       score:       lead?.current_score,
       channelName,
       question:    notif.message,
+      message:     notif.message,
     }
   )
 
