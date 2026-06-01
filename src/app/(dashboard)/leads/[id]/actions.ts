@@ -211,10 +211,33 @@ export async function deleteLead(
   const ctx      = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
-  let q = supabase.from('leads').delete().eq('id', leadId)
-  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+  // Fetch lead details BEFORE deleting — needed for the notification message
+  // and to derive tenant_id (super_admin has ctx.tenant_id = null).
+  let leadQ = supabase
+    .from('leads')
+    .select('id, tenant_id, first_name, last_name, email')
+    .eq('id', leadId)
+  if (ctx.tenant_id) leadQ = leadQ.eq('tenant_id', ctx.tenant_id)
+  const { data: lead } = await leadQ.maybeSingle()
+  if (!lead) return { ok: false, error: 'Lead no encontrado' }
 
-  const { error } = await q
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = lead as any
+  const fullName = `${l.first_name} ${l.last_name ?? ''}`.trim() || 'Lead'
+
+  // Notify before deletion (the lead row — and the FK lead_id — disappear on
+  // delete, so the message must be self-contained). triggers Telegram via webhook.
+  const { error: notifError } = await supabase.from('notifications').insert({
+    tenant_id: l.tenant_id as string,
+    type:      'lead_deleted',
+    lead_id:   leadId,
+    message:   `${fullName} (${l.email}) fue eliminado`,
+  })
+  if (notifError) {
+    console.error(JSON.stringify({ service: 'deleteLead', lead_id: leadId, error: 'notification_insert_failed', detail: notifError.message }))
+  }
+
+  const { error } = await supabase.from('leads').delete().eq('id', leadId)
   if (error) {
     console.error(JSON.stringify({ service: 'deleteLead', lead_id: leadId, error: error.message }))
     return { ok: false, error: error.message }
