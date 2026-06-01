@@ -263,25 +263,32 @@ export async function POST(
     acquisition_channel_id: channelId,
   })
 
-  // Fire contact_form_question notification (triggers Telegram via DB webhook)
-  if (channelRow.channel_type === 'contact_form') {
-    const qa       = parsed.quiz_answers
-    const question = (
-      typeof qa?.question === 'string' ? qa.question :
-      typeof qa?.message  === 'string' ? qa.message  :
-      ''
-    ).slice(0, 300)
+  // Fire a notification for every new lead (triggers Telegram via DB webhook).
+  // contact_form channels get the richer contact_form_question (includes the
+  // question text); all other channels (lead_magnet, event, manychat, manual)
+  // get a generic new_lead. Exactly one notification per new lead — no double.
+  const fullName = `${parsed.first_name} ${parsed.last_name ?? ''}`.trim()
+  const notifPayload = channelRow.channel_type === 'contact_form'
+    ? {
+        tenant_id: tenantId,
+        type:      'contact_form_question',
+        lead_id:   leadId,
+        message:   (
+          typeof parsed.quiz_answers?.question === 'string' ? parsed.quiz_answers.question :
+          typeof parsed.quiz_answers?.message  === 'string' ? parsed.quiz_answers.message  :
+          ''
+        ).slice(0, 300),
+      }
+    : {
+        tenant_id: tenantId,
+        type:      'lead_created',  // constraint-allowed type for a new lead
+        lead_id:   leadId,
+        message:   `${fullName || 'Lead'} — ${channelName}`,
+      }
 
-    const { error: notifError } = await db.from('notifications').insert({
-      tenant_id: tenantId,
-      type:      'contact_form_question',
-      lead_id:   leadId,
-      message:   question,
-    })
-
-    if (notifError) {
-      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'notification_insert_failed', detail: notifError.message }))
-    }
+  const { error: notifError } = await db.from('notifications').insert(notifPayload)
+  if (notifError) {
+    console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'notification_insert_failed', detail: notifError.message }))
   }
 
   console.log(JSON.stringify({

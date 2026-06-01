@@ -28,6 +28,11 @@ function buildMessage(
     return `📬 <b>Nuevo contacto con pregunta</b>\n${name}\n"${excerpt}"\n<a href="${url}">Ver lead</a>`
   }
 
+  if (type === 'lead_created') {
+    const channelLine = opts.channelName ? `\nFuente: ${opts.channelName}` : ''
+    return `👤 <b>Nuevo lead</b>\n${name}${channelLine}\n<a href="${url}">Ver lead</a>`
+  }
+
   return `📋 <b>Nueva notificación</b>\n${name}\n<a href="${url}">Ver lead</a>`
 }
 
@@ -113,9 +118,9 @@ export async function POST(request: NextRequest) {
     return new Response(null, { status: 200 })
   }
 
-  // Resolve channel name for score_threshold (extra query only when needed)
+  // Resolve channel name for score_threshold / lead_created (extra query only when needed)
   let channelName = ''
-  if (notif.type === 'score_threshold' && lead?.acquisition_channel_id) {
+  if ((notif.type === 'score_threshold' || notif.type === 'lead_created') && lead?.acquisition_channel_id) {
     const { data: channel } = await db
       .from('acquisition_channels')
       .select('name')
