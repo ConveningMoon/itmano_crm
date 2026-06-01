@@ -389,10 +389,10 @@ public/                       — static assets
 **Open rate is intentionally NOT tracked.** Apple Mail Privacy Protection pre-fetches tracking pixels, inflating open rates by >50% in many cases. The metric is unreliable and was removed from all analytics surfaces. **Click rate is the primary engagement metric** — every ITMANO email carries a CTA link, so a click is a real, actionable signal. `email_opened` events are still logged (they contribute +2 to scoring per the Lead Scoring Model) but are never surfaced as a rate.
 
 **Metric derivation** — all rates are distinct-lead-based (never count-based) to avoid inflation from email forwarding:
-- **Click rate**: `COUNT(DISTINCT lead_id with 'email_clicked' event after sent_at) / unique_leads_sent` — primary engagement proxy
-- **Reply rate**: same pattern with `'email_replied'`
-- **Bounce rate**: `'email_hard_bounce'` — flag >5% as high
-- **Unsubscribe rate**: `'email_unsubscribed'` — flag >3% as high
+- **Click rate**: `COUNT(DISTINCT lead_id with 'email_clicked' event after sent_at) / unique_leads_sent` — primary engagement proxy. Any click counts (no per-URL breakdown). Source: Resend `email.clicked` webhook → `email_clicked` lead_event. Requires Click tracking ON in the Resend domain settings.
+- **Reply rate**: same pattern with `'email_replied'`. Source: Resend **Inbound** `email.received` webhook → `handleInboundEvent` resolves the lead by sender address (`extractEmail` normalizes `"Name <email>"` → bare lowercased email to match `leads.email`) → `email_replied` lead_event. **Requires Resend Inbound configured (MX records on the reply domain).** Without inbound MX, no `email.received` fires and reply rate stays 0.
+- **Bounce rate**: `'email_hard_bounce'` (Resend `email.bounced`) — flag >5% as high.
+- **Unsubscribe rate**: `'email_unsubscribed'` — flag >3% as high. Source: the `/unsubscribe` page (signed link) inserts the event idempotently. Note: spam complaints (`email.complained`) map to `email_spam_complaint` (−100 score, force `perdido`) and are NOT folded into unsubscribe rate.
 
 **Helper: `src/lib/services/email-metrics.ts`**
 - `getSequenceMetrics(sequenceId)` → `SequenceMetrics` for one sequence
