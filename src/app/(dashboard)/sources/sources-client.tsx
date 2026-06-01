@@ -3,9 +3,11 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Copy, Check, X } from 'lucide-react'
+import { Plus, Copy, Check, X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
-import { createLeadMagnet, createEvent } from './actions'
+import { createLeadMagnet, createEvent, deleteChannelPermanently } from './actions'
+
+type TabValue = ChannelType | 'all' | 'archived'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -31,13 +33,14 @@ const CHANNEL_TYPE_COLORS: Record<ChannelType, string> = {
   manual:        'var(--text-muted)',
 }
 
-const TAB_FILTERS: Array<{ value: ChannelType | 'all'; label: string }> = [
+const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
   { value: 'all',          label: 'Todos' },
   { value: 'lead_magnet',  label: 'Lead Magnets' },
   { value: 'event',        label: 'Eventos' },
   { value: 'contact_form', label: 'Formularios' },
   { value: 'manychat_flow',label: 'ManyChat' },
   { value: 'manual',       label: 'Manual' },
+  { value: 'archived',     label: 'Archivados' },
 ]
 
 // ─── Channel Card ─────────────────────────────────────────────────────────────
@@ -534,19 +537,232 @@ function EventModal({ onClose, isSuperAdmin, tenants }: {
   )
 }
 
+// ─── Delete confirmation modal (permanent delete) ───────────────────────────────
+
+function DeleteChannelModal({ channel, onClose, onDeleted }: {
+  channel:   ChannelWithMetrics
+  onClose:   () => void
+  onDeleted: () => void
+}) {
+  const [confirmText, setConfirmText]   = useState('')
+  const [error,       setError]         = useState<string | null>(null)
+  const [pending,     startTransition]  = useTransition()
+  const canDelete  = confirmText.trim().toUpperCase() === 'ELIMINAR'
+  const typeLabel  = CHANNEL_TYPE_LABELS[channel.channelType]
+  const leadCount  = channel.metrics.leadsTotal
+
+  function handleDelete() {
+    setError(null)
+    startTransition(async () => {
+      const res = await deleteChannelPermanently(channel.id)
+      if (!res.ok) { setError(res.error); return }
+      onDeleted()
+    })
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px',
+    }}>
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '480px',
+      }}>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={16} style={{ color: 'var(--accent-coral)' }} />
+            Eliminar permanentemente
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            Vas a eliminar <strong style={{ color: 'var(--text-primary)' }}>{channel.name}</strong> ({typeLabel}).
+          </div>
+
+          <div style={{
+            padding: '12px 14px',
+            background: 'rgba(224,64,64,0.08)',
+            border: '1px solid rgba(224,64,64,0.2)',
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            lineHeight: 1.5,
+          }}>
+            Este source tiene <strong style={{ color: 'var(--text-primary)' }}>{leadCount} lead{leadCount === 1 ? '' : 's'} atribuido{leadCount === 1 ? '' : 's'}</strong>. Al eliminarlo, los leads se conservan pero pierden la atribución a este source. Esta acción no se puede deshacer.
+          </div>
+
+          <div>
+            <label style={LABEL}>Escribe <code style={{ color: 'var(--accent-coral)', fontFamily: 'monospace', textTransform: 'none', letterSpacing: 0 }}>ELIMINAR</code> para confirmar</label>
+            <input
+              value={confirmText}
+              onChange={e => setConfirmText(e.target.value)}
+              style={INPUT}
+              placeholder="ELIMINAR"
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
+            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
+            <button
+              onClick={handleDelete}
+              disabled={!canDelete || pending}
+              style={{
+                padding: '9px 18px',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: '#fff',
+                background: 'var(--accent-coral)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: (!canDelete || pending) ? 'default' : 'pointer',
+                opacity: (!canDelete || pending) ? 0.5 : 1,
+              }}
+            >
+              {pending ? 'Eliminando…' : 'Eliminar permanentemente'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Archived channel card ───────────────────────────────────────────────────
+
+function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
+  ch:           ChannelWithMetrics
+  isSuperAdmin: boolean
+  tenantName?:  string
+}) {
+  const router = useRouter()
+  const [showDelete, setShowDelete] = useState(false)
+  const typeColor   = CHANNEL_TYPE_COLORS[ch.channelType]
+  const typeLabel   = CHANNEL_TYPE_LABELS[ch.channelType]
+  const archivedStr = ch.archivedAt
+    ? new Date(ch.archivedAt).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—'
+
+  return (
+    <div
+      className="source-card"
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        borderTop: `3px solid var(--text-muted)`,
+        display: 'flex',
+        flexDirection: 'column',
+        opacity: 0.92,
+      }}
+    >
+      {showDelete && (
+        <DeleteChannelModal
+          channel={ch}
+          onClose={() => setShowDelete(false)}
+          onDeleted={() => { setShowDelete(false); router.refresh() }}
+        />
+      )}
+
+      {/* Header */}
+      <div style={{
+        background: 'var(--bg-elevated)',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottom: '1px solid var(--border-subtle)',
+      }}>
+        <span style={{
+          fontSize: '10px', fontWeight: 500, color: typeColor, background: `${typeColor}18`,
+          padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>
+          {typeLabel}
+        </span>
+        <span style={{
+          fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', background: 'var(--bg-overlay)',
+          padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
+        }}>
+          Archivado
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: '16px', flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>{ch.name}</span>
+          {isSuperAdmin && tenantName && (
+            <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '4px', background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}>
+              {tenantName}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+          {ch.publicId}
+        </div>
+
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+          Archivado el {archivedStr}
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          {ch.metrics.leadsTotal} lead{ch.metrics.leadsTotal === 1 ? '' : 's'} atribuido{ch.metrics.leadsTotal === 1 ? '' : 's'}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => setShowDelete(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            fontSize: '12px', fontWeight: 500,
+            color: 'var(--accent-coral)',
+            background: 'transparent',
+            border: '1px solid rgba(224,64,64,0.3)',
+            borderRadius: '6px',
+            padding: '5px 10px',
+            cursor: 'pointer',
+          }}
+        >
+          <Trash2 size={13} />
+          Eliminar permanentemente
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main client component ────────────────────────────────────────────────────
 
 interface Props {
-  channels:     ChannelWithMetrics[]
-  windowDays:   number
-  isSuperAdmin: boolean
-  tenants:      Array<{ id: string; name: string }>
+  channels:         ChannelWithMetrics[]
+  archivedChannels: ChannelWithMetrics[]
+  windowDays:       number
+  isSuperAdmin:     boolean
+  tenants:          Array<{ id: string; name: string }>
 }
 
-export function SourcesClient({ channels, windowDays, isSuperAdmin, tenants }: Props) {
+export function SourcesClient({ channels, archivedChannels, windowDays, isSuperAdmin, tenants }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
-  const [activeTab,    setActiveTab]    = useState<ChannelType | 'all'>('all')
+  const [activeTab,    setActiveTab]    = useState<TabValue>('all')
   const [openModal,    setOpenModal]    = useState<'lead_magnet' | 'event' | null>(null)
 
   function setWindow(days: number) {
@@ -555,9 +771,14 @@ export function SourcesClient({ channels, windowDays, isSuperAdmin, tenants }: P
     router.push(`/sources?${params.toString()}`)
   }
 
-  const filtered = activeTab === 'all'
-    ? channels
-    : channels.filter(c => c.channelType === activeTab)
+  const isArchivedTab = activeTab === 'archived'
+  const display = isArchivedTab
+    ? archivedChannels
+    : activeTab === 'all'
+      ? channels
+      : channels.filter(c => c.channelType === activeTab)
+
+  const tenantName = (id: string) => tenants.find(t => t.id === id)?.name
 
   return (
     <div>
@@ -597,7 +818,7 @@ export function SourcesClient({ channels, windowDays, isSuperAdmin, tenants }: P
           {TAB_FILTERS.map(t => (
             <button
               key={t.value}
-              onClick={() => setActiveTab(t.value as ChannelType | 'all')}
+              onClick={() => setActiveTab(t.value)}
               style={{
                 padding: '8px 14px',
                 fontSize: '13px',
@@ -640,15 +861,22 @@ export function SourcesClient({ channels, windowDays, isSuperAdmin, tenants }: P
       </div>
 
       {/* Cards grid */}
-      {filtered.length === 0 ? (
+      {display.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: '14px' }}>
-          No hay fuentes en esta categoría.
+          {isArchivedTab ? 'No hay fuentes archivadas.' : 'No hay fuentes en esta categoría.'}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-          {filtered.map(ch => (
-            <ChannelCard key={ch.id} ch={ch} />
-          ))}
+          {isArchivedTab
+            ? display.map(ch => (
+                <ArchivedChannelCard
+                  key={ch.id}
+                  ch={ch}
+                  isSuperAdmin={isSuperAdmin}
+                  tenantName={tenantName(ch.tenantId)}
+                />
+              ))
+            : display.map(ch => <ChannelCard key={ch.id} ch={ch} />)}
         </div>
       )}
     </div>

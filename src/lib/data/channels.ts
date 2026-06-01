@@ -47,6 +47,22 @@ export async function getChannelsWithMetrics(
   tenantId: string | null,
   windowDays = 30
 ): Promise<ChannelWithMetrics[]> {
+  return fetchChannelsWithMetrics(tenantId, windowDays, false)
+}
+
+// Archived counterpart — same metrics, but only channels with archived_at set.
+export async function getArchivedChannelsWithMetrics(
+  tenantId: string | null,
+  windowDays = 30
+): Promise<ChannelWithMetrics[]> {
+  return fetchChannelsWithMetrics(tenantId, windowDays, true)
+}
+
+async function fetchChannelsWithMetrics(
+  tenantId: string | null,
+  windowDays: number,
+  archived: boolean
+): Promise<ChannelWithMetrics[]> {
   if (tenantId === '') return []
 
   const supabase = createAdminClient()
@@ -55,8 +71,10 @@ export async function getChannelsWithMetrics(
   let channelQ = supabase
     .from('acquisition_channels')
     .select('*')
-    .is('archived_at', null)
     .order('created_at', { ascending: false })
+  channelQ = archived
+    ? channelQ.not('archived_at', 'is', null)
+    : channelQ.is('archived_at', null)
   if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
 
   const { data: channels, error } = await channelQ
