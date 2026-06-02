@@ -205,7 +205,7 @@ export async function POST(
       await db.from('leads').update(updates).eq('id', leadId)
     }
 
-    // b) Log re-engagement event
+    // b) Log re-engagement event (lead-level dedup — independent of submission dedup)
     await db.from('lead_events').insert({
       lead_id:     leadId,
       tenant_id:   tenantId,
@@ -213,23 +213,7 @@ export async function POST(
       description: `Lead re-submitted via intake form (channel: ${channelName})`,
       points:      5,
     })
-
-    // c) Re-enroll in sequence only if no active run exists
-    const { data: activeRuns } = await db
-      .from('lead_sequence_runs')
-      .select('id')
-      .eq('lead_id', leadId)
-      .eq('status', 'active')
-      .limit(1)
-
-    if (!activeRuns?.length) {
-      await enrollLeadInSequence({
-        db,
-        lead_id:                leadId,
-        tenant_id:              tenantId,
-        acquisition_channel_id: channelId,
-      })
-    }
+    // Enrollment is decided below, by submission status (created vs already_submitted).
   } else {
     // ── New lead ──────────────────────────────────────────────────────────────
     const baseline = BASELINE_SCORE[channelRow.channel_type as string] ?? 0
@@ -260,14 +244,6 @@ export async function POST(
       return err('Submission failed', 500)
     }
 
-    // Enroll in email sequence if the channel has one
-    await enrollLeadInSequence({
-      db,
-      lead_id:                leadId,
-      tenant_id:              tenantId,
-      acquisition_channel_id: channelId,
-    })
-
     // Contact-form questions keep their dedicated notification.
     if (channelRow.channel_type === 'contact_form') {
       const question = (
@@ -288,38 +264,88 @@ export async function POST(
     }
   }
 
-  // ── Structured submission snapshot (every submit gets one row) ───────────────
-  const { error: submissionError } = await db.from('form_submissions').insert({
-    tenant_id:  tenantId,
-    channel_id: channelId,
-    lead_id:    leadId,
-    answers:    parsed.form_answers ?? [],
-  })
-  if (submissionError) {
-    console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
-  }
+  // ── Submission + enrollment + notifications ──────────────────────────────────
+  // Two dedup layers: the lead is unique per (tenant_id, email) above; here a
+  // SECOND layer dedups the *submission* per (lead_id, channel_id) — but ONLY for
+  // lead_magnet & event. Contact-form/manychat/manual keep one submission per submit.
+  const channelType = channelRow.channel_type as string
+  let submissionStatus: 'created' | 'already_submitted' = 'created'
 
-  // ── Event registrations notify; lead_magnet does not ─────────────────────────
-  if (channelRow.channel_type === 'event') {
-    const { error: evNotifError } = await db.from('notifications').insert({
-      tenant_id: tenantId,
-      type:      'event_submission',
-      lead_id:   leadId,
-      message:   `${fullName} se registró en ${channelName}`,
-    })
-    if (evNotifError) {
-      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'event_notification_failed', detail: evNotifError.message }))
+  // Legacy enrollment guard for non-LM/event: new lead always; existing lead only
+  // if it has no active run (avoids duplicate runs). Preserves prior behavior.
+  async function enrollIfEligible() {
+    if (!duplicate) {
+      await enrollLeadInSequence({ db, lead_id: leadId, tenant_id: tenantId, acquisition_channel_id: channelId })
+      return
+    }
+    const { data: activeRuns } = await db
+      .from('lead_sequence_runs').select('id').eq('lead_id', leadId).eq('status', 'active').limit(1)
+    if (!activeRuns?.length) {
+      await enrollLeadInSequence({ db, lead_id: leadId, tenant_id: tenantId, acquisition_channel_id: channelId })
     }
   }
 
+  if (channelType === 'lead_magnet' || channelType === 'event') {
+    const { data: existingSub } = await db
+      .from('form_submissions')
+      .select('id')
+      .eq('lead_id', leadId)
+      .eq('channel_id', channelId)
+      .limit(1)
+      .maybeSingle()
+
+    if (existingSub) {
+      // ── already_submitted: overwrite answers, no re-enroll, no new notification ──
+      submissionStatus = 'already_submitted'
+      const subId = (existingSub as { id: string }).id
+      const { error: updErr } = await db.from('form_submissions').update({
+        answers:      parsed.form_answers ?? [],
+        submitted_at: new Date().toISOString(),
+      }).eq('id', subId)
+      if (updErr) {
+        console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'submission_update_failed', detail: updErr.message }))
+      }
+    } else {
+      // ── created: new submission for this (lead, channel) ──
+      submissionStatus = 'created'
+      const { error: insErr } = await db.from('form_submissions').insert({
+        tenant_id: tenantId, channel_id: channelId, lead_id: leadId, answers: parsed.form_answers ?? [],
+      })
+      if (insErr) {
+        console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'submission_insert_failed', detail: insErr.message }))
+      }
+      // Enroll / send material (no-op if the channel has no linked sequence).
+      await enrollLeadInSequence({ db, lead_id: leadId, tenant_id: tenantId, acquisition_channel_id: channelId })
+      // Events notify on first submission; lead_magnet does not.
+      if (channelType === 'event') {
+        const { error: evNotifError } = await db.from('notifications').insert({
+          tenant_id: tenantId, type: 'event_submission', lead_id: leadId,
+          message: `${fullName} se registró en ${channelName}`,
+        })
+        if (evNotifError) {
+          console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'event_notification_failed', detail: evNotifError.message }))
+        }
+      }
+    }
+  } else {
+    // contact_form / manychat / manual — unchanged: one submission per submit + legacy enroll.
+    const { error: submissionError } = await db.from('form_submissions').insert({
+      tenant_id: tenantId, channel_id: channelId, lead_id: leadId, answers: parsed.form_answers ?? [],
+    })
+    if (submissionError) {
+      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
+    }
+    await enrollIfEligible()
+  }
+
   console.log(JSON.stringify({
-    service:    'intake-submit',
-    public_id:  publicId,
-    lead_id:    leadId,
-    tenant_id:  tenantId,
-    channel_type: channelRow.channel_type,
-    duplicate,
+    service:      'intake-submit',
+    public_id:    publicId,
+    lead_id:      leadId,
+    tenant_id:    tenantId,
+    channel_type: channelType,
+    status:       submissionStatus,
   }))
 
-  return ok(duplicate ? { duplicate: true } : undefined)
+  return ok({ status: submissionStatus, channel_type: channelType })
 }
