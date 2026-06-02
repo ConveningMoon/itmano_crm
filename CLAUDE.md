@@ -465,6 +465,23 @@ endpoint no longer writes it). New answers live in `form_submissions`. The
   — writes a single-item `answers` snapshot of the message, plus the existing
   `contact_us_question` event + `contact_us` notification.
 
+**Two dedup layers (LP intake) — distinct and independent:**
+1. **Lead** — unique per `(tenant_id, email)`. A repeat email merges personal
+   fields into the existing lead (and logs a `lead_resubmitted` +5 event). Unchanged.
+2. **Submission** — per `(lead_id, channel_id)`, **only for `lead_magnet` & `event`**.
+   If the lead already submitted *that* form, the existing `form_submissions` row
+   is **updated** (`answers` overwritten, `submitted_at = now`) instead of inserting
+   a new one — and there is **no** re-enrollment, no re-sent material, and no new
+   `event_submission` notification. First submission for a `(lead, channel)` →
+   enroll/send material (and notify for `event`). `contact_form`/`manychat`/`manual`
+   are **exempt**: one `form_submissions` row per submit (Contact Us included).
+
+**Intake response the LP consumes:** `{ ok: true, status: 'created' | 'already_submitted', channel_type }`.
+`created` = first submission for this `(lead, channel)` (material/enrollment happened);
+`already_submitted` = the lead had already sent this form (answers refreshed, nothing
+re-sent). A lead magnet with no linked sequence still returns `already_submitted` on
+re-submit — the LP decides the message (there's just no material to re-send).
+
 ---
 
 ## Route Groups & Layouts
