@@ -4,6 +4,46 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 
+// ─── Toggle a submission's responded flag (event / contact_form only) ─────────
+
+export async function toggleSubmissionResponded(
+  submissionId: string
+): Promise<{ ok: true; responded: boolean } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+
+  const supabase = createAdminClient()
+
+  // Fetch submission (tenant-scoped) + its channel type
+  let q = supabase
+    .from('form_submissions')
+    .select('id, responded, acquisition_channels(channel_type)')
+    .eq('id', submissionId)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+  const { data: sub } = await q.maybeSingle()
+  if (!sub) return { ok: false, error: 'Solicitud no encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = sub as any
+  const channelRel = Array.isArray(s.acquisition_channels) ? s.acquisition_channels[0] : s.acquisition_channels
+  if (channelRel?.channel_type === 'lead_magnet') {
+    return { ok: false, error: 'Los lead magnets no usan estado de respuesta' }
+  }
+
+  const newResponded = !s.responded
+  let uq = supabase
+    .from('form_submissions')
+    .update({ responded: newResponded, responded_at: newResponded ? new Date().toISOString() : null })
+    .eq('id', submissionId)
+  if (ctx.tenant_id) uq = uq.eq('tenant_id', ctx.tenant_id)
+
+  const { error } = await uq
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/sources/[slug]', 'page')
+  return { ok: true, responded: newResponded }
+}
+
 function genPublicId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let s = ''
