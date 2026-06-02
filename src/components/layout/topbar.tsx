@@ -8,6 +8,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/leads':         'Leads',
   '/lead-magnets':  'Lead Magnets',
   '/analytics':     'Analytics',
+  '/activity':      'Actividad',
   '/notifications': 'Notificaciones',
   '/settings':      'Configuración',
 }
