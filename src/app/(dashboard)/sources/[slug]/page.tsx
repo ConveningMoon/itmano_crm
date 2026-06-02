@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getChannelBySlug, getChannelLeads } from '@/lib/data/channels'
+import { getChannelBySlug } from '@/lib/data/channels'
+import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
 import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { STATUS_CONFIG } from '@/lib/config'
-import type { LeadStatus } from '@/lib/types'
 import { ChannelActions } from './channel-actions'
+import { SubmissionsList } from './submissions-list'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -14,16 +14,6 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
   contact_form:  'Formulario',
   manychat_flow: 'ManyChat',
   manual:        'Manual',
-}
-
-const TRAFFIC_SOURCE_LABELS: Record<string, string> = {
-  ads_meta:        'Meta Ads',
-  ads_google:      'Google Ads',
-  organic_social:  'Social Orgánico',
-  direct:          'Directo',
-  manychat_inbound:'ManyChat',
-  referral:        'Referido',
-  unknown:         'Desconocido',
 }
 
 export default async function ChannelDetailPage({
@@ -34,17 +24,13 @@ export default async function ChannelDetailPage({
   const { slug }      = await params
   const { tenant_id } = await getCurrentTenantContext()
 
-  const [channel, leads, sequences] = await Promise.all([
-    getChannelBySlug(tenant_id, slug),
-    (async () => {
-      const ch = await getChannelBySlug(tenant_id, slug)
-      if (!ch) return []
-      return getChannelLeads(ch.tenantId, ch.id)
-    })(),
+  const channel = await getChannelBySlug(tenant_id, slug)
+  if (!channel) notFound()
+
+  const [submissions, sequences] = await Promise.all([
+    getSubmissionsForChannel(channel.id, tenant_id),
     listSequences(tenant_id),
   ])
-
-  if (!channel) notFound()
 
   const typeLabel  = CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType
   const typeColor  = {
@@ -130,65 +116,8 @@ export default async function ChannelDetailPage({
         ))}
       </div>
 
-      {/* Leads table */}
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Leads atribuidos · {leads.length} en total
-          </span>
-          <Link href={`/leads?channel=${channel.id}`} style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
-            Ver todos →
-          </Link>
-        </div>
-        {leads.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No hay leads atribuidos a este canal.
-          </div>
-        ) : (
-          <div>
-            {/* Table header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px 120px 100px 90px', gap: '0', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
-              {['Nombre', 'Email', 'Estado', 'Score', 'Fuente'].map(h => (
-                <span key={h} style={{ fontSize: '10px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                  {h}
-                </span>
-              ))}
-            </div>
-            {leads.slice(0, 20).map(lead => {
-              const cfg = STATUS_CONFIG[lead.status as LeadStatus] ?? { label: lead.status, color: 'var(--text-muted)', bgColor: 'var(--bg-overlay)' }
-              return (
-                <div
-                  key={lead.id}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 180px 120px 100px 90px', gap: '0', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', alignItems: 'center' }}
-                >
-                  <Link href={`/leads/${lead.id}`} style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
-                    {lead.firstName} {lead.lastName}
-                  </Link>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {lead.email}
-                  </span>
-                  <span style={{ fontSize: '11px', color: cfg.color, background: cfg.bgColor, padding: '2px 8px', borderRadius: '4px', fontWeight: 500, width: 'fit-content' }}>
-                    {cfg.label}
-                  </span>
-                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                    {lead.temperatureScore !== null ? lead.temperatureScore : '—'}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {TRAFFIC_SOURCE_LABELS[lead.trafficSource ?? ''] ?? lead.trafficSource ?? '—'}
-                  </span>
-                </div>
-              )
-            })}
-            {leads.length > 20 && (
-              <div style={{ padding: '12px 16px', textAlign: 'center' }}>
-                <Link href={`/leads?channel=${channel.id}`} style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
-                  Ver {leads.length - 20} más →
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Submissions — expandable Q&A list */}
+      <SubmissionsList submissions={submissions} channelType={channel.channelType} />
     </>
   )
 }
