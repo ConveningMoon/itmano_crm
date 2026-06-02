@@ -102,10 +102,12 @@ export async function POST(
   // ── Map Webflow field keys (arbitrary) → our schema ───────────────────────────
   const data = (payload.data ?? payload.formResponse ?? {}) as Record<string, unknown>
 
-  const firstName = pick(data, ['First Name', 'Nombre', 'first_name', 'firstName', 'Name', 'name', 'Full Name', 'Nombre completo'])
+  // Exact keys from A&J's Webflow Contact Us form are primary; variants are
+  // tolerated as fallbacks. hutk/ipAddress/pageUri/pageId/pageName are ignored.
+  const firstName = pick(data, ['Name', 'First Name', 'Nombre', 'first_name', 'firstName', 'Full Name', 'Nombre completo'])
   const lastName  = pick(data, ['Last Name', 'Apellido', 'last_name', 'lastName'])
   const email     = pick(data, ['Email', 'email', 'E-mail', 'Correo', 'Correo electrónico', 'Correo electronico'])
-  const phone     = pick(data, ['Phone', 'Teléfono', 'Telefono', 'phone', 'Phone Number', 'Telefono celular'])
+  const phone     = pick(data, ['Phone Number', 'Phone', 'Teléfono', 'Telefono', 'phone', 'Telefono celular'])
   const message   = pick(data, ['Message', 'Mensaje', 'message', 'Pregunta', 'Comentarios', 'Comentario', 'How can we help?', '¿Cómo podemos ayudarte?'])
   const langRaw   = pick(data, ['Language', 'Idioma', 'language', 'lang'])
 

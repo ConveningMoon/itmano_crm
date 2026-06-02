@@ -418,6 +418,55 @@ public/                       — static assets
 
 ---
 
+## Form Submissions — Answers Snapshot Contract
+
+`form_submissions` is the structured, per-submission record used to display the
+questions/answers a lead gave on a form. **There is no form-schema table** — the
+form sends a self-describing, human-readable snapshot and the CRM stores it
+verbatim. This is intentional: lead-magnet/event/contact forms each have
+arbitrary fields, and we do not want a schema migration every time a form changes.
+
+**`form_submissions` is NOT a replacement for `lead_events`.** They are different
+concerns and both are written:
+- `lead_events` = append-only activity log + scoring source (drives status/score).
+- `form_submissions` = structured display record of one form submit (the Q&A).
+
+A submission row carries `tenant_id`, `channel_id` (uuid), `lead_id` (text — `leads.id`
+is text), `answers jsonb`, `responded`/`responded_at` (manual toggle for event/contact
+follow-up; lead-magnet does not use it), and `submitted_at`.
+
+**`answers` format** — an ordered array (order preserved) of self-describing items:
+
+```json
+[
+  { "key": "timeline", "question": "¿Cuál es tu horizonte de compra?",
+    "value": "less_3_months", "label": "Menos de 3 meses" }
+]
+```
+
+- `key` — the form's `variable_name` for the field (required).
+- `question` — the human-readable question text (optional, for robustness).
+- `value` — the raw value (option code or free text) (required).
+- `label` — the human-readable answer (for selects, the option label; for free
+  text, `label` = `value`) (optional).
+
+**Personal data (name, email, phone) does NOT go in `answers`** — it lives on the
+`leads` row. `answers` is only the qualifying Q&A.
+
+`leads.metadata.quiz_answers` is **deprecated** as an answer store (the intake
+endpoint no longer writes it). New answers live in `form_submissions`. The
+`metadata` column itself is kept (it may hold other things).
+
+**Who writes a submission:**
+- LP intake (`/api/intake/[publicId]/submit`) — accepts a `form_answers` array and
+  writes one row per submit. `event` channels also fire an `event_submission`
+  notification; `lead_magnet` channels do not notify.
+- Contact (`handleContactSubmission`, used by the Webflow webhook + backup endpoint)
+  — writes a single-item `answers` snapshot of the message, plus the existing
+  `contact_us_question` event + `contact_us` notification.
+
+---
+
 ## Route Groups & Layouts
 
 | Group | Path prefix | Theme | Auth |

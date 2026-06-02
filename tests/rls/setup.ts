@@ -88,6 +88,8 @@ export const CHANNEL_A_UUID = '00000000-0000-0000-0000-000000000a01'
 export const CHANNEL_B_UUID = '00000000-0000-0000-0000-000000000b01'
 export const SEQ_A_UUID     = '00000000-0000-0000-0000-000000000a02'
 export const SEQ_B_UUID     = '00000000-0000-0000-0000-000000000b02'
+export const FORM_SUB_A_UUID = '00000000-0000-0000-0000-000000000a03'
+export const FORM_SUB_B_UUID = '00000000-0000-0000-0000-000000000b03'
 
 // Text IDs for agents and leads
 export const AGENT_A_ID = 'agent-rls-test-a'
@@ -240,11 +242,38 @@ export async function createFixtures(): Promise<{
     { onConflict: 'id' }
   )
 
+  // 8. Create form_submissions (one per tenant; FK to channel + lead)
+  await adminClient.from('form_submissions').upsert(
+    [
+      {
+        id: FORM_SUB_A_UUID,
+        tenant_id: TENANT_A_ID,
+        channel_id: CHANNEL_A_UUID,
+        lead_id: LEAD_A_ID,
+        answers: [{ key: 'timeline', question: '¿Horizonte?', value: 'q1', label: 'Menos de 3 meses' }],
+      },
+      {
+        id: FORM_SUB_B_UUID,
+        tenant_id: TENANT_B_ID,
+        channel_id: CHANNEL_B_UUID,
+        lead_id: LEAD_B_ID,
+        answers: [{ key: 'timeline', question: '¿Horizonte?', value: 'q2', label: 'Más de 6 meses' }],
+      },
+    ],
+    { onConflict: 'id' }
+  )
+
   return { userAId, userBId, superAdminId }
 }
 
 // Call once after all RLS tests — cleans up in reverse FK order
 export async function cleanupFixtures() {
+  // form_submissions (FK to leads + channels; delete before them)
+  await adminClient
+    .from('form_submissions')
+    .delete()
+    .in('tenant_id', [TENANT_A_ID, TENANT_B_ID])
+
   // lead_sequence_runs
   await adminClient
     .from('lead_sequence_runs')

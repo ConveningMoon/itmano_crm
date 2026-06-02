@@ -10,6 +10,15 @@ export function OPTIONS() {
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
+// One answer in the form_submissions snapshot (see CLAUDE.md → answers contract).
+// key/value required; question/label optional for robustness.
+const FormAnswerSchema = z.object({
+  key:      z.string().min(1).max(200),
+  question: z.string().max(2000).optional(),
+  value:    z.union([z.string().max(4000), z.number(), z.boolean()]),
+  label:    z.string().max(4000).optional(),
+})
+
 const SubmitSchema = z.object({
   first_name:   z.string().min(1).max(100),
   last_name:    z.string().max(100).optional().default(''),
@@ -19,6 +28,7 @@ const SubmitSchema = z.object({
   visitor_id:   z.string().max(128).optional(),
   utms:         z.record(z.string(), z.string().max(256)).optional().default({}),
   quiz_answers: z.record(z.string(), z.unknown()).optional(),
+  form_answers: z.array(FormAnswerSchema).max(50).optional(),
   source_url:   z.string().max(2048).optional(),
   website:      z.string().optional(), // honeypot — must be empty
 })
@@ -174,9 +184,15 @@ export async function POST(
     .eq('email', parsed.email)
     .maybeSingle()
 
+  let leadId: string
+  let duplicate = false
+  const fullName = `${parsed.first_name} ${parsed.last_name}`.trim() || 'Lead'
+
   if (existingLead) {
+    duplicate = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = existingLead as any
+    leadId = existing.id as string
 
     // a) Merge non-empty changed fields
     const updates: Record<string, string> = {}
@@ -186,12 +202,12 @@ export async function POST(
     if (parsed.language   && parsed.language   !== existing.language)   updates.language   = parsed.language
 
     if (Object.keys(updates).length > 0) {
-      await db.from('leads').update(updates).eq('id', existing.id)
+      await db.from('leads').update(updates).eq('id', leadId)
     }
 
     // b) Log re-engagement event
     await db.from('lead_events').insert({
-      lead_id:     existing.id,
+      lead_id:     leadId,
       tenant_id:   tenantId,
       type:        'lead_resubmitted',
       description: `Lead re-submitted via intake form (channel: ${channelName})`,
@@ -202,85 +218,97 @@ export async function POST(
     const { data: activeRuns } = await db
       .from('lead_sequence_runs')
       .select('id')
-      .eq('lead_id', existing.id)
+      .eq('lead_id', leadId)
       .eq('status', 'active')
       .limit(1)
 
     if (!activeRuns?.length) {
       await enrollLeadInSequence({
         db,
-        lead_id:                existing.id,
+        lead_id:                leadId,
         tenant_id:              tenantId,
         acquisition_channel_id: channelId,
       })
     }
+  } else {
+    // ── New lead ──────────────────────────────────────────────────────────────
+    const baseline = BASELINE_SCORE[channelRow.channel_type as string] ?? 0
+    leadId         = crypto.randomUUID()
+    const utms     = parsed.utms
 
-    console.log(JSON.stringify({
-      service:    'intake-submit',
-      public_id:  publicId,
-      lead_id:    existing.id,
-      tenant_id:  tenantId,
-      result:     'duplicate',
-    }))
-
-    return ok({ duplicate: true })
-  }
-
-  // ── New lead ──────────────────────────────────────────────────────────────
-
-  const baseline = BASELINE_SCORE[channelRow.channel_type as string] ?? 0
-  const leadId   = crypto.randomUUID()
-  const utms     = parsed.utms
-
-  const { error: leadError } = await db.from('leads').insert({
-    id:                   leadId,
-    tenant_id:            tenantId,
-    agent_id:             agentId,
-    first_name:           parsed.first_name,
-    last_name:            parsed.last_name,
-    email:                parsed.email,
-    phone:                parsed.phone ?? null,
-    language:             parsed.language,
-    status:               scoreToStatus(baseline),
-    acquisition_channel_id: channelId,
-    traffic_source:       resolveTrafficSource(utms),
-    traffic_source_detail: Object.keys(utms).length > 0 ? utms : null,
-    peak_score:           baseline,
-    current_score:        baseline,
-    metadata:             parsed.quiz_answers ? { quiz_answers: parsed.quiz_answers } : null,
-  })
-
-  if (leadError) {
-    console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: leadError.message }))
-    return err('Submission failed', 500)
-  }
-
-  // Enroll in email sequence if the channel has one
-  await enrollLeadInSequence({
-    db,
-    lead_id:                leadId,
-    tenant_id:              tenantId,
-    acquisition_channel_id: channelId,
-  })
-
-  // Notify only for contact-form questions. Generic new-lead notifications
-  // were removed — a lead's interest is surfaced by the hot_lead notification
-  // once it engages enough to cross score 80 (see apply_lead_event_scoring).
-  if (channelRow.channel_type === 'contact_form') {
-    const question = (
-      typeof parsed.quiz_answers?.question === 'string' ? parsed.quiz_answers.question :
-      typeof parsed.quiz_answers?.message  === 'string' ? parsed.quiz_answers.message  :
-      ''
-    ).slice(0, 300)
-
-    const { error: notifError } = await db.from('notifications').insert({
-      tenant_id: tenantId,
-      type:      'contact_form_question',
-      lead_id:   leadId,
-      message:   question,
+    const { error: leadError } = await db.from('leads').insert({
+      id:                   leadId,
+      tenant_id:            tenantId,
+      agent_id:             agentId,
+      first_name:           parsed.first_name,
+      last_name:            parsed.last_name,
+      email:                parsed.email,
+      phone:                parsed.phone ?? null,
+      language:             parsed.language,
+      status:               scoreToStatus(baseline),
+      acquisition_channel_id: channelId,
+      traffic_source:       resolveTrafficSource(utms),
+      traffic_source_detail: Object.keys(utms).length > 0 ? utms : null,
+      peak_score:           baseline,
+      current_score:        baseline,
+      // quiz_answers is no longer persisted to metadata — answers now live in
+      // form_submissions (see CLAUDE.md → answers contract).
     })
-    if (notifError) {
-      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'notification_insert_failed', detail: notifError.message }))
+
+    if (leadError) {
+      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: leadError.message }))
+      return err('Submission failed', 500)
+    }
+
+    // Enroll in email sequence if the channel has one
+    await enrollLeadInSequence({
+      db,
+      lead_id:                leadId,
+      tenant_id:              tenantId,
+      acquisition_channel_id: channelId,
+    })
+
+    // Contact-form questions keep their dedicated notification.
+    if (channelRow.channel_type === 'contact_form') {
+      const question = (
+        typeof parsed.quiz_answers?.question === 'string' ? parsed.quiz_answers.question :
+        typeof parsed.quiz_answers?.message  === 'string' ? parsed.quiz_answers.message  :
+        ''
+      ).slice(0, 300)
+
+      const { error: notifError } = await db.from('notifications').insert({
+        tenant_id: tenantId,
+        type:      'contact_form_question',
+        lead_id:   leadId,
+        message:   question,
+      })
+      if (notifError) {
+        console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'notification_insert_failed', detail: notifError.message }))
+      }
+    }
+  }
+
+  // ── Structured submission snapshot (every submit gets one row) ───────────────
+  const { error: submissionError } = await db.from('form_submissions').insert({
+    tenant_id:  tenantId,
+    channel_id: channelId,
+    lead_id:    leadId,
+    answers:    parsed.form_answers ?? [],
+  })
+  if (submissionError) {
+    console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
+  }
+
+  // ── Event registrations notify; lead_magnet does not ─────────────────────────
+  if (channelRow.channel_type === 'event') {
+    const { error: evNotifError } = await db.from('notifications').insert({
+      tenant_id: tenantId,
+      type:      'event_submission',
+      lead_id:   leadId,
+      message:   `${fullName} se registró en ${channelName}`,
+    })
+    if (evNotifError) {
+      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'event_notification_failed', detail: evNotifError.message }))
     }
   }
 
@@ -289,10 +317,9 @@ export async function POST(
     public_id:  publicId,
     lead_id:    leadId,
     tenant_id:  tenantId,
-    language:   parsed.language,
-    agent_id:   agentId,
-    baseline,
+    channel_type: channelRow.channel_type,
+    duplicate,
   }))
 
-  return ok()
+  return ok(duplicate ? { duplicate: true } : undefined)
 }

@@ -157,6 +157,18 @@ export async function handleContactSubmission(
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'notification_insert_failed', detail: notifError.message }))
   }
 
+  // ── Structured submission snapshot (the message as a single Q&A item) ─────────
+  // lead_events above is the activity/scoring log; this is the display record.
+  const { error: submissionError } = await db.from('form_submissions').insert({
+    tenant_id:  tenantId,
+    channel_id: channel.id,
+    lead_id:    leadId,
+    answers:    [{ key: 'message', question: 'Mensaje', value: message, label: message }],
+  })
+  if (submissionError) {
+    console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
+  }
+
   console.log(JSON.stringify({
     service:   'handle-contact-submission',
     channel:   channel.name,
