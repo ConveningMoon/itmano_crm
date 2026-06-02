@@ -1,45 +1,17 @@
+import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapAgent, mapLead, type LeadRow, type AgentRow, type LeadEventRow } from '@/lib/db'
+import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
 import { STATUS_CONFIG } from '@/lib/config'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { getRecentActivity } from '@/lib/data/activity'
+import { ActivityRow } from '../activity/activity-ui'
 import type { Agent } from '@/lib/types'
 import {
   Flame,
   Users,
   ArrowRightCircle,
   CheckCircle2,
-  Mail,
-  FileDown,
-  Calendar,
-  UserPlus,
 } from 'lucide-react'
-
-type ActivityItem = {
-  time: string
-  text: string
-  icon: string
-  color: string
-}
-
-const EVENT_META: Record<string, { icon: string; color: string }> = {
-  lead_created:   { icon: 'UserPlus',         color: '#5B8EC9' },
-  status_changed: { icon: 'ArrowRightCircle', color: '#9B72CF' },
-  email_sent:     { icon: 'Mail',             color: '#5AAFA0' },
-  download:       { icon: 'FileDown',          color: '#B87BA3' },
-  appointment:    { icon: 'Calendar',          color: '#C9A96E' },
-  process_closed: { icon: 'CheckCircle2',      color: '#6BA368' },
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1)   return 'Ahora mismo'
-  if (mins < 60)  return `Hace ${mins} min`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `Hace ${hours} hora${hours > 1 ? 's' : ''}`
-  const days = Math.floor(hours / 24)
-  if (days === 1) return 'Ayer'
-  return `Hace ${days} días`
-}
 
 type AgentStat = {
   agent: Agent
@@ -61,26 +33,14 @@ function getTempColor(score: number): string {
   return '#C9A96E'
 }
 
-function ActivityIcon({ name }: { name: string }) {
-  const props = { size: 16 }
-  switch (name) {
-    case 'ArrowRightCircle': return <ArrowRightCircle {...props} />
-    case 'Mail':             return <Mail {...props} />
-    case 'FileDown':         return <FileDown {...props} />
-    case 'Calendar':         return <Calendar {...props} />
-    case 'UserPlus':         return <UserPlus {...props} />
-    case 'CheckCircle2':     return <CheckCircle2 {...props} />
-    default:                 return null
-  }
-}
-
 export default async function DashboardPage() {
+  const { tenant_id } = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
-  const [{ data: rawLeads }, { data: rawAgents }, { data: rawEvents }] = await Promise.all([
+  const [{ data: rawLeads }, { data: rawAgents }, recentActivity] = await Promise.all([
     supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
     supabase.from('agents').select('*').eq('active', true),
-    supabase.from('lead_events').select('*').order('created_at', { ascending: false }).limit(10),
+    getRecentActivity(tenant_id, 10),
   ])
 
   const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))
@@ -128,12 +88,6 @@ export default async function DashboardPage() {
       l => l.status === 'closed' || l.status === 'process_completed'
     ).length
     return { agent, total, hot, percentage, closed }
-  })
-
-  const recentActivity: ActivityItem[] = (rawEvents ?? []).map(r => {
-    const event = r as LeadEventRow
-    const meta  = EVENT_META[event.type] ?? { icon: 'ArrowRightCircle', color: '#C9A96E' }
-    return { time: timeAgo(event.created_at), text: event.description, icon: meta.icon, color: meta.color }
   })
 
   const specialtyLabel: Record<string, string> = {
@@ -373,33 +327,28 @@ export default async function DashboardPage() {
 
         {/* Actividad Reciente */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px', overflowY: 'auto' }}>
-          <div style={{ marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Actividad Reciente</span>
+            <Link href="/activity" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+              Ver toda la actividad →
+            </Link>
           </div>
-          <div>
-            {recentActivity.map((item, idx) => (
-              <div key={idx}>
-                <div style={{ display: 'flex', gap: '10px', padding: '8px 0' }}>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '50%',
-                    background: `${item.color}1F`,
-                    color: item.color,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <ActivityIcon name={item.icon} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{item.text}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{item.time}</div>
-                  </div>
+          {recentActivity.length === 0 ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+              No hay actividad todavía.
+            </div>
+          ) : (
+            <div>
+              {recentActivity.map((item, idx) => (
+                <div key={item.id}>
+                  <ActivityRow item={item} />
+                  {idx < recentActivity.length - 1 && (
+                    <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
+                  )}
                 </div>
-                {idx < recentActivity.length - 1 && (
-                  <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
