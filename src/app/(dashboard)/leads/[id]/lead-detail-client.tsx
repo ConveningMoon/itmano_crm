@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 import { EditLeadModal } from './edit-lead-modal'
 import { ScoringTestPanel } from './scoring-test-panel'
+import { LeadSubmissionsList } from './lead-submissions-list'
+import type { LeadSubmissionRow } from '@/lib/data/form-submissions'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,13 +112,14 @@ interface LeadDetailProps {
   agents: Agent[]
   channels: ChannelOption[]
   events: LeadEvent[]
+  submissions: LeadSubmissionRow[]
   purchaseProcess: PurchaseProcess | null
   hasActiveSequenceRun: boolean
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, purchaseProcess, hasActiveSequenceRun }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, purchaseProcess, hasActiveSequenceRun }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -687,6 +690,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, purcha
         currentStatus={currentStatus}
         currentScore={lead.temperatureScore}
       />
+
+      {/* ── Formularios completados ── */}
+      <LeadSubmissionsList submissions={submissions} />
 
       {/* ── Timeline ── */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px 24px', marginTop: '24px' }}>

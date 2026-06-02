@@ -40,7 +40,9 @@ export async function toggleSubmissionResponded(
   const { error } = await uq
   if (error) return { ok: false, error: error.message }
 
+  // The submission surfaces on both the source profile and the lead profile.
   revalidatePath('/sources/[slug]', 'page')
+  revalidatePath('/leads/[id]', 'page')
   return { ok: true, responded: newResponded }
 }
 

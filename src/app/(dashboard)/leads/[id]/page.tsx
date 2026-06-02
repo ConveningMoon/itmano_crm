@@ -13,11 +13,14 @@ import { LeadDetailClient } from './lead-detail-client'
 import { notFound } from 'next/navigation'
 import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 
 const TENANT_ID = 'tenant-aj'
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const { tenant_id } = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
   const [
@@ -27,6 +30,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     { data: rawProcess },
     { data: rawChannels },
     { data: rawActiveRuns },
+    submissions,
   ] = await Promise.all([
     supabase.from('leads').select('*').eq('id', id).single(),
     supabase.from('agents').select('*'),
@@ -34,6 +38,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     supabase.from('purchase_processes').select('*').eq('lead_id', id).maybeSingle(),
     supabase.from('acquisition_channels').select('id, channel_type, name, slug').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
     supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
+    getSubmissionsForLead(id, tenant_id),
   ])
 
   if (!rawLead) notFound()
@@ -59,6 +64,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       channels={channels}
       purchaseProcess={purchaseProcess}
       events={events}
+      submissions={submissions}
       hasActiveSequenceRun={hasActiveSequenceRun}
     />
   )
