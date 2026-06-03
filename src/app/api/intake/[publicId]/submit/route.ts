@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
+import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit'
 
 export function OPTIONS() {
   return corsOptions()
@@ -29,6 +30,7 @@ const SubmitSchema = z.object({
   utms:         z.record(z.string(), z.string().max(256)).optional().default({}),
   quiz_answers: z.record(z.string(), z.unknown()).optional(),
   form_answers: z.array(FormAnswerSchema).max(50).optional(),
+  intent:       z.string().max(40).optional(), // buyer/seller path — drives fit extraction
   source_url:   z.string().max(2048).optional(),
   website:      z.string().optional(), // honeypot — must be empty
 })
@@ -46,20 +48,30 @@ function resolveTrafficSource(utms: Record<string, string>): string {
   return 'direct'
 }
 
-// Baseline score per channel_type (from lead scoring model in CLAUDE.md)
-const BASELINE_SCORE: Record<string, number> = {
-  lead_magnet:   15,
-  event:         40,
-  contact_form:  20,
-  manychat_flow: 20,
-  manual:         0,
+// Engagement events fired by the lead-magnet path (see lead_score_rules, migration 029).
+// recompute_lead_score reads points from the rules — the `points` on the event row is
+// for the activity log only and does not drive the score.
+const LM_ENGAGEMENT: Record<string, { type: string; points: number; description: string }> = {
+  first:  { type: 'form_baseline', points: 10, description: 'Formulario enviado' },
+  second: { type: 'second_lm',     points: 8,  description: '2º lead magnet descargado' },
+  third:  { type: 'third_lm',      points: 12, description: '3º+ lead magnet descargado' },
 }
 
-function scoreToStatus(score: number): string {
-  if (score >= 60) return 'hot'
-  if (score >= 35) return 'warm'
-  if (score >= 15) return 'nurturing'
-  return 'new'
+// Count the distinct lead_magnet channels this lead has ever submitted a form to.
+// Used to fire the 2nd/3rd distinct-LM engagement events.
+async function countDistinctLeadMagnetSubmissions(
+  db: ReturnType<typeof createAdminClient>,
+  leadId: string
+): Promise<number> {
+  const { data: subs } = await db.from('form_submissions').select('channel_id').eq('lead_id', leadId)
+  const channelIds = [...new Set((subs ?? []).map(s => (s as { channel_id: string }).channel_id))]
+  if (channelIds.length === 0) return 0
+  const { data: lm } = await db
+    .from('acquisition_channels')
+    .select('id')
+    .in('id', channelIds)
+    .eq('channel_type', 'lead_magnet')
+  return (lm ?? []).length
 }
 
 function ok(extra?: Record<string, unknown>): NextResponse {
@@ -179,7 +191,7 @@ export async function POST(
 
   const { data: existingLead } = await db
     .from('leads')
-    .select('id, status, first_name, last_name, phone, language')
+    .select('id, status, first_name, last_name, phone, language, fit_profile, metadata')
     .eq('tenant_id', tenantId)
     .eq('email', parsed.email)
     .maybeSingle()
@@ -216,7 +228,9 @@ export async function POST(
     // Enrollment is decided below, by submission status (created vs already_submitted).
   } else {
     // ── New lead ──────────────────────────────────────────────────────────────
-    const baseline = BASELINE_SCORE[channelRow.channel_type as string] ?? 0
+    // Score starts at 0/new; recompute_lead_score (called at the end, after fit_profile
+    // is set and engagement events are logged) is the authoritative source. Writing a
+    // channel baseline here would only pollute peak_score before recompute overwrites it.
     leadId         = crypto.randomUUID()
     const utms     = parsed.utms
 
@@ -229,12 +243,12 @@ export async function POST(
       email:                parsed.email,
       phone:                parsed.phone ?? null,
       language:             parsed.language,
-      status:               scoreToStatus(baseline),
+      status:               'new',
       acquisition_channel_id: channelId,
       traffic_source:       resolveTrafficSource(utms),
       traffic_source_detail: Object.keys(utms).length > 0 ? utms : null,
-      peak_score:           baseline,
-      current_score:        baseline,
+      peak_score:           0,
+      current_score:        0,
       // quiz_answers is no longer persisted to metadata — answers now live in
       // form_submissions (see CLAUDE.md → answers contract).
     })
@@ -264,11 +278,33 @@ export async function POST(
     }
   }
 
+  const channelType = channelRow.channel_type as string
+
+  // ── FASE 1: merge fit dimensions (latest-wins) + record intent ────────────────
+  // Recognized fit answers update leads.fit_profile, overwriting only the dimensions
+  // present in this submission and preserving the rest. The intent is stored on
+  // leads.metadata for routing/display. recompute_lead_score (at the end) folds
+  // fit_profile into the score. Runs for every channel_type that sends form_answers.
+  const intent  = normalizeIntent(parsed.intent)
+  const fitDims = extractFitDimensions(intent, parsed.form_answers)
+  if (Object.keys(fitDims).length > 0 || intent) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing       = existingLead as any
+    const currentProfile = (existing?.fit_profile ?? {}) as Record<string, unknown>
+    const currentMeta    = (existing?.metadata ?? {}) as Record<string, unknown>
+    const leadUpdate: Record<string, unknown> = {}
+    if (Object.keys(fitDims).length > 0) leadUpdate.fit_profile = { ...currentProfile, ...fitDims }
+    if (intent)                          leadUpdate.metadata    = { ...currentMeta, intent }
+    const { error: fitErr } = await db.from('leads').update(leadUpdate).eq('id', leadId)
+    if (fitErr) {
+      console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'fit_profile_update_failed', detail: fitErr.message }))
+    }
+  }
+
   // ── Submission + enrollment + notifications ──────────────────────────────────
   // Two dedup layers: the lead is unique per (tenant_id, email) above; here a
   // SECOND layer dedups the *submission* per (lead_id, channel_id) — but ONLY for
   // lead_magnet & event. Contact-form/manychat/manual keep one submission per submit.
-  const channelType = channelRow.channel_type as string
   let submissionStatus: 'created' | 'already_submitted' = 'created'
 
   // Legacy enrollment guard for non-LM/event: new lead always; existing lead only
@@ -316,6 +352,30 @@ export async function POST(
       }
       // Enroll / send material (no-op if the channel has no linked sequence).
       await enrollLeadInSequence({ db, lead_id: leadId, tenant_id: tenantId, acquisition_channel_id: channelId })
+
+      // ── FASE 2: lead-magnet engagement events (lead_magnet only) ──────────────
+      // Count distinct lead_magnet channels this lead has submitted (including the one
+      // just inserted): 1st → form_baseline, 2nd → second_lm, 3rd → third_lm, 4th+ → none.
+      // Re-submitting the same LM lands in the already_submitted branch above (no event).
+      // dedup_key makes each tier fire at most once per lead. The insert triggers
+      // apply_lead_event_scoring → recompute.
+      if (channelType === 'lead_magnet') {
+        const lmCount = await countDistinctLeadMagnetSubmissions(db, leadId)
+        const tier =
+          lmCount === 1 ? LM_ENGAGEMENT.first  :
+          lmCount === 2 ? LM_ENGAGEMENT.second :
+          lmCount === 3 ? LM_ENGAGEMENT.third  : null
+        if (tier) {
+          const { error: lmEvErr } = await db.from('lead_events').insert({
+            lead_id: leadId, tenant_id: tenantId, type: tier.type,
+            description: tier.description, points: tier.points, dedup_key: tier.type,
+          })
+          if (lmEvErr) {
+            console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'lm_engagement_insert_failed', detail: lmEvErr.message }))
+          }
+        }
+      }
+
       // Events notify on first submission; lead_magnet does not.
       if (channelType === 'event') {
         const { error: evNotifError } = await db.from('notifications').insert({
@@ -336,6 +396,15 @@ export async function POST(
       console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
     }
     await enrollIfEligible()
+  }
+
+  // ── FASE 3: recompute score from fit_profile + events (idempotent) ────────────
+  // Engagement-event inserts above already trigger recompute, but this final call
+  // also covers fit-only submissions (no event fired) and guarantees a consistent end
+  // state. recompute_lead_score is a no-op for frozen (post-funnel) leads.
+  const { error: recomputeErr } = await db.rpc('recompute_lead_score', { p_lead_id: leadId })
+  if (recomputeErr) {
+    console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'recompute_failed', detail: recomputeErr.message }))
   }
 
   console.log(JSON.stringify({
