@@ -101,43 +101,86 @@ export async function updateLeadNotes(
   return { ok: true }
 }
 
-// ─── Insert scoring events (the trigger recomputes the score) ─────────────────
+// ─── Apply a manual agent action (manual scoring panel) ───────────────────────
+// Inserts a category=manual lead_event for the given dimension, then recomputes the
+// score. The dimension must be an ACTIVE manual rule (lead_score_rules), so the
+// available actions are driven by Settings → Scoring. Disqualify (side_effect =
+// force_perdido) is handled inside recompute (→ score 0 / lost). Audited via metadata.
 
-export async function insertScoringEvents(
+export async function applyManualAction(
   leadId: string,
-  events: Array<{ type: string; description: string; points: number }>
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = createAdminClient()
-
-  const { data: lead, error: fetchErr } = await supabase
-    .from('leads')
-    .select('status')
-    .eq('id', leadId)
-    .single()
-
-  if (fetchErr || !lead) return { ok: false, error: 'Lead no encontrado' }
-
-  if (FROZEN_STATUSES.includes(lead.status as LeadStatus)) { // reason: Supabase client returns untyped row without generated schema
-    return { ok: false, error: 'El scoring está congelado para este lead' }
+  dimension: string
+): Promise<{ ok: true; score: number; status: string } | { ok: false; error: string }> {
+  if (typeof dimension !== 'string' || !dimension) {
+    return { ok: false, error: 'Acción inválida' }
   }
 
-  // points is informational on the row; the score is derived by recompute_lead_score
-  // (fired by the AFTER INSERT trigger) from lead_score_rules, not from this column.
-  const rows = events.map(e => ({
-    lead_id:     leadId,
-    tenant_id:   TENANT_ID,
-    type:        e.type,
-    description: e.description,
-    points:      e.points,
-  }))
+  const ctx      = await getCurrentTenantContext()
+  const supabase = createAdminClient()
 
-  const { error: insertErr } = await supabase.from('lead_events').insert(rows)
+  // Fetch the lead, scoped by tenant (super_admin: ctx.tenant_id null → any tenant).
+  let leadQ = supabase
+    .from('leads')
+    .select('id, tenant_id, status')
+    .eq('id', leadId)
+  if (ctx.tenant_id) leadQ = leadQ.eq('tenant_id', ctx.tenant_id)
+  const { data: lead } = await leadQ.maybeSingle()
+  if (!lead) return { ok: false, error: 'Lead no encontrado o sin acceso' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = lead as any
+  if (FROZEN_STATUSES.includes(l.status as LeadStatus)) {
+    return { ok: false, error: 'Las acciones manuales no aplican a un lead fuera del funnel activo.' }
+  }
+
+  // Validate the dimension is an active manual rule (tenant override or global).
+  const { data: rule } = await supabase
+    .from('lead_score_rules')
+    .select('points, label')
+    .eq('category', 'manual')
+    .eq('dimension', dimension)
+    .eq('is_active', true)
+    .or(`tenant_id.is.null,tenant_id.eq.${l.tenant_id}`)
+    .order('tenant_id', { ascending: false, nullsFirst: false }) // prefer a tenant override
+    .limit(1)
+    .maybeSingle()
+  if (!rule) return { ok: false, error: 'Acción no disponible' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = rule as any
+
+  // Insert the event with audit (who via metadata, when via created_at). points is
+  // informational on the row; recompute_lead_score derives the score from the rules.
+  const { error: insertErr } = await supabase.from('lead_events').insert({
+    lead_id:     leadId,
+    tenant_id:   l.tenant_id as string,
+    type:        dimension,
+    description: (r.label as string | null) ?? dimension,
+    points:      r.points as number,
+    metadata:    { source: 'manual_panel', actor_user_id: ctx.user_id, actor_role: ctx.role },
+  })
   if (insertErr) return { ok: false, error: insertErr.message }
+
+  // Recompute (the AFTER INSERT trigger already does, but call explicitly per spec).
+  const { error: recomputeErr } = await supabase.rpc('recompute_lead_score', { p_lead_id: leadId })
+  if (recomputeErr) return { ok: false, error: recomputeErr.message }
+
+  const { data: after } = await supabase
+    .from('leads')
+    .select('current_score, status')
+    .eq('id', leadId)
+    .single()
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
   revalidatePath('/dashboard')
-  return { ok: true }
+  return {
+    ok: true,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    score:  ((after as any)?.current_score as number | null) ?? 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    status: ((after as any)?.status as string) ?? l.status,
+  }
 }
 
 // ─── Start purchase process ───────────────────────────────────────────────────

@@ -15,6 +15,8 @@ import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getSubmissionsForLead } from '@/lib/data/form-submissions'
+import { getGlobalScoreRules } from '@/lib/data/score-rules'
+import type { ManualActionItem } from './manual-actions-panel'
 
 const TENANT_ID = 'tenant-aj'
 
@@ -31,6 +33,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     { data: rawChannels },
     { data: rawActiveRuns },
     submissions,
+    scoreRules,
   ] = await Promise.all([
     supabase.from('leads').select('*').eq('id', id).single(),
     supabase.from('agents').select('*'),
@@ -39,9 +42,21 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     supabase.from('acquisition_channels').select('id, channel_type, name, slug').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
     supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
     getSubmissionsForLead(id, tenant_id),
+    getGlobalScoreRules(),
   ])
 
   if (!rawLead) notFound()
+
+  // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
+  const manualActions: ManualActionItem[] = scoreRules
+    .filter(r => r.category === 'manual' && r.isActive)
+    .sort((a, b) => b.points - a.points)
+    .map(r => ({
+      dimension:    r.dimension,
+      label:        r.label ?? r.dimension,
+      points:       r.points,
+      isDisqualify: r.sideEffect === 'force_perdido',
+    }))
 
   const lead           = mapLead(rawLead as LeadRow)
   const agents         = (rawAgents  ?? []).map(r => mapAgent(r as AgentRow))
@@ -66,6 +81,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       events={events}
       submissions={submissions}
       hasActiveSequenceRun={hasActiveSequenceRun}
+      manualActions={manualActions}
     />
   )
 }
