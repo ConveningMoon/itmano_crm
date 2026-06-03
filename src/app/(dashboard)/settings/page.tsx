@@ -1,5 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
+import { getGlobalScoreRules } from '@/lib/data/score-rules'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
 const TENANT_ID = 'tenant-aj'
@@ -7,9 +9,11 @@ const TENANT_ID = 'tenant-aj'
 export default async function SettingsPage() {
   const supabase = createAdminClient()
 
-  const [{ data: tenantRow }, { data: rawAgents }] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, ctx] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color').eq('id', TENANT_ID).single(),
     supabase.from('agents').select('*').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
+    getGlobalScoreRules(),
+    getCurrentTenantContext(),
   ])
 
   const tenant = tenantRow
@@ -29,7 +33,12 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <SettingsClient tenant={tenant} agents={agents} />
+      <SettingsClient
+        tenant={tenant}
+        agents={agents}
+        scoringRules={scoringRules}
+        canEditScoring={ctx.role === 'super_admin'}
+      />
     </>
   )
 }

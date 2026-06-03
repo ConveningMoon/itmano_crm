@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import type { Agent } from '@/lib/types'
+import type { ScoreRule } from '@/lib/data/score-rules'
 import { updateTenantName, updateAgent } from './actions'
+import { ScoringSection } from './scoring-section'
 
 // ─── Style constants ──────────────────────────────────────────────────────────
 
@@ -332,20 +334,23 @@ function AccountSection() {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'agentes' | 'cuenta'
+type Tab = 'perfil' | 'agentes' | 'scoring' | 'cuenta'
 
 const TABS: Array<{ value: Tab; label: string }> = [
   { value: 'perfil',  label: 'Perfil del equipo' },
   { value: 'agentes', label: 'Agentes' },
+  { value: 'scoring', label: 'Scoring' },
   { value: 'cuenta',  label: 'Cuenta y acceso' },
 ]
 
 interface Props {
   tenant: { id: string; name: string; slug: string; primaryColor: string }
   agents: Agent[]
+  scoringRules: ScoreRule[]
+  canEditScoring: boolean
 }
 
-export function SettingsClient({ tenant, agents }: Props) {
+export function SettingsClient({ tenant, agents, scoringRules, canEditScoring }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
 
   return (
@@ -375,6 +380,7 @@ export function SettingsClient({ tenant, agents }: Props) {
 
       {tab === 'perfil'  && <TenantSection tenant={tenant} />}
       {tab === 'agentes' && <AgentsSection agents={agents} />}
+      {tab === 'scoring' && <ScoringSection rules={scoringRules} canEdit={canEditScoring} />}
       {tab === 'cuenta'  && <AccountSection />}
     </div>
   )
