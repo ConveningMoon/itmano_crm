@@ -50,7 +50,8 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
     phone:                 input.phone,
     language:              input.language,
     status:                'new',
-    temperature_score:     baselineScore,
+    current_score:         baselineScore,
+    peak_score:            baselineScore,
     lender:                input.lender,
     notes:                 input.notes,
   })
@@ -123,7 +124,8 @@ export async function createLeadsBulk(inputs: BulkLeadInput[]): Promise<{ error?
       phone:                 input.phone,
       language:              input.language,
       status:                'new',
-      temperature_score:     baselineScore,
+      current_score:         baselineScore,
+      peak_score:            baselineScore,
       lender:                input.lender,
       notes:                 input.notes,
     }

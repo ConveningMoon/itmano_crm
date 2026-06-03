@@ -11,15 +11,6 @@ const TENANT_ID = 'tenant-aj'
 
 const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
 
-// ─── Score band helper ────────────────────────────────────────────────────────
-
-function scoreToBand(score: number): Extract<LeadStatus, 'new' | 'nurturing' | 'warm' | 'hot'> {
-  if (score >= 60) return 'hot'
-  if (score >= 35) return 'warm'
-  if (score >= 15) return 'nurturing'
-  return 'new'
-}
-
 // ─── Update status (process_completed / closed / lost only) ──────────────────
 
 export async function updateLeadStatus(
@@ -28,12 +19,9 @@ export async function updateLeadStatus(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createAdminClient()
 
-  const update: Record<string, unknown> = { status }
-  if (status === 'closed' || status === 'lost') {
-    update.temperature_score = null
-  }
-
-  const { error } = await supabase.from('leads').update(update).eq('id', leadId)
+  // Freezing happens via the status itself (recompute_lead_score early-returns on
+  // frozen statuses). temperature_score is deprecated and no longer written.
+  const { error } = await supabase.from('leads').update({ status }).eq('id', leadId)
   if (error) return { ok: false, error: error.message }
 
   if (status === 'process_completed') {
@@ -113,7 +101,7 @@ export async function updateLeadNotes(
   return { ok: true }
 }
 
-// ─── Insert scoring events + recalculate score + auto-promote status ──────────
+// ─── Insert scoring events (the trigger recomputes the score) ─────────────────
 
 export async function insertScoringEvents(
   leadId: string,
@@ -123,17 +111,18 @@ export async function insertScoringEvents(
 
   const { data: lead, error: fetchErr } = await supabase
     .from('leads')
-    .select('temperature_score, status')
+    .select('status')
     .eq('id', leadId)
     .single()
 
   if (fetchErr || !lead) return { ok: false, error: 'Lead no encontrado' }
 
-  // TODO: move frozen-status guard into the UPDATE WHERE clause for atomicity
   if (FROZEN_STATUSES.includes(lead.status as LeadStatus)) { // reason: Supabase client returns untyped row without generated schema
     return { ok: false, error: 'El scoring está congelado para este lead' }
   }
 
+  // points is informational on the row; the score is derived by recompute_lead_score
+  // (fired by the AFTER INSERT trigger) from lead_score_rules, not from this column.
   const rows = events.map(e => ({
     lead_id:     leadId,
     tenant_id:   TENANT_ID,
@@ -144,18 +133,6 @@ export async function insertScoringEvents(
 
   const { error: insertErr } = await supabase.from('lead_events').insert(rows)
   if (insertErr) return { ok: false, error: insertErr.message }
-
-  const pointsSum  = events.reduce((sum, e) => sum + e.points, 0)
-  const current    = (lead.temperature_score as number | null) ?? 0 // reason: Supabase client returns untyped row without generated schema
-  const newScore   = Math.min(100, Math.max(0, current + pointsSum))
-  const newStatus  = scoreToBand(newScore)
-
-  const { error: updateErr } = await supabase
-    .from('leads')
-    .update({ temperature_score: newScore, status: newStatus })
-    .eq('id', leadId)
-
-  if (updateErr) return { ok: false, error: updateErr.message }
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')

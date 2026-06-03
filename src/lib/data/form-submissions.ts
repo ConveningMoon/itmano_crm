@@ -82,7 +82,7 @@ export async function getSubmissionsForChannel(
 
   let q = supabase
     .from('form_submissions')
-    .select('id, channel_id, lead_id, answers, responded, responded_at, submitted_at, leads(first_name, last_name, email, phone, temperature_score, status)')
+    .select('id, channel_id, lead_id, answers, responded, responded_at, submitted_at, leads(first_name, last_name, email, phone, current_score, status)')
     .eq('channel_id', channelId)
     .order('submitted_at', { ascending: false })
   if (tenantId) q = q.eq('tenant_id', tenantId)
@@ -109,7 +109,7 @@ export async function getSubmissionsForChannel(
             lastName:         leadRaw.last_name ?? '',
             email:            leadRaw.email ?? '',
             phone:            leadRaw.phone ?? null,
-            temperatureScore: leadRaw.temperature_score ?? null,
+            temperatureScore: leadRaw.current_score ?? null,
             status:           leadRaw.status ?? '',
           }
         : null,

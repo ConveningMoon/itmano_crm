@@ -1,12 +1,12 @@
 /**
- * Integration tests for the lead_events scoring trigger (migration 010).
+ * Integration tests for the three-component scoring engine (migration 029).
  *
- * Each test inserts a lead event via adminClient and verifies the side-effects:
- * - peak_score / current_score updated on leads
- * - status band transitions written to lead_status_history
- * - notifications fired on ≥80 rising edge
- * - dedup guard rejects duplicate dedup_key
- * - frozen leads (process_started etc.) are not scored
+ * total = clamp(0,100, fit + engagement_decayed + manual)
+ *   - fit: from leads.fit_profile (latest-wins, no decay)
+ *   - engagement: events; positive decays by per-event age, negative persists
+ *   - manual: events, no decay
+ * Status bands + hot_lead ≥80 rising edge + freeze are preserved.
+ * The lead_events AFTER INSERT trigger and recompute_lead_score share one code path.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
@@ -19,14 +19,13 @@ import {
   cleanupFixtures,
 } from '../rls/setup'
 
-// A fresh lead created for each test (to start with a clean score slate)
 const SCORING_LEAD_ID = 'lead-scoring-test-01'
 
 async function freshLead(overrides: Record<string, unknown> = {}) {
-  await adminClient.from('leads').delete().eq('id', SCORING_LEAD_ID)
+  await adminClient.from('lead_events').delete().eq('lead_id', SCORING_LEAD_ID)
   await adminClient.from('lead_status_history').delete().eq('lead_id', SCORING_LEAD_ID)
   await adminClient.from('notifications').delete().eq('lead_id', SCORING_LEAD_ID)
-  await adminClient.from('lead_events').delete().eq('lead_id', SCORING_LEAD_ID)
+  await adminClient.from('leads').delete().eq('id', SCORING_LEAD_ID)
 
   const { error } = await adminClient.from('leads').insert({
     id: SCORING_LEAD_ID,
@@ -38,39 +37,47 @@ async function freshLead(overrides: Record<string, unknown> = {}) {
     email: 'score-test@test.invalid',
     language: 'es',
     status: 'new',
-    peak_score: 0,
     current_score: 0,
+    peak_score: 0,
+    fit_profile: {},
     ...overrides,
   })
   if (error) throw new Error(`freshLead insert failed: ${error.message}`)
 }
 
-async function insertEvent(type: string, dedup_key?: string) {
+async function insertEvent(type: string, opts: { dedup_key?: string; created_at?: string } = {}) {
   const payload: Record<string, unknown> = {
     lead_id: SCORING_LEAD_ID,
     tenant_id: TENANT_A_ID,
     type,
     description: `test: ${type}`,
   }
-  if (dedup_key) payload.dedup_key = dedup_key
+  if (opts.dedup_key) payload.dedup_key = opts.dedup_key
+  if (opts.created_at) payload.created_at = opts.created_at
   return adminClient.from('lead_events').insert(payload)
+}
+
+async function recompute() {
+  return adminClient.rpc('recompute_lead_score', { p_lead_id: SCORING_LEAD_ID })
 }
 
 async function getLead() {
   const { data } = await adminClient
     .from('leads')
-    .select('peak_score, current_score, status, last_event_at')
+    .select('fit_score, engagement_score, manual_score, current_score, peak_score, status, last_event_at')
     .eq('id', SCORING_LEAD_ID)
     .single()
-  return data
+  return data!
 }
 
-describe('Scoring trigger: lead_events', () => {
+function daysAgo(n: number): string {
+  return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
+}
+
+describe('Scoring engine: three components', () => {
   beforeAll(async () => {
     await createFixtures()
-    await freshLead()
   })
-
   afterAll(async () => {
     await adminClient.from('lead_events').delete().eq('lead_id', SCORING_LEAD_ID)
     await adminClient.from('notifications').delete().eq('lead_id', SCORING_LEAD_ID)
@@ -79,115 +86,135 @@ describe('Scoring trigger: lead_events', () => {
     await cleanupFixtures()
   })
 
-  it('email_clicked (+15) raises score and promotes to nurturing', async () => {
-    await freshLead({ peak_score: 0, current_score: 0, status: 'new' })
-    const { error } = await insertEvent('email_clicked')
-    expect(error).toBeNull()
-
+  it('fit comes from fit_profile (latest-wins, no double count)', async () => {
+    await freshLead({ fit_profile: { financing: 'cash' } })
+    await recompute()
     const lead = await getLead()
-    expect(lead!.peak_score).toBe(15)
-    expect(lead!.current_score).toBe(15)
-    expect(lead!.status).toBe('nurturing')
+    expect(lead.fit_score).toBe(25)        // cash, counted once (not 50)
+    expect(lead.current_score).toBe(25)
+    expect(lead.status).toBe('nurturing')
   })
 
-  it('writes lead_status_history on band transition', async () => {
+  it('engagement event promotes via trigger and writes status_history (source trigger)', async () => {
+    await freshLead()
+    const { error } = await insertEvent('contact_us_question')   // +20 engagement
+    expect(error).toBeNull()
+    const lead = await getLead()
+    expect(lead.engagement_score).toBe(20)
+    expect(lead.current_score).toBe(20)
+    expect(lead.status).toBe('nurturing')
+
     const { data } = await adminClient
       .from('lead_status_history')
       .select('from_status, to_status, source')
       .eq('lead_id', SCORING_LEAD_ID)
       .order('changed_at', { ascending: false })
       .limit(1)
-    expect(data).toHaveLength(1)
     expect(data![0].from_status).toBe('new')
     expect(data![0].to_status).toBe('nurturing')
     expect(data![0].source).toBe('trigger')
   })
 
-  it('property_inquiry (+30) raises score to warm', async () => {
-    // current score is 15 (nurturing), +30 = 45 → warm
-    const { error } = await insertEvent('property_inquiry')
-    expect(error).toBeNull()
+  it('engagement accumulates across events', async () => {
+    await insertEvent('email_clicked')   // +10 → 30
     const lead = await getLead()
-    expect(lead!.peak_score).toBe(45)
-    expect(lead!.status).toBe('warm')
+    expect(lead.engagement_score).toBe(30)
+    expect(lead.current_score).toBe(30)
   })
 
-  it('consultation_scheduled (+50) raises score to hot and fires ≥80 notification', async () => {
-    // current score is 45, +50 = 95 → hot, crosses ≥80 rising edge
-    const { error } = await insertEvent('consultation_scheduled', 'consult-dedup-01')
-    expect(error).toBeNull()
-
+  it('positive engagement decays by event age (44d → half)', async () => {
+    await freshLead()
+    await insertEvent('email_clicked', { created_at: daysAgo(44) })  // 10 × 0.5 = 5
     const lead = await getLead()
-    expect(lead!.peak_score).toBe(95)
-    expect(lead!.status).toBe('hot')
-
-    // Notification must have been fired
-    const { data: notifs } = await adminClient
-      .from('notifications')
-      .select('type, message')
-      .eq('lead_id', SCORING_LEAD_ID)
-      .eq('type', 'score_threshold')
-    expect(notifs).toHaveLength(1)
-    expect(notifs![0].message).toContain('95')
+    expect(lead.engagement_score).toBe(5)
+    expect(lead.current_score).toBe(5)
   })
 
-  it('second high-score event does NOT fire a second ≥80 notification (rising edge only)', async () => {
-    // score is already ≥80; another positive event should not double-notify
-    await insertEvent('email_clicked')
+  it('negative engagement does NOT decay (persists full)', async () => {
+    // fit 45 (cash 25 + premium 20); aged hard bounce -30 full → 15 (would be 30 if decayed)
+    await freshLead({ fit_profile: { financing: 'cash', budget_tier: 'premium' } })
+    await insertEvent('email_hard_bounce', { created_at: daysAgo(44) })
+    const lead = await getLead()
+    expect(lead.fit_score).toBe(45)
+    expect(lead.engagement_score).toBe(-30)
+    expect(lead.current_score).toBe(15)
+  })
+
+  it('manual events accumulate and do not decay', async () => {
+    await freshLead()
+    await insertEvent('appointment_scheduled', { created_at: daysAgo(44) })  // +15, no decay
+    const lead = await getLead()
+    expect(lead.manual_score).toBe(15)
+    expect(lead.current_score).toBe(15)
+  })
+
+  it('fires hot_lead on ≥80 rising edge, only once', async () => {
+    await freshLead({
+      fit_profile: { financing: 'cash', timeline: 'under_3_months', budget_tier: 'premium', agent_status: 'sin_agente' },
+    })
+    await recompute()   // fit 80
+    let lead = await getLead()
+    expect(lead.current_score).toBe(80)
+    expect(lead.status).toBe('hot')
+
+    await recompute()   // second pass — must not double-notify
+    lead = await getLead()
+    expect(lead.current_score).toBe(80)
+
     const { data: notifs } = await adminClient
       .from('notifications')
-      .select('id')
+      .select('id, message')
       .eq('lead_id', SCORING_LEAD_ID)
-      .eq('type', 'score_threshold')
-    // Still exactly 1 notification
+      .eq('type', 'hot_lead')
     expect(notifs).toHaveLength(1)
+    expect(notifs![0].message).toContain('80')
+  })
+
+  it('peak_score is a high-water mark (kept above a later lower score)', async () => {
+    // currently hot at 80; add a negative event to drop current — peak stays 80
+    await insertEvent('email_unsubscribed')   // -40 engagement → 80+(-40 eng) ... fit 80 + eng -40 = 40
+    const lead = await getLead()
+    expect(lead.current_score).toBe(40)
+    expect(lead.peak_score).toBe(80)
+  })
+
+  it('manual_disqualify forces score 0 / status lost', async () => {
+    await freshLead({ fit_profile: { financing: 'cash' } })
+    await insertEvent('manual_disqualify')
+    const lead = await getLead()
+    expect(lead.current_score).toBe(0)
+    expect(lead.status).toBe('lost')
+  })
+
+  it('email_spam_complaint forces score 0 / status lost', async () => {
+    await freshLead({ fit_profile: { financing: 'cash', budget_tier: 'premium' } })
+    await insertEvent('email_spam_complaint')
+    const lead = await getLead()
+    expect(lead.current_score).toBe(0)
+    expect(lead.status).toBe('lost')
   })
 
   it('dedup guard rejects a duplicate dedup_key', async () => {
-    // Insert the same dedup_key twice — second must error
-    await insertEvent('email_clicked', 'dedup-key-unique-01')
-    const { error } = await insertEvent('email_clicked', 'dedup-key-unique-01')
+    await freshLead()
+    await insertEvent('email_clicked', { dedup_key: 'dedup-unique-01' })
+    const { error } = await insertEvent('email_clicked', { dedup_key: 'dedup-unique-01' })
     expect(error).not.toBeNull()
   })
 
-  it('events without a matching rule update last_event_at but do not change score', async () => {
-    const before = await getLead()
-    await insertEvent('unknown_event_type_xyz')
-    const after = await getLead()
-    expect(after!.peak_score).toBe(before!.peak_score)
-    expect(after!.last_event_at).not.toBeNull()
-  })
-
-  it('email_spam_complaint (-100, force_perdido) sets status to lost', async () => {
-    await freshLead({ peak_score: 50, current_score: 50, status: 'warm' })
-    const { error } = await insertEvent('email_spam_complaint')
-    expect(error).toBeNull()
-    const lead = await getLead()
-    expect(lead!.status).toBe('lost')
-    // Score should be capped at 0 (50 - 100 = -50, clamped)
-    expect(lead!.peak_score).toBe(0)
-  })
-
   it('frozen lead (process_started) is not scored', async () => {
-    await freshLead({ peak_score: 60, current_score: 60, status: 'process_started' })
-    await insertEvent('email_clicked')
+    await freshLead({ status: 'process_started', current_score: 60, peak_score: 60 })
+    await insertEvent('contact_us_question')
     const lead = await getLead()
-    // Score must remain unchanged
-    expect(lead!.peak_score).toBe(60)
-    expect(lead!.status).toBe('process_started')
+    expect(lead.current_score).toBe(60)
+    expect(lead.status).toBe('process_started')
   })
 
-  it('recalc_lead_score returns same score when event was recent (≤14 days)', async () => {
-    await freshLead({ peak_score: 55, current_score: 55, status: 'warm' })
-    // Insert an event to set last_event_at to now
-    await insertEvent('page_visit')
-    const before = await getLead()
-
-    await adminClient.rpc('recalc_lead_score', { p_lead_id: SCORING_LEAD_ID })
-    const after = await getLead()
-
-    // current_score should equal peak_score (within 14-day grace window)
-    expect(after!.current_score).toBe(after!.peak_score)
-    expect(after!.peak_score).toBe(before!.peak_score)
+  it('event without a matching rule is a no-op for score', async () => {
+    await freshLead({ fit_profile: { financing: 'cash' } })   // fit 25
+    await insertEvent('unknown_event_type_xyz')
+    const lead = await getLead()
+    expect(lead.current_score).toBe(25)        // only fit counts
+    expect(lead.engagement_score).toBe(0)
+    expect(lead.last_event_at).not.toBeNull()
   })
 })

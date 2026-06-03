@@ -25,12 +25,16 @@ describe('RLS: lead_score_rules', () => {
         {
           id: RULE_A_UUID,
           tenant_id: TENANT_A_ID,
+          category: 'engagement',
+          dimension: 'rls_test_event',
           event_type: 'rls_test_event',
           points: 99,
         },
         {
           id: RULE_B_UUID,
           tenant_id: TENANT_B_ID,
+          category: 'engagement',
+          dimension: 'rls_test_event',
           event_type: 'rls_test_event',
           points: 88,
         },
@@ -82,6 +86,8 @@ describe('RLS: lead_score_rules', () => {
     const client = await asUser(USER_A_EMAIL, TEST_PASSWORD)
     const { error } = await client.from('lead_score_rules').insert({
       tenant_id: TENANT_A_ID,
+      category: 'engagement',
+      dimension: 'unauthorized_event',
       event_type: 'unauthorized_event',
       points: 1,
     })
@@ -102,6 +108,8 @@ describe('RLS: lead_score_rules', () => {
     const { error } = await adminClient.from('lead_score_rules').insert({
       id: insertId,
       tenant_id: null,
+      category: 'engagement',
+      dimension: 'rls_test_global_write',
       event_type: 'rls_test_global_write',
       points: 5,
     })

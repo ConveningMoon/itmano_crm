@@ -26,42 +26,38 @@ interface Category {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
+// Event types match the new scoring engine's engagement & manual rules
+// (lead_score_rules.dimension). Fit is trait-based (leads.fit_profile), not an
+// event, so it is not fired here. The score is derived by recompute_lead_score
+// from the rules — the points shown below are informational.
 const CATEGORIES: Category[] = [
   {
-    label: 'Nuclear',
+    label: 'Engagement',
     events: [
-      { label: 'Consulta / visita agendada',           type: 'consultation_scheduled', points: 50  },
-      { label: 'Consulta / visita atendida',            type: 'consultation_attended',  points: 30  },
-      { label: 'Solicitud de valoración AVM',           type: 'avm_request',            points: 40  },
-      { label: 'Consulta sobre propiedad específica',   type: 'property_inquiry',       points: 30  },
-      { label: 'Respuesta a email o WhatsApp',          type: 'reply_received',         points: 30  },
-      { label: 'Llamada atendida (>2 min)',              type: 'phone_call',             points: 25  },
+      { label: 'Formulario enviado',          type: 'form_baseline',        points: 10   },
+      { label: '2º lead magnet',              type: 'second_lm',            points: 8    },
+      { label: '3º+ lead magnet',             type: 'third_lm',             points: 12   },
+      { label: 'Pregunta de contacto',        type: 'contact_us_question',  points: 20   },
+      { label: 'Click en email',              type: 'email_clicked',        points: 10   },
+      { label: 'Respuesta a email',           type: 'email_replied',        points: 20   },
     ],
   },
   {
-    label: 'Medio',
+    label: 'Engagement negativo',
     events: [
-      { label: 'Click en CTA de email',                 type: 'email_clicked',          points: 15  },
-      { label: '2° lead magnet descargado',             type: 'lm_downloaded_2',        points: 20  },
-      { label: '3°+ lead magnet descargado',            type: 'lm_downloaded_3plus',    points: 25  },
-      { label: 'Visita a página de servicios/precios',  type: 'page_visit_pricing',     points: 15  },
-      { label: 'Suscripción al newsletter',             type: 'newsletter_subscribed',  points: 10  },
+      { label: 'Hard bounce',                 type: 'email_hard_bounce',    points: -30  },
+      { label: 'Desuscripción',               type: 'email_unsubscribed',   points: -40  },
+      { label: 'Queja de spam',               type: 'email_spam_complaint', points: -100 },
     ],
   },
   {
-    label: 'Bajo',
+    label: 'Manual',
     events: [
-      { label: 'Email abierto',                         type: 'email_opened',           points: 2   },
-      { label: 'Visita genérica a página',              type: 'page_visit_generic',     points: 3   },
-    ],
-  },
-  {
-    label: 'Negativo',
-    events: [
-      { label: 'Desuscripción de email',                type: 'unsubscribed',           points: -50  },
-      { label: 'Hard bounce',                           type: 'hard_bounce',            points: -30  },
-      { label: 'Queja de spam',                         type: 'spam_complaint',         points: -100 },
-      { label: 'Respuesta de rechazo',                  type: 'reply_negative',         points: -40  },
+      { label: 'Cita agendada',               type: 'appointment_scheduled', points: 15  },
+      { label: 'Visita atendida',             type: 'visit_attended',        points: 25  },
+      { label: 'Propuesta enviada',           type: 'proposal_sent',         points: 20  },
+      { label: 'No-show / sin respuesta',     type: 'no_show_no_answer',     points: -10 },
+      { label: 'Descalificación manual',      type: 'manual_disqualify',     points: 0   },
     ],
   },
 ]
