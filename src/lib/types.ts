@@ -61,6 +61,9 @@ export interface Lead {
   temperatureScore: number | null
   peakScore: number | null
   currentScore: number | null
+  fitScore: number | null
+  engagementScore: number | null
+  manualScore: number | null
   lastEventAt: string | null
   lender?: string
   notes?: string

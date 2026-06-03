@@ -30,6 +30,9 @@ export interface LeadRow {
   temperature_score: number | null
   peak_score: number | null
   current_score: number | null
+  fit_score: number | null
+  engagement_score: number | null
+  manual_score: number | null
   last_event_at: string | null
   lender: string | null
   notes: string | null
@@ -102,9 +105,14 @@ export function mapLead(r: LeadRow): Lead {
     phone: r.phone ?? undefined,
     language: r.language as Lead['language'],
     status: r.status as Lead['status'],
-    temperatureScore: r.temperature_score,
+    // current_score is the canonical engine score; temperatureScore (legacy column,
+    // no longer written) is repointed to it so all UI surfaces show the real score.
+    temperatureScore: r.current_score ?? null,
     peakScore: r.peak_score ?? null,
     currentScore: r.current_score ?? null,
+    fitScore: r.fit_score ?? null,
+    engagementScore: r.engagement_score ?? null,
+    manualScore: r.manual_score ?? null,
     lastEventAt: r.last_event_at ?? null,
     lender: r.lender ?? undefined,
     notes: r.notes ?? undefined,

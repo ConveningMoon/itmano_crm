@@ -86,7 +86,7 @@ async function fetchChannelsWithMetrics(
   const [{ data: windowLeads }, { data: windowViews }, { data: allLeads }] = await Promise.all([
     supabase
       .from('leads')
-      .select('acquisition_channel_id, temperature_score')
+      .select('acquisition_channel_id, current_score')
       .in('acquisition_channel_id', channelIds)
       .gte('created_at', windowStart),
     supabase
@@ -119,12 +119,12 @@ async function fetchChannelsWithMetrics(
       : 0
 
     const scoredLeads = wLeads.filter(
-      (l: { temperature_score: number | null }) => l.temperature_score !== null
+      (l: { current_score: number | null }) => l.current_score !== null
     )
     const avgTempScore = scoredLeads.length > 0
       ? Math.round(
           scoredLeads.reduce(
-            (sum: number, l: { temperature_score: number | null }) => sum + (l.temperature_score ?? 0),
+            (sum: number, l: { current_score: number | null }) => sum + (l.current_score ?? 0),
             0
           ) / scoredLeads.length
         )
@@ -170,7 +170,7 @@ export async function getChannelLeads(
 
   const { data, error } = await supabase
     .from('leads')
-    .select('id, first_name, last_name, email, status, temperature_score, traffic_source, created_at')
+    .select('id, first_name, last_name, email, status, current_score, traffic_source, created_at')
     .eq('tenant_id', tenantId)
     .eq('acquisition_channel_id', channelId)
     .order('created_at', { ascending: false })
@@ -184,7 +184,7 @@ export async function getChannelLeads(
     lastName:         r.last_name,
     email:            r.email,
     status:           r.status,
-    temperatureScore: r.temperature_score,
+    temperatureScore: r.current_score,
     trafficSource:    r.traffic_source,
     createdAt:        r.created_at,
   }))
