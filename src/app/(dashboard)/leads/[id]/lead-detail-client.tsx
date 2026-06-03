@@ -14,7 +14,7 @@ import {
   Phone, Activity,
 } from 'lucide-react'
 import { EditLeadModal } from './edit-lead-modal'
-import { ScoringTestPanel } from './scoring-test-panel'
+import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { LeadSubmissionsList } from './lead-submissions-list'
 import type { LeadSubmissionRow } from '@/lib/data/form-submissions'
 
@@ -115,11 +115,12 @@ interface LeadDetailProps {
   submissions: LeadSubmissionRow[]
   purchaseProcess: PurchaseProcess | null
   hasActiveSequenceRun: boolean
+  manualActions: ManualActionItem[]
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, purchaseProcess, hasActiveSequenceRun }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, purchaseProcess, hasActiveSequenceRun, manualActions }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -684,11 +685,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         </div>
       </div>
 
-      {/* ── Scoring Test Panel ── */}
-      <ScoringTestPanel
+      {/* ── Manual actions panel ── */}
+      <ManualActionsPanel
         leadId={lead.id}
         currentStatus={currentStatus}
-        currentScore={lead.temperatureScore}
+        actions={manualActions}
       />
 
       {/* ── Formularios completados ── */}
