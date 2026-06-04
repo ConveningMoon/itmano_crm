@@ -1,5 +1,6 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -23,17 +24,6 @@ export interface ContactSubmissionParams {
   language?:   'es' | 'en' | 'pt'
 }
 
-// Baseline score for a contact-form lead (from the lead scoring model in CLAUDE.md).
-// The +20 from the 'contact_us_question' event is applied separately by the
-// apply_lead_event_scoring trigger — do NOT hand-adjust the score here.
-const CONTACT_BASELINE = 20
-
-function scoreToStatus(score: number): string {
-  if (score >= 60) return 'hot'
-  if (score >= 35) return 'warm'
-  if (score >= 15) return 'nurturing'
-  return 'new'
-}
 
 // Core contact-submission logic shared by all contact entry points:
 // dedup by (tenant_id, email) with field merge, always log a high-intent
@@ -107,6 +97,9 @@ export async function handleContactSubmission(
     }
   } else {
     leadId = crypto.randomUUID()
+    // Score starts at 0/new; it is derived from engagement-by-action — form_baseline
+    // (+10) + contact_us_question (+20) below, folded in by recompute via the event
+    // triggers (= 30). No per-channel baseline is seeded (it would only pollute peak_score).
     const { error: leadError } = await db.from('leads').insert({
       id:                     leadId,
       tenant_id:              tenantId,
@@ -116,18 +109,21 @@ export async function handleContactSubmission(
       email,
       phone,
       language,
-      status:                 scoreToStatus(CONTACT_BASELINE),
+      status:                 'new',
       acquisition_channel_id: channel.id,
       // traffic_source is the *arrival* source (constrained set), not the channel
       // type. A contact submission has no UTM context → 'direct'.
       traffic_source:         'direct',
-      peak_score:             CONTACT_BASELINE,
-      current_score:          CONTACT_BASELINE,
+      peak_score:             0,
+      current_score:          0,
     })
     if (leadError) {
       console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, error: leadError.message }))
       throw new Error(`Lead insert failed: ${leadError.message}`)
     }
+
+    // form_baseline (+10) on the lead's FIRST form — only on creation (new lead).
+    await emitFormBaselineOnce(db, leadId, tenantId)
   }
 
   // ── Always log the question as a scoring event ───────────────────────────────
