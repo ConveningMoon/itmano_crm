@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit'
+import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 
 export function OPTIONS() {
   return corsOptions()
@@ -48,13 +49,13 @@ function resolveTrafficSource(utms: Record<string, string>): string {
   return 'direct'
 }
 
-// Engagement events fired by the lead-magnet path (see lead_score_rules, migration 029).
-// recompute_lead_score reads points from the rules — the `points` on the event row is
-// for the activity log only and does not drive the score.
+// Distinct-LM engagement events (see lead_score_rules, migration 029). form_baseline
+// (the lead's FIRST form of any type) is emitted on lead creation by emitFormBaselineOnce
+// — NOT here — so the LM tiers start at the 2nd distinct lead magnet. recompute_lead_score
+// reads points from the rules; the `points` on the event row is for the activity log only.
 const LM_ENGAGEMENT: Record<string, { type: string; points: number; description: string }> = {
-  first:  { type: 'form_baseline', points: 10, description: 'Formulario enviado' },
-  second: { type: 'second_lm',     points: 8,  description: '2º lead magnet descargado' },
-  third:  { type: 'third_lm',      points: 12, description: '3º+ lead magnet descargado' },
+  second: { type: 'second_lm', points: 8,  description: '2º lead magnet descargado' },
+  third:  { type: 'third_lm',  points: 12, description: '3º+ lead magnet descargado' },
 }
 
 // Count the distinct lead_magnet channels this lead has ever submitted a form to.
@@ -258,6 +259,10 @@ export async function POST(
       return err('Submission failed', 500)
     }
 
+    // FASE 2: form_baseline (+10) on the lead's FIRST form — any channel_type. Only on
+    // creation (new lead); the existing-lead path never re-emits it (dedup_key guards too).
+    await emitFormBaselineOnce(db, leadId, tenantId)
+
     // Contact-form questions keep their dedicated notification.
     if (channelRow.channel_type === 'contact_form') {
       const question = (
@@ -353,16 +358,15 @@ export async function POST(
       // Enroll / send material (no-op if the channel has no linked sequence).
       await enrollLeadInSequence({ db, lead_id: leadId, tenant_id: tenantId, acquisition_channel_id: channelId })
 
-      // ── FASE 2: lead-magnet engagement events (lead_magnet only) ──────────────
+      // ── FASE 2: distinct lead-magnet engagement (lead_magnet only) ────────────
       // Count distinct lead_magnet channels this lead has submitted (including the one
-      // just inserted): 1st → form_baseline, 2nd → second_lm, 3rd → third_lm, 4th+ → none.
-      // Re-submitting the same LM lands in the already_submitted branch above (no event).
-      // dedup_key makes each tier fire at most once per lead. The insert triggers
-      // apply_lead_event_scoring → recompute.
+      // just inserted): 2nd → second_lm, 3rd → third_lm, otherwise none. The FIRST form
+      // (any type) is rewarded by form_baseline on lead creation, so the 1st LM scores
+      // no extra event here. Re-submitting the same LM lands in already_submitted (no
+      // event). dedup_key makes each tier fire at most once per lead.
       if (channelType === 'lead_magnet') {
         const lmCount = await countDistinctLeadMagnetSubmissions(db, leadId)
         const tier =
-          lmCount === 1 ? LM_ENGAGEMENT.first  :
           lmCount === 2 ? LM_ENGAGEMENT.second :
           lmCount === 3 ? LM_ENGAGEMENT.third  : null
         if (tier) {
@@ -376,8 +380,21 @@ export async function POST(
         }
       }
 
-      // Events notify on first submission; lead_magnet does not.
+      // ── FASE 3: event registration scores as a committed action ───────────────
       if (channelType === 'event') {
+        // event_submission (+20) scoring signal — parallel to contact_us_question. No
+        // dedup_key: each DISTINCT event the lead registers to scores. Re-registering the
+        // SAME event lands in already_submitted above (no new event). Independent of the
+        // event_submission Telegram notification below.
+        const { error: evScoreErr } = await db.from('lead_events').insert({
+          lead_id: leadId, tenant_id: tenantId, type: 'event_submission',
+          description: `Registro a evento: ${channelName}`, points: 20,
+        })
+        if (evScoreErr) {
+          console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'event_submission_insert_failed', detail: evScoreErr.message }))
+        }
+
+        // Telegram notification (unchanged).
         const { error: evNotifError } = await db.from('notifications').insert({
           tenant_id: tenantId, type: 'event_submission', lead_id: leadId,
           message: `${fullName} se registró en ${channelName}`,

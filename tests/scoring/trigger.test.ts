@@ -217,4 +217,26 @@ describe('Scoring engine: three components', () => {
     expect(lead.engagement_score).toBe(0)
     expect(lead.last_event_at).not.toBeNull()
   })
+
+  // Entry signals (migration 030): event_submission is engagement +20; combined with
+  // the form_baseline (+10) emitted on a lead's first form, an event/contact lead is
+  // born at 30 from engagement-by-action (no per-channel baseline).
+  it('event_submission scores +20 (engagement)', async () => {
+    await freshLead()
+    await insertEvent('event_submission')
+    const lead = await getLead()
+    expect(lead.engagement_score).toBe(20)
+    expect(lead.current_score).toBe(20)
+    expect(lead.status).toBe('nurturing')
+  })
+
+  it('form_baseline + event_submission = 30 (no fit)', async () => {
+    await freshLead()
+    await insertEvent('form_baseline', { dedup_key: 'form_baseline' })  // +10
+    await insertEvent('event_submission')                               // +20
+    const lead = await getLead()
+    expect(lead.engagement_score).toBe(30)
+    expect(lead.current_score).toBe(30)
+    expect(lead.status).toBe('nurturing')
+  })
 })
