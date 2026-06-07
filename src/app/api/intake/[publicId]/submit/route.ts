@@ -218,13 +218,17 @@ export async function POST(
       await db.from('leads').update(updates).eq('id', leadId)
     }
 
-    // b) Log re-engagement event (lead-level dedup — independent of submission dedup)
+    // b) Log re-engagement as an activity-feed entry only. There is NO scoring rule for
+    // lead_resubmitted (retired in migration 029): resubmitting the SAME form is a weak
+    // signal and easy to inflate. Real re-engagement already scores (a distinct LM fires
+    // second_lm/third_lm, a form of another type fires its own signal). points:0 — the
+    // column is informational; recompute_lead_score reads the rules, not this value.
     await db.from('lead_events').insert({
       lead_id:     leadId,
       tenant_id:   tenantId,
       type:        'lead_resubmitted',
       description: `Lead re-submitted via intake form (channel: ${channelName})`,
-      points:      5,
+      points:      0,
     })
     // Enrollment is decided below, by submission status (created vs already_submitted).
   } else {

@@ -728,7 +728,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                           {event.description}
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                          {event.points !== null && (
+                          {event.points !== null && event.points !== 0 && (
                             <span style={{
                               fontSize: '11px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
                               background: event.points > 0 ? 'rgba(107,163,104,0.12)' : 'rgba(201,123,107,0.12)',

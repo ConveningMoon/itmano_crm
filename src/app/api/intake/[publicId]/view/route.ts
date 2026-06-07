@@ -37,6 +37,7 @@ export async function POST(
     payload = JSON.parse(raw)
   } catch {
     // Beacon payloads can't be retried by the browser — return 200 always
+    console.warn(JSON.stringify({ service: 'intake-view', public_id: publicId, result: 'noop', reason: 'body_not_json' }))
     return new Response(null, { status: 200, headers: CORS_HEADERS })
   }
 
@@ -50,6 +51,7 @@ export async function POST(
   const screenSize  = payload.screen_size ?? null
 
   if (!visitorId) {
+    console.warn(JSON.stringify({ service: 'intake-view', public_id: publicId, result: 'noop', reason: 'missing_visitor_id' }))
     return new Response(null, { status: 200, headers: CORS_HEADERS })
   }
 
@@ -64,16 +66,28 @@ export async function POST(
 
   // Don't error on unknown channels — the beacon can't retry
   if (!channel) {
+    console.warn(JSON.stringify({ service: 'intake-view', public_id: publicId, result: 'noop', reason: 'channel_not_found_or_inactive' }))
     return new Response(null, { status: 200, headers: CORS_HEADERS })
   }
 
-  await db.from('channel_page_views').insert({
+  // Surface insert failures (RLS / validation / schema) — they were being swallowed,
+  // which is one reason a visit may not register. We still return 200 (beacon).
+  const { error: insertError } = await db.from('channel_page_views').insert({
     channel_id:          channel.id,
     tenant_id:           channel.tenant_id,
     visitor_fingerprint: visitorId,
     traffic_source:      resolveTrafficSource(utms),
     utm_data:            { ...utms, url, referrer, user_agent: userAgent, screen_size: screenSize },
   })
+
+  if (insertError) {
+    console.error(JSON.stringify({
+      service: 'intake-view', public_id: publicId, channel_id: channel.id,
+      result: 'insert_failed', code: insertError.code, detail: insertError.message,
+    }))
+  } else {
+    console.log(JSON.stringify({ service: 'intake-view', public_id: publicId, channel_id: channel.id, result: 'inserted' }))
+  }
 
   return new Response(null, { status: 200, headers: CORS_HEADERS })
 }
