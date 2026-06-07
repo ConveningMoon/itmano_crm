@@ -15,6 +15,7 @@ import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getSubmissionsForLead } from '@/lib/data/form-submissions'
+import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import type { ManualActionItem } from './manual-actions-panel'
 
@@ -34,6 +35,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     { data: rawActiveRuns },
     submissions,
     scoreRules,
+    statusHistory,
   ] = await Promise.all([
     supabase.from('leads').select('*').eq('id', id).single(),
     supabase.from('agents').select('*'),
@@ -43,6 +45,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
     getSubmissionsForLead(id, tenant_id),
     getGlobalScoreRules(),
+    getLeadStatusHistory(id, tenant_id),
   ])
 
   if (!rawLead) notFound()
@@ -82,6 +85,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       submissions={submissions}
       hasActiveSequenceRun={hasActiveSequenceRun}
       manualActions={manualActions}
+      statusHistory={statusHistory}
     />
   )
 }
