@@ -65,3 +65,20 @@ export function assertCanWriteLead(
 
   return null
 }
+
+/**
+ * Resolves the target tenant for a write: owner/agent → their context tenant;
+ * super_admin → the explicitly chosen tenant (no implicit fallback). Returns the
+ * tenant id, or an { error } to surface from the action.
+ */
+export function resolveTargetTenant(
+  ctx: TenantContext,
+  chosenTenantId?: string,
+): string | { error: string } {
+  if (ctx.role === 'super_admin') {
+    if (!chosenTenantId) return { error: 'Selecciona un tenant' }
+    return chosenTenantId
+  }
+  if (!ctx.tenant_id) return { error: 'Acceso no autorizado' }
+  return ctx.tenant_id
+}

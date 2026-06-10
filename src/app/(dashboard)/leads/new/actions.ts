@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { requireWriteAccess } from '@/lib/auth/guards'
+import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import type { Language } from '@/lib/types'
 
@@ -34,20 +34,6 @@ interface LeadInput {
   // Only honored for super_admin (who has no tenant of their own); owner/agent
   // always use their context tenant.
   tenantId?:           string
-}
-
-// Resolves the target tenant for a write: owner/agent → their context tenant;
-// super_admin → the explicitly chosen tenant (no implicit fallback).
-function resolveTargetTenant(
-  ctx: Awaited<ReturnType<typeof getCurrentTenantContext>>,
-  chosenTenantId?: string,
-): string | { error: string } {
-  if (ctx.role === 'super_admin') {
-    if (!chosenTenantId) return { error: 'Selecciona un tenant' }
-    return chosenTenantId
-  }
-  if (!ctx.tenant_id) return { error: 'Acceso no autorizado' }
-  return ctx.tenant_id
 }
 
 export async function createLead(input: LeadInput): Promise<{ error?: string }> {
