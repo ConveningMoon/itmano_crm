@@ -31,6 +31,23 @@ interface LeadInput {
   channelType:         string
   lender:              string | null
   notes:               string | null
+  // Only honored for super_admin (who has no tenant of their own); owner/agent
+  // always use their context tenant.
+  tenantId?:           string
+}
+
+// Resolves the target tenant for a write: owner/agent → their context tenant;
+// super_admin → the explicitly chosen tenant (no implicit fallback).
+function resolveTargetTenant(
+  ctx: Awaited<ReturnType<typeof getCurrentTenantContext>>,
+  chosenTenantId?: string,
+): string | { error: string } {
+  if (ctx.role === 'super_admin') {
+    if (!chosenTenantId) return { error: 'Selecciona un tenant' }
+    return chosenTenantId
+  }
+  if (!ctx.tenant_id) return { error: 'Acceso no autorizado' }
+  return ctx.tenant_id
 }
 
 export async function createLead(input: LeadInput): Promise<{ error?: string }> {
@@ -39,9 +56,9 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
   const baselineScore = BASELINE_SCORES[input.channelType] ?? 10
   const leadId        = genId('lead')
 
-  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
-  // onboarding prompt; until then super_admin creation falls back to 'tenant-aj'.
-  const tenantId = ctx.tenant_id ?? 'tenant-aj'
+  const tenant = resolveTargetTenant(ctx, input.tenantId)
+  if (typeof tenant === 'object') return { error: tenant.error }
+  const tenantId = tenant
   // An agent is auto-attributed to their own leads (ignore any submitted agentId);
   // owner / super_admin pick the agent as before. ctx.agent_id is non-null for
   // role 'agent' (getCurrentTenantContext throws on an unlinked agent).
@@ -103,7 +120,10 @@ interface BulkLeadInput {
   notes:      string | null
 }
 
-export async function createLeadsBulk(inputs: BulkLeadInput[]): Promise<{ error?: string }> {
+export async function createLeadsBulk(
+  inputs: BulkLeadInput[],
+  chosenTenantId?: string,
+): Promise<{ error?: string }> {
   if (inputs.length === 0) return {}
 
   const ctx = await getCurrentTenantContext()
@@ -111,10 +131,11 @@ export async function createLeadsBulk(inputs: BulkLeadInput[]): Promise<{ error?
   const denied = requireWriteAccess(ctx)
   if (denied) return { error: denied.error }
 
+  const tenant = resolveTargetTenant(ctx, chosenTenantId)
+  if (typeof tenant === 'object') return { error: tenant.error }
+  const tenantId = tenant
+
   const supabase = createAdminClient()
-  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
-  // onboarding prompt; until then bulk import falls back to 'tenant-aj'.
-  const tenantId = ctx.tenant_id ?? 'tenant-aj'
 
   // Resolve default manual channel for bulk imports
   const { data: manualChannel } = await supabase

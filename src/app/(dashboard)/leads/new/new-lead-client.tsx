@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import type { Agent, Language } from '@/lib/types'
-import type { ChannelOption } from './page'
+import type { ChannelOption, TenantOption } from './page'
 import { createLead, createLeadsBulk } from './actions'
 import {
   ArrowLeft,
@@ -38,6 +38,7 @@ interface FormErrors {
   email?:                string
   agentId?:             string
   acquisitionChannelId?: string
+  tenantId?:             string
 }
 
 type ImportStatus = 'idle' | 'parsing' | 'preview' | 'success' | 'error'
@@ -223,7 +224,17 @@ function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
   )
 }
 
-export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels: ChannelOption[] }) {
+export function NewLeadClient({
+  agents,
+  channels,
+  isSuperAdmin = false,
+  tenants = [],
+}: {
+  agents: Agent[]
+  channels: ChannelOption[]
+  isSuperAdmin?: boolean
+  tenants?: TenantOption[]
+}) {
   const router = useRouter()
 
   const [form, setForm] = useState<FormData>(INITIAL_FORM)
@@ -236,7 +247,20 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
   const [importedLeads, setImportedLeads] = useState<ImportedLead[]>([])
   const [importError, setImportError] = useState<string>('')
   const [isDragging, setIsDragging] = useState(false)
+  const [selectedTenantId, setSelectedTenantId] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // For super_admin, agents/channels are filtered to the chosen tenant (none until
+  // one is picked). owner/agent always see their own tenant's data.
+  const visibleAgents   = isSuperAdmin ? (selectedTenantId ? agents.filter(a => a.tenantId === selectedTenantId) : []) : agents
+  const visibleChannels = isSuperAdmin ? (selectedTenantId ? channels.filter(c => c.tenantId === selectedTenantId) : []) : channels
+
+  function handleTenantChange(tenantId: string) {
+    setSelectedTenantId(tenantId)
+    // Agent + channel belong to the previous tenant — clear them.
+    setForm(prev => ({ ...prev, agentId: '', acquisitionChannelId: '', channelType: '' }))
+    setErrors(prev => ({ ...prev, tenantId: undefined, agentId: undefined, acquisitionChannelId: undefined }))
+  }
 
   const AGENT_DISPLAY_NAMES: Record<string, string> = Object.fromEntries(
     agents.map(a => [a.id, a.name])
@@ -310,7 +334,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
       }
 
       const validLanguages = ['es', 'en', 'pt']
-      const validAgentIds = agents.map(a => a.id)
+      const validAgentIds = visibleAgents.map(a => a.id)
       const validSourceTypes = ['lead_magnet', 'web_form', 'open_house', 'manual', 'ads', 'referral']
 
       const mapped: ImportedLead[] = rows.map((row, i) => {
@@ -351,6 +375,11 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
   async function handleImport() {
     const validRows = importedLeads.filter(l => !l._hasError)
     if (validRows.length === 0) return
+    if (isSuperAdmin && !selectedTenantId) {
+      setImportError('Selecciona un tenant antes de importar')
+      setImportStatus('error')
+      return
+    }
     setImportStatus('parsing')
     const result = await createLeadsBulk(validRows.map(row => ({
       firstName:  row.firstName,
@@ -362,7 +391,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
       sourceType: row.sourceType,
       lender:     row.lender || null,
       notes:      row.notes || null,
-    })))
+    })), isSuperAdmin ? selectedTenantId : undefined)
     if (result.error) {
       setImportStatus('error')
       setImportError(result.error)
@@ -380,7 +409,9 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
 
   const handleLanguageChange = (lang: Language) => {
     updateField('language', lang)
-    if (!form.agentId) {
+    // Language→agent auto-routing is A&J (tenant-aj) specific; skip it for
+    // super_admin (who may be creating in any tenant and picks the agent).
+    if (!isSuperAdmin && !form.agentId) {
       const agentMap: Record<Language, string> = {
         es: 'agent-adriana',
         en: 'agent-john',
@@ -399,6 +430,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {}
+    if (isSuperAdmin && !selectedTenantId) newErrors.tenantId = 'Selecciona un tenant'
     if (!form.firstName.trim()) newErrors.firstName = 'El nombre es obligatorio'
     if (!form.email.trim()) {
       newErrors.email = 'El email es obligatorio'
@@ -425,6 +457,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
       channelType:          form.channelType,
       lender:               form.lender || null,
       notes:                form.notes || null,
+      tenantId:             isSuperAdmin ? selectedTenantId : undefined,
     })
     setIsSubmitting(false)
     if (result.error) {
@@ -446,8 +479,8 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
   const selectedAgent = agents.find(a => a.id === form.agentId)
   const isSubmitDisabled = !form.firstName.trim() || !form.email.trim() || isSubmitting
 
-  // Channels filtered by type for cascade picker
-  const channelsForType = (type: string) => channels.filter(c => c.channelType === type)
+  // Channels filtered by type for cascade picker (scoped to the visible tenant)
+  const channelsForType = (type: string) => visibleChannels.filter(c => c.channelType === type)
 
   // When channel type changes: auto-select if only one option, or clear
   function handleChannelTypeChange(type: string) {
@@ -678,6 +711,36 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
             </div>
           </div>
 
+          {/* SECCIÓN 0 — Tenant (super_admin only) */}
+          {isSuperAdmin && (
+            <>
+              <div style={sectionHeaderStyle}>Tenant</div>
+              <div style={{ ...sectionBodyStyle }}>
+                <label style={labelStyle}>Tenant destino *</label>
+                <div style={{ position: 'relative' }}>
+                  <select
+                    className="new-lead-input"
+                    value={selectedTenantId}
+                    onChange={e => handleTenantChange(e.target.value)}
+                    style={{
+                      ...(errors.tenantId ? inputErrorStyle : inputStyle),
+                      appearance: 'none',
+                      cursor: 'pointer',
+                      paddingRight: '32px',
+                    }}
+                  >
+                    <option value="">-- Seleccionar tenant --</option>
+                    {tenants.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+                </div>
+                {errors.tenantId && <p style={errorStyle}>{errors.tenantId}</p>}
+              </div>
+            </>
+          )}
+
           {/* SECCIÓN 2 — Asignación */}
           <div style={sectionHeaderStyle}>Asignación</div>
           <div style={{ ...sectionBodyStyle }}>
@@ -707,8 +770,8 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
                   paddingRight: '32px',
                 }}
               >
-                <option value="">-- Seleccionar agente --</option>
-                {agents.map(agent => (
+                <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
+                {visibleAgents.map(agent => (
                   <option key={agent.id} value={agent.id}>
                     {agent.avatarInitials} · {agent.name} · {SPECIALTY_LABEL[agent.specialty]} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
                   </option>
