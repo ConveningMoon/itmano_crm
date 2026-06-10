@@ -1,5 +1,7 @@
 import Image from 'next/image'
+import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 
 const navItems = [
@@ -91,58 +93,84 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
         ))}
       </nav>
 
-      {/* Active user */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderTop: '1px solid var(--border-subtle)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-        }}
-      >
+      {/* Active user + sign out */}
+      <style>{`.signout-btn:hover { background: var(--bg-elevated) !important; color: var(--text-secondary) !important; }`}</style>
+      <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
         <div
           style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(91,142,201,0.15)',
-            border: '1px solid rgba(91,142,201,0.25)',
+            padding: '12px 16px 8px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: '600',
-            color: 'var(--accent-blue)',
-            flexShrink: 0,
+            gap: '10px',
           }}
         >
-          {initialsFromEmail(userEmail)}
-        </div>
-        <div style={{ minWidth: 0 }}>
           <div
             style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(91,142,201,0.15)',
+              border: '1px solid rgba(91,142,201,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '11px',
+              fontWeight: '600',
+              color: 'var(--accent-blue)',
+              flexShrink: 0,
+            }}
+          >
+            {initialsFromEmail(userEmail)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: '500',
+                color: 'var(--text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {userEmail}
+            </div>
+            <div
+              style={{
+                fontSize: '10px',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {ROLE_LABELS[role]}
+            </div>
+          </div>
+        </div>
+
+        <form action={signOut} style={{ padding: '0 12px 12px' }}>
+          <button
+            type="submit"
+            className="signout-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '7px 10px',
               fontSize: '12px',
-              fontWeight: '500',
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {userEmail}
-          </div>
-          <div
-            style={{
-              fontSize: '10px',
               color: 'var(--text-muted)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
             }}
           >
-            {ROLE_LABELS[role]}
-          </div>
-        </div>
+            <LogOut size={14} strokeWidth={1.6} />
+            <span>Cerrar sesión</span>
+          </button>
+        </form>
       </div>
     </aside>
   )
