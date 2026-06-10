@@ -4,8 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-
-const TENANT_ID = 'tenant-aj'
+import { requireWriteAccess } from '@/lib/auth/guards'
 
 // ─── Update tenant name ───────────────────────────────────────────────────────
 
@@ -14,11 +13,18 @@ export async function updateTenantName(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!name.trim()) return { ok: false, error: 'El nombre no puede estar vacío' }
 
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
   const supabase = createAdminClient()
+  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
+  // onboarding prompt; until then super_admin falls back to 'tenant-aj'.
+  const tenantId = ctx.tenant_id ?? 'tenant-aj'
   const { error } = await supabase
     .from('tenants')
     .update({ name: name.trim() })
-    .eq('id', TENANT_ID)
+    .eq('id', tenantId)
 
   if (error) return { ok: false, error: error.message }
 
@@ -41,7 +47,14 @@ export async function updateAgent(
   if (!fields.name.trim()) return { ok: false, error: 'El nombre no puede estar vacío' }
   if (!fields.email.trim()) return { ok: false, error: 'El email no puede estar vacío' }
 
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
   const supabase = createAdminClient()
+  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
+  // onboarding prompt; until then super_admin falls back to 'tenant-aj'.
+  const tenantId = ctx.tenant_id ?? 'tenant-aj'
   const { error } = await supabase
     .from('agents')
     .update({
@@ -52,7 +65,7 @@ export async function updateAgent(
       avatar_initials: fields.avatarInitials.trim().toUpperCase().slice(0, 2),
     })
     .eq('id', agentId)
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', tenantId)
 
   if (error) return { ok: false, error: error.message }
 

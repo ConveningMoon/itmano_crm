@@ -2,10 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireWriteAccess } from '@/lib/auth/guards'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import type { Language } from '@/lib/types'
-
-const TENANT_ID = 'tenant-aj'
 
 function genId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -34,14 +34,23 @@ interface LeadInput {
 }
 
 export async function createLead(input: LeadInput): Promise<{ error?: string }> {
+  const ctx           = await getCurrentTenantContext()
   const supabase      = createAdminClient()
   const baselineScore = BASELINE_SCORES[input.channelType] ?? 10
   const leadId        = genId('lead')
 
+  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
+  // onboarding prompt; until then super_admin creation falls back to 'tenant-aj'.
+  const tenantId = ctx.tenant_id ?? 'tenant-aj'
+  // An agent is auto-attributed to their own leads (ignore any submitted agentId);
+  // owner / super_admin pick the agent as before. ctx.agent_id is non-null for
+  // role 'agent' (getCurrentTenantContext throws on an unlinked agent).
+  const agentId = ctx.role === 'agent' ? ctx.agent_id! : input.agentId
+
   const { error } = await supabase.from('leads').insert({
     id:                    leadId,
-    tenant_id:             TENANT_ID,
-    agent_id:              input.agentId,
+    tenant_id:             tenantId,
+    agent_id:              agentId,
     acquisition_channel_id: input.acquisitionChannelId || null,
     traffic_source:        'direct',
     first_name:            input.firstName,
@@ -63,7 +72,7 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
   await enrollLeadInSequence({
     db:                     supabase,
     lead_id:                leadId,
-    tenant_id:              TENANT_ID,
+    tenant_id:              tenantId,
     acquisition_channel_id: input.acquisitionChannelId || null,
   })
 
@@ -97,13 +106,21 @@ interface BulkLeadInput {
 export async function createLeadsBulk(inputs: BulkLeadInput[]): Promise<{ error?: string }> {
   if (inputs.length === 0) return {}
 
+  const ctx = await getCurrentTenantContext()
+  // Bulk import is an administrative operation — owner / super_admin only.
+  const denied = requireWriteAccess(ctx)
+  if (denied) return { error: denied.error }
+
   const supabase = createAdminClient()
+  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
+  // onboarding prompt; until then bulk import falls back to 'tenant-aj'.
+  const tenantId = ctx.tenant_id ?? 'tenant-aj'
 
   // Resolve default manual channel for bulk imports
   const { data: manualChannel } = await supabase
     .from('acquisition_channels')
     .select('id')
-    .eq('tenant_id', TENANT_ID)
+    .eq('tenant_id', tenantId)
     .eq('channel_type', 'manual')
     .limit(1)
     .single()
@@ -114,7 +131,7 @@ export async function createLeadsBulk(inputs: BulkLeadInput[]): Promise<{ error?
     const baselineScore = BASELINE_SCORES[channelType] ?? 10
     return {
       id:                    genId('lead'),
-      tenant_id:             TENANT_ID,
+      tenant_id:             tenantId,
       agent_id:              input.agentId,
       acquisition_channel_id: manualChannelId,
       traffic_source:        'direct',
