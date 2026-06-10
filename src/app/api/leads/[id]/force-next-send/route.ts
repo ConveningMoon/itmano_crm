@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { assertCanWriteLead } from '@/lib/auth/guards'
 
 export async function POST(
   _req: NextRequest,
@@ -11,11 +12,16 @@ export async function POST(
   const ctx      = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
-  // Verify the lead belongs to the caller's tenant
-  let leadQ = supabase.from('leads').select('id, tenant_id').eq('id', leadId)
+  // Verify the lead belongs to the caller's tenant and (for an agent) to them.
+  let leadQ = supabase.from('leads').select('id, tenant_id, agent_id').eq('id', leadId)
   if (ctx.tenant_id) leadQ = leadQ.eq('tenant_id', ctx.tenant_id)
   const { data: lead } = await leadQ.maybeSingle()
   if (!lead) return NextResponse.json({ error: 'Lead no encontrado' }, { status: 404 })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = lead as any
+  const denied = assertCanWriteLead(ctx, { tenant_id: l.tenant_id, agent_id: l.agent_id })
+  if (denied) return NextResponse.json({ error: denied.error }, { status: 403 })
 
   // Set next_send_at = NOW() for all active runs of this lead.
   // Use .select() so we can check the actual rows updated (count: null without it).

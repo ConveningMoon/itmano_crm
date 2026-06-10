@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireWriteAccess } from '@/lib/auth/guards'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,6 +42,10 @@ export async function createSequence(
   const parsed = SequenceSchema.safeParse(fields)
   if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
 
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
   const tenantId = await getTenantId(parsed.data.tenantId)
   if (typeof tenantId === 'object') return { ok: false, error: tenantId.error }
 
@@ -72,6 +77,8 @@ export async function updateSequence(
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
   const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
   const supabase = createAdminClient()
 
   let q = supabase
@@ -97,6 +104,8 @@ export async function toggleSequenceActive(
   active: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
   const supabase = createAdminClient()
 
   let q = supabase
@@ -117,6 +126,8 @@ export async function deleteSequence(
   sequenceId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
   const supabase = createAdminClient()
 
   // 1. Cancel active runs
@@ -168,6 +179,8 @@ export async function addStep(
   if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
 
   const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
   const supabase = createAdminClient()
 
   // Verify sequence belongs to tenant
@@ -213,6 +226,8 @@ export async function updateStep(
   if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
 
   const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
   const supabase = createAdminClient()
 
   let q = supabase
@@ -237,6 +252,8 @@ export async function deleteStep(
   sequenceId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
   const supabase = createAdminClient()
 
   // Guard: don't allow deleting the last step
@@ -289,6 +306,10 @@ export async function moveStep(
   sequenceId: string,
   direction: 'up' | 'down',
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
   const supabase = createAdminClient()
 
   const { data: allSteps } = await supabase
@@ -338,6 +359,12 @@ export async function addLeadsToSequence(
   if (leadIds.length === 0) return { ok: true, result: { enrolled: 0, skipped: 0, errors: [] } }
 
   const ctx      = await getCurrentTenantContext()
+  // Bulk enrollment from the sequence side is email management — owner / super_admin
+  // only. (An agent enrolling their OWN leads would be a future lead-profile action
+  // gated by assertCanWriteLead; out of scope here.)
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
   const supabase = createAdminClient()
 
   // Verify sequence exists, belongs to tenant, and is manual-type
