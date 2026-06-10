@@ -90,6 +90,8 @@ export const SEQ_A_UUID     = '00000000-0000-0000-0000-000000000a02'
 export const SEQ_B_UUID     = '00000000-0000-0000-0000-000000000b02'
 export const FORM_SUB_A_UUID = '00000000-0000-0000-0000-000000000a03'
 export const FORM_SUB_B_UUID = '00000000-0000-0000-0000-000000000b03'
+export const INVITE_A_UUID   = '00000000-0000-0000-0000-000000000a04'
+export const INVITE_B_UUID   = '00000000-0000-0000-0000-000000000b04'
 
 // Text IDs for agents and leads
 export const AGENT_A_ID = 'agent-rls-test-a'
@@ -263,11 +265,39 @@ export async function createFixtures(): Promise<{
     { onConflict: 'id' }
   )
 
+  // 9. Create invitations (one pending per tenant; distinct emails so the
+  //    (tenant_id, email) WHERE status='pending' partial unique index is satisfied)
+  await adminClient.from('invitations').upsert(
+    [
+      {
+        id: INVITE_A_UUID,
+        tenant_id: TENANT_A_ID,
+        email: 'invite-a@itmano-test.example.com',
+        role: 'agent',
+        status: 'pending',
+      },
+      {
+        id: INVITE_B_UUID,
+        tenant_id: TENANT_B_ID,
+        email: 'invite-b@itmano-test.example.com',
+        role: 'agent',
+        status: 'pending',
+      },
+    ],
+    { onConflict: 'id' }
+  )
+
   return { userAId, userBId, superAdminId }
 }
 
 // Call once after all RLS tests — cleans up in reverse FK order
 export async function cleanupFixtures() {
+  // invitations (FK to tenants + agents; delete before them)
+  await adminClient
+    .from('invitations')
+    .delete()
+    .in('tenant_id', [TENANT_A_ID, TENANT_B_ID])
+
   // form_submissions (FK to leads + channels; delete before them)
   await adminClient
     .from('form_submissions')
