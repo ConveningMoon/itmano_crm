@@ -6,13 +6,27 @@ import { createClient } from '@/lib/supabase/client'
 
 const COOLDOWN_SECONDS = 60
 
+// B2B private tool: only pre-provisioned accounts (admin onboarding / agent
+// invitations) can log in. Revealing account existence is an accepted trade-off.
+const NO_ACCESS_MSG = 'Este correo no tiene acceso a la plataforma. Si crees que es un error, contacta a tu administrador.'
+
+// Maps a ?error= query param (set by the callback / middleware / context guard)
+// to a friendly message.
+function messageForErrorParam(code: string | null): string | null {
+  switch (code) {
+    case 'sin-acceso':            return NO_ACCESS_MSG
+    case 'auth_callback_failed':  return 'No pudimos validar tu enlace de acceso. Solicita uno nuevo.'
+    default:                      return null
+  }
+}
+
 function LoginForm() {
   const searchParams = useSearchParams()
   const nextParam = useRef<string>(searchParams.get('next') ?? '/dashboard')
 
   const [email, setEmail]     = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(messageForErrorParam(searchParams.get('error')))
   const [cooldown, setCooldown] = useState(0)
 
   useEffect(() => {
@@ -38,12 +52,19 @@ function LoginForm() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email,
       options: {
+        // Login never creates accounts — every legitimate user is pre-provisioned
+        // (admin onboarding / agent invitation) before their first Magic Link.
+        shouldCreateUser: false,
         emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     })
 
     if (authError) {
-      setError(authError.message)
+      // With shouldCreateUser:false, an unregistered email returns an error.
+      // Show the friendly no-access message; rate limiting gets its own note.
+      setError(authError.status === 429
+        ? 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+        : NO_ACCESS_MSG)
       setLoading(false)
     } else {
       setLoading(false)

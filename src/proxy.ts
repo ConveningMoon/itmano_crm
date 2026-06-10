@@ -1,15 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 
-const PROTECTED_PREFIXES = [
-  '/analytics',
-  '/dashboard',
-  '/emails',
-  '/leads',
-  '/settings',
-  '/sources',
-]
-
+// Next 16 renamed `middleware` → `proxy`. This is the EDGE auth guard for
+// (dashboard) pages: refresh the Supabase session and redirect unauthenticated
+// visitors to /login.
+//
+// BORDER guard only — getCurrentTenantContext remains the definitive guard in
+// pages/actions (defense in layers; nothing here replaces it).
+//
+// The matcher (below) excludes ALL /api routes — each has its own auth (cron/
+// webhook secrets, Resend signature, or self-guard via getCurrentTenantContext) —
+// plus /login, /auth/*, /unsubscribe and static assets. So every path that reaches
+// this function is a protected page (a denylist: every new dashboard page is
+// protected automatically, including /admin, /notifications and /activity).
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -22,9 +25,7 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -34,20 +35,13 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: use getUser(), not getSession() — getSession() trusts the client JWT only
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // IMPORTANT: use getUser() (not getSession()); it refreshes the session. Do not
+  // run logic between createServerClient and getUser() (avoids random logouts).
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const { pathname, search } = request.nextUrl
-
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  )
-
-  if (isProtected && !user) {
+  if (!user) {
     const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('next', pathname + search)
+    loginUrl.searchParams.set('next', request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)
   }
 
@@ -55,17 +49,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Run on every page EXCEPT: all /api routes (own auth), /login, /auth/*,
+  // /unsubscribe, and static assets. Mirrored by tests/auth/middleware-matcher.test.ts.
   matcher: [
-    /*
-     * Match all request paths EXCEPT:
-     * - _next/static (static files)
-     * - _next/image  (image optimisation)
-     * - favicon.ico and common static asset extensions
-     * - /auth/callback (OTP exchange — must be public)
-     * - /api/intake, /api/webhooks, /api/health, /api/cron
-     * - /login and /(auth)
-     * - /unsubscribe (public, HMAC-signed — no session needed)
-     */
-    '/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|otf|eot)$|auth/callback|api/intake|api/webhooks|api/health|api/cron|login|unsubscribe).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

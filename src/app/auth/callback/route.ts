@@ -1,6 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { normalizeEmail } from '@/lib/auth/admin-users'
+
+// Best-effort: mark any pending invitation for this email as accepted. A failure
+// here must NEVER break the login — log and continue.
+async function markInvitationAccepted(email: string | undefined | null) {
+  if (!email) return
+  try {
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('invitations')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .eq('email', normalizeEmail(email))
+      .eq('status', 'pending')
+    if (error) {
+      console.error(JSON.stringify({ service: 'auth-callback', path: 'mark_invitation_failed', error: error.message }))
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ service: 'auth-callback', path: 'mark_invitation_threw', error: err instanceof Error ? err.message : String(err) }))
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -26,10 +47,13 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      // Validate `next` to prevent open redirect — only allow relative paths
+      // First login off an invitation → flip it to accepted (best-effort).
+      await markInvitationAccepted(data.user?.email)
+      // Validate `next` to prevent open redirect — only allow relative paths.
+      // No role-based redirect: everyone lands on /dashboard (or a safe `next`).
       const redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
       return NextResponse.redirect(`${origin}${redirectTo}`)
     }
