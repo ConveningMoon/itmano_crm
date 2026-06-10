@@ -1,37 +1,65 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { NewLeadClient } from './new-lead-client'
-
-const TENANT_ID = 'tenant-aj'
 
 export interface ChannelOption {
   id: string
+  tenantId: string
   channelType: string
   name: string
   slug: string
 }
 
+export interface TenantOption {
+  id: string
+  name: string
+}
+
 export default async function NewLeadPage() {
+  const ctx      = await getCurrentTenantContext()
+  const isSuper  = ctx.role === 'super_admin'
   const supabase = createAdminClient()
 
-  const [{ data: rawAgents }, { data: rawChannels }] = await Promise.all([
-    supabase.from('agents').select('*').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
-    supabase
-      .from('acquisition_channels')
-      .select('id, channel_type, name, slug')
-      .eq('tenant_id', TENANT_ID)
-      .eq('active', true)
-      .order('name'),
+  // Scope agents/channels by tenant. super_admin sees every tenant's (the client
+  // filters by the selected tenant); owner/agent are scoped to their own tenant.
+  let agentsQ   = supabase.from('agents').select('*').eq('active', true).order('name')
+  let channelsQ = supabase
+    .from('acquisition_channels')
+    .select('id, tenant_id, channel_type, name, slug')
+    .eq('active', true)
+    .order('name')
+  if (!isSuper && ctx.tenant_id) {
+    agentsQ   = agentsQ.eq('tenant_id', ctx.tenant_id)
+    channelsQ = channelsQ.eq('tenant_id', ctx.tenant_id)
+  }
+
+  const [{ data: rawAgents }, { data: rawChannels }, { data: rawTenants }] = await Promise.all([
+    agentsQ,
+    channelsQ,
+    isSuper
+      ? supabase.from('tenants').select('id, name').order('name')
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
 
-  const agents   = (rawAgents   ?? []).map(r => mapAgent(r as AgentRow))
+  const agents   = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channels = (rawChannels ?? []).map((r: any) => ({
     id:          r.id as string,
+    tenantId:    r.tenant_id as string,
     channelType: r.channel_type as string,
     name:        r.name as string,
     slug:        r.slug as string,
   })) as ChannelOption[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenants = (rawTenants ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string })) as TenantOption[]
 
-  return <NewLeadClient agents={agents} channels={channels} />
+  return (
+    <NewLeadClient
+      agents={agents}
+      channels={channels}
+      isSuperAdmin={isSuper}
+      tenants={tenants}
+    />
+  )
 }

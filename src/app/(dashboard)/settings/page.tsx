@@ -4,21 +4,24 @@ import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
-const TENANT_ID = 'tenant-aj'
-
 export default async function SettingsPage() {
+  const ctx      = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, ctx] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color').eq('id', TENANT_ID).single(),
-    supabase.from('agents').select('*').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
+  // Settings is "this tenant's configuration". Owner/agent → their own tenant.
+  // super_admin has no tenant of their own; until admin tenant-switching exists,
+  // Settings shows A&J. (Cross-tenant config lives in the /admin console.)
+  const tenantId = ctx.tenant_id ?? 'tenant-aj'
+
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules] = await Promise.all([
+    supabase.from('tenants').select('id, name, slug, primary_color').eq('id', tenantId).single(),
+    supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
-    getCurrentTenantContext(),
   ])
 
   const tenant = tenantRow
     ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E' }
-    : { id: TENANT_ID, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E' }
+    : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E' }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 
