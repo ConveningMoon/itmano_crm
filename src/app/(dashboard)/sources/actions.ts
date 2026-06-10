@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireWriteAccess } from '@/lib/auth/guards'
 
 // ─── Toggle a submission's responded flag (event / contact_form only) ─────────
 
@@ -11,6 +12,8 @@ export async function toggleSubmissionResponded(
 ): Promise<{ ok: true; responded: boolean } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const supabase = createAdminClient()
 
@@ -98,6 +101,8 @@ export async function createLeadMagnet(fields: {
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
   if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
@@ -179,6 +184,8 @@ export async function updateChannel(
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   let q = supabase
@@ -203,6 +210,8 @@ export async function archiveChannel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const supabase = createAdminClient()
 
@@ -230,6 +239,8 @@ export async function deleteChannelPermanently(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const supabase = createAdminClient()
 
@@ -290,6 +301,8 @@ export async function updateChannelSequence(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   let q = supabase
@@ -327,6 +340,8 @@ export async function createEvent(fields: {
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
   if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
