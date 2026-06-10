@@ -1,0 +1,161 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
+
+// All actions here are super_admin-only (ITMANO internal onboarding), gated the
+// same way as updateScoreRules. The admin client (service_role) is the correct
+// path: tenants/user_profiles have SELECT-only RLS, and auth.users is only
+// reachable via the admin API.
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Administrador ITMANO',
+  agent_owner: 'Propietario',
+  agent:       'Agente',
+}
+
+// ─── Create tenant ──────────────────────────────────────────────────────────
+
+const CreateTenantSchema = z.object({
+  name:         z.string().trim().min(1, 'El nombre es obligatorio').max(100),
+  slug:         z.string().trim().min(1).max(60)
+                  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'El slug debe ser kebab-case (minúsculas, números y guiones)'),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)').optional(),
+})
+
+export async function createTenant(
+  input: { name: string; slug: string; primaryColor?: string },
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede crear tenants.' }
+  }
+
+  const parsed = CreateTenantSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  // id is derived from the slug, consistent with 'tenant-aj'.
+  const id       = `tenant-${parsed.data.slug}`
+  const supabase = createAdminClient()
+
+  // Reject a duplicate id OR slug up front for a clean message (the unique slug
+  // constraint is the DB-level backstop).
+  const { data: existing } = await supabase
+    .from('tenants')
+    .select('id')
+    .or(`id.eq.${id},slug.eq.${parsed.data.slug}`)
+    .limit(1)
+    .maybeSingle()
+  if (existing) {
+    return { ok: false, error: `Ya existe un tenant con el slug "${parsed.data.slug}".` }
+  }
+
+  // email_from_address is intentionally omitted (nullable; configured later).
+  const { error } = await supabase.from('tenants').insert({
+    id,
+    name:          parsed.data.name,
+    slug:          parsed.data.slug,
+    primary_color: parsed.data.primaryColor ?? '#1E3A5F',
+  })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true, id }
+}
+
+// ─── Provision owner ──────────────────────────────────────────────────────────
+
+const ProvisionOwnerSchema = z.object({
+  tenantId:       z.string().trim().min(1),
+  email:          z.string().trim().email('Email inválido'),
+  telegramChatId: z.string().trim().max(50).optional(),
+})
+
+export async function provisionOwner(
+  input: { tenantId: string; email: string; telegramChatId?: string },
+): Promise<{ ok: true; email: string; created: boolean } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede provisionar owners.' }
+  }
+
+  const parsed = ProvisionOwnerSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const email          = normalizeEmail(parsed.data.email)
+  const telegramChatId = parsed.data.telegramChatId?.trim() || null
+  const supabase       = createAdminClient()
+
+  // Tenant must exist.
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id, name')
+    .eq('id', parsed.data.tenantId)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'El tenant no existe.' }
+
+  // One owner per tenant (current rule). Check BEFORE creating any auth user so a
+  // rejected provisioning never leaves a stray account behind.
+  const { data: existingOwner } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('tenant_id', parsed.data.tenantId)
+    .eq('role', 'agent_owner')
+    .limit(1)
+    .maybeSingle()
+  if (existingOwner) {
+    return { ok: false, error: `${(tenant as { name: string }).name} ya tiene un owner asignado.` }
+  }
+
+  // Find an existing auth user with this email, else create one (no password —
+  // login is Magic Link; email_confirm so the first link works immediately).
+  const found = await findAuthUserByEmail(email)
+  let userId: string
+  let created = false
+  if (found) {
+    userId = found.id
+  } else {
+    const { data: createdUser, error: createErr } = await supabase.auth.admin.createUser({
+      email,
+      email_confirm: true,
+    })
+    if (createErr || !createdUser?.user) {
+      return { ok: false, error: `No se pudo crear el usuario: ${createErr?.message ?? 'desconocido'}` }
+    }
+    userId  = createdUser.user.id
+    created = true
+  }
+
+  // The user must not already have a profile (reused auth user from another
+  // tenant/role). A freshly created user never does.
+  const { data: existingProfile } = await supabase
+    .from('user_profiles')
+    .select('tenant_id, role')
+    .eq('id', userId)
+    .maybeSingle()
+  if (existingProfile) {
+    const p = existingProfile as { tenant_id: string | null; role: string }
+    const where = p.tenant_id ?? 'sin tenant'
+    return { ok: false, error: `Este email ya tiene un perfil (${ROLE_LABELS[p.role] ?? p.role} en ${where}).` }
+  }
+
+  // RLS on user_profiles is SELECT-only; the admin client (service_role) is the
+  // correct path for this insert.
+  const { error: insertErr } = await supabase.from('user_profiles').insert({
+    id:               userId,
+    tenant_id:        parsed.data.tenantId,
+    role:             'agent_owner',
+    telegram_chat_id: telegramChatId,
+  })
+  if (insertErr) return { ok: false, error: insertErr.message }
+
+  revalidatePath('/admin')
+  return { ok: true, email, created }
+}

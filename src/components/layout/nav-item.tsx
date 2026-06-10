@@ -10,6 +10,7 @@ import {
   Settings,
   GitBranch,
   Mail,
+  ShieldCheck,
 } from 'lucide-react'
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -20,6 +21,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   Settings,
   GitBranch,
   Mail,
+  ShieldCheck,
 }
 
 interface NavItemProps {

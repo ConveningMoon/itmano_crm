@@ -11,7 +11,7 @@ export default async function LeadsPage() {
 
   const leadsQ    = supabase.from('leads').select('*').order('created_at', { ascending: false })
   const agentsQ   = supabase.from('agents').select('*').eq('active', true)
-  const channelsQ = supabase.from('acquisition_channels').select('id, channel_type, name, slug').eq('active', true).order('name')
+  const channelsQ = supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug').eq('active', true).order('name')
 
   const [{ data: rawLeads }, { data: rawAgents }, { data: rawChannels }] = await Promise.all([
     tenant_id ? leadsQ.eq('tenant_id',    tenant_id) : leadsQ,
@@ -22,6 +22,7 @@ export default async function LeadsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channels: ChannelOption[] = (rawChannels ?? []).map((r: any) => ({
     id:          r.id as string,
+    tenantId:    r.tenant_id as string,
     channelType: r.channel_type as string,
     name:        r.name as string,
     slug:        r.slug as string,

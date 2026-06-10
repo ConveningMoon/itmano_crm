@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import { NavItem } from './nav-item'
+import type { TenantRole } from '@/lib/auth/tenant-context'
 
 const navItems = [
   { label: 'Dashboard',      href: '/dashboard',     icon: 'LayoutDashboard' },
@@ -10,7 +11,23 @@ const navItems = [
   { label: 'Configuración',  href: '/settings',      icon: 'Settings' },
 ]
 
-export function Sidebar() {
+const ROLE_LABELS: Record<TenantRole, string> = {
+  super_admin: 'Administrador ITMANO',
+  agent_owner: 'Propietario',
+  agent:       'Agente',
+}
+
+function initialsFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? email
+  return local.slice(0, 2).toUpperCase() || '??'
+}
+
+export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: string }) {
+  // Admin console is super_admin-only — hidden from the nav for everyone else.
+  const items = role === 'super_admin'
+    ? [...navItems, { label: 'Admin', href: '/admin', icon: 'ShieldCheck' }]
+    : navItems
+
   return (
     <aside
       style={{
@@ -69,7 +86,7 @@ export function Sidebar() {
           overflowY: 'auto',
         }}
       >
-        {navItems.map(item => (
+        {items.map(item => (
           <NavItem key={item.href} {...item} />
         ))}
       </nav>
@@ -100,7 +117,7 @@ export function Sidebar() {
             flexShrink: 0,
           }}
         >
-          AM
+          {initialsFromEmail(userEmail)}
         </div>
         <div style={{ minWidth: 0 }}>
           <div
@@ -113,7 +130,7 @@ export function Sidebar() {
               whiteSpace: 'nowrap',
             }}
           >
-            Adriana Melendez
+            {userEmail}
           </div>
           <div
             style={{
@@ -123,7 +140,7 @@ export function Sidebar() {
               textTransform: 'uppercase',
             }}
           >
-            agent_owner
+            {ROLE_LABELS[role]}
           </div>
         </div>
       </div>
