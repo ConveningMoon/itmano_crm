@@ -36,10 +36,11 @@ export async function getCurrentTenantContext(): Promise<TenantContext> {
     .single()
 
   if (profileError || !profile) {
-    throw new Error(
-      `No user_profile found for auth user ${user.id}. ` +
-      `Run: INSERT INTO user_profiles (id, role) VALUES ('${user.id}', 'agent_owner')`
-    )
+    // Valid session but no profile (e.g. a deprovisioned or never-provisioned
+    // account). Sign out (best-effort) and bounce to login with a friendly
+    // message instead of crashing the page with an unhandled error.
+    await supabase.auth.signOut()
+    redirect('/login?error=sin-acceso')
   }
 
   const role = profile.role as TenantRole
