@@ -1,22 +1,28 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
-  const ctx      = await getCurrentTenantContext()
-  const supabase = createAdminClient()
+  const ctx        = await getCurrentTenantContext()
+  const supabase   = createAdminClient()
+  const authClient = await createClient()
 
   // Settings is "this tenant's configuration". Owner/agent → their own tenant.
   // super_admin has no tenant of their own; until admin tenant-switching exists,
   // Settings shows A&J. (Cross-tenant config lives in the /admin console.)
   const tenantId = ctx.tenant_id ?? 'tenant-aj'
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
+    // Honest "active accesses" = every login profile in this tenant (owner + any
+    // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
+    supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+    authClient.auth.getUser(),
   ])
 
   const tenant = tenantRow
@@ -24,6 +30,13 @@ export default async function SettingsPage() {
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E' }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+
+  // Access status per agent (user_id present) — kept off the global Agent type.
+  const agentAccess: Record<string, boolean> = {}
+  for (const r of rawAgents ?? []) {
+    const row = r as AgentRow & { user_id: string | null }
+    agentAccess[row.id] = !!row.user_id
+  }
 
   return (
     <>
@@ -39,8 +52,13 @@ export default async function SettingsPage() {
       <SettingsClient
         tenant={tenant}
         agents={agents}
+        agentAccess={agentAccess}
+        accessCount={accessCountRes.count ?? 0}
         scoringRules={scoringRules}
         canEditScoring={ctx.role === 'super_admin'}
+        canManageAgents={ctx.role !== 'agent'}
+        userEmail={userRes.data.user?.email ?? ''}
+        userRole={ctx.role}
       />
     </>
   )
