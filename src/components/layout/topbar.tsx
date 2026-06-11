@@ -13,7 +13,15 @@ const PAGE_TITLES: Record<string, string> = {
   '/settings':      'Configuración',
 }
 
-export function Topbar({ unreadCount = 0 }: { unreadCount?: number }) {
+export function Topbar({
+  unreadCount = 0,
+  userEmail = '',
+  avatarInitials = '',
+}: {
+  unreadCount?: number
+  userEmail?: string
+  avatarInitials?: string
+}) {
   const pathname = usePathname()
   const router = useRouter()
   const title = PAGE_TITLES[pathname] ?? 'ITMANO CRM'
@@ -119,7 +127,7 @@ export function Topbar({ unreadCount = 0 }: { unreadCount?: number }) {
 
         {/* User avatar */}
         <div
-          title="Adriana Melendez"
+          title={userEmail || 'Usuario'}
           style={{
             width: '32px',
             height: '32px',
@@ -135,7 +143,7 @@ export function Topbar({ unreadCount = 0 }: { unreadCount?: number }) {
             cursor: 'default',
           }}
         >
-          AM
+          {avatarInitials || '??'}
         </div>
       </div>
     </header>

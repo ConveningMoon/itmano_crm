@@ -34,13 +34,21 @@ interface LeadInput {
   // Only honored for super_admin (who has no tenant of their own); owner/agent
   // always use their context tenant.
   tenantId?:           string
+  // Arrival source for direct-entry sources (Instagram/Facebook/WhatsApp set their
+  // own; manual + channel-based use 'direct'). Whitelisted server-side.
+  trafficSource?:      string
 }
+
+// Direct-entry arrival sources accepted from the manual form (must match the
+// leads.traffic_source CHECK). Anything else falls back to 'direct'.
+const MANUAL_TRAFFIC_SOURCES = new Set(['direct', 'instagram', 'facebook', 'whatsapp'])
 
 export async function createLead(input: LeadInput): Promise<{ error?: string }> {
   const ctx           = await getCurrentTenantContext()
   const supabase      = createAdminClient()
   const baselineScore = BASELINE_SCORES[input.channelType] ?? 10
   const leadId        = genId('lead')
+  const trafficSource = MANUAL_TRAFFIC_SOURCES.has(input.trafficSource ?? '') ? input.trafficSource! : 'direct'
 
   const tenant = resolveTargetTenant(ctx, input.tenantId)
   if (typeof tenant === 'object') return { error: tenant.error }
@@ -55,7 +63,7 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
     tenant_id:             tenantId,
     agent_id:              agentId,
     acquisition_channel_id: input.acquisitionChannelId || null,
-    traffic_source:        'direct',
+    traffic_source:        trafficSource,
     first_name:            input.firstName,
     last_name:             input.lastName,
     email:                 input.email,
