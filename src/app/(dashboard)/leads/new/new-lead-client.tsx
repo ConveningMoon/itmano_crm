@@ -18,6 +18,12 @@ import {
   FileUp,
   Download,
   AlertTriangle,
+  Camera,
+  ThumbsUp,
+  MessageCircle,
+  FileDown,
+  Calendar,
+  Globe,
 } from 'lucide-react'
 
 interface FormData {
@@ -71,15 +77,35 @@ const INITIAL_FORM: FormData = {
   notes:                '',
 }
 
-const CHANNEL_TYPE_LABELS: Record<string, string> = {
-  manual:        'Registro manual',
-  lead_magnet:   'Lead Magnet',
-  event:         'Evento',
-  contact_form:  'Formulario Web',
-  manychat_flow: 'ManyChat',
-}
+// Lead-registration sources. The first four are DIRECT-ENTRY: the source IS the
+// origin (no specific acquisition channel), so traffic_source is set from the
+// source and the "origen" picker is hidden. The last three are channel-based:
+// they require picking a specific acquisition channel (current behavior).
+const SOURCE_OPTIONS: { value: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
+  { value: 'manual',       label: 'Registro manual', icon: PenLine },
+  // lucide-react v1 dropped brand icons (Instagram/Facebook); use representative
+  // generics: camera (IG photos), thumbs-up (FB), message circle (WhatsApp DM).
+  { value: 'instagram',    label: 'Instagram',       icon: Camera },
+  { value: 'facebook',     label: 'Facebook',        icon: ThumbsUp },
+  { value: 'whatsapp',     label: 'WhatsApp',        icon: MessageCircle },
+  { value: 'lead_magnet',  label: 'Lead Magnet',     icon: FileDown },
+  { value: 'event',        label: 'Evento',          icon: Calendar },
+  { value: 'contact_form', label: 'Formulario Web',  icon: Globe },
+]
 
-const CHANNEL_TYPE_ORDER = ['manual', 'lead_magnet', 'event', 'contact_form', 'manychat_flow']
+const CHANNEL_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  SOURCE_OPTIONS.map(o => [o.value, o.label])
+)
+
+// Direct-entry sources → their traffic_source value. The lead's channel_type is
+// forced to 'manual' and acquisition_channel_id to null for these.
+const DIRECT_ENTRY_SOURCES = new Set(['manual', 'instagram', 'facebook', 'whatsapp'])
+const TRAFFIC_SOURCE_BY_SOURCE: Record<string, string> = {
+  manual:    'direct',
+  instagram: 'instagram',
+  facebook:  'facebook',
+  whatsapp:  'whatsapp',
+}
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -438,7 +464,12 @@ export function NewLeadClient({
       newErrors.email = 'Email no válido'
     }
     if (!form.agentId) newErrors.agentId = 'Selecciona un agente'
-    if (!form.acquisitionChannelId) newErrors.acquisitionChannelId = 'Selecciona el origen'
+    if (!form.channelType) {
+      newErrors.acquisitionChannelId = 'Selecciona la fuente'
+    } else if (!DIRECT_ENTRY_SOURCES.has(form.channelType) && !form.acquisitionChannelId) {
+      // Origin is only required for channel-based sources (LM / event / contact form).
+      newErrors.acquisitionChannelId = 'Selecciona el origen'
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -446,6 +477,10 @@ export function NewLeadClient({
   async function handleManualSubmit() {
     if (!validate()) return
     setIsSubmitting(true)
+    // Direct-entry sources: traffic_source = the source, channel forced to manual /
+    // null. Channel-based sources keep traffic_source 'direct' and their channel.
+    const directEntry  = DIRECT_ENTRY_SOURCES.has(form.channelType)
+    const trafficSource = TRAFFIC_SOURCE_BY_SOURCE[form.channelType] ?? 'direct'
     const result = await createLead({
       firstName:            form.firstName,
       lastName:             form.lastName,
@@ -453,8 +488,9 @@ export function NewLeadClient({
       phone:                form.phone || null,
       language:             form.language as Language,
       agentId:              form.agentId,
-      acquisitionChannelId: form.acquisitionChannelId,
-      channelType:          form.channelType,
+      acquisitionChannelId: directEntry ? '' : form.acquisitionChannelId,
+      channelType:          directEntry ? 'manual' : form.channelType,
+      trafficSource,
       lender:               form.lender || null,
       notes:                form.notes || null,
       tenantId:             isSuperAdmin ? selectedTenantId : undefined,
@@ -482,12 +518,18 @@ export function NewLeadClient({
   // Channels filtered by type for cascade picker (scoped to the visible tenant)
   const channelsForType = (type: string) => visibleChannels.filter(c => c.channelType === type)
 
-  // When channel type changes: auto-select if only one option, or clear
+  // When source changes: direct-entry → no channel; channel-based → auto-select if
+  // only one option, else clear for explicit pick.
   function handleChannelTypeChange(type: string) {
-    const options = channelsForType(type)
-    const autoId  = options.length === 1 ? options[0].id : ''
-    updateField('channelType', type)
-    updateField('acquisitionChannelId', autoId)
+    if (DIRECT_ENTRY_SOURCES.has(type)) {
+      updateField('channelType', type)
+      updateField('acquisitionChannelId', '')
+    } else {
+      const options = channelsForType(type)
+      const autoId  = options.length === 1 ? options[0].id : ''
+      updateField('channelType', type)
+      updateField('acquisitionChannelId', autoId)
+    }
     if (errors.acquisitionChannelId) setErrors(prev => ({ ...prev, acquisitionChannelId: undefined }))
   }
 
@@ -822,30 +864,41 @@ export function NewLeadClient({
           {/* SECCIÓN 3 — Origen */}
           <div style={sectionHeaderStyle}>Origen</div>
           <div style={{ ...sectionBodyStyle }}>
-            {/* Step 1: Channel type */}
+            {/* Step 1: Source picker (icon chips) */}
             <label style={labelStyle}>¿Cómo llegó este lead? *</label>
-            <div style={{ position: 'relative', marginBottom: '10px' }}>
-              <select
-                className="new-lead-input"
-                value={form.channelType}
-                onChange={e => handleChannelTypeChange(e.target.value)}
-                style={{
-                  ...(errors.acquisitionChannelId && !form.channelType ? inputErrorStyle : inputStyle),
-                  appearance: 'none',
-                  cursor: 'pointer',
-                  paddingRight: '32px',
-                }}
-              >
-                <option value="">-- Tipo de origen --</option>
-                {CHANNEL_TYPE_ORDER.map(t => (
-                  <option key={t} value={t}>{CHANNEL_TYPE_LABELS[t]}</option>
-                ))}
-              </select>
-              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              {SOURCE_OPTIONS.map(opt => {
+                const Icon   = opt.icon
+                const active = form.channelType === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleChannelTypeChange(opt.value)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                      background: active ? 'rgba(201,169,110,0.10)' : 'var(--bg-elevated)',
+                      color: active ? 'var(--accent-gold)' : 'var(--text-secondary)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <Icon size={14} strokeWidth={1.7} />
+                    {opt.label}
+                  </button>
+                )
+              })}
             </div>
 
-            {/* Step 2: Specific channel (only for types with multiple options) */}
-            {form.channelType && channelsForType(form.channelType).length > 1 && (
+            {/* Step 2: Specific channel — only for channel-based sources with >1 option */}
+            {!DIRECT_ENTRY_SOURCES.has(form.channelType) && form.channelType && channelsForType(form.channelType).length > 1 && (
               <div style={{ position: 'relative' }}>
                 <select
                   className="new-lead-input"
