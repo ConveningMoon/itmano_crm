@@ -333,3 +333,44 @@ export async function revokeAgentAccess(
   revalidatePath('/leads')
   return { ok: true }
 }
+
+// Links the agent_owner's own login to one of their tenant's agent records (so the
+// owner is attributed as that agent — e.g. for lead import). Owner-only; the target
+// agent must be in the owner's tenant and unlinked, and the owner must not already
+// be linked to another agent. Does NOT create an auth user or invitation (the owner
+// already has a login) and does NOT change the owner's role/permissions.
+export async function linkAgentToMyAccount(
+  agentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'agent_owner' || !ctx.tenant_id) {
+    return { ok: false, error: 'Solo el propietario puede vincularse a un agente' }
+  }
+
+  const supabase = createAdminClient()
+
+  // The owner must not already be linked to an agent.
+  const { data: alreadyLinked } = await supabase
+    .from('agents').select('id').eq('user_id', ctx.user_id).maybeSingle()
+  if (alreadyLinked) {
+    return { ok: false, error: 'Ya estás vinculado a un agente' }
+  }
+
+  // Target agent: in the owner's tenant, currently unlinked.
+  const { data: agent } = await supabase
+    .from('agents').select('id, user_id').eq('id', agentId).eq('tenant_id', ctx.tenant_id).maybeSingle()
+  if (!agent) return { ok: false, error: 'Agente no encontrado' }
+  if ((agent as { user_id: string | null }).user_id) {
+    return { ok: false, error: 'Ese agente ya tiene un acceso vinculado' }
+  }
+
+  // Guard against a race with the UNIQUE(user_id) constraint via the .is null filter.
+  const { error } = await supabase
+    .from('agents').update({ user_id: ctx.user_id }).eq('id', agentId).is('user_id', null)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  return { ok: true }
+}

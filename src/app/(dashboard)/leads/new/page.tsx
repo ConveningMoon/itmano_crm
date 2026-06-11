@@ -54,12 +54,18 @@ export default async function NewLeadPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenants = (rawTenants ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string })) as TenantOption[]
 
+  // The agent record linked to this login (if any) — used to auto-attribute imports.
+  const { data: myAgentRow } = await supabase
+    .from('agents').select('id').eq('user_id', ctx.user_id).maybeSingle()
+  const myAgentId = (myAgentRow as { id: string } | null)?.id ?? null
+
   return (
     <NewLeadClient
       agents={agents}
       channels={channels}
       isSuperAdmin={isSuper}
       tenants={tenants}
+      myAgentId={myAgentId}
     />
   )
 }

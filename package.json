@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test:rls": "vitest run tests/rls",
     "test:scoring": "vitest run tests/scoring",
-    "test:auth": "vitest run tests/auth"
+    "test:auth": "vitest run tests/auth",
+    "test:import": "vitest run tests/import"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
