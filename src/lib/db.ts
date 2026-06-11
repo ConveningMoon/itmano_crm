@@ -63,6 +63,7 @@ export interface LeadEventRow {
   description: string
   points: number | null
   created_at: string
+  actor_user_id?: string | null
 }
 
 export interface PurchaseProcessRow {
@@ -158,5 +159,6 @@ export function mapLeadEvent(r: LeadEventRow): LeadEvent {
     description: r.description,
     points:      r.points,
     createdAt:   r.created_at,
+    actorUserId: r.actor_user_id ?? null,
   }
 }

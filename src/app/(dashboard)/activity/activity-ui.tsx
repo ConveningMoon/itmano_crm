@@ -65,7 +65,9 @@ export function ActivityRow({ item, showTenant = false }: { item: ActivityItem; 
             </span>
           )}
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{timeAgo(item.createdAt)}</div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          {item.author} · {timeAgo(item.createdAt)}
+        </div>
       </div>
     </div>
   )

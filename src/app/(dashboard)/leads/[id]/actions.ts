@@ -51,11 +51,12 @@ export async function updateLeadStatus(
 
   if (status === 'process_completed') {
     await supabase.from('lead_events').insert({
-      lead_id:     leadId,
-      tenant_id:   guard.tenant_id,
-      type:        'status_changed',
-      description: 'Proceso de compra completado.',
-      points:      0,
+      lead_id:       leadId,
+      tenant_id:     guard.tenant_id,
+      type:          'status_changed',
+      description:   'Proceso de compra completado.',
+      points:        0,
+      actor_user_id: ctx.user_id,
     })
   }
 
@@ -202,12 +203,13 @@ export async function applyManualAction(
   // Insert the event with audit (who via metadata, when via created_at). points is
   // informational on the row; recompute_lead_score derives the score from the rules.
   const { error: insertErr } = await supabase.from('lead_events').insert({
-    lead_id:     leadId,
-    tenant_id:   l.tenant_id as string,
-    type:        dimension,
-    description: (r.label as string | null) ?? dimension,
-    points:      r.points as number,
-    metadata:    { source: 'manual_panel', actor_user_id: ctx.user_id, actor_role: ctx.role },
+    lead_id:       leadId,
+    tenant_id:     l.tenant_id as string,
+    type:          dimension,
+    description:   (r.label as string | null) ?? dimension,
+    points:        r.points as number,
+    actor_user_id: ctx.user_id,
+    metadata:      { source: 'manual_panel', actor_user_id: ctx.user_id, actor_role: ctx.role },
   })
   if (insertErr) return { ok: false, error: insertErr.message }
 
@@ -264,11 +266,12 @@ export async function startPurchaseProcess(
   if (updateErr) return { ok: false, error: updateErr.message }
 
   await supabase.from('lead_events').insert({
-    lead_id:     leadId,
-    tenant_id:   guard.tenant_id,
-    type:        'status_changed',
-    description: 'Proceso de compra iniciado.',
-    points:      0,
+    lead_id:       leadId,
+    tenant_id:     guard.tenant_id,
+    type:          'status_changed',
+    description:   'Proceso de compra iniciado.',
+    points:        0,
+    actor_user_id: ctx.user_id,
   })
 
   revalidatePath(`/leads/${leadId}`)

@@ -79,6 +79,8 @@ export interface LeadEvent {
   description: string
   points: number | null
   createdAt: string
+  actorUserId?: string | null
+  author?: string            // resolved display, attached by the page
 }
 
 export interface PurchaseProcess {
