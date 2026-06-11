@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
+import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import type { Language } from '@/lib/types'
 
 function genId(prefix: string): string {
@@ -69,6 +70,9 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
   })
 
   if (error) return { error: error.message }
+
+  // Lifecycle log: who registered the lead and how (actor = the owner/super).
+  await emitLeadCreated(supabase, { leadId, tenantId, via: 'manual', actorUserId: ctx.user_id })
 
   // Apply the canonical model (fit + engagement + manual). For a fresh manual lead
   // with no events this resolves to 0 / status 'new'.
@@ -201,6 +205,18 @@ export async function createLeadsBulk(
 
   const { data: inserted, error } = await supabase.from('leads').insert(rows).select('id, status')
   if (error) return { ok: false, error: error.message }
+
+  // Lifecycle log (one per lead) attributed to the importer.
+  const createdEvents = (inserted ?? []).map(r => ({
+    lead_id:       (r as { id: string }).id,
+    tenant_id:     tenantId,
+    type:          'lead_created',
+    description:   'Lead registrado (importación)',
+    points:        0,
+    actor_user_id: ctx.user_id,
+    metadata:      { source: 'import' },
+  }))
+  if (createdEvents.length > 0) await supabase.from('lead_events').insert(createdEvents)
 
   // Canonical scoring. 'closed' leads are frozen (recompute early-returns); only
   // 'new' leads need it, and with no events they resolve to 0 — applied for

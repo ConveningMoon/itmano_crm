@@ -34,3 +34,27 @@ export async function findAuthUserByEmail(
     if (users.length < perPage) return null
   }
 }
+
+/**
+ * Resolves a set of auth user ids to their emails in one pass (batch, no N+1).
+ * Loops listUsers pages, stopping early once all requested ids are found.
+ */
+export async function getAuthEmailsByIds(ids: string[]): Promise<Record<string, string>> {
+  const want = new Set(ids.filter(Boolean))
+  const out: Record<string, string> = {}
+  if (want.size === 0) return out
+
+  const supabase = createAdminClient()
+  const perPage  = 200
+  for (let page = 1; ; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
+    if (error) break
+    const users = data?.users ?? []
+    for (const u of users) {
+      if (want.has(u.id) && u.email) out[u.id] = u.email
+    }
+    if (users.length < perPage) break
+    if (Object.keys(out).length >= want.size) break
+  }
+  return out
+}

@@ -5,6 +5,7 @@ import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
+import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 
 export function OPTIONS() {
   return corsOptions()
@@ -266,6 +267,13 @@ export async function POST(
     // FASE 2: form_baseline (+10) on the lead's FIRST form — any channel_type. Only on
     // creation (new lead); the existing-lead path never re-emits it (dedup_key guards too).
     await emitFormBaselineOnce(db, leadId, tenantId)
+
+    // Lifecycle log — system-authored (public form), with the entry channel.
+    await emitLeadCreated(db, {
+      leadId, tenantId, via: 'intake', actorUserId: null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      channelLabel: ((channelRow as any).name ?? (channelRow as any).slug ?? null) as string | null,
+    })
 
     // Contact-form questions keep their dedicated notification.
     if (channelRow.channel_type === 'contact_form') {

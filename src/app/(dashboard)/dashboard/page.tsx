@@ -34,13 +34,13 @@ function getTempColor(score: number): string {
 }
 
 export default async function DashboardPage() {
-  const { tenant_id } = await getCurrentTenantContext()
+  const { tenant_id, role, user_id } = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
   const [{ data: rawLeads }, { data: rawAgents }, recentActivity] = await Promise.all([
     supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
     supabase.from('agents').select('*').eq('active', true),
-    getRecentActivity(tenant_id, 10),
+    getRecentActivity(tenant_id, { role, userId: user_id }, 10),
   ])
 
   const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))

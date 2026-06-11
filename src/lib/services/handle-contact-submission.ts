@@ -1,6 +1,7 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
+import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -124,6 +125,8 @@ export async function handleContactSubmission(
 
     // form_baseline (+10) on the lead's FIRST form — only on creation (new lead).
     await emitFormBaselineOnce(db, leadId, tenantId)
+    // Lifecycle log — system-authored (no user context on a public webhook).
+    await emitLeadCreated(db, { leadId, tenantId, via: 'contact_form', actorUserId: null })
   }
 
   // ── Always log the question as a scoring event ───────────────────────────────

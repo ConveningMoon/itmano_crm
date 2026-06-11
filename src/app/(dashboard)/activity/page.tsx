@@ -14,14 +14,14 @@ export default async function ActivityPage({
 }: {
   searchParams: Promise<{ count?: string }>
 }) {
-  const { tenant_id, role } = await getCurrentTenantContext()
+  const { tenant_id, role, user_id } = await getCurrentTenantContext()
   const isSuper = role === 'super_admin'
 
   const { count: countParam } = await searchParams
   const count = Math.min(500, Math.max(PAGE, Number(countParam ?? PAGE) || PAGE))
 
   // Fetch one extra to know whether there is more to load.
-  const items   = await getAllActivity(tenant_id, { limit: count + 1, offset: 0 })
+  const items   = await getAllActivity(tenant_id, { role, userId: user_id }, { limit: count + 1, offset: 0 })
   const hasMore = items.length > count
   const visible = items.slice(0, count)
 

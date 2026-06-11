@@ -19,6 +19,7 @@ import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
 import { LeadSubmissionsList } from './lead-submissions-list'
 import type { LeadSubmissionRow } from '@/lib/data/form-submissions'
+import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,54 @@ const CARD: React.CSSProperties = {
 const CARD_TITLE: React.CSSProperties = {
   fontSize: '13px', fontWeight: 500,
   color: 'var(--text-primary)', marginBottom: '16px',
+}
+
+// Calculated score breakdown (not events): fit dimensions + component subtotals.
+function ScoreBreakdownPanel({ breakdown }: { breakdown: ScoreBreakdown }) {
+  const ptsColor = (p: number) => p > 0 ? '#6BA368' : p < 0 ? '#C97B6B' : 'var(--text-muted)'
+  const row = (label: string, pts: number, muted = false) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', fontSize: '12px' }}>
+      <span style={{ color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ color: ptsColor(pts), fontWeight: 600 }}>{pts > 0 ? `+${pts}` : pts}</span>
+    </div>
+  )
+  const sectionTitle = (t: string) => (
+    <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginTop: '14px', marginBottom: '2px' }}>{t}</div>
+  )
+  return (
+    <div style={CARD}>
+      <div style={CARD_TITLE}>Desglose del score</div>
+
+      {sectionTitle('Fit')}
+      {breakdown.hasFitProfile ? (
+        breakdown.fit.lines.length > 0
+          ? breakdown.fit.lines.map(l => <div key={l.dimension}>{row(l.label, l.points)}</div>)
+          : <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '5px 0' }}>Sin dimensiones puntuables.</div>
+      ) : (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '5px 0', fontStyle: 'italic' }}>Sin datos de perfil aún</div>
+      )}
+      {row('Subtotal Fit', breakdown.fit.total, true)}
+
+      {sectionTitle('Engagement')}
+      {row('Subtotal Engagement', breakdown.engagement.total, true)}
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+        Las señales positivas pierden valor con el tiempo.
+      </div>
+
+      {sectionTitle('Manual')}
+      {row('Subtotal Manual', breakdown.manual.total, true)}
+
+      <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: '14px', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Total</span>
+        <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>{breakdown.total}/100</span>
+      </div>
+      {breakdown.frozen && (
+        <div style={{ fontSize: '11px', color: 'var(--accent-gold)', marginTop: '6px' }}>
+          Score congelado por estado.
+        </div>
+      )}
+    </div>
+  )
 }
 
 const ACTION_BTN_STYLE: React.CSSProperties = {
@@ -119,11 +168,12 @@ interface LeadDetailProps {
   hasActiveSequenceRun: boolean
   manualActions: ManualActionItem[]
   statusHistory: StatusChange[]
+  scoreBreakdown: ScoreBreakdown
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, purchaseProcess, hasActiveSequenceRun, manualActions, statusHistory }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, purchaseProcess, hasActiveSequenceRun, manualActions, statusHistory, scoreBreakdown }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -361,6 +411,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </>
             )}
           </div>
+
+          {/* Card: Score breakdown */}
+          <ScoreBreakdownPanel breakdown={scoreBreakdown} />
 
           {/* Card 3: Notes */}
           <div style={CARD}>
@@ -744,7 +797,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                             </span>
                           )}
                           <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                            {formatDateTime(event.createdAt)}
+                            {event.author ? `${event.author} · ` : ''}{formatDateTime(event.createdAt)}
                           </span>
                         </div>
                       </div>
