@@ -33,10 +33,15 @@ export default async function SettingsPage() {
 
   // Access status per agent (user_id present) — kept off the global Agent type.
   const agentAccess: Record<string, boolean> = {}
+  let ownerLinked = false
+  const myUserId = userRes.data.user?.id
   for (const r of rawAgents ?? []) {
     const row = r as AgentRow & { user_id: string | null }
     agentAccess[row.id] = !!row.user_id
+    if (myUserId && row.user_id === myUserId) ownerLinked = true
   }
+  // The owner may link their own login to one unlinked agent (once).
+  const canLinkSelf = ctx.role === 'agent_owner' && !ownerLinked
 
   return (
     <>
@@ -57,6 +62,7 @@ export default async function SettingsPage() {
         scoringRules={scoringRules}
         canEditScoring={ctx.role === 'super_admin'}
         canManageAgents={ctx.role !== 'agent'}
+        canLinkSelf={canLinkSelf}
         userEmail={userRes.data.user?.email ?? ''}
         userRole={ctx.role}
       />

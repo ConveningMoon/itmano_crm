@@ -6,7 +6,8 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import type { Agent, Language } from '@/lib/types'
 import type { ChannelOption, TenantOption } from './page'
-import { createLead, createLeadsBulk } from './actions'
+import { createLead, createLeadsBulk, getExistingLeadEmails } from './actions'
+import { parseLeadRows, type ParseLeadsResult, type NormalizedLead } from '@/lib/import/parse-leads'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -49,20 +50,7 @@ interface FormErrors {
 
 type ImportStatus = 'idle' | 'parsing' | 'preview' | 'success' | 'error'
 
-interface ImportedLead {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  language: string
-  agentId: string
-  sourceType: string
-  lender: string
-  notes: string
-  _rowIndex: number
-  _hasError: boolean
-  _errorMessage?: string
-}
+type FileFormat = 'csv' | 'xlsx'
 
 const INITIAL_FORM: FormData = {
   firstName:            '',
@@ -255,11 +243,13 @@ export function NewLeadClient({
   channels,
   isSuperAdmin = false,
   tenants = [],
+  myAgentId = null,
 }: {
   agents: Agent[]
   channels: ChannelOption[]
   isSuperAdmin?: boolean
   tenants?: TenantOption[]
+  myAgentId?: string | null
 }) {
   const router = useRouter()
 
@@ -270,7 +260,12 @@ export function NewLeadClient({
   const [autoAssigned, setAutoAssigned] = useState(false)
   const [mode, setMode] = useState<'manual' | 'import'>('manual')
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
-  const [importedLeads, setImportedLeads] = useState<ImportedLead[]>([])
+  const [parseResult, setParseResult] = useState<ParseLeadsResult | null>(null)
+  const [existingEmails, setExistingEmails] = useState<Set<string>>(new Set())
+  const [importAgentId, setImportAgentId] = useState('')   // attribution agent (when no linked agent)
+  const [confirming, setConfirming] = useState(false)       // double-confirmation gate
+  const [importedCount, setImportedCount] = useState(0)
+  const [fileFormat, setFileFormat] = useState<FileFormat>('csv')
   const [importError, setImportError] = useState<string>('')
   const [isDragging, setIsDragging] = useState(false)
   const [selectedTenantId, setSelectedTenantId] = useState('')
@@ -292,136 +287,137 @@ export function NewLeadClient({
     agents.map(a => [a.id, a.name])
   )
 
+  // Headers use Spanish labels the tolerant matcher recognizes; status is Nuevo/Cerrado.
+  const TEMPLATE_HEADERS = ['nombre', 'apellido', 'email', 'telefono', 'idioma', 'estatus', 'prestamista', 'notas']
+
+  function leadToRow(l: NormalizedLead): string[] {
+    return [
+      l.firstName, l.lastName, l.email, l.phone, l.language,
+      l.status === 'new' ? 'Nuevo' : 'Cerrado', l.lender, l.notes,
+    ]
+  }
+
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   function downloadTemplate() {
-    const headers = [
-      'firstName', 'lastName', 'email', 'phone',
-      'language', 'agentId', 'sourceType', 'lender', 'notes',
-    ]
-    const exampleRow = [
-      'María', 'González', 'maria@email.com', '(757) 555-0100',
-      'es', 'agent-adriana', 'manual', 'Navy Federal', 'Cliente interesada en Virginia Beach',
-    ]
+    const example = ['María', 'González', 'maria@email.com', '(757) 555-0100', 'es', 'Nuevo', 'Navy Federal', 'Cliente interesada en Virginia Beach']
     const notes = [
       '# INSTRUCCIONES:',
-      '# language: es | en | pt',
-      '# agentId: agent-adriana | agent-john | agent-melanie | agent-viviane',
-      '# sourceType: lead_magnet | web_form | open_house | manual | ads | referral',
-      '# lender: texto libre (opcional)',
+      '# idioma: es | en | pt (vacío → es)',
+      '# estatus: Nuevo | Cerrado (vacío o inválido → Cerrado)',
+      '# email es obligatorio; filas sin email se omiten',
       '# Elimina estas líneas de comentario antes de importar',
       '',
     ]
-    const csv = [...notes, headers.join(','), exampleRow.join(',')].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'plantilla_leads_itmano.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+    const csv = [...notes, TEMPLATE_HEADERS.join(','), example.join(',')].join('\n')
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'plantilla_leads_itmano.csv')
+  }
+
+  // Exports the normalized, insert-ready dataset (already-existing rows excluded) in
+  // the same format as the uploaded file.
+  function downloadFinal(rows: NormalizedLead[]) {
+    if (fileFormat === 'xlsx') {
+      const aoa = [TEMPLATE_HEADERS, ...rows.map(leadToRow)]
+      const ws  = XLSX.utils.aoa_to_sheet(aoa)
+      const wb  = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Leads')
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'leads_a_importar.xlsx')
+    } else {
+      const esc = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+      const csv = [TEMPLATE_HEADERS.join(','), ...rows.map(r => leadToRow(r).map(esc).join(','))].join('\n')
+      triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'leads_a_importar.csv')
+    }
+  }
+
+  function resetImport() {
+    setImportStatus('idle'); setParseResult(null); setExistingEmails(new Set())
+    setConfirming(false); setImportError('')
   }
 
   async function handleFileUpload(file: File) {
     setImportStatus('parsing')
-    setImportError('')
+    setImportError(''); setConfirming(false)
+
+    if (isSuperAdmin && !selectedTenantId) {
+      setImportError('Selecciona un tenant antes de subir el archivo')
+      setImportStatus('error'); return
+    }
 
     const extension = file.name.split('.').pop()?.toLowerCase()
 
     try {
-      let rows: Record<string, string>[] = []
+      let rawRows: Record<string, string>[] = []
+      let headers: string[] = []
 
       if (extension === 'csv') {
+        setFileFormat('csv')
         await new Promise<void>((resolve, reject) => {
-          Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            comments: '#',
+          Papa.parse<Record<string, string>>(file, {
+            header: true, skipEmptyLines: true, comments: '#',
             complete: (results) => {
-              rows = results.data as Record<string, string>[]
+              rawRows = results.data
+              headers = results.meta.fields ?? []
               resolve()
             },
             error: (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))),
           })
         })
       } else if (extension === 'xlsx') {
+        setFileFormat('xlsx')
         const buffer = await file.arrayBuffer()
         const workbook = XLSX.read(buffer, { type: 'array' })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
-        rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false })
+        rawRows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false, defval: '' })
+        headers = [...new Set(rawRows.flatMap(r => Object.keys(r)))]
       } else {
         throw new Error('Formato no soportado. Usa .csv o .xlsx')
       }
 
-      if (rows.length === 0) {
-        throw new Error('El archivo está vacío o no tiene filas de datos')
-      }
+      if (rawRows.length === 0) throw new Error('El archivo está vacío o no tiene filas de datos')
+      if (rawRows.length > 500) throw new Error(`El archivo tiene ${rawRows.length} filas. El máximo permitido es 500`)
 
-      if (rows.length > 500) {
-        throw new Error(`El archivo tiene ${rows.length} filas. El máximo permitido es 500`)
-      }
+      const result = parseLeadRows(rawRows, headers)
 
-      const validLanguages = ['es', 'en', 'pt']
-      const validAgentIds = visibleAgents.map(a => a.id)
-      const validSourceTypes = ['lead_magnet', 'web_form', 'open_house', 'manual', 'ads', 'referral']
+      // Flag rows whose email already exists in the tenant.
+      const emails = result.rows.map(r => r.email)
+      const existing = await getExistingLeadEmails(emails, isSuperAdmin ? selectedTenantId : undefined)
+      setExistingEmails(existing.ok ? new Set(existing.existing.map(e => e.toLowerCase())) : new Set())
 
-      const mapped: ImportedLead[] = rows.map((row, i) => {
-        const rowErrors: string[] = []
-
-        if (!row.firstName?.trim()) rowErrors.push('firstName requerido')
-        if (!row.email?.trim()) rowErrors.push('email requerido')
-        if (row.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) rowErrors.push('email inválido')
-        if (row.language?.trim() && !validLanguages.includes(row.language.trim())) rowErrors.push(`language debe ser: ${validLanguages.join(' | ')}`)
-        if (row.agentId?.trim() && !validAgentIds.includes(row.agentId.trim())) rowErrors.push('agentId inválido')
-        if (row.sourceType?.trim() && !validSourceTypes.includes(row.sourceType.trim())) rowErrors.push('sourceType inválido')
-
-        return {
-          firstName:     row.firstName?.trim()  || '',
-          lastName:      row.lastName?.trim()   || '',
-          email:         row.email?.trim()      || '',
-          phone:         row.phone?.trim()      || '',
-          language:      row.language?.trim()   || 'es',
-          agentId:       row.agentId?.trim()    || 'agent-adriana',
-          sourceType:    row.sourceType?.trim() || 'manual',
-          lender:        row.lender?.trim()     || '',
-          notes:         row.notes?.trim()      || '',
-          _rowIndex:     i + 1,
-          _hasError:     rowErrors.length > 0,
-          _errorMessage: rowErrors.join(', '),
-        }
-      })
-
-      setImportedLeads(mapped)
+      setParseResult(result)
       setImportStatus('preview')
-
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Error al procesar el archivo')
       setImportStatus('error')
     }
   }
 
-  async function handleImport() {
-    const validRows = importedLeads.filter(l => !l._hasError)
-    if (validRows.length === 0) return
-    if (isSuperAdmin && !selectedTenantId) {
-      setImportError('Selecciona un tenant antes de importar')
-      setImportStatus('error')
-      return
-    }
+  async function handleImport(rowsToInsert: NormalizedLead[], agentId: string) {
+    if (rowsToInsert.length === 0 || !agentId) return
     setImportStatus('parsing')
-    const result = await createLeadsBulk(validRows.map(row => ({
-      firstName:  row.firstName,
-      lastName:   row.lastName,
-      email:      row.email,
-      phone:      row.phone || null,
-      language:   row.language as Language,
-      agentId:    row.agentId,
-      sourceType: row.sourceType,
-      lender:     row.lender || null,
-      notes:      row.notes || null,
-    })), isSuperAdmin ? selectedTenantId : undefined)
-    if (result.error) {
-      setImportStatus('error')
-      setImportError(result.error)
+    const result = await createLeadsBulk(
+      rowsToInsert.map(r => ({
+        firstName: r.firstName,
+        lastName:  r.lastName,
+        email:     r.email,
+        phone:     r.phone || null,
+        language:  r.language as Language,
+        status:    r.status,
+        lender:    r.lender || null,
+        notes:     r.notes || null,
+      })),
+      agentId,
+      isSuperAdmin ? selectedTenantId : undefined,
+    )
+    if (!result.ok) {
+      setImportStatus('error'); setImportError(result.error)
     } else {
+      setImportedCount(result.result.inserted)
       setImportStatus('success')
     }
   }
@@ -508,8 +504,7 @@ export function NewLeadClient({
     setErrors({})
     setAutoAssigned(false)
     setSubmitSuccess(false)
-    setImportStatus('idle')
-    setImportedLeads([])
+    resetImport()
   }
 
   const selectedAgent = agents.find(a => a.id === form.agentId)
@@ -533,8 +528,16 @@ export function NewLeadClient({
     if (errors.acquisitionChannelId) setErrors(prev => ({ ...prev, acquisitionChannelId: undefined }))
   }
 
-  const validCount = importedLeads.filter(l => !l._hasError).length
-  const errorCount = importedLeads.filter(l => l._hasError).length
+  // ─── Import preview computeds ─────────────────────────────────────────────
+  const importRows  = parseResult?.rows ?? []
+  const finalRows   = importRows.filter(r => !existingEmails.has(r.email.toLowerCase()))
+  const existingCount = importRows.length - finalRows.length
+  const newCount    = finalRows.filter(r => r.status === 'new').length
+  const closedCount = finalRows.filter(r => r.status === 'closed').length
+  // Attribution: the linked agent if any, else the (mandatory) selector value.
+  const attributionAgentId   = myAgentId ?? importAgentId
+  const attributionAgentName = AGENT_DISPLAY_NAMES[attributionAgentId] || '—'
+  const needsAgentSelector   = !myAgentId
 
   if (submitSuccess) return <SuccessScreen form={form} agents={agents} onReset={handleReset} />
 
@@ -1038,7 +1041,7 @@ export function NewLeadClient({
               Descargar plantilla CSV
             </button>
             <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              Columnas: firstName · lastName · email · phone · language · agentId · sourceType · lender · notes
+              Columnas (reconocimiento automático, es/en): nombre · apellido · email · teléfono · idioma · estatus (Nuevo/Cerrado) · prestamista · notas
             </div>
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
@@ -1120,124 +1123,146 @@ export function NewLeadClient({
               </>
             )}
 
-            {/* PASO 3: Preview table */}
-            {importStatus === 'preview' && (
+            {/* PASO 3: Preview + double confirmation */}
+            {importStatus === 'preview' && parseResult && (
               <>
                 <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
-                <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-                  Paso 3 — Revisa y confirma
-                </p>
-
-                {/* Preview header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <div>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                      {importedLeads.length} leads detectados
-                    </span>
-                    {errorCount > 0 && (
-                      <span style={{
-                        marginLeft: '10px',
-                        fontSize: '12px',
-                        color: 'var(--accent-coral)',
-                        background: 'rgba(201,123,107,0.1)',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                      }}>
-                        ⚠ {errorCount} con errores
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => { setImportStatus('idle'); setImportedLeads([]) }}
-                    style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
+                  <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                    Paso 3 — Revisa y confirma
+                  </p>
+                  <button onClick={resetImport} style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
                     ✕ Cancelar
                   </button>
                 </div>
 
-                {/* Preview table */}
-                <div style={{ overflowY: 'auto', maxHeight: '320px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--bg-elevated)' }}>
-                        {['#', 'Nombre', 'Email', 'Teléfono', 'Agente', 'Idioma', 'Prestamista', 'Estado'].map(col => (
-                          <th key={col} style={{
-                            position: 'sticky',
-                            top: 0,
-                            zIndex: 1,
-                            background: 'var(--bg-elevated)',
-                            padding: '8px 10px',
-                            textAlign: 'left',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            color: 'var(--text-muted)',
-                            fontWeight: 500,
-                            borderBottom: '1px solid var(--border-subtle)',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importedLeads.map((lead) => (
-                        <tr
-                          key={lead._rowIndex}
-                          style={{
-                            background: lead._hasError ? 'rgba(201,123,107,0.06)' : 'transparent',
-                            borderLeft: lead._hasError ? '2px solid var(--accent-coral)' : '2px solid transparent',
-                          }}
-                        >
-                          <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{lead._rowIndex}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ')}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.email}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.phone || '—'}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{AGENT_DISPLAY_NAMES[lead.agentId] || lead.agentId}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.language.toUpperCase()}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.lender || '—'}</td>
-                          <td style={{ padding: '8px 10px' }}>
-                            {lead._hasError
-                              ? <span style={{ color: 'var(--accent-coral)', fontSize: '11px' }}>{lead._errorMessage}</span>
-                              : <span style={{ color: 'var(--accent-green)' }}>✓</span>
-                            }
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                  {finalRows.length} se importarán ({newCount} Nuevos · {closedCount} Cerrados) · {parseResult.totalRows} filas en el archivo
                 </div>
 
-                {/* Preview footer */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {validCount} leads válidos serán importados
-                    {errorCount > 0 &&
-                      ` · ${errorCount} con errores serán omitidos`}
-                  </p>
-                  <button
-                    onClick={handleImport}
-                    disabled={validCount === 0}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 20px',
-                      background: 'var(--accent-gold)',
-                      color: 'var(--bg-base)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: validCount === 0 ? 'not-allowed' : 'pointer',
-                      opacity: validCount === 0 ? 0.5 : 1,
-                    }}
-                  >
-                    <CheckCircle2 size={14} />
-                    Importar {validCount} leads
-                  </button>
+                {/* Warnings */}
+                {(() => {
+                  const warns: string[] = []
+                  if (parseResult.excludedNoEmail > 0)         warns.push(`${parseResult.excludedNoEmail} fila(s) sin email válido — omitidas`)
+                  if (parseResult.excludedDuplicateInFile > 0) warns.push(`${parseResult.excludedDuplicateInFile} email(s) duplicado(s) en el archivo — se conserva la primera`)
+                  if (existingCount > 0)                       warns.push(`${existingCount} ya existen en este tenant — omitidas`)
+                  if (parseResult.statusDefaulted > 0)         warns.push(`${parseResult.statusDefaulted} fila(s) sin estatus válido — asignadas a "Cerrado"`)
+                  if (parseResult.ignoredColumns.length > 0)   warns.push(`Columnas ignoradas: ${parseResult.ignoredColumns.join(', ')}`)
+                  if (warns.length === 0) return null
+                  return (
+                    <div style={{ background: 'rgba(201,169,110,0.07)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '12px 14px', marginBottom: '14px' }}>
+                      {warns.map((w, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '12px', color: 'var(--text-secondary)', marginTop: i === 0 ? 0 : '6px' }}>
+                          <AlertTriangle size={13} style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: '1px' }} />
+                          <span>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* Attribution agent */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={labelStyle}>Agente al que se atribuirán los leads *</label>
+                  {needsAgentSelector ? (
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        className="new-lead-input"
+                        value={importAgentId}
+                        onChange={e => setImportAgentId(e.target.value)}
+                        style={{ ...inputStyle, appearance: 'none', cursor: 'pointer', paddingRight: '32px' }}
+                      >
+                        <option value="">-- Seleccionar agente --</option>
+                        {visibleAgents.map(a => (
+                          <option key={a.id} value={a.id}>{a.avatarInitials} · {a.name}</option>
+                        ))}
+                      </select>
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', padding: '4px 0' }}>{attributionAgentName}</div>
+                  )}
                 </div>
+
+                {/* Preview table (insert-ready rows) */}
+                {finalRows.length > 0 && (
+                  <div style={{ overflowY: 'auto', maxHeight: '300px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--bg-elevated)' }}>
+                          {['#', 'Nombre', 'Email', 'Teléfono', 'Idioma', 'Prestamista', 'Estatus'].map(col => (
+                            <th key={col} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--bg-elevated)', padding: '8px 10px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border-subtle)', whiteSpace: 'nowrap' }}>
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {finalRows.slice(0, 50).map((r, i) => (
+                          <tr key={`${r.email}-${i}`}>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{i + 1}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.email}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.phone || '—'}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.language.toUpperCase()}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.lender || '—'}</td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <span style={{ fontSize: '11px', color: r.status === 'new' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+                                {r.status === 'new' ? 'Nuevo' : 'Cerrado'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {finalRows.length > 50 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>Mostrando 50 de {finalRows.length}.</div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', gap: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => downloadFinal(finalRows)}
+                    disabled={finalRows.length === 0}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 16px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500, cursor: finalRows.length === 0 ? 'not-allowed' : 'pointer', opacity: finalRows.length === 0 ? 0.5 : 1 }}
+                  >
+                    <Download size={14} />
+                    Descargar archivo final ({fileFormat.toUpperCase()})
+                  </button>
+
+                  {!confirming ? (
+                    <button
+                      onClick={() => setConfirming(true)}
+                      disabled={finalRows.length === 0 || !attributionAgentId}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: (finalRows.length === 0 || !attributionAgentId) ? 'not-allowed' : 'pointer', opacity: (finalRows.length === 0 || !attributionAgentId) ? 0.5 : 1 }}
+                    >
+                      Continuar
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* Double confirmation */}
+                {confirming && (
+                  <div style={{ marginTop: '16px', background: 'var(--bg-elevated)', border: '1px solid var(--accent-gold)', borderRadius: '10px', padding: '16px' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: '0 0 12px' }}>
+                      Se registrarán <strong>{finalRows.length}</strong> leads ({newCount} Nuevos, {closedCount} Cerrados) asignados a <strong>{attributionAgentName}</strong>. Esta acción no se puede deshacer.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => handleImport(finalRows, attributionAgentId)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        <CheckCircle2 size={14} />
+                        Confirmar e importar {finalRows.length}
+                      </button>
+                      <button onClick={() => setConfirming(false)} style={{ padding: '10px 18px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '13px', cursor: 'pointer' }}>
+                        Volver
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -1249,36 +1274,18 @@ export function NewLeadClient({
                   Importación completada
                 </h3>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
-                  {validCount} leads han sido añadidos al sistema.
+                  {importedCount} lead(s) añadidos al sistema.
                 </p>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                   <button
                     onClick={() => router.push('/leads')}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'transparent',
-                      color: 'var(--text-secondary)',
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
+                    style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
                   >
                     ← Ver todos los leads
                   </button>
                   <button
-                    onClick={() => { setImportStatus('idle'); setImportedLeads([]) }}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'var(--accent-gold)',
-                      color: 'var(--bg-base)',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
+                    onClick={resetImport}
+                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'var(--accent-gold)', color: 'var(--bg-base)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
                   >
                     + Importar otro archivo
                   </button>

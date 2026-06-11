@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
-import { updateTenantName, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess } from './actions'
+import { updateTenantName, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount } from './actions'
 import { ScoringSection } from './scoring-section'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
@@ -160,7 +160,7 @@ function TenantSection({ tenant, canManage }: { tenant: { id: string; name: stri
 
 // ─── Agent edit row ───────────────────────────────────────────────────────────
 
-function AgentRow({ agent, hasAccess, canManage }: { agent: Agent; hasAccess: boolean; canManage: boolean }) {
+function AgentRow({ agent, hasAccess, canManage, canLinkSelf }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean }) {
   const [editing, setEditing]   = useState(false)
   const [name, setName]         = useState(agent.name)
   const [email, setEmail]       = useState(agent.email ?? '')
@@ -218,6 +218,15 @@ function AgentRow({ agent, hasAccess, canManage }: { agent: Agent; hasAccess: bo
     })
   }
 
+  function handleLinkSelf() {
+    setAccessErr(null); setAccessMsg(null)
+    startAccess(async () => {
+      const res = await linkAgentToMyAccount(agent.id)
+      if (!res.ok) { setAccessErr(res.error); return }
+      setAccessMsg(`Vinculado. Ahora figuras como ${agent.name} (p. ej. para importar leads).`)
+    })
+  }
+
   return (
     <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px' }}>
       {!editing ? (
@@ -264,7 +273,12 @@ function AgentRow({ agent, hasAccess, canManage }: { agent: Agent; hasAccess: bo
               {hasAccess ? (
                 <button onClick={() => { setAccessMode('confirmRevoke'); setAccessErr(null) }} style={BTN_GHOST}>Revocar acceso</button>
               ) : (
-                <button onClick={() => { setInviteEmail(agent.email ?? ''); setAccessMode('inviting'); setAccessErr(null); setAccessMsg(null) }} style={BTN_GHOST}>Invitar acceso</button>
+                <>
+                  {canLinkSelf && (
+                    <button onClick={handleLinkSelf} disabled={accessPending} style={BTN_GHOST}>Vincular a mi cuenta</button>
+                  )}
+                  <button onClick={() => { setInviteEmail(agent.email ?? ''); setAccessMode('inviting'); setAccessErr(null); setAccessMsg(null) }} style={BTN_GHOST}>Invitar acceso</button>
+                </>
               )}
               <button onClick={() => setEditing(true)} style={BTN_GHOST}>Editar</button>
             </div>
@@ -449,12 +463,13 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
 // ─── Agents section ───────────────────────────────────────────────────────────
 
 function AgentsSection({
-  agents, agentAccess, accessCount, canManage, tenantId, isSuper,
+  agents, agentAccess, accessCount, canManage, canLinkSelf, tenantId, isSuper,
 }: {
   agents: Agent[]
   agentAccess: Record<string, boolean>
   accessCount: number
   canManage: boolean
+  canLinkSelf: boolean
   tenantId: string
   isSuper: boolean
 }) {
@@ -477,7 +492,7 @@ function AgentsSection({
       {creating && <CreateAgentForm tenantId={isSuper ? tenantId : undefined} onDone={() => setCreating(false)} />}
 
       {agents.map(agent => (
-        <AgentRow key={agent.id} agent={agent} hasAccess={!!agentAccess[agent.id]} canManage={canManage} />
+        <AgentRow key={agent.id} agent={agent} hasAccess={!!agentAccess[agent.id]} canManage={canManage} canLinkSelf={canLinkSelf} />
       ))}
     </div>
   )
@@ -566,13 +581,14 @@ interface Props {
   scoringRules: ScoreRule[]
   canEditScoring: boolean
   canManageAgents: boolean
+  canLinkSelf: boolean
   userEmail: string
   userRole: TenantRole
 }
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, scoringRules,
-  canEditScoring, canManageAgents, userEmail, userRole,
+  canEditScoring, canManageAgents, canLinkSelf, userEmail, userRole,
 }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
 
@@ -608,6 +624,7 @@ export function SettingsClient({
           agentAccess={agentAccess}
           accessCount={accessCount}
           canManage={canManageAgents}
+          canLinkSelf={canLinkSelf}
           tenantId={tenant.id}
           isSuper={userRole === 'super_admin'}
         />
