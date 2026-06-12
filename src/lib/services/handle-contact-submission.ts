@@ -2,6 +2,7 @@ import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
+import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -12,6 +13,7 @@ export interface ContactChannel {
   id:        string
   tenant_id: string
   name:      string
+  agent_id:  string | null
 }
 
 export interface ContactSubmissionParams {
@@ -42,29 +44,9 @@ export async function handleContactSubmission(
   const message    = params.message.slice(0, 2000)
   const tenantId   = channel.tenant_id
 
-  // ── Resolve agent — language-based, Melanie (first_buyer) is manual-only ──────
-  let agentId: string | null = null
-  {
-    const { data: agent } = await db
-      .from('agents')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('language', language)
-      .neq('specialty', 'first_buyer')
-      .limit(1)
-      .maybeSingle()
-    agentId = agent?.id ?? null
-  }
-  if (!agentId) {
-    const { data: fallback } = await db
-      .from('agents')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('active', true)
-      .limit(1)
-      .maybeSingle()
-    agentId = fallback?.id ?? null
-  }
+  // ── Resolve agent — channel.agent_id (explicit) or round-robin. Language is NO
+  //    LONGER a routing criterion. See route-channel-agent.ts. ──────────────────
+  const agentId = await resolveChannelAgent(db, tenantId, channel.agent_id)
   if (!agentId) {
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, error: 'no_agent_found' }))
     throw new Error('No agent available for tenant')

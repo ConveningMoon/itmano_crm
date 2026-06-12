@@ -27,14 +27,32 @@ export async function POST(
 ) {
   const { publicId } = await params
 
+  const received = request.headers.get('x-contact-secret')?.trim()
+
+  const db = createAdminClient()
+
+  // ── Resolve channel (needed to read its per-channel secret) ───────────────────
+  const { data: channel } = await db
+    .from('acquisition_channels')
+    .select('id, name, tenant_id, channel_type, agent_id, metadata')
+    .eq('public_id', publicId)
+    .eq('active', true)
+    .maybeSingle()
+
+  if (!channel) return err('Channel not found', 404)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ch = channel as any
+
   // ── Shared-secret auth ──────────────────────────────────────────────────────
-  const secret = process.env.CONTACT_WEBHOOK_SECRET?.trim()
-  if (!secret) {
-    console.error(JSON.stringify({ service: 'contact-submit', path: 'no_secret' }))
+  // Effective secret = per-channel metadata.contact_secret, else the global env
+  // var. The existing Contact Us has no per-channel secret → env fallback (unchanged).
+  const channelSecret = (ch.metadata?.contact_secret as string | undefined)?.trim()
+  const effectiveSecret = channelSecret || process.env.CONTACT_WEBHOOK_SECRET?.trim()
+  if (!effectiveSecret) {
+    console.error(JSON.stringify({ service: 'contact-submit', path: 'no_secret', public_id: publicId }))
     return err('Server not configured', 500)
   }
-  const received = request.headers.get('x-contact-secret')?.trim()
-  if (received !== secret) {
+  if (received !== effectiveSecret) {
     console.warn(JSON.stringify({ service: 'contact-submit', path: 'secret_mismatch', public_id: publicId }))
     return err('Unauthorized', 401)
   }
@@ -53,24 +71,10 @@ export async function POST(
     return err('Invalid request', 400)
   }
 
-  const db = createAdminClient()
-
-  // ── Resolve channel ─────────────────────────────────────────────────────────
-  const { data: channel } = await db
-    .from('acquisition_channels')
-    .select('id, name, tenant_id, channel_type')
-    .eq('public_id', publicId)
-    .eq('active', true)
-    .maybeSingle()
-
-  if (!channel) return err('Channel not found', 404)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ch = channel as any
-
   try {
     const result = await handleContactSubmission({
       db,
-      channel:    { id: ch.id, tenant_id: ch.tenant_id, name: ch.name },
+      channel:    { id: ch.id, tenant_id: ch.tenant_id, name: ch.name, agent_id: ch.agent_id ?? null },
       first_name: parsed.first_name,
       last_name:  parsed.last_name,
       email:      parsed.email,

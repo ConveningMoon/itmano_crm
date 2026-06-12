@@ -46,8 +46,29 @@ export async function POST(
 ) {
   const { publicId } = await params
 
+  const db = createAdminClient()
+
+  // ── Resolve channel (must be a contact_form) — also needed for its per-channel
+  //    secret, read BEFORE signature validation. publicId is a non-secret lookup. ─
+  const { data: channel } = await db
+    .from('acquisition_channels')
+    .select('id, name, tenant_id, channel_type, agent_id, metadata')
+    .eq('public_id', publicId)
+    .eq('active', true)
+    .maybeSingle()
+
+  if (!channel) return err('Channel not found', 404)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ch = channel as any
+  if (ch.channel_type !== 'contact_form') {
+    return err('Channel is not a contact form', 404)
+  }
+
   // ── Signature config ──────────────────────────────────────────────────────────
-  const secret = process.env.WEBFLOW_WEBHOOK_SECRET?.trim()
+  // Effective secret = per-channel metadata.webflow_secret, else the global env
+  // var. The existing Contact Us has no per-channel secret → env fallback (unchanged).
+  const channelSecret = (ch.metadata?.webflow_secret as string | undefined)?.trim()
+  const secret = channelSecret || process.env.WEBFLOW_WEBHOOK_SECRET?.trim()
   if (!secret) {
     console.error(JSON.stringify({ service: 'webflow-webhook', path: 'no_secret', public_id: publicId }))
     return err('Server not configured', 500)
@@ -116,27 +137,10 @@ export async function POST(
     return err('Missing required fields (email, message)', 400)
   }
 
-  const db = createAdminClient()
-
-  // ── Resolve channel (must be a contact_form) ──────────────────────────────────
-  const { data: channel } = await db
-    .from('acquisition_channels')
-    .select('id, name, tenant_id, channel_type')
-    .eq('public_id', publicId)
-    .eq('active', true)
-    .maybeSingle()
-
-  if (!channel) return err('Channel not found', 404)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ch = channel as any
-  if (ch.channel_type !== 'contact_form') {
-    return err('Channel is not a contact form', 404)
-  }
-
   try {
     const result = await handleContactSubmission({
       db,
-      channel:    { id: ch.id, tenant_id: ch.tenant_id, name: ch.name },
+      channel:    { id: ch.id, tenant_id: ch.tenant_id, name: ch.name, agent_id: ch.agent_id ?? null },
       first_name: firstName || 'Lead',
       last_name:  lastName,
       email,

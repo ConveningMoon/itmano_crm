@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelBySlug } from '@/lib/data/channels'
 import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
 import { listSequences } from '@/lib/data/email-sequences'
@@ -27,10 +28,14 @@ export default async function ChannelDetailPage({
   const channel = await getChannelBySlug(tenant_id, slug)
   if (!channel) notFound()
 
-  const [submissions, sequences] = await Promise.all([
+  const supabase = createAdminClient()
+  const [submissions, sequences, { data: agentRows }] = await Promise.all([
     getSubmissionsForChannel(channel.id, tenant_id),
     listSequences(tenant_id),
+    supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
   ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
 
   const typeLabel  = CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType
   const typeColor  = {
@@ -86,15 +91,23 @@ export default async function ChannelDetailPage({
               {channel.active ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '8px' }}>
             {channel.publicId} · slug: {channel.slug}
           </div>
+          <span style={{
+            fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
+            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+          }}>
+            Agente: {channel.agentName ?? 'Toda la agencia'}
+          </span>
         </div>
         <ChannelActions
           channelId={channel.id}
           channelName={channel.name}
           channelActive={channel.active}
           emailSequenceId={channel.emailSequenceId}
+          agentId={channel.agentId}
+          agents={agents}
           sequences={sequences.filter(s => s.activationType === 'form').map(s => ({ id: s.id, name: s.name }))}
         />
       </div>

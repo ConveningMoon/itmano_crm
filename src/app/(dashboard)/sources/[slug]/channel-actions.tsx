@@ -11,6 +11,8 @@ interface ChannelActionsProps {
   channelName:     string
   channelActive:   boolean
   emailSequenceId: string | null
+  agentId:         string | null
+  agents:          Array<{ id: string; name: string }>
   sequences:       Array<{ id: string; name: string }>
 }
 
@@ -36,12 +38,13 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive, emailSequenceId, sequences }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, emailSequenceId, agentId, agents, sequences }: ChannelActionsProps) {
   const router = useRouter()
   const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
   const [name,       setName]       = useState(channelName)
   const [active,     setActive]     = useState(channelActive)
   const [sequenceId, setSequenceId] = useState<string>(emailSequenceId ?? '')
+  const [agId,       setAgId]       = useState<string>(agentId ?? '') // '' = Toda la agencia
   const [error,      setError]      = useState<string | null>(null)
   const [pending,    start]         = useTransition()
 
@@ -49,7 +52,7 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
     setError(null)
     start(async () => {
       const [nameRes, seqRes] = await Promise.all([
-        updateChannel(channelId, { name, active }),
+        updateChannel(channelId, { name, active, agentId: agId || null }),
         updateChannelSequence(channelId, sequenceId || null),
       ])
       if (!nameRes.ok) { setError(nameRes.error); return }
@@ -76,7 +79,7 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
       {/* Action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <button
-          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setMode('edit') }}
+          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setMode('edit') }}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
@@ -158,6 +161,22 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
                       {opt.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>Agente</label>
+                <select
+                  value={agId}
+                  onChange={e => setAgId(e.target.value)}
+                  className="ch-act-input"
+                  style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}
+                >
+                  <option value="">Toda la agencia</option>
+                  {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                  Atribución de leads de esta fuente. &quot;Toda la agencia&quot; reparte entre los agentes activos.
                 </div>
               </div>
 
