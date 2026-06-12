@@ -21,6 +21,7 @@ export interface LeadRow {
   tenant_id: string
   agent_id: string
   acquisition_channel_id: string | null
+  traffic_source: string | null
   first_name: string
   last_name: string
   email: string
@@ -100,6 +101,7 @@ export function mapLead(r: LeadRow): Lead {
     tenantId: r.tenant_id,
     agentId: r.agent_id,
     acquisitionChannelId: r.acquisition_channel_id,
+    trafficSource: r.traffic_source ?? null,
     firstName: r.first_name,
     lastName: r.last_name,
     email: r.email,

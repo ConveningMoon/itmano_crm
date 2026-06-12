@@ -29,18 +29,23 @@ const LABEL: React.CSSProperties = {
 interface Props {
   isSuperAdmin:    boolean
   tenants:         Array<{ id: string; name: string }>
+  agents:          Array<{ id: string; name: string; tenantId: string }>
   fixedTenantId?:  string
 }
 
-export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props) {
+export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }: Props) {
   const router = useRouter()
   const [name,           setName]           = useState('')
   const [language,       setLanguage]       = useState<'es' | 'en' | 'pt'>('es')
   const [description,    setDescription]    = useState('')
   const [activationType, setActivationType] = useState<'form' | 'manual'>('form')
   const [tenantId,       setTenantId]       = useState(fixedTenantId ?? tenants[0]?.id ?? '')
+  const [agentId,        setAgentId]        = useState('') // '' = Toda la agencia
   const [error,          setError]          = useState<string | null>(null)
   const [pending,        start]             = useTransition()
+
+  // For super_admin the agent options follow the selected tenant.
+  const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -51,6 +56,7 @@ export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props)
         language,
         description:    description.trim() || null,
         activationType,
+        agentId:        agentId || null,
         tenantId:       isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
@@ -72,7 +78,7 @@ export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props)
             <label style={LABEL}>Tenant</label>
             <select
               value={tenantId}
-              onChange={e => setTenantId(e.target.value)}
+              onChange={e => { setTenantId(e.target.value); setAgentId('') }}
               className="seq-select"
               required
               style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}
@@ -148,6 +154,24 @@ export function NewSequenceForm({ isSuperAdmin, tenants, fixedTenantId }: Props)
                 <div style={{ fontSize: '11px', fontWeight: 400, marginTop: '2px', opacity: 0.8 }}>{opt.desc}</div>
               </button>
             ))}
+          </div>
+        </div>
+
+        <div>
+          <label style={LABEL}>Agente <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(organizacional)</span></label>
+          <select
+            value={agentId}
+            onChange={e => setAgentId(e.target.value)}
+            className="seq-select"
+            style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}
+          >
+            <option value="">Toda la agencia</option>
+            {visibleAgents.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Vínculo organizacional — no afecta el envío de emails.
           </div>
         </div>
 

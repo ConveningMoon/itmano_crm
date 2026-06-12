@@ -34,12 +34,12 @@ const CHANNEL_TYPE_COLORS: Record<ChannelType, string> = {
 }
 
 const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
+  // manual / manychat_flow are excluded page-wide (no form behind them) — they are
+  // already filtered out by the base query (getChannelsWithMetrics).
   { value: 'all',          label: 'Todos' },
   { value: 'lead_magnet',  label: 'Lead Magnets' },
   { value: 'event',        label: 'Eventos' },
   { value: 'contact_form', label: 'Formularios' },
-  { value: 'manychat_flow',label: 'ManyChat' },
-  { value: 'manual',       label: 'Manual' },
   { value: 'archived',     label: 'Archivados' },
 ]
 

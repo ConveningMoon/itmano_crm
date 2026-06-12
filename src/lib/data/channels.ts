@@ -70,7 +70,11 @@ async function fetchChannelsWithMetrics(
 
   let channelQ = supabase
     .from('acquisition_channels')
+    // Only channels with a form behind them are manageable here. 'manual' and
+    // 'manychat_flow' are excluded from the WHOLE page (incl. "Todos") — legacy rows
+    // stay in the DB, just invisible. No CHECK change, no lead migration.
     .select('*')
+    .in('channel_type', ['lead_magnet', 'event', 'contact_form'])
     .order('created_at', { ascending: false })
   channelQ = archived
     ? channelQ.not('archived_at', 'is', null)

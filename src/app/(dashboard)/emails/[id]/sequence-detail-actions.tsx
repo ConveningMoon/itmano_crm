@@ -34,21 +34,24 @@ interface Props {
   description:    string
   active:         boolean
   activeRunCount: number
+  agentId:        string | null
+  agents:         Array<{ id: string; name: string }>
 }
 
-export function SequenceDetailActions({ sequenceId, sequenceName, language, description, active, activeRunCount }: Props) {
+export function SequenceDetailActions({ sequenceId, sequenceName, language, description, active, activeRunCount, agentId, agents }: Props) {
   const router  = useRouter()
   const [mode,    setMode]    = useState<'idle' | 'edit' | 'confirm_delete'>('idle')
   const [name,    setName]    = useState(sequenceName)
   const [lang,    setLang]    = useState(language)
   const [desc,    setDesc]    = useState(description)
+  const [agId,    setAgId]    = useState(agentId ?? '') // '' = Toda la agencia
   const [error,   setError]   = useState<string | null>(null)
   const [pending, start]      = useTransition()
 
   function handleSave() {
     setError(null)
     start(async () => {
-      const res = await updateSequence(sequenceId, { name, language: lang, description: desc })
+      const res = await updateSequence(sequenceId, { name, language: lang, description: desc, agentId: agId || null })
       if (!res.ok) { setError(res.error); return }
       setMode('idle')
       router.refresh()
@@ -79,7 +82,7 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
 
       <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
         <button
-          onClick={() => { setName(sequenceName); setLang(language); setDesc(description); setMode('edit') }}
+          onClick={() => { setName(sequenceName); setLang(language); setDesc(description); setAgId(agentId ?? ''); setMode('edit') }}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
@@ -154,6 +157,14 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
                     }}>{opt.label}</button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label style={LABEL}>Agente (organizacional)</label>
+                <select value={agId} onChange={e => setAgId(e.target.value)} className="sda-input" style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                  <option value="">Toda la agencia</option>
+                  {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>No afecta el envío de emails.</div>
               </div>
               <div>
                 <label style={LABEL}>Descripción</label>
