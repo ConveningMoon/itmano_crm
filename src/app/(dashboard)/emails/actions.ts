@@ -33,8 +33,23 @@ const SequenceSchema = z.object({
   language:       z.enum(['es', 'en', 'pt']),
   description:    z.string().max(500).optional().nullable(),
   activationType: z.enum(['form', 'manual']).default('form'),
+  agentId:        z.string().optional().nullable(), // null = "Toda la agencia"
   tenantId:       z.string().optional(), // required for super_admin
 })
+
+// Validates an optional sequence agent_id belongs to the tenant. null/'' → "Toda la
+// agencia" (no agent). Returns the value to store, or an error.
+async function resolveSequenceAgent(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  agentId: string | null | undefined,
+): Promise<string | null | { error: string }> {
+  const id = agentId?.trim()
+  if (!id) return null
+  const { data } = await supabase.from('agents').select('id').eq('id', id).eq('tenant_id', tenantId).maybeSingle()
+  if (!data) return { error: 'El agente seleccionado no pertenece a este tenant' }
+  return id
+}
 
 export async function createSequence(
   fields: z.infer<typeof SequenceSchema>
@@ -50,6 +65,9 @@ export async function createSequence(
   if (typeof tenantId === 'object') return { ok: false, error: tenantId.error }
 
   const supabase = createAdminClient()
+  const agent = await resolveSequenceAgent(supabase, tenantId, parsed.data.agentId)
+  if (typeof agent === 'object' && agent !== null) return { ok: false, error: agent.error }
+
   const { data, error } = await supabase
     .from('email_sequences')
     .insert({
@@ -58,6 +76,7 @@ export async function createSequence(
       language:        parsed.data.language,
       description:     parsed.data.description?.trim() || null,
       activation_type: parsed.data.activationType,
+      agent_id:        agent,
       active:          true,
     })
     .select('id')
@@ -72,7 +91,7 @@ export async function createSequence(
 
 export async function updateSequence(
   sequenceId: string,
-  fields: { name: string; language: string; description?: string | null }
+  fields: { name: string; language: string; description?: string | null; agentId?: string | null }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
@@ -81,12 +100,18 @@ export async function updateSequence(
   if (denied) return denied
   const supabase = createAdminClient()
 
+  // Resolve/validate the agent against the sequence's tenant.
+  const tenantForCheck = ctx.tenant_id ?? (await supabase.from('email_sequences').select('tenant_id').eq('id', sequenceId).maybeSingle()).data?.tenant_id as string | undefined
+  const agent = await resolveSequenceAgent(supabase, tenantForCheck ?? '', fields.agentId)
+  if (typeof agent === 'object' && agent !== null) return { ok: false, error: agent.error }
+
   let q = supabase
     .from('email_sequences')
     .update({
       name:        fields.name.trim(),
       language:    fields.language,
       description: fields.description?.trim() || null,
+      agent_id:    agent,
     })
     .eq('id', sequenceId)
 

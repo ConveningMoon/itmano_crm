@@ -39,6 +39,8 @@ export interface EmailSequence {
   description:       string | null
   active:            boolean
   activationType:    'form' | 'manual'
+  agentId:           string | null   // organizational owner (null = "Toda la agencia")
+  agentName:         string | null   // resolved display
   channels:          SequenceChannel[]
   steps:             SequenceStep[]
   stepCount:         number
@@ -59,7 +61,7 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, activation_type, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, created_at')
     .order('created_at')
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
 
@@ -139,6 +141,16 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
     channelsBySeq.get(sid)!.push({ id: row.id, name: row.name, slug: row.slug })
   }
 
+  // Resolve sequence agent names in one batch.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agentIds = [...new Set((seqRows ?? []).map((s: any) => s.agent_id).filter(Boolean))] as string[]
+  const agentNameMap = new Map<string, string>()
+  if (agentIds.length > 0) {
+    const { data: ag } = await supabase.from('agents').select('id, name').in('id', agentIds)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const a of (ag ?? []) as any[]) agentNameMap.set(a.id, a.name)
+  }
+
   return (seqRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row    = s as any
@@ -154,6 +166,8 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
       description:       row.description ?? null,
       active:            row.active,
       activationType:    (row.activation_type ?? 'form') as 'form' | 'manual',
+      agentId:           row.agent_id ?? null,
+      agentName:         row.agent_id ? (agentNameMap.get(row.agent_id) ?? null) : null,
       channels:          channelsBySeq.get(id) ?? [],
       steps,
       stepCount:         steps.length,
@@ -175,7 +189,7 @@ export async function getSequenceWithRuns(
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, activation_type, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, created_at')
     .eq('id', sequenceId)
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
 
@@ -229,6 +243,14 @@ export async function getSequenceWithRuns(
     tenantName = (t as any)?.name ?? null
   }
 
+  // Sequence agent name (null = whole agency)
+  let agentName: string | null = null
+  if (row.agent_id) {
+    const { data: a } = await supabase.from('agents').select('name').eq('id', row.agent_id).maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agentName = (a as any)?.name ?? null
+  }
+
   const steps: SequenceStep[] = (stepRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sr = s as any
@@ -276,6 +298,8 @@ export async function getSequenceWithRuns(
     description:       row.description ?? null,
     active:            row.active,
     activationType:    (row.activation_type ?? 'form') as 'form' | 'manual',
+    agentId:           row.agent_id ?? null,
+    agentName:         agentName,
     channels:          (channelRows ?? []).map(c => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cr = c as any

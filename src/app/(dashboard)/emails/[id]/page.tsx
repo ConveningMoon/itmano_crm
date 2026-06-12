@@ -48,6 +48,12 @@ export default async function EmailSequenceDetailPage({
   const sequence = await getSequenceWithRuns(tenant_id, id)
   if (!sequence) notFound()
 
+  // Active agents of the sequence's tenant for the organizational-owner selector.
+  const { data: agentRows } = await createAdminClient()
+    .from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
+
   const totalRuns = sequence.activeRunCount + sequence.completedRunCount + sequence.cancelledRunCount
 
   // For manual sequences: fetch leads eligible to be added (exclude those with active run in this seq)
@@ -119,6 +125,13 @@ export default async function EmailSequenceDetailPage({
             }}>
               {sequence.activationType === 'manual' ? 'Manual' : 'Formulario'}
             </span>
+            <span style={{
+              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--text-muted)', background: 'var(--bg-elevated)',
+            }}>
+              {sequence.agentName ?? 'Toda la agencia'}
+            </span>
           </div>
           {isSuperAdmin && sequence.tenantName && (
             <div style={{ marginBottom: '4px' }}>
@@ -141,6 +154,8 @@ export default async function EmailSequenceDetailPage({
           description={sequence.description ?? ''}
           active={sequence.active}
           activeRunCount={sequence.activeRunCount}
+          agentId={sequence.agentId}
+          agents={agents}
         />
       </div>
 

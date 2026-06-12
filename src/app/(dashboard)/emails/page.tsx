@@ -128,6 +128,14 @@ export default async function EmailsPage() {
                 >
                   {seq.name}
                 </Link>
+                <div style={{ marginTop: '2px' }}>
+                  <span style={{
+                    fontSize: '10px', padding: '1px 7px', borderRadius: '4px',
+                    background: 'var(--bg-elevated)', color: 'var(--text-muted)',
+                  }}>
+                    {seq.agentName ?? 'Toda la agencia'}
+                  </span>
+                </div>
                 {isSuperAdmin && seq.tenantName && (
                   <div style={{ marginTop: '2px' }}>
                     <span style={{

@@ -52,6 +52,7 @@ export interface Lead {
   tenantId: string
   agentId: string
   acquisitionChannelId: string | null
+  trafficSource: string | null
   firstName: string
   lastName: string
   email: string

@@ -2,10 +2,27 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, List, LayoutGrid, ChevronDown, X, Users } from 'lucide-react'
+import {
+  Search, List, LayoutGrid, ChevronDown, X, Users,
+  Camera, ThumbsUp, MessageCircle, PenLine, FileDown, Calendar, Globe,
+} from 'lucide-react'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadStatus } from '@/lib/types'
 import type { ChannelOption } from './new/page'
+import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
+
+// Source kind → icon (reuses the leads/new source icons; brand icons unavailable in
+// lucide v1 so representative generics are used).
+const SOURCE_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
+  manual:       PenLine,
+  instagram:    Camera,
+  facebook:     ThumbsUp,
+  whatsapp:     MessageCircle,
+  lead_magnet:  FileDown,
+  event:        Calendar,
+  contact_form: Globe,
+  manychat:     MessageCircle,
+}
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -191,7 +208,9 @@ export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
       const matchAgent    = filterAgent === 'all' || lead.agentId === filterAgent
       const matchStatus   = filterStatus === 'all' || lead.status === filterStatus
       const channel       = channels.find(c => c.id === lead.acquisitionChannelId)
-      const matchSource   = filterSource === 'all' || channel?.channelType === filterSource
+      // Composite source: channel type if a channel exists, else traffic_source.
+      const leadSource    = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
+      const matchSource   = filterSource === 'all' || leadSource.kind === filterSource
       const matchLanguage = filterLanguage === 'all' || lead.language === filterLanguage
 
       return matchSearch && matchAgent && matchStatus && matchSource && matchLanguage
@@ -231,12 +250,8 @@ export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
     ...Object.entries(STATUS_CONFIG).map(([k, v]) => ({ value: k, label: v.label })),
   ]
   const sourceOptions = [
-    { value: 'all',          label: 'Todas las fuentes' },
-    { value: 'lead_magnet',  label: 'Lead Magnet' },
-    { value: 'event',        label: 'Evento' },
-    { value: 'contact_form', label: 'Formulario' },
-    { value: 'manychat_flow',label: 'ManyChat' },
-    { value: 'manual',       label: 'Manual' },
+    { value: 'all', label: 'Todas las fuentes' },
+    ...LEAD_SOURCE_FILTER_OPTIONS,
   ]
   const languageOptions = [
     { value: 'all', label: 'Todos los idiomas' },
@@ -416,6 +431,8 @@ export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
                 pagedLeads.map((lead, idx) => {
                   const agent      = agents.find(a => a.id === lead.agentId)
                   const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
+                  const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
+                  const SrcIcon    = SOURCE_ICON[leadSource.kind]
                   const langCfg    = LANGUAGE_CONFIG[lead.language]
                   const isLast     = idx === pagedLeads.length - 1
 
@@ -454,11 +471,21 @@ export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
                       <td style={{ padding: '12px 16px', width: '140px' }}>
                         <StatusBadge status={lead.status} />
                       </td>
-                      {/* Fuente */}
-                      <td style={{ padding: '12px 16px', width: '140px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          {channel ? `${channel.name}` : '—'}
-                        </span>
+                      {/* Fuente (composite: channel type / traffic source) */}
+                      <td style={{ padding: '12px 16px', width: '160px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                          {SrcIcon && <SrcIcon size={13} />}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {leadSource.label}
+                            </div>
+                            {channel && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {channel.name}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       {/* Temperatura */}
                       <td style={{ padding: '12px 16px', width: '120px' }}>
