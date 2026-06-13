@@ -38,7 +38,7 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
         }}
       >
         <Image
-          src="/Logo.PNG"
+          src="/A&J_Logo_White.png"
           alt="ITMANO"
           width={120}
           height={44}

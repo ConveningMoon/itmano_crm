@@ -19,12 +19,10 @@ export function Topbar({
   role = 'agent_owner',
   unreadCount = 0,
   userEmail = '',
-  avatarInitials = '',
 }: {
   role?: TenantRole
   unreadCount?: number
   userEmail?: string
-  avatarInitials?: string
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -138,26 +136,6 @@ export function Topbar({
           <span className="hidden sm:inline">Registrar Lead</span>
         </button>
 
-        {/* User avatar */}
-        <div
-          title={userEmail || 'Usuario'}
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(91,142,201,0.15)',
-            border: '1px solid rgba(91,142,201,0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: '600',
-            color: 'var(--accent-blue)',
-            cursor: 'default',
-          }}
-        >
-          {avatarInitials || '??'}
-        </div>
       </div>
     </header>
   )
