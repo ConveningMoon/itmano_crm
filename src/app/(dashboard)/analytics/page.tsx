@@ -224,7 +224,7 @@ export default async function AnalyticsPage() {
   return (
     <div>
       {/* FILA 1 — KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {kpis.map((kpi, i) => (
           <div
             key={i}
@@ -267,7 +267,7 @@ export default async function AnalyticsPage() {
 
       {/* FILA 2 — Donut + Bar horizontal. "Leads por Agente" is a per-agent block →
           hidden for role 'agent' (the donut then spans full width). */}
-      <div style={{ display: 'grid', gridTemplateColumns: isAgent ? '1fr' : '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+      <div className={isAgent ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'} style={{ marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Leads por Fuente</div>
           <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
@@ -292,14 +292,15 @@ export default async function AnalyticsPage() {
       {/* FILA 4 — Stacked bar + Temp-by-agent table. Both are per-agent blocks →
           the whole row is hidden for role 'agent'. */}
       {!isAgent && (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" style={{ marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Estados por Agente</div>
           <div style={CARD_SUBTITLE}>Distribución de pipeline por agente</div>
           <StatusDistributionChart data={statusData} />
         </div>
 
-        <div style={CARD}>
+        {/* Dense table — out of redesign scope; defensive horizontal scroll on phones only. */}
+        <div className="max-md:overflow-x-auto" style={CARD}>
           <div style={CARD_HEADER}>Temperatura por Agente</div>
           <div style={CARD_SUBTITLE}>Score promedio y leads calientes por agente</div>
 
@@ -410,7 +411,7 @@ export default async function AnalyticsPage() {
             </div>
 
             {/* Summary KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3" style={{ marginBottom: '20px' }}>
               {[
                 { label: 'Runs activos',    value: totalActive,    color: 'var(--accent-gold)'  },
                 { label: 'Completados',      value: totalCompleted, color: 'var(--accent-green)' },
@@ -428,8 +429,9 @@ export default async function AnalyticsPage() {
               ))}
             </div>
 
-            {/* Per-sequence table */}
+            {/* Per-sequence table — dense, out of redesign scope; defensive scroll <md. */}
             {sequences.length > 0 && (
+              <div className="max-md:overflow-x-auto">
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
@@ -478,6 +480,7 @@ export default async function AnalyticsPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )
@@ -496,6 +499,8 @@ export default async function AnalyticsPage() {
         </div>
         <div style={{ ...CARD_SUBTITLE, marginBottom: '12px' }}>Leads captados, vistas y conversión por canal de adquisición</div>
 
+        {/* Dense table — out of redesign scope; defensive scroll <md. */}
+        <div className="max-md:overflow-x-auto">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -576,6 +581,7 @@ export default async function AnalyticsPage() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

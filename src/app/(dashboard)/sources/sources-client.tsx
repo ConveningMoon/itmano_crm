@@ -528,7 +528,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
                 <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="open-house-vb-jun-2026" />
               </div>
               <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
                   <input value={eventDate} onChange={e => setEventDate(e.target.value)} style={INPUT} type="date" />

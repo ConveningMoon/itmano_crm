@@ -330,7 +330,7 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf }: { agent: Agent; 
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label style={LABEL}>Nombre</label>
               <input value={name} onChange={e => setName(e.target.value)} style={INPUT} />
@@ -594,12 +594,13 @@ export function SettingsClient({
 
   return (
     <div>
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '24px' }}>
+      {/* Tab bar — scrolls horizontally on phones instead of wrapping/squishing. */}
+      <div className="max-md:overflow-x-auto" style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '24px' }}>
         {TABS.map(t => (
           <button
             key={t.value}
             onClick={() => setTab(t.value)}
+            className="shrink-0"
             style={{
               padding: '8px 16px',
               fontSize: '13px',

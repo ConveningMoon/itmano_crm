@@ -157,7 +157,7 @@ export default async function LeadMagnetsPage() {
   ]
 
   const activeContent = (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       {activeLMs.map(lm => {
         const agent = agents.find(a => a.id === lm.agentId)
         if (!agent) return null
@@ -177,7 +177,7 @@ export default async function LeadMagnetsPage() {
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>Material gratuito activo · Lead Magnets</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ marginBottom: '24px' }}>
         {kpis.map((kpi, i) => (
           <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>

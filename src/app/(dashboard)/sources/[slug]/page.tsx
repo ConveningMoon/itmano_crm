@@ -117,7 +117,7 @@ export default async function ChannelDetailPage({
       </div>
 
       {/* Metrics row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {[
           { label: 'Leads (30d)',     value: String(channel.metrics.leadsInWindow) },
           { label: 'Vistas (30d)',    value: String(channel.metrics.pageViewsInWindow) },
