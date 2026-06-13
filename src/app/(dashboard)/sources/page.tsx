@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/data/channels'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
 
@@ -9,14 +10,17 @@ export default async function SourcesPage({
 }: {
   searchParams: Promise<{ window?: string }>
 }) {
-  const { tenant_id, role } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
+  const scope = scopeFor(ctx)
   const { window: windowParam } = await searchParams
   const windowDays = Number(windowParam ?? 30)
   const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
-  const channels         = await getChannelsWithMetrics(tenant_id, validWindow)
-  const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow)
+  // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
+  const channels         = await getChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
+  const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
 
   const supabase = createAdminClient()
 

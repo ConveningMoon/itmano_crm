@@ -54,7 +54,12 @@ export interface EmailSequence {
 
 // tenantId = null → super_admin: no tenant filter, fetches all tenants
 // tenantId = ''   → edge-case: returns empty (no valid tenant)
-export async function listSequences(tenantId: string | null): Promise<EmailSequence[]> {
+// agentId != null → role 'agent': only sequences owned by that agent (excludes the
+//                   "Toda la agencia" rows where agent_id IS NULL).
+export async function listSequences(
+  tenantId: string | null,
+  agentId: string | null = null,
+): Promise<EmailSequence[]> {
   if (tenantId === '') return []
 
   const supabase = createAdminClient()
@@ -64,6 +69,7 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
     .select('id, tenant_id, name, language, description, active, activation_type, agent_id, created_at')
     .order('created_at')
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
+  if (agentId)  seqQ = seqQ.eq('agent_id', agentId)
 
   let stepQ = supabase
     .from('email_sequence_steps')
@@ -182,6 +188,7 @@ export async function listSequences(tenantId: string | null): Promise<EmailSeque
 export async function getSequenceWithRuns(
   tenantId: string | null,
   sequenceId: string,
+  agentId: string | null = null,
 ): Promise<(EmailSequence & { runs: SequenceRun[] }) | null> {
   if (tenantId === '') return null
 
@@ -192,6 +199,8 @@ export async function getSequenceWithRuns(
     .select('id, tenant_id, name, language, description, active, activation_type, agent_id, created_at')
     .eq('id', sequenceId)
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
+  // Agent visibility: a non-owned (or "Toda la agencia") sequence resolves to null → 404.
+  if (agentId)  seqQ = seqQ.eq('agent_id', agentId)
 
   const [
     { data: seqRow },

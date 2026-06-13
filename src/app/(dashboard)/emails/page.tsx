@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceListActions } from './sequence-list-actions'
 import { Plus, Mail } from 'lucide-react'
 
@@ -12,9 +13,11 @@ const LANG_COLOR: Record<string, string> = {
 }
 
 export default async function EmailsPage() {
-  const { tenant_id, role } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
-  const sequences = await listSequences(tenant_id)
+  const scope = scopeFor(ctx)
+  const sequences = await listSequences(tenant_id, scope.agentId)
 
   return (
     <>

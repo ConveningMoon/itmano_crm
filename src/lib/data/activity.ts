@@ -18,21 +18,31 @@ export interface ActivityItem {
 // tenantId = ''   → missing/invalid tenant → empty
 // viewer: role-based visibility — an 'agent' only sees system + own activities
 // (filter applied in SQL here; mirrors isEventVisibleToViewer).
+// ownerAgentId != null → scope to events on leads owned by that agent (dashboard
+//   "ve solo sus leads" model). When set it SUPERSEDES the author-based viewer
+//   filter. The full /activity page leaves it null and keeps the author model.
 async function fetchActivity(
   tenantId: string | null,
   limit: number,
   offset: number,
   viewer: ActivityViewer | null,
+  ownerAgentId: string | null = null,
 ): Promise<ActivityItem[]> {
   if (tenantId === '') return []
 
   const supabase = createAdminClient()
+  const selectCols = ownerAgentId
+    ? 'id, type, description, created_at, tenant_id, actor_user_id, leads!inner(agent_id)'
+    : 'id, type, description, created_at, tenant_id, actor_user_id'
   let q = supabase
     .from('lead_events')
-    .select('id, type, description, created_at, tenant_id, actor_user_id')
+    .select(selectCols)
     .order('created_at', { ascending: false })
   if (tenantId) q = q.eq('tenant_id', tenantId)
-  if (viewer && viewer.role === 'agent') {
+  if (ownerAgentId) {
+    // Agent dashboard: events on the agent's own leads (supersedes the actor filter).
+    q = q.eq('leads.agent_id', ownerAgentId)
+  } else if (viewer && viewer.role === 'agent') {
     q = q.or(`actor_user_id.is.null,actor_user_id.eq.${viewer.userId}`)
   }
   q = q.range(offset, offset + limit - 1)
@@ -64,12 +74,14 @@ async function fetchActivity(
 }
 
 // Dashboard block — mirrors the original inline query (limit 10, newest first).
+// ownerAgentId (role 'agent') scopes to events on that agent's own leads.
 export function getRecentActivity(
   tenantId: string | null,
   viewer: ActivityViewer | null,
   limit = 10,
+  ownerAgentId: string | null = null,
 ): Promise<ActivityItem[]> {
-  return fetchActivity(tenantId, limit, 0, viewer)
+  return fetchActivity(tenantId, limit, 0, viewer, ownerAgentId)
 }
 
 // Full activity page — paginated by offset.

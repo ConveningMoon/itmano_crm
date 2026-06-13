@@ -1,20 +1,28 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
 
 export default async function LeadsPage() {
   // getCurrentTenantContext reads cookies → forces dynamic (non-cached) rendering
-  const { tenant_id } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const scope = scopeFor(ctx)
+  const { tenant_id } = ctx
   const supabase = createAdminClient()
 
-  const leadsQ    = supabase.from('leads').select('*').order('created_at', { ascending: false })
+  // Leads: scoped by tenant (owner/super) and additionally by agent_id (role 'agent').
+  const leadsQ    = applyVisibilityScope(
+    supabase.from('leads').select('*').order('created_at', { ascending: false }),
+    scope,
+  )
+  // Agents + channels are reference data for rendering/filters → tenant-scoped only.
   const agentsQ   = supabase.from('agents').select('*').eq('active', true)
   const channelsQ = supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug').eq('active', true).order('name')
 
   const [{ data: rawLeads }, { data: rawAgents }, { data: rawChannels }] = await Promise.all([
-    tenant_id ? leadsQ.eq('tenant_id',    tenant_id) : leadsQ,
+    leadsQ,
     tenant_id ? agentsQ.eq('tenant_id',   tenant_id) : agentsQ,
     tenant_id ? channelsQ.eq('tenant_id', tenant_id) : channelsQ,
   ])

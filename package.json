@@ -12,7 +12,8 @@
     "test:auth": "vitest run tests/auth",
     "test:import": "vitest run tests/import",
     "test:leads": "vitest run tests/leads",
-    "test:routing": "vitest run tests/routing"
+    "test:routing": "vitest run tests/routing",
+    "test:visibility": "vitest run tests/visibility"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

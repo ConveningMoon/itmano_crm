@@ -6,6 +6,7 @@ import { getChannelBySlug } from '@/lib/data/channels'
 import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
 import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
 import { ChannelActions } from './channel-actions'
 import { SubmissionsList } from './submissions-list'
 
@@ -22,16 +23,19 @@ export default async function ChannelDetailPage({
 }: {
   params: Promise<{ slug: string }>
 }) {
-  const { slug }      = await params
-  const { tenant_id } = await getCurrentTenantContext()
+  const { slug } = await params
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id } = ctx
+  const scope = scopeFor(ctx)
 
-  const channel = await getChannelBySlug(tenant_id, slug)
+  // Agent: only their own channel resolves; a non-owned/null channel → 404.
+  const channel = await getChannelBySlug(tenant_id, slug, 30, scope.agentId)
   if (!channel) notFound()
 
   const supabase = createAdminClient()
   const [submissions, sequences, { data: agentRows }] = await Promise.all([
     getSubmissionsForChannel(channel.id, tenant_id),
-    listSequences(tenant_id),
+    listSequences(tenant_id, scope.agentId),
     supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

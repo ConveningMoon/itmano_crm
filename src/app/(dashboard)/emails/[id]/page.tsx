@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { SequenceDetailActions } from './sequence-detail-actions'
 import { StepManager } from './step-manager'
 import { ManualLeadPicker, type PickerLead } from './manual-lead-picker'
@@ -42,10 +43,13 @@ export default async function EmailSequenceDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const { tenant_id, role } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
+  const scope = scopeFor(ctx)
 
-  const sequence = await getSequenceWithRuns(tenant_id, id)
+  // Agent: a sequence they don't own (or "Toda la agencia") resolves to null → 404.
+  const sequence = await getSequenceWithRuns(tenant_id, id, scope.agentId)
   if (!sequence) notFound()
 
   // Active agents of the sequence's tenant for the organizational-owner selector.
@@ -61,11 +65,10 @@ export default async function EmailSequenceDetailPage({
   if (sequence.activationType === 'manual') {
     const supabase = createAdminClient()
     const [leadsRes, activeRunsRes] = await Promise.all([
-      (() => {
-        let q = supabase.from('leads').select('id, first_name, last_name, email').order('created_at', { ascending: false })
-        if (tenant_id) q = q.eq('tenant_id', tenant_id)
-        return q
-      })(),
+      applyVisibilityScope(
+        supabase.from('leads').select('id, first_name, last_name, email').order('created_at', { ascending: false }),
+        scope,
+      ),
       supabase.from('lead_sequence_runs').select('lead_id').eq('sequence_id', id).eq('status', 'active'),
     ])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
