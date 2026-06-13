@@ -145,7 +145,9 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div className="p-6 max-md:p-0">
+    // Content gutter is owned by .app-shell-main (single source of truth); no inner
+    // padding here — avoids the double-gutter and the dead utility classes.
+    <div>
       <style>{`
         .stat-card { transition: border-color 200ms, transform 200ms; }
         .stat-card:hover { border-color: var(--border-accent) !important; transform: translateY(-1px); }
