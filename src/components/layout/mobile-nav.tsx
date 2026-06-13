@@ -25,15 +25,15 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
 
   return (
     <>
-      {/* Trigger — phones only */}
+      {/* Trigger — phones only. `flex` here + `md:hidden` controls display via CSS class
+          only — no inline display: so the md:hidden rule can override at ≥768px. */}
       <button
         type="button"
         aria-label="Abrir menú"
         aria-expanded={open}
         onClick={() => setOpen(true)}
-        className="md:hidden"
+        className="flex md:hidden"
         style={{
-          display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           width: '40px',
@@ -93,7 +93,7 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <Image src="/Logo.PNG" alt="ITMANO" width={120} height={44} priority style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }} />
+              <Image src="/A&J_Logo_White.png" alt="ITMANO" width={120} height={44} priority style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }} />
               <div style={{ fontSize: '10px', fontWeight: 300, color: 'var(--text-muted)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
                 CRM by ITMANO
               </div>
