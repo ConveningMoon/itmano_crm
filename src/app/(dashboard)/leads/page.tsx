@@ -9,7 +9,7 @@ export default async function LeadsPage() {
   // getCurrentTenantContext reads cookies → forces dynamic (non-cached) rendering
   const ctx = await getCurrentTenantContext()
   const scope = scopeFor(ctx)
-  const { tenant_id } = ctx
+  const { tenant_id, role } = ctx
   const supabase = createAdminClient()
 
   // Leads: scoped by tenant (owner/super) and additionally by agent_id (role 'agent').
@@ -41,6 +41,7 @@ export default async function LeadsPage() {
       leads={(rawLeads ?? []).map(r => mapLead(r as LeadRow))}
       agents={(rawAgents ?? []).map(r => mapAgent(r as AgentRow))}
       channels={channels}
+      viewerRole={role}
     />
   )
 }

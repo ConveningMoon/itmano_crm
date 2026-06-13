@@ -184,9 +184,11 @@ interface LeadsClientProps {
   leads:    Lead[]
   agents:   Agent[]
   channels: ChannelOption[]
+  // Hide the per-agent filter for role 'agent' (they only ever see their own leads).
+  viewerRole: 'super_admin' | 'agent_owner' | 'agent'
 }
 
-export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
+export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClientProps) {
   const router = useRouter()
 
   const [view, setView]               = useState<'table' | 'kanban'>('table')
@@ -350,7 +352,9 @@ export function LeadsClient({ leads, agents, channels }: LeadsClientProps) {
           />
         </div>
 
-        <FilterSelect value={filterAgent}    onChange={setFilterAgent}    options={agentOptions} />
+        {viewerRole !== 'agent' && (
+          <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} />
+        )}
         <FilterSelect value={filterStatus}   onChange={setFilterStatus}   options={statusOptions} />
         <FilterSelect value={filterSource}   onChange={setFilterSource}   options={sourceOptions} />
         <FilterSelect value={filterLanguage} onChange={setFilterLanguage} options={languageOptions} />
