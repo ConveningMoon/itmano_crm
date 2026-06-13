@@ -14,6 +14,7 @@ import { notFound } from 'next/navigation'
 import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor, isRowVisible } from '@/lib/auth/visibility'
 import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
@@ -21,20 +22,28 @@ import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import type { ManualActionItem } from './manual-actions-panel'
 
-const TENANT_ID = 'tenant-aj'
 const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost']
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { tenant_id, role, user_id } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id, role, user_id } = ctx
+  const scope = scopeFor(ctx)
   const supabase = createAdminClient()
+
+  // Load the lead first and enforce visibility — an agent (or wrong-tenant viewer)
+  // hitting a lead they don't own by URL gets a 404, not the record.
+  const { data: rawLead } = await supabase.from('leads').select('*').eq('id', id).single()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!isRowVisible(scope, rawLead as any)) notFound()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leadTenantId = (rawLead as any).tenant_id as string
 
   // Profile activity feed: an 'agent' only sees system + their own events.
   let eventsQ = supabase.from('lead_events').select('*').eq('lead_id', id).order('created_at', { ascending: false })
   if (role === 'agent') eventsQ = eventsQ.or(`actor_user_id.is.null,actor_user_id.eq.${user_id}`)
 
   const [
-    { data: rawLead },
     { data: rawAgents },
     { data: rawEvents },
     { data: rawProcess },
@@ -44,18 +53,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     scoreRules,
     statusHistory,
   ] = await Promise.all([
-    supabase.from('leads').select('*').eq('id', id).single(),
-    supabase.from('agents').select('*'),
+    supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
     supabase.from('purchase_processes').select('*').eq('lead_id', id).maybeSingle(),
-    supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
+    supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug').eq('tenant_id', leadTenantId).eq('active', true).order('name'),
     supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
     getSubmissionsForLead(id, tenant_id),
     getGlobalScoreRules(),
     getLeadStatusHistory(id, tenant_id),
   ])
-
-  if (!rawLead) notFound()
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
   const manualActions: ManualActionItem[] = scoreRules

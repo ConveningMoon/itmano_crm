@@ -3,6 +3,8 @@ import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
+import { bandForScore, averageLiveTemperature } from '@/lib/scoring/temperature-band'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
@@ -31,17 +33,25 @@ const CARD_SUBTITLE: React.CSSProperties = {
 }
 
 export default async function AnalyticsPage() {
-  const { tenant_id } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id, role } = ctx
+  const scope = scopeFor(ctx)
+  const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
-  const leadsQ  = supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)')
+  // Leads scoped to the viewer (tenant + agent_id for role 'agent'). Agents are
+  // tenant-scoped reference data (per-agent blocks are hidden for the agent role).
+  const leadsQ  = applyVisibilityScope(
+    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)'),
+    scope,
+  )
   const agentsQ = supabase.from('agents').select('*')
 
   const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
-    tenant_id ? leadsQ.eq('tenant_id', tenant_id)  : leadsQ,
+    leadsQ,
     tenant_id ? agentsQ.eq('tenant_id', tenant_id) : agentsQ,
-    getChannelsWithMetrics(tenant_id, 30),
-    listSequences(tenant_id),
+    getChannelsWithMetrics(tenant_id, 30, scope.agentId),
+    listSequences(tenant_id, scope.agentId),
   ])
 
   const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
@@ -54,9 +64,19 @@ export default async function AnalyticsPage() {
     l.status === 'closed' || l.status === 'process_completed'
   ).length
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
-  const avgScore = totalLeads > 0
-    ? Math.round(leads.reduce((sum, l) => sum + (l.temperatureScore ?? 0), 0) / totalLeads)
-    : 0
+
+  // Temperatura promedio (KPI): mean current_score over LIVE leads (frozen excluded),
+  // shown as its band + the mean number as backup.
+  const avgLiveTemp = averageLiveTemperature(leads)
+  const tempBand = avgLiveTemp !== null ? bandForScore(avgLiveTemp) : null
+
+  // Real current-calendar-month counts (created_at within this month) — replaces the
+  // previously hardcoded "+12 este mes" / "+3 esta semana" trend strings.
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const inThisMonth = (iso: string) => new Date(iso) >= monthStart
+  const leadsThisMonth = leads.filter(l => inThisMonth(l.createdAt)).length
+  const hotThisMonth   = leads.filter(l => inThisMonth(l.createdAt) && (l.temperatureScore ?? 0) >= 70).length
 
   // ─── Channel-type donut ──────────────────────────────────────
   const CHANNEL_TYPE_LABELS: Record<string, { label: string; icon: string }> = {
@@ -101,7 +121,6 @@ export default async function AnalyticsPage() {
     0: 'Ene', 1: 'Feb', 2: 'Mar', 3: 'Abr', 4: 'May', 5: 'Jun',
     6: 'Jul', 7: 'Ago', 8: 'Sep', 9: 'Oct', 10: 'Nov', 11: 'Dic',
   }
-  const now = new Date()
   const months: { month: string; leads: number; nurturing: number; hot: number; closed: number }[] = []
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -120,6 +139,11 @@ export default async function AnalyticsPage() {
     })
   }
   const enrichedMonthlyData = months
+
+  // Dynamic range label for the monthly area chart (was a hardcoded "Oct 2025 – Abr 2026").
+  const rangeStart = new Date(now.getFullYear(), now.getMonth() - 6, 1)
+  const monthlyRangeLabel =
+    `${MONTH_LABELS[rangeStart.getMonth()]} ${rangeStart.getFullYear()} – ${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`
 
   // ─── Status distribution by agent ────────────────────────────
   const statusData = agents.map(agent => {
@@ -149,38 +173,45 @@ export default async function AnalyticsPage() {
     }
   }).sort((a, b) => b.avgTemp - a.avgTemp)
 
-  const kpis = [
+  // tone: 'pos' → green up-arrow + green text (real positive delta); 'neutral' →
+  // muted descriptor, no arrow (no fabricated delta).
+  const kpis: Array<{
+    label: string; value: string; sub: string; tone: 'pos' | 'neutral'
+    icon: React.ReactNode; color: string
+  }> = [
     {
       label: 'Total Leads',
       value: String(totalLeads),
-      trend: '+12 este mes',
-      positive: true,
+      sub: `+${leadsThisMonth} este mes`,
+      tone: 'pos',
       icon: <Users size={18} />,
       color: 'var(--accent-gold)',
     },
     {
       label: 'Leads Calientes',
       value: String(hotLeads),
-      trend: '+3 esta semana',
-      positive: true,
+      sub: `+${hotThisMonth} este mes`,
+      tone: 'pos',
       icon: <Flame size={18} />,
       color: '#E04040',
     },
     {
       label: 'Tasa de Conversión',
       value: `${conversionRate}%`,
-      trend: '+2% vs mes anterior',
-      positive: true,
+      sub: 'sobre el total de leads',
+      tone: 'neutral',
       icon: <TrendingUp size={18} />,
       color: 'var(--accent-green)',
     },
     {
-      label: 'Score Promedio',
-      value: `${avgScore} pts`,
-      trend: '+5 pts vs mes anterior',
-      positive: true,
+      // Temperatura promedio: banda del score medio de los leads vivos (congelados
+      // excluidos), con el número medio como respaldo.
+      label: 'Temperatura Promedio',
+      value: tempBand ? tempBand.label : '—',
+      sub: avgLiveTemp !== null ? `${avgLiveTemp} pts · pipeline vivo` : 'sin pipeline vivo',
+      tone: 'neutral',
       icon: <Activity size={18} />,
-      color: '#9B72CF',
+      color: tempBand ? tempBand.color : 'var(--text-muted)',
     },
   ]
 
@@ -219,37 +250,42 @@ export default async function AnalyticsPage() {
               {kpi.value}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px' }}>
-              <TrendingUp size={12} color={kpi.positive ? 'var(--accent-green)' : '#E04040'} />
-              <span style={{ fontSize: '11px', color: kpi.positive ? 'var(--accent-green)' : '#E04040' }}>
-                {kpi.trend}
+              {kpi.tone === 'pos' && <TrendingUp size={12} color="var(--accent-green)" />}
+              <span style={{ fontSize: '11px', color: kpi.tone === 'pos' ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                {kpi.sub}
               </span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* FILA 2 — Donut + Bar horizontal */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+      {/* FILA 2 — Donut + Bar horizontal. "Leads por Agente" is a per-agent block →
+          hidden for role 'agent' (the donut then spans full width). */}
+      <div style={{ display: 'grid', gridTemplateColumns: isAgent ? '1fr' : '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Leads por Fuente</div>
           <div style={CARD_SUBTITLE}>Distribución por canal de captación</div>
           <LeadsDonutChart data={sourceData} total={totalLeads} />
         </div>
-        <div style={CARD}>
-          <div style={CARD_HEADER}>Leads por Agente</div>
-          <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
-          <LeadsByAgentChart data={agentData} />
-        </div>
+        {!isAgent && (
+          <div style={CARD}>
+            <div style={CARD_HEADER}>Leads por Agente</div>
+            <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
+            <LeadsByAgentChart data={agentData} />
+          </div>
+        )}
       </div>
 
       {/* FILA 3 — Area chart */}
       <div style={{ ...CARD, marginBottom: '24px' }}>
         <div style={CARD_HEADER}>Evolución de Leads</div>
-        <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · Oct 2025 – Abr 2026</div>
+        <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · {monthlyRangeLabel}</div>
         <LeadsOverTimeChart data={enrichedMonthlyData} />
       </div>
 
-      {/* FILA 4 — Stacked bar + Temp table */}
+      {/* FILA 4 — Stacked bar + Temp-by-agent table. Both are per-agent blocks →
+          the whole row is hidden for role 'agent'. */}
+      {!isAgent && (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Estados por Agente</div>
@@ -258,7 +294,7 @@ export default async function AnalyticsPage() {
         </div>
 
         <div style={CARD}>
-          <div style={CARD_HEADER}>Temperatura Promedio</div>
+          <div style={CARD_HEADER}>Temperatura por Agente</div>
           <div style={CARD_SUBTITLE}>Score promedio y leads calientes por agente</div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '4px' }}>
@@ -337,6 +373,7 @@ export default async function AnalyticsPage() {
           </table>
         </div>
       </div>
+      )}
       {/* FILA 5 — Secuencias de email */}
       {(() => {
         const totalActive    = sequences.reduce((s, q) => s + q.activeRunCount,    0)

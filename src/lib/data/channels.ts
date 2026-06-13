@@ -45,25 +45,30 @@ export interface ChannelLead {
 
 // tenantId = null → super_admin: no tenant filter, fetches all tenants
 // tenantId = ''   → invalid/missing tenant: returns empty
+// agentId  != null → role 'agent': only channels owned by that agent (excludes the
+//                    "Toda la agencia" rows where agent_id IS NULL).
 export async function getChannelsWithMetrics(
   tenantId: string | null,
-  windowDays = 30
+  windowDays = 30,
+  agentId: string | null = null,
 ): Promise<ChannelWithMetrics[]> {
-  return fetchChannelsWithMetrics(tenantId, windowDays, false)
+  return fetchChannelsWithMetrics(tenantId, windowDays, false, agentId)
 }
 
 // Archived counterpart — same metrics, but only channels with archived_at set.
 export async function getArchivedChannelsWithMetrics(
   tenantId: string | null,
-  windowDays = 30
+  windowDays = 30,
+  agentId: string | null = null,
 ): Promise<ChannelWithMetrics[]> {
-  return fetchChannelsWithMetrics(tenantId, windowDays, true)
+  return fetchChannelsWithMetrics(tenantId, windowDays, true, agentId)
 }
 
 async function fetchChannelsWithMetrics(
   tenantId: string | null,
   windowDays: number,
-  archived: boolean
+  archived: boolean,
+  agentId: string | null = null,
 ): Promise<ChannelWithMetrics[]> {
   if (tenantId === '') return []
 
@@ -82,6 +87,8 @@ async function fetchChannelsWithMetrics(
     ? channelQ.not('archived_at', 'is', null)
     : channelQ.is('archived_at', null)
   if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
+  // Agent visibility: own channels only (excludes "Toda la agencia" / null agent_id).
+  if (agentId) channelQ = channelQ.eq('agent_id', agentId)
 
   const { data: channels, error } = await channelQ
 
@@ -175,9 +182,10 @@ async function fetchChannelsWithMetrics(
 export async function getChannelBySlug(
   tenantId: string | null,
   slug: string,
-  windowDays = 30
+  windowDays = 30,
+  agentId: string | null = null,
 ): Promise<ChannelWithMetrics | null> {
-  const all = await getChannelsWithMetrics(tenantId, windowDays)
+  const all = await getChannelsWithMetrics(tenantId, windowDays, agentId)
   return all.find(c => c.slug === slug) ?? null
 }
 

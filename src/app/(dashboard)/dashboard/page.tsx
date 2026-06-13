@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
 import { STATUS_CONFIG } from '@/lib/config'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
 import { ActivityRow } from '../activity/activity-ui'
 import type { Agent } from '@/lib/types'
@@ -34,13 +35,24 @@ function getTempColor(score: number): string {
 }
 
 export default async function DashboardPage() {
-  const { tenant_id, role, user_id } = await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const { tenant_id, role, user_id } = ctx
+  const scope = scopeFor(ctx)
+  const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
   const [{ data: rawLeads }, { data: rawAgents }, recentActivity] = await Promise.all([
-    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
-    supabase.from('agents').select('*').eq('active', true),
-    getRecentActivity(tenant_id, { role, userId: user_id }, 10),
+    // Leads: tenant-scoped (owner/super) + agent_id (agent). Fixes the prior
+    // cross-tenant leak (this query had no tenant filter at all).
+    applyVisibilityScope(
+      supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
+      scope,
+    ),
+    tenant_id
+      ? supabase.from('agents').select('*').eq('active', true).eq('tenant_id', tenant_id)
+      : supabase.from('agents').select('*').eq('active', true),
+    // Agent: recent activity over their OWN leads; owner/super: tenant-wide (author model).
+    getRecentActivity(tenant_id, { role, userId: user_id }, 10, scope.agentId),
   ])
 
   const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))
@@ -352,7 +364,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* ── BLOQUE 4: Rendimiento por Agente ── */}
+      {/* ── BLOQUE 4: Rendimiento por Agente ── (hidden for role 'agent' — they only see their own leads) */}
+      {!isAgent && (
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px 20px' }}>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Rendimiento por Agente</div>
@@ -415,6 +428,7 @@ export default async function DashboardPage() {
           ))}
         </div>
       </div>
+      )}
     </div>
   )
 }
