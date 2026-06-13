@@ -114,6 +114,28 @@
   box-sizing: border-box;
 }
 
+/* ── App-shell layout — single, authoritative source of truth ──────────────────
+   The sidebar offset and content/topbar gutters MUST live as real rules here, not
+   as Tailwind utility classes. Tailwind utilities live in `@layer utilities`, and
+   the unlayered `* { margin:0; padding:0 }` reset above beats ANY layered rule
+   (cascade-layer precedence), so utility-based margin/padding silently lost — which
+   is exactly what made the responsive refactor overlap the sidebar (margin killed)
+   and stick content to the edges (padding killed). These rules are unlayered too,
+   with class specificity (0,1,0) > `*` (0,0,0), so they win cleanly — the same
+   immunity the previous inline styles had.
+
+   Mobile-first: comfortable 16px gutter, no offset. At ≥768px (the `md` breakpoint,
+   where the sidebar becomes visible) the desktop is restored byte-for-byte to the
+   pre-responsive values: 220px sidebar offset + 24px gutters. */
+.app-shell-content { margin-left: 0; }
+.app-shell-main    { padding: 16px; }
+.app-shell-topbar  { padding-left: 16px; padding-right: 16px; }
+@media (min-width: 768px) {
+  .app-shell-content { margin-left: 220px; }
+  .app-shell-main    { padding: 24px; }
+  .app-shell-topbar  { padding-left: 24px; padding-right: 24px; }
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

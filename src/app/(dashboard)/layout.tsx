@@ -40,10 +40,12 @@ export default async function DashboardLayout({
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
       <Sidebar role={ctx.role} userEmail={userEmail} />
-      {/* Content offset: no margin on phones (drawer nav), restored to 220px at md:
-          — the desktop (≥768px) layout is byte-identical. */}
+      {/* Sidebar offset + content gutter come from the authoritative .app-shell-*
+          rules in globals.css (a layered utility would lose to the unlayered
+          `* { margin:0; padding:0 }` reset). ≥768px = 220px offset + 24px gutter
+          (byte-identical to pre-responsive); <768px = no offset + 16px gutter. */}
       <div
-        className="md:ml-[220px] max-md:min-w-0"
+        className="app-shell-content max-md:min-w-0"
         style={{
           flex: 1,
           display: 'flex',
@@ -52,7 +54,7 @@ export default async function DashboardLayout({
         }}
       >
         <Topbar role={ctx.role} unreadCount={unreadCount} userEmail={userEmail} avatarInitials={avatarInitials} />
-        <main className="p-6 max-md:p-4 max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
+        <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>
       </div>

@@ -32,7 +32,7 @@ export function Topbar({
 
   return (
     <header
-      className="px-6 max-md:px-4"
+      className="app-shell-topbar"
       style={{
         height: '56px',
         backgroundColor: 'var(--bg-base)',
