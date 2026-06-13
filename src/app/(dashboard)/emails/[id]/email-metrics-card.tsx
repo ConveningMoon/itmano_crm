@@ -68,7 +68,10 @@ export async function EmailMetricsCard({ sequenceId }: Props) {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', padding: '16px 20px', gap: '0' }}>
+        // 5-metric strip with divider borders — on phones it scrolls sideways
+        // (keeps the columns intact) instead of wrapping awkwardly. Desktop unchanged.
+        <div className="max-md:overflow-x-auto">
+        <div className="max-md:min-w-[520px]" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', padding: '16px 20px', gap: '0' }}>
           {stats.map((stat, i) => (
             <div
               key={stat.label}
@@ -92,6 +95,7 @@ export async function EmailMetricsCard({ sequenceId }: Props) {
               )}
             </div>
           ))}
+        </div>
         </div>
       )}
     </div>

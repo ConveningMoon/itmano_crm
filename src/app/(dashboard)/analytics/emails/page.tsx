@@ -89,7 +89,7 @@ export default async function EmailAnalyticsPage() {
       </div>
 
       {/* Global KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3" style={{ marginBottom: '24px' }}>
         {kpis.map(kpi => (
           <div key={kpi.label} style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
@@ -125,6 +125,8 @@ export default async function EmailAnalyticsPage() {
             No hay secuencias configuradas todavía.
           </p>
         ) : (
+          // Dense per-sequence table — redesign deferred to Prompt C; defensive scroll <md.
+          <div className="max-md:overflow-x-auto">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
@@ -170,12 +172,13 @@ export default async function EmailAnalyticsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
       {/* Performance ranking — only shown when there are sends */}
       {seqsWithSends.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Top click rate */}
           <div style={CARD}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>

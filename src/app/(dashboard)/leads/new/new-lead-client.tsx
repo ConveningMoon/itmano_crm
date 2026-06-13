@@ -633,7 +633,7 @@ export function NewLeadClient({
           <div style={sectionHeaderStyle}>Datos del lead</div>
           <div style={{ ...sectionBodyStyle }}>
             {/* Nombre / Apellido */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ marginBottom: '12px' }}>
               <div>
                 <label style={labelStyle}>Nombre *</label>
                 <input
@@ -1184,9 +1184,10 @@ export function NewLeadClient({
                   )}
                 </div>
 
-                {/* Preview table (insert-ready rows) */}
+                {/* Preview table (insert-ready rows) — dense table, out of redesign
+                    scope; horizontally scrollable on phones (overflow-x). */}
                 {finalRows.length > 0 && (
-                  <div style={{ overflowY: 'auto', maxHeight: '300px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
+                  <div className="overflow-x-auto" style={{ overflowY: 'auto', maxHeight: '300px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                       <thead>
                         <tr style={{ background: 'var(--bg-elevated)' }}>

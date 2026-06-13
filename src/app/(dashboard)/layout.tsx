@@ -40,17 +40,19 @@ export default async function DashboardLayout({
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
       <Sidebar role={ctx.role} userEmail={userEmail} />
+      {/* Content offset: no margin on phones (drawer nav), restored to 220px at md:
+          — the desktop (≥768px) layout is byte-identical. */}
       <div
+        className="md:ml-[220px] max-md:min-w-0"
         style={{
           flex: 1,
-          marginLeft: '220px',
           display: 'flex',
           flexDirection: 'column',
           minHeight: '100vh',
         }}
       >
-        <Topbar unreadCount={unreadCount} userEmail={userEmail} avatarInitials={avatarInitials} />
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+        <Topbar role={ctx.role} unreadCount={unreadCount} userEmail={userEmail} avatarInitials={avatarInitials} />
+        <main className="p-6 max-md:p-4 max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>
       </div>

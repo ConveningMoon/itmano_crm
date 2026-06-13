@@ -2,6 +2,8 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { Plus, Bell } from 'lucide-react'
+import { MobileNav } from './mobile-nav'
+import type { TenantRole } from '@/lib/auth/tenant-context'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
@@ -14,10 +16,12 @@ const PAGE_TITLES: Record<string, string> = {
 }
 
 export function Topbar({
+  role = 'agent_owner',
   unreadCount = 0,
   userEmail = '',
   avatarInitials = '',
 }: {
+  role?: TenantRole
   unreadCount?: number
   userEmail?: string
   avatarInitials?: string
@@ -28,6 +32,7 @@ export function Topbar({
 
   return (
     <header
+      className="px-6 max-md:px-4"
       style={{
         height: '56px',
         backgroundColor: 'var(--bg-base)',
@@ -35,19 +40,25 @@ export function Topbar({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
         flexShrink: 0,
       }}
     >
-      <h1
-        style={{
-          fontSize: '15px',
-          fontWeight: '500',
-          color: 'var(--text-primary)',
-        }}
-      >
-        {title}
-      </h1>
+      <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+        {/* Drawer trigger — phones only (md:hidden inside MobileNav). */}
+        <MobileNav role={role} userEmail={userEmail} />
+        <h1
+          style={{
+            fontSize: '15px',
+            fontWeight: '500',
+            color: 'var(--text-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {title}
+        </h1>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {/* Notification bell */}
@@ -120,9 +131,11 @@ export function Topbar({
           onClick={() => router.push('/leads/new')}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--accent-gold-dim)' }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--accent-gold)' }}
+          aria-label="Registrar Lead"
         >
           <Plus size={14} strokeWidth={2} />
-          Registrar Lead
+          {/* Label collapses to an icon-only button on phones; full text at sm:+. */}
+          <span className="hidden sm:inline">Registrar Lead</span>
         </button>
 
         {/* User avatar */}

@@ -145,7 +145,7 @@ export default async function DashboardPage() {
   ]
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div className="p-6 max-md:p-0">
       <style>{`
         .stat-card { transition: border-color 200ms, transform 200ms; }
         .stat-card:hover { border-color: var(--border-accent) !important; transform: translateY(-1px); }
@@ -154,7 +154,7 @@ export default async function DashboardPage() {
       `}</style>
 
       {/* ── BLOQUE 1: Stats Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {statCards.map(card => (
           <div
             key={card.label}
@@ -211,7 +211,9 @@ export default async function DashboardPage() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+        {/* Pipeline is horizontal by nature — on phones the lane scrolls sideways
+            (max-md:) rather than breaking to a vertical list. Desktop unchanged. */}
+        <div className="max-md:overflow-x-auto" style={{ display: 'flex', alignItems: 'flex-end' }}>
           {mainStages.map((key, idx) => {
             const cfg = STATUS_CONFIG[key]
             const count = statusCounts[key]
@@ -254,7 +256,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── BLOQUE 3: Hot Leads + Actividad ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
 
         {/* Leads Calientes */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>

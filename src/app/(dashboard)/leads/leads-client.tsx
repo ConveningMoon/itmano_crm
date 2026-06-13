@@ -394,9 +394,11 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
         </div>
       )}
 
-      {/* ── ZONA 3A: Table view ── */}
+      {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
+          Defensive horizontal scroll on phones so columns stay readable.) */}
       {view === 'table' && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
+          <div className="max-md:overflow-x-auto">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -513,6 +515,7 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
               )}
             </tbody>
           </table>
+          </div>
 
           {/* Pagination */}
           {filteredLeads.length > ITEMS_PER_PAGE && (

@@ -3,42 +3,23 @@ import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-
-const navItems = [
-  { label: 'Dashboard',      href: '/dashboard',     icon: 'LayoutDashboard' },
-  { label: 'Leads',          href: '/leads',         icon: 'Users' },
-  { label: 'Fuentes',        href: '/sources',       icon: 'GitBranch' },
-  { label: 'Emails',         href: '/emails',        icon: 'Mail' },
-  { label: 'Analytics',      href: '/analytics',     icon: 'BarChart2' },
-  { label: 'Configuración',  href: '/settings',      icon: 'Settings' },
-]
-
-const ROLE_LABELS: Record<TenantRole, string> = {
-  super_admin: 'Administrador ITMANO',
-  agent_owner: 'Propietario',
-  agent:       'Agente',
-}
-
-function initialsFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? email
-  return local.slice(0, 2).toUpperCase() || '??'
-}
+import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
 export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: string }) {
   // Admin console is super_admin-only — hidden from the nav for everyone else.
-  const items = role === 'super_admin'
-    ? [...navItems, { label: 'Admin', href: '/admin', icon: 'ShieldCheck' }]
-    : navItems
+  const items = navItemsForRole(role)
 
   return (
+    // Hidden on phones (drawer takes over <md); restored to the fixed flex column
+    // at md: — the desktop (≥768px) render is byte-identical to before.
     <aside
+      className="hidden md:flex"
       style={{
         width: '220px',
         minWidth: '220px',
         height: '100vh',
         backgroundColor: 'var(--bg-surface)',
         borderRight: '1px solid var(--border-subtle)',
-        display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
         top: 0,

@@ -163,7 +163,7 @@ export default async function EmailSequenceDetailPage({
       </div>
 
       {/* Run stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '24px' }}>
         {[
           { label: 'Runs activos',    value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--accent-gold)" />,  color: 'var(--accent-gold)' },
           { label: 'Completados',      value: sequence.completedRunCount, icon: <CheckCircle size={14} color="var(--accent-green)" />, color: 'var(--accent-green)' },
@@ -276,6 +276,8 @@ export default async function EmailSequenceDetailPage({
             </div>
           </div>
         ) : (
+          // Dense runs table — redesign deferred to Prompt C; defensive scroll <md.
+          <div className="max-md:overflow-x-auto">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
@@ -323,6 +325,7 @@ export default async function EmailSequenceDetailPage({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </>
