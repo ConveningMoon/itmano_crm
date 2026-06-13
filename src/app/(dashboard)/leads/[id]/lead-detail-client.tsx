@@ -12,6 +12,7 @@ import {
   ArrowRightCircle, CheckCircle2, Circle,
   MessageCircle, XCircle,
   Phone, Activity,
+  Copy, Check,
 } from 'lucide-react'
 import { EditLeadModal } from './edit-lead-modal'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
@@ -20,6 +21,7 @@ import type { StatusChange } from '@/lib/data/lead-status-history'
 import { LeadSubmissionsList } from './lead-submissions-list'
 import type { LeadSubmissionRow } from '@/lib/data/form-submissions'
 import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
+import { getLeadSource } from '@/lib/leads/source'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -200,6 +202,10 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [forceResult,   setForceResult]   = useState<string | null>(null)
   const [isForceSending, startForceSend]  = useTransition()
 
+  // Clipboard copy feedback (auto-reset after 2 s)
+  const [copiedEmail, setCopiedEmail] = useState(false)
+  const [copiedPhone, setCopiedPhone] = useState(false)
+
   function handleDeleteConfirm() {
     setDeleteError(null)
     startDelete(async () => {
@@ -230,8 +236,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server-prop to local state after router.refresh()
   useEffect(() => { setCurrentStatus(lead.status) }, [lead.status])
 
-  const channel   = channels.find(c => c.id === lead.acquisitionChannelId)
-  const langCfg   = LANGUAGE_CONFIG[lead.language]
+  const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
+  const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
+  const langCfg    = LANGUAGE_CONFIG[lead.language]
   const initials  = getInitials(lead.firstName, lead.lastName)
 
   const isProcessActive = currentStatus === 'process_started' || currentStatus === 'process_completed'
@@ -579,24 +586,27 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             )}
           </div>
 
-          {/* Source card */}
+          {/* Source card — composite source: channel type takes priority over traffic_source
+              (same model as /leads column and analytics donut). */}
           <div style={CARD}>
             <div style={CARD_TITLE}>Origen del lead</div>
-            {channel ? (
+            {leadSource.label === '—' ? (
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Origen no registrado</div>
+            ) : (
               <>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                  {channel.name}
+                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: channel ? '2px' : '14px' }}>
+                  {leadSource.label}
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px', textTransform: 'capitalize' }}>
-                  {channel.channelType.replace(/_/g, ' ')}
-                </div>
+                {channel && (
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                    {channel.name}
+                  </div>
+                )}
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
                   Registrado
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{formatDateTime(lead.createdAt)}</div>
               </>
-            ) : (
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>—</div>
             )}
           </div>
 
@@ -604,14 +614,51 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
           <div style={{ ...CARD, marginBottom: 0 }}>
             <div style={CARD_TITLE}>Acciones</div>
 
-            {/* Email and WhatsApp — placeholders */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <button disabled className="action-btn" style={{ ...ACTION_BTN_STYLE, opacity: 0.5, cursor: 'not-allowed' }}>
+              {/* Mailto — opens the agent's personal email client. No server send, no Resend. */}
+              <a
+                href={`mailto:${lead.email}?subject=${encodeURIComponent(`${lead.firstName} ${lead.lastName}`)}`}
+                className="action-btn"
+                style={{ ...ACTION_BTN_STYLE, textDecoration: 'none', minHeight: '40px' }}
+              >
                 <Mail size={14} /> Enviar email
+              </a>
+              {/* Copy email — always visible */}
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(lead.email)
+                  setCopiedEmail(true)
+                  setTimeout(() => setCopiedEmail(false), 2000)
+                }}
+                className="action-btn"
+                style={{
+                  ...ACTION_BTN_STYLE,
+                  minHeight: '40px',
+                  ...(copiedEmail && { color: 'var(--accent-green)', borderColor: 'rgba(107,163,104,0.3)' }),
+                }}
+              >
+                {copiedEmail ? <Check size={14} /> : <Copy size={14} />}
+                {copiedEmail ? 'Copiado' : 'Copiar email'}
               </button>
-              <button disabled className="action-btn" style={{ ...ACTION_BTN_STYLE, opacity: 0.5, cursor: 'not-allowed' }}>
-                <MessageCircle size={14} /> WhatsApp
-              </button>
+              {/* Copy phone — only when the lead has a phone number */}
+              {lead.phone && (
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(lead.phone!)
+                    setCopiedPhone(true)
+                    setTimeout(() => setCopiedPhone(false), 2000)
+                  }}
+                  className="action-btn"
+                  style={{
+                    ...ACTION_BTN_STYLE,
+                    minHeight: '40px',
+                    ...(copiedPhone && { color: 'var(--accent-green)', borderColor: 'rgba(107,163,104,0.3)' }),
+                  }}
+                >
+                  {copiedPhone ? <Check size={14} /> : <Copy size={14} />}
+                  {copiedPhone ? 'Copiado' : 'Copiar teléfono'}
+                </button>
+              )}
 
               {/* Force-next-send — visible only when lead has an active sequence run */}
               {hasActiveSequenceRun && (
