@@ -58,6 +58,21 @@ export async function updateLeadStatus(
       points:        0,
       actor_user_id: ctx.user_id,
     })
+
+    // Fire the 'completed' lifecycle email. Load process id for this lead.
+    const { data: proc } = await supabase
+      .from('purchase_processes')
+      .select('id, closing_date')
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (proc) {
+      const { sendPurchaseEmail } = await import('@/lib/services/send-purchase-email')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = proc as any
+      await sendPurchaseEmail(supabase, p.id as string, 'completed', p.closing_date as string | null)
+    }
   }
 
   revalidatePath(`/leads/${leadId}`)
@@ -241,20 +256,32 @@ export async function startPurchaseProcess(
   leadId: string,
   data: { address: string; loanType: string; closingDate: string; notes: string }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // closing_date is mandatory — the email system depends on it for pre_close scheduling.
+  if (!data.closingDate) return { ok: false, error: 'La fecha estimada de cierre es obligatoria' }
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const closing = new Date(data.closingDate + 'T00:00:00')
+  if (isNaN(closing.getTime()) || closing < today) {
+    return { ok: false, error: 'La fecha de cierre debe ser hoy o posterior' }
+  }
+
   const ctx      = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
   const guard = await loadGuardedLead(supabase, ctx, leadId)
   if ('ok' in guard) return guard
 
-  const { error: insertErr } = await supabase.from('purchase_processes').insert({
-    lead_id:      leadId,
-    tenant_id:    guard.tenant_id,
-    address:      data.address,
-    loan_type:    data.loanType,
-    closing_date: data.closingDate || null,
-    notes:        data.notes       || null,
-  })
+  const { data: process, error: insertErr } = await supabase
+    .from('purchase_processes')
+    .insert({
+      lead_id:      leadId,
+      tenant_id:    guard.tenant_id,
+      address:      data.address,
+      loan_type:    data.loanType,
+      closing_date: data.closingDate,
+      notes:        data.notes || null,
+    })
+    .select('id')
+    .single()
 
   if (insertErr) return { ok: false, error: insertErr.message }
 
@@ -273,6 +300,12 @@ export async function startPurchaseProcess(
     points:        0,
     actor_user_id: ctx.user_id,
   })
+
+  // Fire the lifecycle email for this milestone. Runs after the process is committed
+  // so the service can read the row. Errors are logged but do not fail the action.
+  const { sendPurchaseEmail } = await import('@/lib/services/send-purchase-email')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await sendPurchaseEmail(supabase, (process as any).id as string, 'start', data.closingDate)
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')

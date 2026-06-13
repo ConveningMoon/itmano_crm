@@ -922,11 +922,13 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 </select>
               </div>
               <div>
-                <label style={LABEL_STYLE}>Fecha estimada de cierre</label>
+                <label style={LABEL_STYLE}>Fecha estimada de cierre <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
                 <input
                   type="date"
                   value={modalClosingDate}
                   onChange={e => setModalClosingDate(e.target.value)}
+                  required
+                  min={new Date().toISOString().slice(0, 10)}
                   className="modal-input"
                   style={{ ...INPUT_STYLE, colorScheme: 'dark' }}
                 />
