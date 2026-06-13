@@ -5,6 +5,7 @@ import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { bandForScore, averageLiveTemperature } from '@/lib/scoring/temperature-band'
+import { getLeadSource } from '@/lib/leads/source'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
@@ -78,30 +79,35 @@ export default async function AnalyticsPage() {
   const leadsThisMonth = leads.filter(l => inThisMonth(l.createdAt)).length
   const hotThisMonth   = leads.filter(l => inThisMonth(l.createdAt) && (l.temperatureScore ?? 0) >= 70).length
 
-  // ─── Channel-type donut ──────────────────────────────────────
-  const CHANNEL_TYPE_LABELS: Record<string, { label: string; icon: string }> = {
-    lead_magnet:   { label: 'Lead Magnet',    icon: '📄' },
-    event:         { label: 'Evento',         icon: '🏠' },
-    contact_form:  { label: 'Formulario',     icon: '🌐' },
-    manychat_flow: { label: 'ManyChat',       icon: '💬' },
-    manual:        { label: 'Manual',         icon: '✍️' },
+  // ─── Composite-source donut ──────────────────────────────────
+  // Same composite-source logic as the /leads column & filter (getLeadSource):
+  // a lead with a channel → its channel type; a direct-entry lead → its
+  // traffic_source. Counts the real source instead of bucketing everything
+  // channel-less as "Manual". Categories with 0 leads are omitted.
+  const SOURCE_EMOJI: Record<string, string> = {
+    manual:       '✍️',
+    instagram:    '📸',
+    facebook:     '👍',
+    whatsapp:     '💬',
+    lead_magnet:  '📄',
+    event:        '🏠',
+    contact_form: '🌐',
+    manychat:     '💬',
+    other:        '📌',
   }
-  const sourceCounts: Record<string, number> = {}
+  const sourceCounts = new Map<string, { label: string; count: number }>()
   leads.forEach(lead => {
     // reason: Supabase returns untyped join data without generated schema
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-    const type = raw?.acquisition_channels?.channel_type ?? 'manual'
-    sourceCounts[type] = (sourceCounts[type] ?? 0) + 1
+    const channelType = (raw?.acquisition_channels?.channel_type ?? null) as string | null
+    const src = getLeadSource(channelType, lead.trafficSource ?? null)
+    const prev = sourceCounts.get(src.kind)
+    sourceCounts.set(src.kind, { label: src.label, count: (prev?.count ?? 0) + 1 })
   })
-  const sourceData = Object.entries(sourceCounts).map(([type, count]) => {
-    const cfg = CHANNEL_TYPE_LABELS[type]
-    return {
-      name: cfg?.label ?? type,
-      value: count,
-      emoji: cfg?.icon ?? '📌',
-    }
-  })
+  const sourceData = [...sourceCounts.entries()]
+    .map(([kind, { label, count }]) => ({ name: label, value: count, emoji: SOURCE_EMOJI[kind] ?? '📌' }))
+    .sort((a, b) => b.value - a.value)
 
   // ─── Agents bar ──────────────────────────────────────────────
   const agentData = agents.map(agent => {
@@ -264,7 +270,7 @@ export default async function AnalyticsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: isAgent ? '1fr' : '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Leads por Fuente</div>
-          <div style={CARD_SUBTITLE}>Distribución por canal de captación</div>
+          <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
           <LeadsDonutChart data={sourceData} total={totalLeads} />
         </div>
         {!isAgent && (
