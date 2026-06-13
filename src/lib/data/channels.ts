@@ -13,6 +13,8 @@ export interface AcquisitionChannel {
   slug: string
   active: boolean
   emailSequenceId: string | null
+  agentId: string | null      // owning agent (routing); null = "Toda la agencia"
+  agentName: string | null    // resolved display name, null when agentId is null
   metadata: Record<string, unknown>
   createdAt: string
   archivedAt: string | null
@@ -87,6 +89,17 @@ async function fetchChannelsWithMetrics(
 
   const channelIds = channels.map((c: { id: string }) => c.id) // reason: Supabase returns untyped rows
 
+  // Resolve owning-agent names in one batch (for the "Toda la agencia"/agent badge).
+  const agentIds = [...new Set(
+    channels.map((c: { agent_id: string | null }) => c.agent_id).filter((id): id is string => !!id)
+  )]
+  const agentNameMap = new Map<string, string>()
+  if (agentIds.length > 0) {
+    const { data: agentRows } = await supabase.from('agents').select('id, name').in('id', agentIds)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const a of (agentRows ?? []) as any[]) agentNameMap.set(a.id, a.name)
+  }
+
   const [{ data: windowLeads }, { data: windowViews }, { data: allLeads }] = await Promise.all([
     supabase
       .from('leads')
@@ -143,6 +156,8 @@ async function fetchChannelsWithMetrics(
       slug:            c.slug,
       active:          c.active,
       emailSequenceId: c.email_sequence_id,
+      agentId:         c.agent_id ?? null,
+      agentName:       c.agent_id ? (agentNameMap.get(c.agent_id) ?? null) : null,
       metadata:        c.metadata ?? {},
       createdAt:       c.created_at,
       archivedAt:      c.archived_at,

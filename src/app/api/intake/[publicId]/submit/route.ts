@@ -6,6 +6,7 @@ import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
+import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
 
 export function OPTIONS() {
   return corsOptions()
@@ -139,7 +140,7 @@ export async function POST(
   // Resolve channel
   const { data: channel } = await db
     .from('acquisition_channels')
-    .select('id, name, tenant_id, channel_type, email_sequence_id, metadata')
+    .select('id, name, tenant_id, channel_type, email_sequence_id, metadata, agent_id')
     .eq('public_id', publicId)
     .eq('active', true)
     .maybeSingle()
@@ -154,35 +155,9 @@ export async function POST(
   const channelId  = channelRow.id as string
   const channelName = channelRow.name as string
 
-  // Resolve agent — explicit routing first, then language-based fallback
-  const channelMeta = (channelRow.metadata ?? {}) as Record<string, unknown>
-  let agentId: string | null = typeof channelMeta.default_agent_id === 'string'
-    ? channelMeta.default_agent_id
-    : null
-
-  if (!agentId) {
-    const { data: agent } = await db
-      .from('agents')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('language', parsed.language)
-      .neq('specialty', 'first_buyer') // Melanie is manual-assignment only
-      .limit(1)
-      .maybeSingle()
-    agentId = agent?.id ?? null
-  }
-
-  // Fallback: any active agent for the tenant (should never reach this)
-  if (!agentId) {
-    const { data: fallback } = await db
-      .from('agents')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('active', true)
-      .limit(1)
-      .maybeSingle()
-    agentId = fallback?.id ?? null
-  }
+  // Resolve agent — channel.agent_id (explicit) or round-robin ("Toda la agencia").
+  // Language is NO LONGER a routing criterion. See route-channel-agent.ts.
+  const agentId = await resolveChannelAgent(db, tenantId, (channelRow.agent_id ?? null) as string | null)
 
   if (!agentId) {
     console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, error: 'no_agent_found' }))

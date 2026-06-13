@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Plus, Copy, Check, X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
-import { createLeadMagnet, createEvent, deleteChannelPermanently } from './actions'
+import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
 
 type TabValue = ChannelType | 'all' | 'archived'
 
@@ -133,6 +133,16 @@ function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
           ))}
         </div>
 
+        {/* Owning agent */}
+        <div style={{ marginBottom: '8px' }}>
+          <span style={{
+            fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
+            background: 'var(--bg-overlay)', color: 'var(--text-secondary)',
+          }}>
+            {ch.agentName ?? 'Toda la agencia'}
+          </span>
+        </div>
+
         {/* Email sequence indicator */}
         {ch.emailSequenceId && (
           <div style={{ fontSize: '11px', color: 'var(--accent-teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -229,6 +239,29 @@ const BTN_GHOST: React.CSSProperties = {
   cursor: 'pointer',
 }
 
+type AgentOption = { id: string; name: string; tenantId: string }
+
+// ─── Agent selector (organizational owner; "Toda la agencia" = round-robin) ─────
+
+function AgentSelect({ agents, value, onChange }: {
+  agents:   AgentOption[]
+  value:    string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <label style={LABEL}>Agente</label>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+        <option value="">Toda la agencia</option>
+        {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+        Los leads de esta fuente se atribuyen a este agente. &quot;Toda la agencia&quot; reparte entre los agentes activos.
+      </div>
+    </div>
+  )
+}
+
 // ─── Snippet copy block ────────────────────────────────────────────────────────
 
 function SnippetBlock({ code }: { code: string }) {
@@ -286,25 +319,31 @@ function SnippetBlock({ code }: { code: string }) {
 
 // ─── Lead Magnet modal ─────────────────────────────────────────────────────────
 
-function LeadMagnetModal({ onClose, isSuperAdmin, tenants }: {
+function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
   onClose:     () => void
   isSuperAdmin: boolean
   tenants:     Array<{ id: string; name: string }>
+  agents:      AgentOption[]
 }) {
   const [name,     setName]     = useState('')
   const [slug,     setSlug]     = useState('')
   const [lpUrl,    setLpUrl]    = useState('')
   const [fileUrl,  setFileUrl]  = useState('')
   const [tenantId, setTenantId] = useState(tenants[0]?.id ?? '')
+  const [agentId,  setAgentId]  = useState('')
   const [error,    setError]    = useState<string | null>(null)
   const [result,   setResult]   = useState<{ publicId: string; slug: string; sequenceId: string; embedSnippet: string } | null>(null)
   const [pending,  startTransition] = useTransition()
+
+  // super_admin: only agents of the selected tenant; agent_owner: all (its tenant).
+  const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
 
   function handleSubmit() {
     setError(null)
     startTransition(async () => {
       const res = await createLeadMagnet({
         name, slug: slug || undefined, lpUrl: lpUrl || undefined, fileUrl: fileUrl || undefined,
+        agentId: agentId || null,
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
@@ -344,7 +383,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants }: {
               {isSuperAdmin && (
                 <div>
                   <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-                  <select value={tenantId} onChange={e => setTenantId(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                  <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
                     {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
@@ -357,6 +396,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants }: {
                 <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional — se genera del nombre)</span></label>
                 <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="guia-primeros-compradores" />
               </div>
+              <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
               <div>
                 <label style={LABEL}>URL de la landing page <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
                 <input value={lpUrl} onChange={e => setLpUrl(e.target.value)} style={INPUT} placeholder="https://..." type="url" />
@@ -412,25 +452,30 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants }: {
 
 // ─── Event modal ───────────────────────────────────────────────────────────────
 
-function EventModal({ onClose, isSuperAdmin, tenants }: {
+function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
   onClose:      () => void
   isSuperAdmin: boolean
   tenants:      Array<{ id: string; name: string }>
+  agents:       AgentOption[]
 }) {
   const [name,      setName]      = useState('')
   const [slug,      setSlug]      = useState('')
   const [eventDate, setEventDate] = useState('')
   const [location,  setLocation]  = useState('')
   const [tenantId,  setTenantId]  = useState(tenants[0]?.id ?? '')
+  const [agentId,   setAgentId]   = useState('')
   const [error,     setError]     = useState<string | null>(null)
   const [result,    setResult]    = useState<{ publicId: string; slug: string; formSnippet: string } | null>(null)
   const [pending,   startTransition] = useTransition()
+
+  const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
 
   function handleSubmit() {
     setError(null)
     startTransition(async () => {
       const res = await createEvent({
         name, slug: slug || undefined, eventDate: eventDate || undefined, location: location || undefined,
+        agentId: agentId || null,
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
@@ -469,7 +514,7 @@ function EventModal({ onClose, isSuperAdmin, tenants }: {
               {isSuperAdmin && (
                 <div>
                   <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-                  <select value={tenantId} onChange={e => setTenantId(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                  <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
                     {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
@@ -482,6 +527,7 @@ function EventModal({ onClose, isSuperAdmin, tenants }: {
                 <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
                 <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="open-house-vb-jun-2026" />
               </div>
+              <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
@@ -524,6 +570,158 @@ function EventModal({ onClose, isSuperAdmin, tenants }: {
               <div>
                 <label style={LABEL}>Snippet de formulario de registro (HTML base)</label>
                 <SnippetBlock code={result.formSnippet} />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
+                <button onClick={onClose} style={BTN_PRIMARY}>Listo</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Contact Form (Web) modal ──────────────────────────────────────────────────
+
+function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
+  onClose:      () => void
+  isSuperAdmin: boolean
+  tenants:      Array<{ id: string; name: string }>
+  agents:       AgentOption[]
+}) {
+  const [name,          setName]          = useState('')
+  const [slug,          setSlug]          = useState('')
+  const [webflowSecret, setWebflowSecret] = useState('')
+  const [tenantId,      setTenantId]      = useState(tenants[0]?.id ?? '')
+  const [agentId,       setAgentId]       = useState('')
+  const [error,         setError]         = useState<string | null>(null)
+  const [result,        setResult]        = useState<{
+    publicId: string; slug: string
+    webflowWebhookUrl: string; contactBackupUrl: string; publicIntakeUrl: string; hasChannelSecret: boolean
+  } | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
+
+  function handleSubmit() {
+    setError(null)
+    startTransition(async () => {
+      const res = await createContactForm({
+        name, slug: slug || undefined,
+        agentId: agentId || null,
+        webflowSecret: webflowSecret || undefined,
+        tenantId: isSuperAdmin ? tenantId : undefined,
+      })
+      if (!res.ok) { setError(res.error); return }
+      setResult({
+        publicId: res.publicId, slug: res.slug,
+        webflowWebhookUrl: res.webflowWebhookUrl, contactBackupUrl: res.contactBackupUrl,
+        publicIntakeUrl: res.publicIntakeUrl, hasChannelSecret: res.hasChannelSecret,
+      })
+    })
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px',
+    }}>
+      <div style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '560px',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+      }}>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {result ? 'Formulario creado' : 'Nuevo Formulario Web'}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {!result ? (
+            <>
+              {isSuperAdmin && (
+                <div>
+                  <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                  <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label style={LABEL}>Nombre del formulario *</label>
+                <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Contáctanos — Página de inicio" autoFocus />
+              </div>
+              <div>
+                <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
+                <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="contactanos-home" />
+              </div>
+              <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
+              <div>
+                <label style={LABEL}>Secret de Webflow <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
+                <input value={webflowSecret} onChange={e => setWebflowSecret(e.target.value)} style={INPUT} placeholder="Secret del webhook de Webflow (HMAC)" />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
+                  Solo si conectas con Webflow y quieres un secret propio para este formulario. Si lo dejas vacío, se usa el secret global del servidor.
+                </div>
+              </div>
+
+              {error && (
+                <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
+                <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
+                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+                  {pending ? 'Creando…' : 'Crear Formulario'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ padding: '10px 14px', background: 'rgba(107,163,104,0.08)', border: '1px solid rgba(107,163,104,0.2)', borderRadius: '8px', fontSize: '13px', color: 'var(--accent-green)' }}>
+                Formulario creado. Conéctalo con una de las opciones siguientes — todas alimentan el mismo pipeline (registro, notificación de contacto y scoring).
+              </div>
+
+              <div>
+                <label style={LABEL}>ID público</label>
+                <code style={{ fontSize: '13px', color: 'var(--accent-gold)', fontFamily: 'monospace' }}>{result.publicId}</code>
+              </div>
+
+              <div>
+                <label style={LABEL}>1 · Webhook de Webflow <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(recomendado)</span></label>
+                <SnippetBlock code={result.webflowWebhookUrl} />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>
+                  En Webflow → Site settings → Forms → Webhooks, apunta el form &quot;Contact Us&quot; a esta URL. Valida la firma HMAC con {result.hasChannelSecret ? 'el secret que guardaste para este formulario' : 'el secret global del servidor'}.
+                </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>2 · Endpoint con secret <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(servidor a servidor)</span></label>
+                <SnippetBlock code={result.contactBackupUrl} />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>
+                  POST con header <code style={{ fontFamily: 'monospace' }}>x-contact-secret</code>. Útil para integraciones propias desde tu backend.
+                </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>3 · Formulario propio <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(código custom, sin Webflow)</span></label>
+                <SnippetBlock code={result.publicIntakeUrl} />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>
+                  Un form en tu sitio puede hacer POST a esta URL pública (sin secret) con los campos del lead y la pregunta.
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
@@ -757,13 +955,14 @@ interface Props {
   windowDays:       number
   isSuperAdmin:     boolean
   tenants:          Array<{ id: string; name: string }>
+  agents:           AgentOption[]
 }
 
-export function SourcesClient({ channels, archivedChannels, windowDays, isSuperAdmin, tenants }: Props) {
+export function SourcesClient({ channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<TabValue>('all')
-  const [openModal,    setOpenModal]    = useState<'lead_magnet' | 'event' | null>(null)
+  const [openModal,    setOpenModal]    = useState<'lead_magnet' | 'event' | 'contact_form' | null>(null)
 
   function setWindow(days: number) {
     const params = new URLSearchParams(searchParams.toString())
@@ -785,11 +984,19 @@ export function SourcesClient({ channels, archivedChannels, windowDays, isSuperA
       <style>{`
         .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
       `}</style>
-      {openModal === 'lead_magnet' && <LeadMagnetModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} />}
-      {openModal === 'event'       && <EventModal      onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} />}
+      {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
+      {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
+      {openModal === 'contact_form' && <ContactFormModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
 
       {/* Create buttons */}
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <button
+          onClick={() => setOpenModal('contact_form')}
+          style={{ ...BTN_GHOST, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+        >
+          <Plus size={13} />
+          Crear Formulario
+        </button>
         <button
           onClick={() => setOpenModal('event')}
           style={{ ...BTN_GHOST, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}

@@ -49,6 +49,20 @@ export async function toggleSubmissionResponded(
   return { ok: true, responded: newResponded }
 }
 
+// Validates an optional channel owner agent_id belongs to the tenant. null/''/
+// undefined → "Toda la agencia" (no agent). Returns the value to store, or an error.
+async function resolveChannelAgentId(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  agentId: string | null | undefined,
+): Promise<string | null | { error: string }> {
+  const id = agentId?.trim()
+  if (!id) return null
+  const { data } = await supabase.from('agents').select('id').eq('id', id).eq('tenant_id', tenantId).maybeSingle()
+  if (!data) return { error: 'El agente seleccionado no pertenece a este tenant' }
+  return id
+}
+
 function genPublicId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let s = ''
@@ -95,6 +109,7 @@ export async function createLeadMagnet(fields: {
   slug?:    string
   lpUrl?:   string
   fileUrl?: string
+  agentId?: string | null  // owning agent; null/'' = "Toda la agencia"
   tenantId?: string  // required when caller is super_admin
 }): Promise<CreateLeadMagnetResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
@@ -108,6 +123,10 @@ export async function createLeadMagnet(fields: {
   if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
 
   const supabase  = createAdminClient()
+
+  const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
+  if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
+
   const publicId  = genPublicId()
   const slug      = fields.slug?.trim() || slugify(fields.name)
   const channelId = crypto.randomUUID()
@@ -132,6 +151,7 @@ export async function createLeadMagnet(fields: {
     name:         fields.name.trim(),
     slug,
     active:       true,
+    agent_id:     agent,
     metadata:     {
       lp_url:   fields.lpUrl?.trim()   || null,
       file_url: fields.fileUrl?.trim() || null,
@@ -178,7 +198,7 @@ export async function createLeadMagnet(fields: {
 
 export async function updateChannel(
   channelId: string,
-  fields: { name: string; active: boolean }
+  fields: { name: string; active: boolean; agentId?: string | null }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
@@ -188,9 +208,24 @@ export async function updateChannel(
   if (denied) return denied
 
   const supabase = createAdminClient()
+
+  // agentId provided → validate it belongs to the channel's tenant. Resolve the
+  // channel's tenant first (super_admin has no ctx.tenant_id).
+  const update: Record<string, unknown> = { name: fields.name.trim(), active: fields.active }
+  if (fields.agentId !== undefined) {
+    let chQ = supabase.from('acquisition_channels').select('tenant_id').eq('id', channelId)
+    if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
+    const { data: chRow } = await chQ.maybeSingle()
+    if (!chRow) return { ok: false, error: 'Fuente no encontrada' }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agent = await resolveChannelAgentId(supabase, (chRow as any).tenant_id, fields.agentId)
+    if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
+    update.agent_id = agent
+  }
+
   let q = supabase
     .from('acquisition_channels')
-    .update({ name: fields.name.trim(), active: fields.active })
+    .update(update)
     .eq('id', channelId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
 
@@ -334,6 +369,7 @@ export async function createEvent(fields: {
   slug?:      string
   eventDate?: string
   location?:  string
+  agentId?:   string | null  // owning agent; null/'' = "Toda la agencia"
   tenantId?:  string  // required when caller is super_admin
 }): Promise<CreateEventResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
@@ -347,6 +383,10 @@ export async function createEvent(fields: {
   if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
 
   const supabase  = createAdminClient()
+
+  const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
+  if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
+
   const publicId  = genPublicId()
   const slug      = fields.slug?.trim() || slugify(fields.name)
   const channelId = crypto.randomUUID()
@@ -369,6 +409,7 @@ export async function createEvent(fields: {
     name:         fields.name.trim(),
     slug,
     active:       true,
+    agent_id:     agent,
     metadata:     {
       event_date: fields.eventDate?.trim() || null,
       location:   fields.location?.trim()  || null,
@@ -395,4 +436,86 @@ export async function createEvent(fields: {
 </form>`
 
   return { ok: true, channelId, publicId, slug, formSnippet }
+}
+
+// ─── Create Contact Form (Web) channel ────────────────────────────────────────
+// Webflow-agnostic. Creates a contact_form channel with its own public_id. The
+// channel's submission pipeline (form_submissions, contact_us notification,
+// contact_us_question scoring) is identical to the existing Contact Us channel.
+// Connect it via the native Webflow webhook (HMAC) OR the x-contact-secret backup
+// endpoint OR a custom form posting to the public intake endpoint.
+
+export interface CreateContactFormResult {
+  ok: true
+  channelId: string
+  publicId:  string
+  slug:      string
+  webflowWebhookUrl: string
+  contactBackupUrl:  string
+  publicIntakeUrl:   string
+  hasChannelSecret:  boolean
+}
+
+export async function createContactForm(fields: {
+  name:          string
+  slug?:         string
+  agentId?:      string | null   // owning agent; null/'' = "Toda la agencia"
+  webflowSecret?: string         // optional per-channel Webflow webhook secret
+  tenantId?:     string          // required when caller is super_admin
+}): Promise<CreateContactFormResult | { ok: false; error: string }> {
+  if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
+
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
+  if (!tenant_id) return { ok: false, error: 'Tenant requerido para super_admin' }
+
+  const supabase = createAdminClient()
+
+  const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
+  if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
+
+  const publicId  = genPublicId()
+  const slug      = fields.slug?.trim() || slugify(fields.name)
+  const channelId = crypto.randomUUID()
+  const secret    = fields.webflowSecret?.trim() || null
+
+  const { data: existing } = await supabase
+    .from('acquisition_channels')
+    .select('id')
+    .eq('tenant_id', tenant_id)
+    .eq('slug', slug)
+    .limit(1)
+    .single()
+
+  if (existing) return { ok: false, error: `El slug "${slug}" ya está en uso. Elige otro.` }
+
+  const { error: chErr } = await supabase.from('acquisition_channels').insert({
+    id:           channelId,
+    tenant_id,
+    public_id:    publicId,
+    channel_type: 'contact_form',
+    name:         fields.name.trim(),
+    slug,
+    active:       true,
+    agent_id:     agent,
+    metadata:     secret ? { webflow_secret: secret } : {},
+  })
+
+  if (chErr) return { ok: false, error: chErr.message }
+
+  revalidatePath('/sources')
+  revalidatePath('/analytics')
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
+  return {
+    ok: true, channelId, publicId, slug,
+    webflowWebhookUrl: `${baseUrl}/api/webhooks/webflow/${publicId}`,
+    contactBackupUrl:  `${baseUrl}/api/contact/${publicId}/submit`,
+    publicIntakeUrl:   `${baseUrl}/api/intake/${publicId}/submit`,
+    hasChannelSecret:  !!secret,
+  }
 }

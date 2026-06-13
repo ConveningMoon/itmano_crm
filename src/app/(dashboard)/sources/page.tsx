@@ -18,14 +18,23 @@ export default async function SourcesPage({
   const channels         = await getChannelsWithMetrics(tenant_id, validWindow)
   const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow)
 
+  const supabase = createAdminClient()
+
   // super_admin needs tenant list for create-modal selects
   let tenants: Array<{ id: string; name: string }> = []
   if (isSuperAdmin) {
-    const supabase = createAdminClient()
     const { data } = await supabase.from('tenants').select('id, name').order('name')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
   }
+
+  // Active agents for the owner selector (scoped to tenant; all tenants for
+  // super_admin — the modals filter by the selected tenant).
+  let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
+  if (!isSuperAdmin && tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  const { data: agentRows } = await agentsQ
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
 
   const totalLeads     = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
   const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
@@ -97,6 +106,7 @@ export default async function SourcesPage({
         windowDays={validWindow}
         isSuperAdmin={isSuperAdmin}
         tenants={tenants}
+        agents={agents}
       />
     </>
   )
