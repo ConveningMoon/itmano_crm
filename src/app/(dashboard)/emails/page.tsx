@@ -3,6 +3,8 @@ import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceListActions } from './sequence-list-actions'
+import { getPurchaseTemplates } from './purchase-templates-actions'
+import { PurchaseTemplatesPanel } from './purchase-templates-panel'
 import { Plus, Mail } from 'lucide-react'
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
@@ -17,7 +19,10 @@ export default async function EmailsPage() {
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const sequences = await listSequences(tenant_id, scope.agentId)
+  const [sequences, purchaseTemplates] = await Promise.all([
+    listSequences(tenant_id, scope.agentId),
+    tenant_id ? getPurchaseTemplates(tenant_id) : Promise.resolve([]),
+  ])
 
   return (
     <>
@@ -205,6 +210,14 @@ export default async function EmailsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Purchase lifecycle email templates — editable by owner/super, read-only for agent */}
+      {purchaseTemplates.length > 0 && (
+        <PurchaseTemplatesPanel
+          templates={purchaseTemplates}
+          readOnly={role === 'agent'}
+        />
       )}
     </>
   )

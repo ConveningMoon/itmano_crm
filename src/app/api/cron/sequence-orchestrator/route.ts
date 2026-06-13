@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
+import { sendPurchaseEmail } from '@/lib/services/send-purchase-email'
 
 interface DryRunDetail {
   run_id:        string
@@ -101,14 +102,45 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Stage 3: purchase process pre_close emails ────────────────────────────
+  // Runs independently of Stage 2. Finds processes whose closing_date is
+  // tomorrow and whose pre_close email has not been sent yet.
+  let preCloseSent = 0
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10) // 'YYYY-MM-DD'
+
+  const { data: preCloseProcs } = await db
+    .from('purchase_processes')
+    .select('id, closing_date')
+    .eq('closing_date', tomorrowStr)
+    .eq('email_preclose_sent', false)
+
+  for (const proc of preCloseProcs ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = proc as any
+    try {
+      if (!dryRun) {
+        await sendPurchaseEmail(db, p.id as string, 'pre_close', p.closing_date as string)
+        preCloseSent++
+      } else {
+        console.log(JSON.stringify({ service: 'sequence-orchestrator', stage: 'pre_close', dry_run: true, process_id: p.id }))
+        preCloseSent++
+      }
+    } catch (err) {
+      console.error(JSON.stringify({ service: 'sequence-orchestrator', stage: 'pre_close', process_id: p.id, error: err instanceof Error ? err.message : String(err) }))
+    }
+  }
+
   return NextResponse.json({
-    ok:        true,
-    dry_run:   dryRun,
-    processed: runs.length,
+    ok:             true,
+    dry_run:        dryRun,
+    processed:      runs.length,
     sent,
     completed,
     paused,
-    ts:        new Date().toISOString(),
+    pre_close_sent: preCloseSent,
+    ts:             new Date().toISOString(),
     ...(dryRun && { runs: dryRunDetails }),
   })
 }
