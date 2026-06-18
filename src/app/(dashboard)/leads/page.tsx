@@ -5,7 +5,15 @@ import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ source?: string; channelId?: string }>
+}) {
+  const params = await searchParams
+  const initialSource    = params.source    ?? 'all'
+  const initialChannelId = params.channelId ?? 'all'
+
   // getCurrentTenantContext reads cookies → forces dynamic (non-cached) rendering
   const ctx = await getCurrentTenantContext()
   const scope = scopeFor(ctx)
@@ -19,7 +27,7 @@ export default async function LeadsPage() {
   )
   // Agents + channels are reference data for rendering/filters → tenant-scoped only.
   const agentsQ   = supabase.from('agents').select('*').eq('active', true)
-  const channelsQ = supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug').eq('active', true).order('name')
+  const channelsQ = supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug, agent_id').eq('active', true).order('name')
 
   const [{ data: rawLeads }, { data: rawAgents }, { data: rawChannels }] = await Promise.all([
     leadsQ,
@@ -34,6 +42,7 @@ export default async function LeadsPage() {
     channelType: r.channel_type as string,
     name:        r.name as string,
     slug:        r.slug as string,
+    agentId:     (r.agent_id ?? null) as string | null,
   }))
 
   return (
@@ -42,6 +51,9 @@ export default async function LeadsPage() {
       agents={(rawAgents ?? []).map(r => mapAgent(r as AgentRow))}
       channels={channels}
       viewerRole={role}
+      viewerAgentId={scope.agentId}
+      initialSource={initialSource}
+      initialChannelId={initialChannelId}
     />
   )
 }

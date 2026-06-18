@@ -165,6 +165,9 @@ function FilterSelect({
   )
 }
 
+// Source kinds that have acquisition channels behind them → show channel sub-filter.
+const CHANNEL_SOURCE_TYPES = ['lead_magnet', 'event', 'contact_form']
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ITEMS_PER_PAGE = 20
@@ -185,19 +188,50 @@ interface LeadsClientProps {
   agents:   Agent[]
   channels: ChannelOption[]
   // Hide the per-agent filter for role 'agent' (they only ever see their own leads).
-  viewerRole: 'super_admin' | 'agent_owner' | 'agent'
+  viewerRole:     'super_admin' | 'agent_owner' | 'agent'
+  viewerAgentId:  string | null
+  // Initial filter state from URL query params (set by /sources deep-link or manual share).
+  initialSource:    string
+  initialChannelId: string
 }
 
-export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClientProps) {
+export function LeadsClient({
+  leads, agents, channels, viewerRole, viewerAgentId, initialSource, initialChannelId,
+}: LeadsClientProps) {
   const router = useRouter()
 
   const [view, setView]               = useState<'table' | 'kanban'>('table')
   const [search, setSearch]           = useState('')
   const [filterAgent, setFilterAgent] = useState('all')
-  const [filterStatus, setFilterStatus]   = useState('all')
-  const [filterSource, setFilterSource]   = useState('all')
+  const [filterStatus, setFilterStatus]     = useState('all')
+  const [filterSource, setFilterSource]     = useState(initialSource)
+  const [filterChannelId, setFilterChannelId] = useState(initialChannelId)
   const [filterLanguage, setFilterLanguage] = useState('all')
   const [page, setPage] = useState(1)
+
+  // Sync source + channelId to the URL so the filtered view is bookmarkable/shareable.
+  // Uses replaceState to avoid Next.js server re-renders on every filter keystroke.
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (filterSource    !== 'all') p.set('source',    filterSource)
+    if (filterChannelId !== 'all') p.set('channelId', filterChannelId)
+    const qs = p.toString()
+    window.history.replaceState(null, '', qs ? `/leads?${qs}` : '/leads')
+  }, [filterSource, filterChannelId])
+
+  // When source changes, always reset the channel sub-filter.
+  function handleSourceChange(v: string) {
+    setFilterSource(v)
+    setFilterChannelId('all')
+  }
+
+  // Channels eligible for the sub-filter: same type as selected source, scoped by agent role.
+  const channelOptions = useMemo(() => {
+    if (!CHANNEL_SOURCE_TYPES.includes(filterSource)) return []
+    let opts = channels.filter(c => c.channelType === filterSource)
+    if (viewerAgentId) opts = opts.filter(c => c.agentId === viewerAgentId)
+    return opts
+  }, [channels, filterSource, viewerAgentId])
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
@@ -207,23 +241,24 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
         fullName.includes(search.toLowerCase()) ||
         lead.email.toLowerCase().includes(search.toLowerCase())
 
-      const matchAgent    = filterAgent === 'all' || lead.agentId === filterAgent
-      const matchStatus   = filterStatus === 'all' || lead.status === filterStatus
-      const channel       = channels.find(c => c.id === lead.acquisitionChannelId)
+      const matchAgent   = filterAgent === 'all' || lead.agentId === filterAgent
+      const matchStatus  = filterStatus === 'all' || lead.status === filterStatus
+      const channel      = channels.find(c => c.id === lead.acquisitionChannelId)
       // Composite source: channel type if a channel exists, else traffic_source.
-      const leadSource    = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
-      const matchSource   = filterSource === 'all' || leadSource.kind === filterSource
+      const leadSource   = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
+      const matchSource  = filterSource === 'all' || leadSource.kind === filterSource
+      const matchChannel = filterChannelId === 'all' || lead.acquisitionChannelId === filterChannelId
       const matchLanguage = filterLanguage === 'all' || lead.language === filterLanguage
 
-      return matchSearch && matchAgent && matchStatus && matchSource && matchLanguage
+      return matchSearch && matchAgent && matchStatus && matchSource && matchChannel && matchLanguage
     })
-  }, [leads, channels, search, filterAgent, filterStatus, filterSource, filterLanguage])
+  }, [leads, channels, search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
 
   useEffect(() => {
     // reason: reset pagination on filter change — updating derived state in effect is intentional
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
-  }, [search, filterAgent, filterStatus, filterSource, filterLanguage])
+  }, [search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
 
   const hotCount    = filteredLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
   const totalPages  = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE)
@@ -233,6 +268,7 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
     filterAgent !== 'all' ||
     filterStatus !== 'all' ||
     filterSource !== 'all' ||
+    filterChannelId !== 'all' ||
     filterLanguage !== 'all'
 
   function clearFilters() {
@@ -240,6 +276,7 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
     setFilterAgent('all')
     setFilterStatus('all')
     setFilterSource('all')
+    setFilterChannelId('all')
     setFilterLanguage('all')
   }
 
@@ -274,7 +311,11 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
   }
   if (filterSource !== 'all') {
     const opt = sourceOptions.find(o => o.value === filterSource)
-    if (opt) activeChips.push({ label: opt.label, onRemove: () => setFilterSource('all') })
+    if (opt) activeChips.push({ label: opt.label, onRemove: () => { setFilterSource('all'); setFilterChannelId('all') } })
+  }
+  if (filterChannelId !== 'all') {
+    const ch = channels.find(c => c.id === filterChannelId)
+    if (ch) activeChips.push({ label: ch.name, onRemove: () => setFilterChannelId('all') })
   }
   if (filterLanguage !== 'all') {
     const opt = languageOptions.find(o => o.value === filterLanguage)
@@ -355,8 +396,18 @@ export function LeadsClient({ leads, agents, channels, viewerRole }: LeadsClient
         {viewerRole !== 'agent' && (
           <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} />
         )}
-        <FilterSelect value={filterStatus}   onChange={setFilterStatus}   options={statusOptions} />
-        <FilterSelect value={filterSource}   onChange={setFilterSource}   options={sourceOptions} />
+        <FilterSelect value={filterStatus}  onChange={setFilterStatus}  options={statusOptions} />
+        <FilterSelect value={filterSource}  onChange={handleSourceChange} options={sourceOptions} />
+        {channelOptions.length > 0 && (
+          <FilterSelect
+            value={filterChannelId}
+            onChange={setFilterChannelId}
+            options={[
+              { value: 'all', label: 'Todos los canales' },
+              ...channelOptions.map(c => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        )}
         <FilterSelect value={filterLanguage} onChange={setFilterLanguage} options={languageOptions} />
 
         {hasActiveFilters && (

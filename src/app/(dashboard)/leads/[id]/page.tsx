@@ -56,7 +56,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
     supabase.from('purchase_processes').select('*').eq('lead_id', id).maybeSingle(),
-    supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug').eq('tenant_id', leadTenantId).eq('active', true).order('name'),
+    supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug, agent_id').eq('tenant_id', leadTenantId).eq('active', true).order('name'),
     supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
     getSubmissionsForLead(id, tenant_id),
     getGlobalScoreRules(),
@@ -103,6 +103,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     channelType: r.channel_type as string,
     name:        r.name as string,
     slug:        r.slug as string,
+    agentId:     (r.agent_id ?? null) as string | null,
   }))
   const hasActiveSequenceRun = (rawActiveRuns ?? []).length > 0
 
