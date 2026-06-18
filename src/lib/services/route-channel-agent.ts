@@ -4,30 +4,26 @@ import type { createAdminClient } from '@/lib/supabase/admin'
 // ── Channel → agent routing ─────────────────────────────────────────────────────
 //
 // Attribution rule for a lead arriving through an acquisition channel (intake form
-// or contact submission). The LANGUAGE of the lead is NO LONGER a routing criterion
-// (it was, historically — see the deprecated paths replaced by this module).
+// or contact submission).
 //
 //   1. channel.agent_id is set and that agent is ACTIVE → attribute to that agent.
 //   2. Otherwise ("Toda la agencia", or the linked agent is inactive/missing) →
-//      round-robin among the tenant's ACTIVE agents, excluding the manual-only
-//      'first_buyer' specialty (Melanie). Deterministic: the eligible agent whose
-//      most recent channel-routed lead is OLDEST wins; never-routed agents go first;
-//      ties broken by agent id.
+//      assign to agent-adriana (the tenant owner / team lead) if she is active.
+//   3. If agent-adriana is absent or inactive → first active agent by id (defensive
+//      fallback for tenants that don't have an 'agent-adriana' record).
 //
 // The legacy metadata.default_agent_id is no longer consulted — channels.agent_id
 // (seeded from it during migration 035) is the source of truth.
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-// Specialty excluded from automatic round-robin (assigned manually only).
-const MANUAL_ONLY_SPECIALTY = 'first_buyer'
+// The preferred default agent for "Toda la agencia" channels.
+const DEFAULT_AGENT_ID = 'agent-adriana'
 
 export interface RoutingAgent {
-  id: string
-  active: boolean
+  id:        string
+  active:    boolean
   specialty: string | null
-  // ISO timestamp of this agent's most recent channel-routed lead, or null if none.
-  lastRoutedAt: string | null
 }
 
 // Pure selection rule — unit-tested in isolation. Returns the chosen agent id, or
@@ -40,26 +36,20 @@ export function resolveRoutedAgent(
   if (channelAgentId) {
     const linked = agents.find(a => a.id === channelAgentId)
     if (linked && linked.active) return linked.id
-    // Inactive / missing → fall through to round-robin.
+    // Inactive / missing → fall through to default.
   }
 
-  // 2. Round-robin among active, non-first_buyer agents.
-  const eligible = agents.filter(a => a.active && a.specialty !== MANUAL_ONLY_SPECIALTY)
-  if (eligible.length === 0) return null
+  // 2. "Toda la agencia": always try the default agent first.
+  const preferred = agents.find(a => a.id === DEFAULT_AGENT_ID && a.active)
+  if (preferred) return preferred.id
 
-  eligible.sort((a, b) => {
-    if (a.lastRoutedAt === b.lastRoutedAt) return a.id < b.id ? -1 : 1
-    if (a.lastRoutedAt === null) return -1 // never routed → most starved → first
-    if (b.lastRoutedAt === null) return 1
-    return a.lastRoutedAt < b.lastRoutedAt ? -1 : 1 // oldest assignment first
-  })
-
-  return eligible[0].id
+  // 3. Defensive fallback: first active agent sorted by id (deterministic).
+  const active = agents.filter(a => a.active).sort((a, b) => (a.id < b.id ? -1 : 1))
+  return active[0]?.id ?? null
 }
 
-// Loads the tenant's agents + their last channel-routed assignment, then applies
-// resolveRoutedAgent. Logs a warning when an explicitly-linked agent is skipped
-// because it is inactive. Returns the chosen agent id, or null on misconfiguration.
+// Loads the tenant's agents, then applies resolveRoutedAgent. Logs a warning when
+// an explicitly-linked agent is skipped because it is inactive.
 export async function resolveChannelAgent(
   db: AdminClient,
   tenantId: string,
@@ -74,30 +64,10 @@ export async function resolveChannelAgent(
   const rows = (agentRows ?? []) as any[]
   if (rows.length === 0) return null
 
-  // Most recent channel-routed lead per agent (acquisition_channel_id IS NOT NULL =
-  // arrived through routing, excludes manual/import direct entries). Small tenant
-  // scale — fetch + reduce in-process.
-  const { data: routed } = await db
-    .from('leads')
-    .select('agent_id, created_at')
-    .eq('tenant_id', tenantId)
-    .not('acquisition_channel_id', 'is', null)
-
-  const lastRoutedByAgent = new Map<string, string>()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const l of (routed ?? []) as any[]) {
-    const aid = l.agent_id as string | null
-    const ts  = l.created_at as string | null
-    if (!aid || !ts) continue
-    const prev = lastRoutedByAgent.get(aid)
-    if (!prev || ts > prev) lastRoutedByAgent.set(aid, ts)
-  }
-
   const agents: RoutingAgent[] = rows.map(a => ({
-    id:           a.id as string,
-    active:       a.active as boolean,
-    specialty:    (a.specialty ?? null) as string | null,
-    lastRoutedAt: lastRoutedByAgent.get(a.id as string) ?? null,
+    id:        a.id as string,
+    active:    a.active as boolean,
+    specialty: (a.specialty ?? null) as string | null,
   }))
 
   // Warn when an explicit link is being skipped for inactivity.
@@ -106,7 +76,7 @@ export async function resolveChannelAgent(
     if (linked && !linked.active) {
       console.warn(JSON.stringify({
         service: 'route-channel-agent', tenant_id: tenantId,
-        warning: 'linked_agent_inactive_fallback_round_robin', agent_id: channelAgentId,
+        warning: 'linked_agent_inactive_fallback_default', agent_id: channelAgentId,
       }))
     }
   }
