@@ -4,11 +4,12 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { NewLeadClient } from './new-lead-client'
 
 export interface ChannelOption {
-  id: string
-  tenantId: string
+  id:          string
+  tenantId:    string
   channelType: string
-  name: string
-  slug: string
+  name:        string
+  slug:        string
+  agentId:     string | null
 }
 
 export interface TenantOption {
@@ -26,7 +27,7 @@ export default async function NewLeadPage() {
   let agentsQ   = supabase.from('agents').select('*').eq('active', true).order('name')
   let channelsQ = supabase
     .from('acquisition_channels')
-    .select('id, tenant_id, channel_type, name, slug')
+    .select('id, tenant_id, channel_type, name, slug, agent_id')
     .eq('active', true)
     .order('name')
   if (!isSuper && ctx.tenant_id) {
@@ -50,6 +51,7 @@ export default async function NewLeadPage() {
     channelType: r.channel_type as string,
     name:        r.name as string,
     slug:        r.slug as string,
+    agentId:     (r.agent_id ?? null) as string | null,
   })) as ChannelOption[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenants = (rawTenants ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string })) as TenantOption[]

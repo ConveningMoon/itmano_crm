@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelBySlug } from '@/lib/data/channels'
 import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
@@ -117,7 +117,28 @@ export default async function ChannelDetailPage({
       </div>
 
       {/* Metrics row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4" style={{ marginBottom: '24px' }}>
+        {/* Leads totales — links to /leads pre-filtered by this channel */}
+        <Link
+          href={`/leads?source=${channel.channelType}&channelId=${channel.id}`}
+          style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+            borderRadius: '12px', padding: '16px', textDecoration: 'none',
+            display: 'block', transition: 'border-color 150ms',
+          }}
+          className="metric-link"
+        >
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+            Leads totales
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            {channel.metrics.leadsTotal}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            Ver leads <ArrowRight size={10} />
+          </div>
+        </Link>
+
         {[
           { label: 'Leads (30d)',     value: String(channel.metrics.leadsInWindow) },
           { label: 'Vistas (30d)',    value: String(channel.metrics.pageViewsInWindow) },
@@ -132,6 +153,8 @@ export default async function ChannelDetailPage({
           </div>
         ))}
       </div>
+
+      <style>{`.metric-link:hover { border-color: var(--accent-gold) !important; }`}</style>
 
       {/* Submissions — expandable Q&A list */}
       <SubmissionsList submissions={submissions} channelType={channel.channelType} />
