@@ -52,6 +52,7 @@ const ResendEventDataSchema = z.object({
   from:     z.string().optional(),
   to:       z.array(z.string()).optional(),
   subject:  z.string().optional(),
+  text:     z.string().optional(),   // inbound email body (email.received only)
   click:    z.object({ link: z.string() }).optional(),
   bounce:   z.object({ message: z.string() }).optional(),
 }).passthrough()
@@ -224,6 +225,33 @@ async function handleInboundEvent(
   }
 
   log({ event_type: event.type, event_id: svixId, lead_id: match.id, result: 'inserted' })
+
+  // Best-effort: insert an email_replied notification so the pg_net trigger dispatches
+  // a Telegram message to the tenant owner. Failure here must not affect webhook's 200.
+  try {
+    const subj = event.data.subject
+    const bodyRaw = (event.data.text ?? '').replace(/\s+/g, ' ').trim()
+    const SNIPPET_MAX = 200
+    const snippet = bodyRaw.slice(0, SNIPPET_MAX)
+    const parts: string[] = []
+    if (subj)   parts.push(`Asunto: "${subj}"`)
+    if (snippet) parts.push(`"${snippet}${bodyRaw.length > SNIPPET_MAX ? '…' : ''}"`)
+
+    await db.from('notifications').insert({
+      tenant_id: match.tenant_id,
+      type:      'email_replied',
+      lead_id:   match.id,
+      message:   parts.join('\n') || 'Sin contenido',
+    })
+  } catch (notifErr) {
+    console.error(JSON.stringify({
+      service:   'resend-webhook',
+      event_id:  svixId,
+      lead_id:   match.id,
+      error:     'notification_insert_failed',
+      detail:    String(notifErr),
+    }))
+  }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────

@@ -35,6 +35,10 @@ function buildMessage(
     return `📬 <b>Contact Us</b>\n${body || name}\n<a href="${url}">Ver lead</a>`
   }
 
+  if (type === 'email_replied') {
+    return `💬 <b>Email respondido</b>\n${name}\n${body || 'Sin contenido'}\n<a href="${url}">Ver lead</a>`
+  }
+
   // Self-contained notifications (no live lead → message body carries everything)
   if (type === 'lead_deleted') {
     return `🗑️ <b>Lead eliminado</b>\n${body || name}`
