@@ -58,7 +58,7 @@ export async function processSequenceRun(params: {
   // ── Bulk-fetch related entities in parallel ────────────────────────────────
   const [leadRes, tenantRes, stepRes, channelRes, seqRes] = await Promise.all([
     db.from('leads')
-      .select('id, first_name, email, agent_id, agents(id, name, email)')
+      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email)')
       .eq('id', leadId)
       .maybeSingle(),
     db.from('tenants')
@@ -94,6 +94,26 @@ export async function processSequenceRun(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seqName = (seqRes.data as any)?.name as string | undefined
 
+  // ── Guard: email channel blocked ──────────────────────────────────────────
+  // Cancel the run so the cron never retries it. The block is permanent until
+  // the lead's email_blocked flag is cleared by an operator.
+  if (lead?.email_blocked) {
+    const blockReason = (lead.email_blocked_reason as string | null) ?? 'email_blocked'
+    if (!dryRun) {
+      await db
+        .from('lead_sequence_runs')
+        .update({ status: 'cancelled', cancelled_reason: blockReason })
+        .eq('id', runId)
+    }
+    return {
+      action:       'paused',
+      reason:       `email_blocked_${blockReason}`,
+      leadEmail:    (lead?.email as string) ?? '',
+      sequenceName: seqName ?? sequenceId,
+      stepOrder,
+    }
+  }
+
   const pending: PendingRun = {
     run_id:             runId,
     lead_id:            leadId,
@@ -103,9 +123,11 @@ export async function processSequenceRun(params: {
     step_id:            step?.id ?? null,
     resend_template_id: step?.resend_template_id ?? null,
     next_delay_hours:   step?.delay_hours ?? null,
-    first_name:         lead?.first_name ?? '',
-    lead_email:         lead?.email ?? '',
-    agent_id:           lead?.agent_id ?? '',
+    first_name:            lead?.first_name ?? '',
+    lead_email:            lead?.email ?? '',
+    agent_id:              lead?.agent_id ?? '',
+    email_blocked:         (lead?.email_blocked as boolean) ?? false,
+    email_blocked_reason:  (lead?.email_blocked_reason as string | null) ?? null,
     email_from_address: tenant?.email_from_address ?? null,
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',

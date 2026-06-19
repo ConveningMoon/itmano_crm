@@ -1,6 +1,7 @@
 import 'server-only'
 import { resend } from '@/lib/resend'
 import type { createAdminClient } from '@/lib/supabase/admin'
+import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 
 export type PurchaseMilestone = 'start' | 'pre_close' | 'completed'
 
@@ -64,7 +65,9 @@ export async function sendPurchaseEmail(
         id,
         first_name,
         email,
-        language
+        language,
+        email_blocked,
+        email_blocked_reason
       )
     `)
     .eq('id', processId)
@@ -105,6 +108,22 @@ export async function sendPurchaseEmail(
   const leadEmail  = lead.email as string
   const leadId     = lead.id as string
 
+  // Block purchase emails only for hard_bounce (the address doesn't exist).
+  // unsubscribed: these are transactional confirmations for a process the lead
+  //   explicitly started — we still send them (same logic as a bank statement).
+  // spam_complaint: the lead is already 'lost' and runs are cancelled upstream
+  //   via the force_perdido scoring side-effect; this path is rarely reached.
+  if (lead.email_blocked && lead.email_blocked_reason === 'hard_bounce') {
+    console.warn(JSON.stringify({
+      service:   'sendPurchaseEmail',
+      processId,
+      milestone,
+      lead_id:   leadId,
+      warning:   'skipped_email_blocked_hard_bounce',
+    }))
+    return
+  }
+
   // Look up the template for this (tenant, milestone, language).
   const { data: tmpl } = await db
     .from('purchase_email_templates')
@@ -139,12 +158,16 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Send via Resend. Only variable needed: customer_name.
+  // Send via Resend.
+  // unsubscribe_url is provided but the purchase email templates may not use
+  // it — wire {{unsubscribe_url}} into each template footer when templates are
+  // created in Resend. See CLAUDE.md "Email Analytics" for variable conventions.
+  const unsubscribeUrl = generateUnsubscribeUrl(leadId)
   try {
     const { error: sendErr } = await resend.emails.send({
       from:     fromAddress,
       to:       leadEmail,
-      template: { id: templateId, variables: { customer_name: firstName } },
+      template: { id: templateId, variables: { customer_name: firstName, unsubscribe_url: unsubscribeUrl } },
     })
 
     if (sendErr) {
