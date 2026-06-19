@@ -89,11 +89,20 @@ export async function sendSequenceEmail(
   }
 
   // ── Send via Resend ───────────────────────────────────────────────────────
+  // RFC 8058 one-click unsubscribe: email clients surface a native
+  // "Unsubscribe" button that POSTs to the List-Unsubscribe URL without any
+  // HTML in the email template needing a link. Gmail requires both headers.
+  const listUnsubscribeHeaders = {
+    'List-Unsubscribe':      `<${unsubscribeUrl}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  }
+
   let resendEmailId: string
   try {
     const { data, error } = await resend.emails.send({
-      from: run.email_from_address,
-      to:   run.lead_email,
+      from:    run.email_from_address,
+      to:      run.lead_email,
+      headers: listUnsubscribeHeaders,
       template: {
         id:        run.resend_template_id,
         variables,

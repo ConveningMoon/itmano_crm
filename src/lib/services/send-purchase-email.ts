@@ -159,14 +159,21 @@ export async function sendPurchaseEmail(
   }
 
   // Send via Resend.
-  // unsubscribe_url is provided but the purchase email templates may not use
-  // it — wire {{unsubscribe_url}} into each template footer when templates are
-  // created in Resend. See CLAUDE.md "Email Analytics" for variable conventions.
+  // RFC 8058 one-click: same two headers as sequence emails. Purchase process
+  // emails are commercial follow-ups, not purely transactional (OTP / receipt),
+  // so the unsubscribe header is appropriate and improves deliverability.
+  // unsubscribe_url is also passed as a template variable so authors can wire
+  // a visible link into the template footer (optional — header alone is enough).
   const unsubscribeUrl = generateUnsubscribeUrl(leadId)
+  const listUnsubscribeHeaders = {
+    'List-Unsubscribe':      `<${unsubscribeUrl}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  }
   try {
     const { error: sendErr } = await resend.emails.send({
       from:     fromAddress,
       to:       leadEmail,
+      headers:  listUnsubscribeHeaders,
       template: { id: templateId, variables: { customer_name: firstName, unsubscribe_url: unsubscribeUrl } },
     })
 
