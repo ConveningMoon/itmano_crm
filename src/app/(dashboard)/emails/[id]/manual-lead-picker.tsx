@@ -61,10 +61,11 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
         setToast(`Error: ${res.error}`)
         return
       }
-      const { enrolled, skipped, errors } = res.result
+      const { enrolled, skipped, blocked, errors } = res.result
       const parts: string[] = []
       if (enrolled > 0) parts.push(`${enrolled} ${enrolled === 1 ? 'lead agregado' : 'leads agregados'}`)
       if (skipped  > 0) parts.push(`${skipped} omitido${skipped > 1 ? 's' : ''} (ya activos)`)
+      if (blocked  > 0) parts.push(`${blocked} omitido${blocked > 1 ? 's' : ''} (email bloqueado)`)
       if (errors.length > 0) parts.push(`${errors.length} error${errors.length > 1 ? 'es' : ''}`)
       setToast(parts.join(' · '))
       setSelected(new Set())

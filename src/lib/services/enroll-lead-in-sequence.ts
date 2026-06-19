@@ -42,6 +42,26 @@ export async function enrollLeadInSequence(args: {
 
   if (!acquisition_channel_id) return { enrolled: false }
 
+  // Guard: do not enroll leads whose email channel is permanently blocked.
+  // The flag is set by the unsubscribe page (unsubscribed), the Resend webhook
+  // (hard_bounce, spam_complaint) and is independent of scoring.
+  const { data: leadRow } = await db
+    .from('leads')
+    .select('email_blocked, email_blocked_reason')
+    .eq('id', lead_id)
+    .maybeSingle()
+
+  if (leadRow?.email_blocked) {
+    console.log(JSON.stringify({
+      service:  'enroll-lead-in-sequence',
+      lead_id,
+      tenant_id,
+      result:   'blocked_email',
+      reason:   leadRow.email_blocked_reason,
+    }))
+    return { enrolled: false }
+  }
+
   // 1. Check if the channel has an email sequence
   const { data: channel } = await db
     .from('acquisition_channels')

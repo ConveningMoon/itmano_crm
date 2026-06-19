@@ -154,6 +154,30 @@ async function handleOutboundEvent(
   }
 
   log({ event_type: event.type, event_id: svixId, resend_email_id: emailId, lead_id: send.lead_id, result: 'inserted' })
+
+  // Set email_blocked flag for delivery-blocking events. Best-effort — a failure
+  // here must not affect the webhook's 200 (the lead_event is already committed).
+  // Independent of the scoring recompute triggered by trg_lead_event_scoring.
+  const blockReason =
+    internalType === 'email_hard_bounce'   ? 'hard_bounce'    :
+    internalType === 'email_spam_complaint' ? 'spam_complaint' :
+    null
+  if (blockReason) {
+    try {
+      await db
+        .from('leads')
+        .update({ email_blocked: true, email_blocked_reason: blockReason })
+        .eq('id', send.lead_id)
+    } catch (blockErr) {
+      console.error(JSON.stringify({
+        service:  'resend-webhook',
+        event_id: svixId,
+        lead_id:  send.lead_id,
+        error:    'block_flag_set_failed',
+        detail:   String(blockErr),
+      }))
+    }
+  }
 }
 
 // ─── Inbound event handler ────────────────────────────────────────────────────

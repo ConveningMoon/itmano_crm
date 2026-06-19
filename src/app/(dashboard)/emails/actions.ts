@@ -374,6 +374,7 @@ export async function moveStep(
 export interface BulkEnrollResult {
   enrolled: number
   skipped:  number
+  blocked:  number   // leads skipped because email_blocked = true
   errors:   Array<{ leadId: string; reason: string }>
 }
 
@@ -381,7 +382,7 @@ export async function addLeadsToSequence(
   leadIds:    string[],
   sequenceId: string,
 ): Promise<{ ok: true; result: BulkEnrollResult } | { ok: false; error: string }> {
-  if (leadIds.length === 0) return { ok: true, result: { enrolled: 0, skipped: 0, errors: [] } }
+  if (leadIds.length === 0) return { ok: true, result: { enrolled: 0, skipped: 0, blocked: 0, errors: [] } }
 
   const ctx      = await getCurrentTenantContext()
   // Bulk enrollment from the sequence side is email management — owner / super_admin
@@ -432,15 +433,30 @@ export async function addLeadsToSequence(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const alreadyActive = new Set((activeRunRows as any[] ?? []).map((r: any) => r.lead_id as string))
 
+  // Fetch leads whose email channel is permanently blocked — do not enroll them.
+  const { data: blockedLeadRows } = await supabase
+    .from('leads')
+    .select('id')
+    .eq('email_blocked', true)
+    .in('id', leadIds)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emailBlocked = new Set((blockedLeadRows as any[] ?? []).map((r: any) => r.id as string))
+
   const nextSendAt = new Date(
     Date.now() + (firstStep.delay_hours ?? 0) * 60 * 60 * 1000
   ).toISOString()
 
-  const result: BulkEnrollResult = { enrolled: 0, skipped: 0, errors: [] }
+  const result: BulkEnrollResult = { enrolled: 0, skipped: 0, blocked: 0, errors: [] }
 
   for (const leadId of leadIds) {
     if (alreadyActive.has(leadId)) {
       result.skipped++
+      continue
+    }
+
+    if (emailBlocked.has(leadId)) {
+      result.blocked++
       continue
     }
 

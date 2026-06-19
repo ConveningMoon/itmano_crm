@@ -144,5 +144,13 @@ export default async function UnsubscribePage({
     return <ErrorPage />
   }
 
+  // Set persistent block flag — independent of scoring; idempotent (UPDATE is a no-op
+  // if already set). Best-effort: a failure here still shows the success page since
+  // the lead_event (the source of truth for scoring) was already inserted.
+  await db
+    .from('leads')
+    .update({ email_blocked: true, email_blocked_reason: 'unsubscribed' })
+    .eq('id', leadRow.id)
+
   return <SuccessPage tenantName={tenantName} agentEmail={agentEmail} />
 }

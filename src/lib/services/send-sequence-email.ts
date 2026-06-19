@@ -14,9 +14,11 @@ export type PendingRun = {
   resend_template_id: string | null
   next_delay_hours:   number | null
   // Lead
-  first_name:         string
-  lead_email:         string
-  agent_id:           string
+  first_name:            string
+  lead_email:            string
+  agent_id:              string
+  email_blocked:         boolean
+  email_blocked_reason:  string | null
   // Tenant
   email_from_address: string | null
   // Agent
@@ -36,6 +38,19 @@ export async function sendSequenceEmail(
   dryRun: boolean,
 ): Promise<SendResult> {
   const { run_id, lead_id, sequence_id, current_step_order, tenant_id } = run
+
+  // ── Guard: email channel blocked (defensive — processSequenceRun checks first) ──
+  // Cancels the run rather than pausing so it doesn't linger in the active queue.
+  if (run.email_blocked) {
+    const blockReason = run.email_blocked_reason ?? 'email_blocked'
+    if (!dryRun) {
+      await db
+        .from('lead_sequence_runs')
+        .update({ status: 'cancelled', cancelled_reason: blockReason })
+        .eq('id', run_id)
+    }
+    return { ok: false, reason: 'email_blocked', action: 'paused' }
+  }
 
   // ── Guard: step must exist and be configured ──────────────────────────────
   if (!run.step_id) {
