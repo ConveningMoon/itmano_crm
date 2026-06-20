@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resend } from '@/lib/resend'
+import { stripQuotedReply } from '@/lib/email/strip-quoted-reply'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -290,12 +291,13 @@ async function handleInboundEvent(
           detail:   String(fetchErr),
         }))
       } else if (received) {
-        if (received.text) {
-          bodyText = received.text.trim() || null
-        } else if (received.html) {
-          // Only HTML arrived — derive plain-text (XSS prevention: never store raw HTML)
-          bodyText = htmlToText(received.html) || null
-        }
+        const raw = received.text
+          ? received.text.trim()
+          : received.html
+            ? htmlToText(received.html)
+            : null
+        // Strip the quoted/forwarded block — store only what the lead wrote.
+        bodyText = raw ? (stripQuotedReply(raw) || null) : null
       }
     } catch (fetchEx) {
       console.error(JSON.stringify({
