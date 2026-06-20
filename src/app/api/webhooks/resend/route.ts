@@ -2,6 +2,7 @@ import { Webhook } from 'svix'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resend } from '@/lib/resend'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -52,7 +53,8 @@ const ResendEventDataSchema = z.object({
   from:     z.string().optional(),
   to:       z.array(z.string()).optional(),
   subject:  z.string().optional(),
-  text:     z.string().optional(),   // inbound email body (email.received only)
+  // NOTE: email.received webhook payloads do NOT include body content.
+  // text/html must be fetched via resend.emails.receiving.get(email_id).
   click:    z.object({ link: z.string() }).optional(),
   bounce:   z.object({ message: z.string() }).optional(),
 }).passthrough()
@@ -92,6 +94,24 @@ function log(fields: {
 function extractEmail(raw: string): string {
   const m = raw.match(/<([^>]+)>/)
   return (m ? m[1] : raw).trim().toLowerCase()
+}
+
+// Convert HTML to plain text for storage — XSS prevention.
+// Rules: block elements (<p><div><br><li>) become \n, all other tags stripped.
+// Called only when the Resend API returns html but no text part.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(p|div|li|tr|h[1-6]|blockquote)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 // ─── Outbound event handler ───────────────────────────────────────────────────
@@ -250,11 +270,43 @@ async function handleInboundEvent(
 
   log({ event_type: event.type, event_id: svixId, lead_id: match.id, result: 'inserted' })
 
-  // Normalize body: store plain-text only — never HTML (XSS prevention).
-  // Resend Inbound provides `text` when the sender's MUA sends a text part.
-  // If only HTML arrives, `text` is absent and we store null rather than
-  // stripping tags here (a future migration can add HTML→text extraction).
-  const bodyText = event.data.text?.trim() || null
+  // Fetch the full email body via the Resend API.
+  // The email.received webhook carries metadata only (from/to/subject/email_id)
+  // — body content is never included in the webhook payload (Resend design).
+  // We must call resend.emails.receiving.get(email_id) to retrieve text/html.
+  // Best-effort: a failure here must not block the webhook's 200 or the
+  // lead_event already committed above.
+  let bodyText: string | null = null
+  const inboundEmailId = event.data.email_id
+  if (inboundEmailId) {
+    try {
+      const { data: received, error: fetchErr } = await resend.emails.receiving.get(inboundEmailId)
+      if (fetchErr) {
+        console.error(JSON.stringify({
+          service:  'resend-webhook',
+          event_id: svixId,
+          lead_id:  match.id,
+          error:    'receiving_get_failed',
+          detail:   String(fetchErr),
+        }))
+      } else if (received) {
+        if (received.text) {
+          bodyText = received.text.trim() || null
+        } else if (received.html) {
+          // Only HTML arrived — derive plain-text (XSS prevention: never store raw HTML)
+          bodyText = htmlToText(received.html) || null
+        }
+      }
+    } catch (fetchEx) {
+      console.error(JSON.stringify({
+        service:  'resend-webhook',
+        event_id: svixId,
+        lead_id:  match.id,
+        error:    'receiving_get_exception',
+        detail:   String(fetchEx),
+      }))
+    }
+  }
 
   // ── Persist full reply in lead_email_replies ──────────────────────────────
   // Best-effort: a failure here must not block the webhook's 200.
