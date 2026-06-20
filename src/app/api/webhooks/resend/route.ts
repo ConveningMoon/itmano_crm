@@ -2,7 +2,7 @@ import { Webhook } from 'svix'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resend } from '@/lib/resend'
+import { resendInbound } from '@/lib/resend'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -280,14 +280,18 @@ async function handleInboundEvent(
   const inboundEmailId = event.data.email_id
   if (inboundEmailId) {
     try {
-      const { data: received, error: fetchErr } = await resend.emails.receiving.get(inboundEmailId)
+      const { data: received, error: fetchErr } = await resendInbound.emails.receiving.get(inboundEmailId)
       if (fetchErr) {
+        // Log full error object (not String() which gives [object Object])
         console.error(JSON.stringify({
-          service:  'resend-webhook',
-          event_id: svixId,
-          lead_id:  match.id,
-          error:    'receiving_get_failed',
-          detail:   String(fetchErr),
+          service:       'resend-webhook',
+          event_id:      svixId,
+          lead_id:       match.id,
+          inbound_id:    inboundEmailId,
+          error:         'receiving_get_failed',
+          status_code:   fetchErr.statusCode,
+          error_name:    fetchErr.name,
+          detail:        fetchErr.message,
         }))
       } else if (received) {
         if (received.text) {
@@ -295,17 +299,35 @@ async function handleInboundEvent(
         } else if (received.html) {
           // Only HTML arrived — derive plain-text (XSS prevention: never store raw HTML)
           bodyText = htmlToText(received.html) || null
+        } else {
+          // API succeeded but returned neither text nor html — log for visibility
+          console.log(JSON.stringify({
+            service:    'resend-webhook',
+            event_id:   svixId,
+            lead_id:    match.id,
+            inbound_id: inboundEmailId,
+            result:     'receiving_get_no_body',
+          }))
         }
       }
     } catch (fetchEx) {
       console.error(JSON.stringify({
-        service:  'resend-webhook',
-        event_id: svixId,
-        lead_id:  match.id,
-        error:    'receiving_get_exception',
-        detail:   String(fetchEx),
+        service:    'resend-webhook',
+        event_id:   svixId,
+        lead_id:    match.id,
+        inbound_id: inboundEmailId,
+        error:      'receiving_get_exception',
+        detail:     fetchEx instanceof Error ? fetchEx.message : String(fetchEx),
       }))
     }
+  } else {
+    // email_id absent from webhook payload — body cannot be fetched
+    console.log(JSON.stringify({
+      service:  'resend-webhook',
+      event_id: svixId,
+      lead_id:  match.id,
+      result:   'receiving_no_email_id',
+    }))
   }
 
   // ── Persist full reply in lead_email_replies ──────────────────────────────
