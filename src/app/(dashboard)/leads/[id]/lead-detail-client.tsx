@@ -20,6 +20,8 @@ import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
 import { LeadSubmissionsList } from './lead-submissions-list'
 import type { LeadSubmissionRow } from '@/lib/data/form-submissions'
+import { LeadEmailRepliesList } from './lead-email-replies-list'
+import type { LeadEmailReply } from '@/lib/data/lead-email-replies'
 import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { getLeadSource } from '@/lib/leads/source'
 
@@ -166,6 +168,7 @@ interface LeadDetailProps {
   channels: ChannelOption[]
   events: LeadEvent[]
   submissions: LeadSubmissionRow[]
+  emailReplies: LeadEmailReply[]
   purchaseProcess: PurchaseProcess | null
   hasActiveSequenceRun: boolean
   manualActions: ManualActionItem[]
@@ -175,7 +178,7 @@ interface LeadDetailProps {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, purchaseProcess, hasActiveSequenceRun, manualActions, statusHistory, scoreBreakdown }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, hasActiveSequenceRun, manualActions, statusHistory, scoreBreakdown }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -797,6 +800,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
       {/* ── Formularios completados ── */}
       <LeadSubmissionsList submissions={submissions} />
+
+      {/* ── Respuestas por email ── */}
+      <LeadEmailRepliesList replies={emailReplies} />
 
       {/* ── Historial de estados ── */}
       <StatusHistoryTimeline changes={statusHistory} />

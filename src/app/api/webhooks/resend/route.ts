@@ -250,16 +250,50 @@ async function handleInboundEvent(
 
   log({ event_type: event.type, event_id: svixId, lead_id: match.id, result: 'inserted' })
 
-  // Best-effort: insert an email_replied notification so the pg_net trigger dispatches
-  // a Telegram message to the tenant owner. Failure here must not affect webhook's 200.
+  // Normalize body: store plain-text only — never HTML (XSS prevention).
+  // Resend Inbound provides `text` when the sender's MUA sends a text part.
+  // If only HTML arrives, `text` is absent and we store null rather than
+  // stripping tags here (a future migration can add HTML→text extraction).
+  const bodyText = event.data.text?.trim() || null
+
+  // ── Persist full reply in lead_email_replies ──────────────────────────────
+  // Best-effort: a failure here must not block the webhook's 200.
+  // Idempotent via the (lead_id, provider_message_id) unique index — re-delivery
+  // of the same svix-id is silently ignored (23505).
   try {
-    const subj = event.data.subject
-    const bodyRaw = (event.data.text ?? '').replace(/\s+/g, ' ').trim()
-    const SNIPPET_MAX = 200
-    const snippet = bodyRaw.slice(0, SNIPPET_MAX)
+    await db.from('lead_email_replies').insert({
+      tenant_id:           match.tenant_id,
+      lead_id:             match.id,
+      from_email:          fromAddress,
+      subject:             event.data.subject ?? null,
+      body_text:           bodyText,
+      received_at:         event.created_at,
+      provider_message_id: svixId,
+    })
+  } catch (replyErr) {
+    // 23505 = duplicate delivery — idempotent, ignore
+    const code = (replyErr as { code?: string })?.code
+    if (code !== '23505') {
+      console.error(JSON.stringify({
+        service:  'resend-webhook',
+        event_id: svixId,
+        lead_id:  match.id,
+        error:    'reply_insert_failed',
+        detail:   String(replyErr),
+      }))
+    }
+  }
+
+  // ── Notification → Telegram ───────────────────────────────────────────────
+  // Best-effort: insert an email_replied notification so the pg_net trigger
+  // dispatches a Telegram message to the tenant owner.
+  try {
+    const subj    = event.data.subject
+    const SNIPPET = 200
+    const snippet = bodyText ? bodyText.slice(0, SNIPPET) : null
     const parts: string[] = []
-    if (subj)   parts.push(`Asunto: "${subj}"`)
-    if (snippet) parts.push(`"${snippet}${bodyRaw.length > SNIPPET_MAX ? '…' : ''}"`)
+    if (subj)    parts.push(`Asunto: "${subj}"`)
+    if (snippet) parts.push(`"${snippet}${bodyText && bodyText.length > SNIPPET ? '…' : ''}"`)
 
     await db.from('notifications').insert({
       tenant_id: match.tenant_id,

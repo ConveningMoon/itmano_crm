@@ -17,6 +17,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, isRowVisible } from '@/lib/auth/visibility'
 import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
+import { getLeadEmailReplies } from '@/lib/data/lead-email-replies'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
@@ -52,6 +53,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     submissions,
     scoreRules,
     statusHistory,
+    emailReplies,
   ] = await Promise.all([
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
@@ -61,6 +63,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     getSubmissionsForLead(id, tenant_id),
     getGlobalScoreRules(),
     getLeadStatusHistory(id, tenant_id),
+    getLeadEmailReplies(id, tenant_id),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -116,6 +119,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       purchaseProcess={purchaseProcess}
       events={events}
       submissions={submissions}
+      emailReplies={emailReplies}
       hasActiveSequenceRun={hasActiveSequenceRun}
       manualActions={manualActions}
       statusHistory={statusHistory}
