@@ -262,6 +262,7 @@ export async function POST(
         tenant_id: tenantId,
         type:      'contact_form_question',
         lead_id:   leadId,
+        agent_id:  agentId,
         message:   question,
       })
       if (notifError) {
@@ -384,6 +385,7 @@ export async function POST(
         // Telegram notification (unchanged).
         const { error: evNotifError } = await db.from('notifications').insert({
           tenant_id: tenantId, type: 'event_submission', lead_id: leadId,
+          agent_id:  agentId,
           message: `${fullName} se registró en ${channelName}`,
         })
         if (evNotifError) {

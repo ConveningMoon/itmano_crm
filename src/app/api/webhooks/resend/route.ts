@@ -226,7 +226,7 @@ async function handleInboundEvent(
 
   const { data: matches, error: lookupError } = await db
     .from('leads')
-    .select('id, tenant_id')
+    .select('id, tenant_id, agent_id')
     .eq('email', fromAddress)
 
   if (lookupError) throw lookupError
@@ -353,6 +353,8 @@ async function handleInboundEvent(
       tenant_id: match.tenant_id,
       type:      'email_replied',
       lead_id:   match.id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      agent_id:  (match as any).agent_id ?? null,
       message:   parts.join('\n') || 'Sin contenido',
     })
   } catch (notifErr) {

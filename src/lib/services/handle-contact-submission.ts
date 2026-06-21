@@ -132,6 +132,7 @@ export async function handleContactSubmission(
     tenant_id: tenantId,
     type:      'contact_us',
     lead_id:   leadId,
+    agent_id:  agentId,
     message:   `Nueva pregunta de ${name}: ${message.slice(0, 100)}`,
   })
   if (notifError) {
