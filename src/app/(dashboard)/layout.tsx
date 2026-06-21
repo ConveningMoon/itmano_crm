@@ -10,7 +10,10 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const ctx         = await getCurrentTenantContext()
-  const unreadCount = await getUnreadCount(ctx.tenant_id)
+  const unreadCount = await getUnreadCount(
+    ctx.tenant_id,
+    ctx.role === 'agent' ? ctx.agent_id : null,
+  )
 
   // The auth email isn't on the tenant context; read it from the session for the
   // sidebar footer (the session is already established — ctx redirected otherwise).
