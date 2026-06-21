@@ -49,7 +49,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     { data: rawEvents },
     { data: rawProcess },
     { data: rawChannels },
-    { data: rawActiveRuns },
     submissions,
     scoreRules,
     statusHistory,
@@ -59,7 +58,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     eventsQ,
     supabase.from('purchase_processes').select('*').eq('lead_id', id).maybeSingle(),
     supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug, agent_id').eq('tenant_id', leadTenantId).eq('active', true).order('name'),
-    supabase.from('lead_sequence_runs').select('id').eq('lead_id', id).eq('status', 'active').limit(1),
     getSubmissionsForLead(id, tenant_id),
     getGlobalScoreRules(),
     getLeadStatusHistory(id, tenant_id),
@@ -108,8 +106,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     slug:        r.slug as string,
     agentId:     (r.agent_id ?? null) as string | null,
   }))
-  const hasActiveSequenceRun = (rawActiveRuns ?? []).length > 0
-
   return (
     <LeadDetailClient
       lead={lead}
@@ -120,7 +116,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       events={events}
       submissions={submissions}
       emailReplies={emailReplies}
-      hasActiveSequenceRun={hasActiveSequenceRun}
       manualActions={manualActions}
       statusHistory={statusHistory}
       scoreBreakdown={scoreBreakdown}
