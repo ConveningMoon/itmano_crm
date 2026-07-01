@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeEmail } from '@/lib/auth/admin-users'
+import type { EmailOtpType } from '@supabase/auth-js'
 
 // Best-effort: mark any pending invitation for this email as accepted. A failure
 // here must NEVER break the login — log and continue.
@@ -25,10 +26,11 @@ async function markInvitationAccepted(email: string | undefined | null) {
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const token_hash = searchParams.get('token_hash')
+  const type       = (searchParams.get('type') ?? 'email') as EmailOtpType
+  const next       = searchParams.get('next') ?? '/dashboard'
 
-  if (code) {
+  if (token_hash) {
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,13 +49,13 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+    // verifyOtp is server-side: it needs no code_verifier cookie from the
+    // originating browser. Works cross-device and cross-browser.
+    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash })
 
     if (!error) {
-      // First login off an invitation → flip it to accepted (best-effort).
       await markInvitationAccepted(data.user?.email)
       // Validate `next` to prevent open redirect — only allow relative paths.
-      // No role-based redirect: everyone lands on /dashboard (or a safe `next`).
       const redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
       return NextResponse.redirect(`${origin}${redirectTo}`)
     }
