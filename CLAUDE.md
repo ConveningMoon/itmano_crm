@@ -355,6 +355,7 @@ src/
     (dashboard)/              — protected (Phase 2), CRM dark theme
       dashboard/              — pipeline + KPI cards
       leads/                  — list, filters, detail, new
+      properties/             — agency property listings; write access is asymmetric (owner/super: all; agent: own-created)
       analytics/              — Server pages + client chart wrappers
       lead-magnets/           — CRUD per agent (tracking only — landing pages live outside this app)
       settings/
@@ -489,7 +490,7 @@ re-submit — the LP decides the message (there's just no material to re-send).
 | Group | Path prefix | Theme | Auth |
 |---|---|---|---|
 | `(auth)` | `/login` | Dark | Public |
-| `(dashboard)` | `/dashboard`, `/leads`, `/analytics`, `/analytics/emails`, `/emails`, `/lead-magnets`, `/settings` | Dark premium (CSS vars) | Protected (Phase 2) |
+| `(dashboard)` | `/dashboard`, `/leads`, `/properties`, `/analytics`, `/analytics/emails`, `/emails`, `/lead-magnets`, `/settings` | Dark premium (CSS vars) | Protected (Phase 2) |
 
 The `(dashboard)` layout wraps content in a fixed 220px `Sidebar` + `Topbar` + main area. This is the only design system in the app.
 
@@ -619,6 +620,7 @@ Read these *before* writing code that touches their domain:
 | If you're working on… | Read first |
 |---|---|
 | Anything that uses leads, agents, sources, lead magnets | `src/lib/types.ts`, `src/lib/mockdata.ts` |
+| Anything in `properties/` | `src/lib/data/properties.ts` (types), `src/lib/auth/guards.ts` (`assertCanWriteProperty`), `supabase/migrations/041_properties.sql` |
 | Anything that touches scoring, status auto-transitions, or notifications | The "Lead Scoring Model" section above, then the scoring migration files in `supabase/migrations/` |
 | Anything in `(dashboard)` | `src/app/globals.css` (design tokens), the closest existing page |
 | A new chart | An existing chart under `analytics/charts/` |

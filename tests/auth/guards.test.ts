@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { requireWriteAccess, assertCanWriteLead } from '@/lib/auth/guards'
+import { requireWriteAccess, assertCanWriteLead, assertCanWriteProperty } from '@/lib/auth/guards'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 
 // ─── Context factories ────────────────────────────────────────────────────────
@@ -70,5 +70,54 @@ describe('assertCanWriteLead', () => {
     const denied = assertCanWriteLead(agentA1, leadInTenantB)
     expect(denied).not.toBeNull()
     expect(denied?.error).toBe('No tienes permiso sobre este lead')
+  })
+})
+
+// ─── assertCanWriteProperty (tenant-scoped + per-creator authorship) ──────────
+
+describe('assertCanWriteProperty', () => {
+  const propByAgent = { tenant_id: 'tenant-a', created_by_user_id: 'u-agent-a1' }
+  const propByOwner = { tenant_id: 'tenant-a', created_by_user_id: 'u-owner-a' }
+  const propByNobody = { tenant_id: 'tenant-a', created_by_user_id: null }
+  const propForeign  = { tenant_id: 'tenant-b', created_by_user_id: 'u-agent-b1' }
+
+  it('super_admin can write any property in any tenant', () => {
+    expect(assertCanWriteProperty(superAdmin, propByAgent)).toBeNull()
+    expect(assertCanWriteProperty(superAdmin, propForeign)).toBeNull()
+    expect(assertCanWriteProperty(superAdmin, propByNobody)).toBeNull()
+  })
+
+  it('agent_owner can write any property in their tenant', () => {
+    expect(assertCanWriteProperty(ownerA, propByAgent)).toBeNull()
+    expect(assertCanWriteProperty(ownerA, propByOwner)).toBeNull()
+    expect(assertCanWriteProperty(ownerA, propByNobody)).toBeNull()
+  })
+
+  it('agent_owner CANNOT write a property in another tenant', () => {
+    const denied = assertCanWriteProperty(ownerA, propForeign)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
+  })
+
+  it('agent can write a property they created', () => {
+    expect(assertCanWriteProperty(agentA1, propByAgent)).toBeNull()
+  })
+
+  it("agent CANNOT write another user's property in the same tenant", () => {
+    const denied = assertCanWriteProperty(agentA1, propByOwner)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
+  })
+
+  it('agent CANNOT write a property with null created_by_user_id (created by super_admin)', () => {
+    const denied = assertCanWriteProperty(agentA1, propByNobody)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
+  })
+
+  it('agent CANNOT write a property in another tenant', () => {
+    const denied = assertCanWriteProperty(agentA1, propForeign)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
   })
 })

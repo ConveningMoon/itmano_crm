@@ -45,6 +45,8 @@ describe('middleware matcher — dashboard pages ARE protected', () => {
     '/leads',
     '/leads/new',
     '/leads/lead-1',
+    '/properties',
+    '/properties/some-uuid',
     '/sources',
     '/sources/some-slug',
     '/emails',
