@@ -587,7 +587,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
               <label style={labelStyle}>
                 <span style={labelTextStyle}>Enlace externo (MLS / Zillow / etc.)</span>
                 <input
-                  type="text"
+                  type="url"
                   value={form.external_url ?? ''}
                   onChange={e => setField('external_url', e.target.value || null)}
                   placeholder="https://…"
