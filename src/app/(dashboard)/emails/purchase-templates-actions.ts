@@ -22,12 +22,63 @@ export async function getPurchaseTemplates(tenantId: string): Promise<PurchaseTe
   return (data ?? []) as PurchaseTemplateRow[]
 }
 
+export type PurchaseTemplateByTenant = {
+  tenant_id:   string
+  tenant_name: string
+  templates:   PurchaseTemplateRow[]
+}
+
+// super_admin path: fetch all tenants' purchase templates, grouped by tenant.
+export async function getAllPurchaseTemplatesByTenant(): Promise<PurchaseTemplateByTenant[]> {
+  const db = createAdminClient()
+  const { data: rows } = await db
+    .from('purchase_email_templates')
+    .select('id, milestone, language, resend_template_id, tenant_id')
+    .order('tenant_id')
+    .order('milestone')
+    .order('language')
+
+  const raw = (rows ?? []) as {
+    id: string; milestone: 'start' | 'pre_close' | 'completed'
+    language: 'es' | 'en' | 'pt'; resend_template_id: string; tenant_id: string
+  }[]
+
+  if (raw.length === 0) return []
+
+  const tids = [...new Set(raw.map(r => r.tenant_id))]
+  const { data: tenants } = await db
+    .from('tenants')
+    .select('id, name')
+    .in('id', tids)
+  const nameMap = new Map<string, string>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (tenants ?? []).map((t: any) => [t.id, t.name] as [string, string])
+  )
+
+  const grouped = new Map<string, PurchaseTemplateByTenant>()
+  for (const r of raw) {
+    if (!grouped.has(r.tenant_id)) {
+      grouped.set(r.tenant_id, {
+        tenant_id:   r.tenant_id,
+        tenant_name: nameMap.get(r.tenant_id) ?? r.tenant_id,
+        templates:   [],
+      })
+    }
+    grouped.get(r.tenant_id)!.templates.push({
+      id: r.id, milestone: r.milestone,
+      language: r.language, resend_template_id: r.resend_template_id,
+    })
+  }
+
+  return [...grouped.values()]
+}
+
 export async function updatePurchaseTemplate(
   id: string,
   resendTemplateId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  if (ctx.role === 'agent') return { ok: false, error: 'Sin permiso' }
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Sin permiso' }
 
   const db = createAdminClient()
 

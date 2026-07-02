@@ -3,7 +3,7 @@ import { listSequences } from '@/lib/data/email-sequences'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceListActions } from './sequence-list-actions'
-import { getPurchaseTemplates } from './purchase-templates-actions'
+import { getAllPurchaseTemplatesByTenant } from './purchase-templates-actions'
 import { PurchaseTemplatesPanel } from './purchase-templates-panel'
 import { Plus, Mail } from 'lucide-react'
 
@@ -19,9 +19,9 @@ export default async function EmailsPage() {
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const [sequences, purchaseTemplates] = await Promise.all([
+  const [sequences, purchaseByTenant] = await Promise.all([
     listSequences(tenant_id, scope.agentId),
-    tenant_id ? getPurchaseTemplates(tenant_id) : Promise.resolve([]),
+    isSuperAdmin ? getAllPurchaseTemplatesByTenant() : Promise.resolve([]),
   ])
 
   return (
@@ -212,13 +212,20 @@ export default async function EmailsPage() {
         </div>
       )}
 
-      {/* Purchase lifecycle email templates — editable by owner/super, read-only for agent */}
-      {purchaseTemplates.length > 0 && (
-        <PurchaseTemplatesPanel
-          templates={purchaseTemplates}
-          readOnly={role === 'agent'}
-        />
-      )}
+      {/* Purchase lifecycle email templates — super_admin only */}
+      {isSuperAdmin && purchaseByTenant.map(({ tenant_id: tid, tenant_name, templates }) => (
+        <div key={tid} style={{ marginTop: '32px' }}>
+          <div style={{
+            display: 'inline-block', marginBottom: '12px',
+            fontSize: '11px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
+            color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)',
+            border: '1px solid rgba(201,169,110,0.2)', borderRadius: '6px', padding: '3px 10px',
+          }}>
+            {tenant_name}
+          </div>
+          <PurchaseTemplatesPanel templates={templates} />
+        </div>
+      ))}
     </>
   )
 }
