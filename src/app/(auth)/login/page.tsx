@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { FadeIn } from '@/components/motion/primitives'
 import { createClient } from '@/lib/supabase/client'
 
 const COOLDOWN_SECONDS = 60
@@ -83,7 +84,8 @@ function LoginForm() {
         padding: '24px',
       }}
     >
-      <div
+      <FadeIn
+        y={12}
         style={{
           width: '100%',
           maxWidth: '380px',
@@ -94,6 +96,7 @@ function LoginForm() {
           display: 'flex',
           flexDirection: 'column',
           gap: '24px',
+          boxShadow: 'var(--highlight-top), var(--shadow-lg)',
         }}
       >
         {/* Logo */}
@@ -149,6 +152,7 @@ function LoginForm() {
             <button
               onClick={handleSend}
               disabled={loading || cooldown > 0}
+              className={loading || cooldown > 0 ? undefined : 'btn-cta'}
               style={{
                 width: '100%',
                 padding: '11px',
@@ -160,9 +164,25 @@ function LoginForm() {
                 fontWeight: '600',
                 letterSpacing: '0.06em',
                 cursor: (loading || cooldown > 0) ? 'not-allowed' : 'pointer',
-                transition: 'background-color 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
               }}
             >
+              {loading && (
+                <span
+                  className="animate-spin"
+                  style={{
+                    width: '13px',
+                    height: '13px',
+                    borderRadius: '50%',
+                    border: '2px solid rgba(11,12,14,0.25)',
+                    borderTopColor: 'var(--bg-base)',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
               {loading
                 ? 'Enviando...'
                 : cooldown > 0
@@ -181,7 +201,7 @@ function LoginForm() {
         <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
           ITMANO CRM
         </div>
-      </div>
+      </FadeIn>
     </div>
   )
 }
@@ -211,6 +231,6 @@ const inputStyle: React.CSSProperties = {
   backgroundColor: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
   fontSize: '13px',
-  outline: 'none',
   boxSizing: 'border-box',
+  transition: 'border-color var(--dur-fast)',
 }

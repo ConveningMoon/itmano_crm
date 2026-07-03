@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import { AnimatePresence, m } from 'motion/react'
 import { Menu, X, LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
 import { signOut } from '@/lib/auth/sign-out'
@@ -50,9 +51,14 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
         <Menu size={18} strokeWidth={2} />
       </button>
 
-      {/* Overlay + sliding panel. Always mounted so the slide transition runs both ways. */}
-      <div
-        aria-hidden={!open}
+      {/* Overlay + sliding panel. AnimatePresence anima entrada y salida. */}
+      <AnimatePresence>
+        {open && (
+      <m.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, transition: { duration: 0.15 } }}
+        transition={{ duration: 0.2 }}
         onClick={() => setOpen(false)}
         style={{
           position: 'fixed',
@@ -60,12 +66,13 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
           zIndex: 60,
           background: 'rgba(0,0,0,0.55)',
           backdropFilter: 'blur(4px)',
-          opacity: open ? 1 : 0,
-          pointerEvents: open ? 'auto' : 'none',
-          transition: 'opacity 0.2s ease',
         }}
       >
-        <aside
+        <m.aside
+          initial={{ x: '-100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '-100%', transition: { duration: 0.2, ease: 'easeIn' } }}
+          transition={{ type: 'spring', stiffness: 380, damping: 34 }}
           onClick={e => e.stopPropagation()}
           style={{
             position: 'absolute',
@@ -78,8 +85,6 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
             borderRight: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            transform: open ? 'translateX(0)' : 'translateX(-100%)',
-            transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
           }}
         >
           {/* Header: logo + close */}
@@ -119,7 +124,7 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
             style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}
           >
             {items.map(item => (
-              <NavItem key={item.href} {...item} />
+              <NavItem key={item.href} {...item} indicatorId="nav-indicator-mobile" />
             ))}
           </nav>
 
@@ -162,8 +167,10 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
               </button>
             </form>
           </div>
-        </aside>
-      </div>
+        </m.aside>
+      </m.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

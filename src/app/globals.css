@@ -225,8 +225,30 @@ body {
 .btn-cta:hover { filter: brightness(1.08); box-shadow: var(--shadow-sm); }
 .btn-cta:active { transform: scale(0.98); }
 
-.nav-item { transition: background-color var(--dur-fast), color var(--dur-fast); }
+/* Nav items: base colors live here (not inline) so :hover can win the cascade */
+.nav-item {
+  color: var(--text-secondary);
+  background-color: transparent;
+  font-weight: 400;
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
 .nav-item:hover:not(.nav-item-active) {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.nav-item-active {
+  color: var(--accent-gold);
+  background-color: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  font-weight: 500;
+}
+
+/* Icon buttons (topbar bell y afines) */
+.btn-icon {
+  background-color: transparent;
+  color: var(--text-secondary);
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.btn-icon:hover {
   background-color: var(--bg-elevated);
   color: var(--text-primary);
 }
