@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapLeadMagnet, mapAgent, type LeadMagnetRow, type AgentRow } from '@/lib/db'
 import type { LeadMagnet, Agent } from '@/lib/types'
-import { LMTabs } from './lm-tabs'
+import { Tabs } from '@/components/ui/tabs'
 import { Download, Users, TrendingUp } from 'lucide-react'
 
 function LMCard({ lm, agent }: { lm: LeadMagnet; agent: Agent }) {
@@ -189,7 +189,13 @@ export default async function LeadMagnetsPage() {
         ))}
       </div>
 
-      <LMTabs activeContent={activeContent} historyContent={historyContent} />
+      <Tabs
+        items={[
+          { key: 'active', label: 'Mes Actual · Abr 2026' },
+          { key: 'history', label: 'Historial' },
+        ]}
+        content={{ active: activeContent, history: historyContent }}
+      />
     </>
   )
 }

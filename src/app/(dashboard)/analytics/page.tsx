@@ -13,6 +13,7 @@ import { StatusDistributionChart } from './charts/status-distribution-chart'
 import { Users, Flame, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
 import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { Tabs } from '@/components/ui/tabs'
 
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -267,34 +268,41 @@ export default async function AnalyticsPage() {
         ))}
       </StaggerGroup>
 
-      {/* FILA 2 — Donut + Bar horizontal. "Leads por Agente" is a per-agent block →
-          hidden for role 'agent' (the donut then spans full width). */}
-      <FadeIn delay={0.1} className={isAgent ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'} style={{ marginBottom: '24px' }}>
-        <div style={CARD}>
-          <div style={CARD_HEADER}>Leads por Fuente</div>
-          <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
-          <LeadsDonutChart data={sourceData} total={totalLeads} />
-        </div>
-        {!isAgent && (
-          <div style={CARD}>
-            <div style={CARD_HEADER}>Leads por Agente</div>
-            <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
-            <LeadsByAgentChart data={agentData} />
-          </div>
-        )}
-      </FadeIn>
+      {/* Contenido organizado en tabs — los KPIs permanecen siempre visibles.
+          El tab "Por agente" se omite para rol 'agent' (sus bloques ya estaban
+          ocultos con isAgent). Página server: los tabs reciben JSX server-rendered. */}
+      <Tabs
+        items={[
+          { key: 'resumen', label: 'Resumen' },
+          ...(!isAgent ? [{ key: 'agentes', label: 'Por agente' }] : []),
+          { key: 'canales', label: 'Canales y Email' },
+        ]}
+        content={{
+          resumen: (
+            <>
+              <FadeIn delay={0.05} style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={CARD_HEADER}>Leads por Fuente</div>
+                <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
+                <LeadsDonutChart data={sourceData} total={totalLeads} />
+              </FadeIn>
+              <FadeIn delay={0.1} style={CARD}>
+                <div style={CARD_HEADER}>Evolución de Leads</div>
+                <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · {monthlyRangeLabel}</div>
+                <LeadsOverTimeChart data={enrichedMonthlyData} />
+              </FadeIn>
+            </>
+          ),
+          ...(!isAgent
+            ? {
+                agentes: (
+            <>
+              <div style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={CARD_HEADER}>Leads por Agente</div>
+                <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
+                <LeadsByAgentChart data={agentData} />
+              </div>
 
-      {/* FILA 3 — Area chart */}
-      <FadeIn delay={0.15} style={{ ...CARD, marginBottom: '24px' }}>
-        <div style={CARD_HEADER}>Evolución de Leads</div>
-        <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · {monthlyRangeLabel}</div>
-        <LeadsOverTimeChart data={enrichedMonthlyData} />
-      </FadeIn>
-
-      {/* FILA 4 — Stacked bar + Temp-by-agent table. Both are per-agent blocks →
-          the whole row is hidden for role 'agent'. */}
-      {!isAgent && (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" style={{ marginBottom: '24px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div style={CARD}>
           <div style={CARD_HEADER}>Estados por Agente</div>
           <div style={CARD_SUBTITLE}>Distribución de pipeline por agente</div>
@@ -382,8 +390,13 @@ export default async function AnalyticsPage() {
           </table>
         </div>
       </div>
-      )}
-      {/* FILA 5 — Secuencias de email */}
+            </>
+                ),
+              }
+            : {}),
+          canales: (
+            <>
+      {/* Secuencias de email */}
       {(() => {
         const totalActive    = sequences.reduce((s, q) => s + q.activeRunCount,    0)
         const totalCompleted = sequences.reduce((s, q) => s + q.completedRunCount, 0)
@@ -585,6 +598,10 @@ export default async function AnalyticsPage() {
         </table>
         </div>
       </div>
+            </>
+          ),
+        }}
+      />
     </div>
   )
 }

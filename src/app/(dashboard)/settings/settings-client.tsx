@@ -6,6 +6,7 @@ import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
 import { updateTenantName, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount } from './actions'
 import { ScoringSection } from './scoring-section'
+import { Tabs } from '@/components/ui/tabs'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
   super_admin: 'Administrador ITMANO',
@@ -593,52 +594,33 @@ export function SettingsClient({
   const [tab, setTab] = useState<Tab>('perfil')
 
   return (
-    <div>
-      {/* Tab bar — scrolls horizontally on phones instead of wrapping/squishing. */}
-      <div className="max-md:overflow-x-auto" style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '24px' }}>
-        {TABS.map(t => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className="shrink-0"
-            style={{
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: tab === t.value ? 500 : 400,
-              color: tab === t.value ? 'var(--accent-gold)' : 'var(--text-muted)',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: tab === t.value ? '2px solid var(--accent-gold)' : '2px solid transparent',
-              cursor: 'pointer',
-              marginBottom: '-1px',
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'perfil'  && <TenantSection tenant={tenant} canManage={canManageAgents} />}
-      {tab === 'agentes' && (
-        <AgentsSection
-          agents={agents}
-          agentAccess={agentAccess}
-          accessCount={accessCount}
-          canManage={canManageAgents}
-          canLinkSelf={canLinkSelf}
-          tenantId={tenant.id}
-          isSuper={userRole === 'super_admin'}
-        />
-      )}
-      {tab === 'scoring' && <ScoringSection rules={scoringRules} canEdit={canEditScoring} />}
-      {tab === 'cuenta'  && (
-        <AccountSection
-          userEmail={userEmail}
-          userRole={userRole}
-          canManage={canManageAgents}
-          onGoToAgents={() => setTab('agentes')}
-        />
-      )}
-    </div>
+    <Tabs
+      items={TABS.map(t => ({ key: t.value, label: t.label }))}
+      value={tab}
+      onChange={k => setTab(k as Tab)}
+      content={{
+        perfil: <TenantSection tenant={tenant} canManage={canManageAgents} />,
+        agentes: (
+          <AgentsSection
+            agents={agents}
+            agentAccess={agentAccess}
+            accessCount={accessCount}
+            canManage={canManageAgents}
+            canLinkSelf={canLinkSelf}
+            tenantId={tenant.id}
+            isSuper={userRole === 'super_admin'}
+          />
+        ),
+        scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
+        cuenta: (
+          <AccountSection
+            userEmail={userEmail}
+            userRole={userRole}
+            canManage={canManageAgents}
+            onGoToAgents={() => setTab('agentes')}
+          />
+        ),
+      }}
+    />
   )
 }

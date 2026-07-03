@@ -6,6 +6,7 @@ import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properti
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { createProperty, updateProperty, deleteProperty } from './actions'
 import type { PropertyInput } from './actions'
+import { FormSection } from '@/components/ui/form-section'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -426,6 +427,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
             </div>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <FormSection title="Básico" first>
               {/* Tenant selector — super_admin only */}
               {isSuperAdmin && !editingId && (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -511,7 +513,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   </select>
                 </label>
               </div>
+              </FormSection>
 
+              <FormSection title="Precio y especificaciones">
               {/* Price + Year */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <label style={labelStyle}>
@@ -582,7 +586,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   />
                 </label>
               </div>
+              </FormSection>
 
+              <FormSection title="Enlaces y notas">
               {/* External URL */}
               <label style={labelStyle}>
                 <span style={labelTextStyle}>Enlace externo (MLS / Zillow / etc.)</span>
@@ -606,6 +612,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   style={{ ...inputStyle, resize: 'vertical', minHeight: '72px' }}
                 />
               </label>
+              </FormSection>
 
               {/* Error */}
               {formError && (

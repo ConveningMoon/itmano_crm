@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Plus, Copy, Check, X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
 import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
+import { FormSection } from '@/components/ui/form-section'
 
 type TabValue = ChannelType | 'all' | 'archived'
 
@@ -380,6 +381,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {!result ? (
             <>
+              <FormSection title="Básico" first>
               {isSuperAdmin && (
                 <div>
                   <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
@@ -396,6 +398,9 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
                 <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional — se genera del nombre)</span></label>
                 <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="guia-primeros-compradores" />
               </div>
+              </FormSection>
+
+              <FormSection title="Material y atribución">
               <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
               <div>
                 <label style={LABEL}>URL de la landing page <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
@@ -405,6 +410,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
                 <label style={LABEL}>URL del recurso descargable <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
                 <input value={fileUrl} onChange={e => setFileUrl(e.target.value)} style={INPUT} placeholder="https://drive.google.com/..." type="url" />
               </div>
+              </FormSection>
 
               {error && (
                 <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
@@ -511,6 +517,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {!result ? (
             <>
+              <FormSection title="Básico" first>
               {isSuperAdmin && (
                 <div>
                   <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
@@ -527,6 +534,9 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
                 <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
                 <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="open-house-vb-jun-2026" />
               </div>
+              </FormSection>
+
+              <FormSection title="Detalles del evento">
               <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -538,6 +548,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
                   <input value={location} onChange={e => setLocation(e.target.value)} style={INPUT} placeholder="Virginia Beach, VA" />
                 </div>
               </div>
+              </FormSection>
 
               {error && (
                 <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
@@ -651,6 +662,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {!result ? (
             <>
+              <FormSection title="Básico" first>
               {isSuperAdmin && (
                 <div>
                   <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
@@ -667,6 +679,9 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
                 <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
                 <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="contactanos-home" />
               </div>
+              </FormSection>
+
+              <FormSection title="Integración">
               <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
               <div>
                 <label style={LABEL}>Secret de Webflow <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
@@ -675,6 +690,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
                   Solo si conectas con Webflow y quieres un secret propio para este formulario. Si lo dejas vacío, se usa el secret global del servidor.
                 </div>
               </div>
+              </FormSection>
 
               {error && (
                 <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
