@@ -17,7 +17,16 @@ const PropertySchema = z.object({
   sqft:          z.number().int().nonnegative().max(100000).optional().nullable(),
   year_built:    z.number().int().min(1800).max(2100).optional().nullable(),
   status:        z.enum(['available', 'in_process', 'sold']).default('available'),
-  external_url:  z.string().trim().max(500).optional().nullable(),
+  external_url:  z
+    .string()
+    .trim()
+    .max(500)
+    .refine(
+      (u) => u === '' || /^https?:\/\//i.test(u),
+      'La URL debe comenzar con http:// o https://',
+    )
+    .optional()
+    .nullable(),
   notes:         z.string().trim().max(2000).optional().nullable(),
   tenant_id:     z.string().optional(), // super_admin picks tenant
 })
