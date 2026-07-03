@@ -14,6 +14,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/activity':      'Actividad',
   '/notifications': 'Notificaciones',
   '/settings':      'Configuración',
+  '/admin':         'Centro de control',
 }
 
 export function Topbar({
