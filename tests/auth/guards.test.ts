@@ -5,13 +5,13 @@ import type { TenantContext } from '@/lib/auth/tenant-context'
 // ─── Context factories ────────────────────────────────────────────────────────
 
 const superAdmin: TenantContext = {
-  user_id: 'u-super', role: 'super_admin', tenant_id: null, agent_id: null,
+  user_id: 'u-super', role: 'super_admin', tenant_id: null, agent_id: null, acting_as_tenant: false,
 }
 const ownerA: TenantContext = {
-  user_id: 'u-owner-a', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null,
+  user_id: 'u-owner-a', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: false,
 }
 const agentA1: TenantContext = {
-  user_id: 'u-agent-a1', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1',
+  user_id: 'u-agent-a1', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1', acting_as_tenant: false,
 }
 
 // ─── requireWriteAccess (sources / email / settings / agents) ─────────────────
