@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { Tabs } from '@/components/ui/tabs'
+import { FormSection } from '@/components/ui/form-section'
 import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
@@ -779,6 +780,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
             {/* Form fields */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
+              <FormSection title="Propiedad" first>
               <div>
                 <label style={LABEL_STYLE}>Dirección de la propiedad</label>
                 <input
@@ -803,6 +805,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   ))}
                 </select>
               </div>
+              </FormSection>
+
+              <FormSection title="Cierre">
               <div>
                 <label style={LABEL_STYLE}>Fecha estimada de cierre <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
                 <input
@@ -826,6 +831,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   style={{ ...INPUT_STYLE, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
                 />
               </div>
+              </FormSection>
             </div>
 
             {/* Modal actions */}
