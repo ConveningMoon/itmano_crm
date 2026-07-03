@@ -12,6 +12,7 @@ import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
 import { StatusDistributionChart } from './charts/status-distribution-chart'
 import { Users, Flame, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
 import Link from 'next/link'
+import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -199,7 +200,7 @@ export default async function AnalyticsPage() {
       sub: `+${hotThisMonth} este mes`,
       tone: 'pos',
       icon: <Flame size={18} />,
-      color: '#E04040',
+      color: 'var(--status-hot)',
     },
     {
       label: 'Tasa de Conversión',
@@ -224,10 +225,11 @@ export default async function AnalyticsPage() {
   return (
     <div>
       {/* FILA 1 — KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {kpis.map((kpi, i) => (
-          <div
+          <StaggerItem
             key={i}
+            className="card-interactive"
             style={{
               background: 'var(--bg-surface)',
               border: '1px solid var(--border-subtle)',
@@ -243,7 +245,7 @@ export default async function AnalyticsPage() {
                 width: '34px',
                 height: '34px',
                 borderRadius: '8px',
-                background: `${kpi.color}1F`,
+                background: `color-mix(in srgb, ${kpi.color} 12%, transparent)`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -261,13 +263,13 @@ export default async function AnalyticsPage() {
                 {kpi.sub}
               </span>
             </div>
-          </div>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGroup>
 
       {/* FILA 2 — Donut + Bar horizontal. "Leads por Agente" is a per-agent block →
           hidden for role 'agent' (the donut then spans full width). */}
-      <div className={isAgent ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'} style={{ marginBottom: '24px' }}>
+      <FadeIn delay={0.1} className={isAgent ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'} style={{ marginBottom: '24px' }}>
         <div style={CARD}>
           <div style={CARD_HEADER}>Leads por Fuente</div>
           <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
@@ -280,14 +282,14 @@ export default async function AnalyticsPage() {
             <LeadsByAgentChart data={agentData} />
           </div>
         )}
-      </div>
+      </FadeIn>
 
       {/* FILA 3 — Area chart */}
-      <div style={{ ...CARD, marginBottom: '24px' }}>
+      <FadeIn delay={0.15} style={{ ...CARD, marginBottom: '24px' }}>
         <div style={CARD_HEADER}>Evolución de Leads</div>
         <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · {monthlyRangeLabel}</div>
         <LeadsOverTimeChart data={enrichedMonthlyData} />
-      </div>
+      </FadeIn>
 
       {/* FILA 4 — Stacked bar + Temp-by-agent table. Both are per-agent blocks →
           the whole row is hidden for role 'agent'. */}
@@ -324,7 +326,7 @@ export default async function AnalyticsPage() {
             </thead>
             <tbody>
               {tempByAgent.map((row, i) => {
-                const barColor = row.avgTemp >= 70 ? '#E04040' : row.avgTemp >= 40 ? '#E07B3A' : '#C9A96E'
+                const barColor = row.avgTemp >= 70 ? 'var(--status-hot)' : row.avgTemp >= 40 ? 'var(--status-warm)' : 'var(--accent-gold)'
                 const barWidth = Math.round((row.avgTemp / 100) * 80)
                 return (
                   <tr
@@ -360,7 +362,7 @@ export default async function AnalyticsPage() {
                     <td style={{ padding: '10px 8px', fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center' }}>
                       {row.totalLeads}
                     </td>
-                    <td style={{ padding: '10px 8px', fontSize: '13px', color: '#E04040', textAlign: 'center' }}>
+                    <td style={{ padding: '10px 8px', fontSize: '13px', color: 'var(--status-hot)', textAlign: 'center' }}>
                       {row.hotLeads}
                     </td>
                     <td style={{ padding: '10px 0 10px 8px' }}>
@@ -548,7 +550,7 @@ export default async function AnalyticsPage() {
                       fontSize: '10px',
                       fontWeight: 500,
                       color: typeColor,
-                      background: `${typeColor}18`,
+                      background: `color-mix(in srgb, ${typeColor} 10%, transparent)`,
                       padding: '2px 8px',
                       borderRadius: '10px',
                       letterSpacing: '0.05em',

@@ -6,6 +6,9 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
 import { ActivityRow } from '../activity/activity-ui'
+import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { AnimatedNumber } from '@/components/motion/animated-number'
+import { GrowBar } from '@/components/motion/grow-bar'
 import type { Agent } from '@/lib/types'
 import {
   Flame,
@@ -29,9 +32,9 @@ function getInitials(firstName: string, lastName: string): string {
 }
 
 function getTempColor(score: number): string {
-  if (score >= 70) return '#E04040'
-  if (score >= 40) return '#E07B3A'
-  return '#C9A96E'
+  if (score >= 70) return 'var(--status-hot)'
+  if (score >= 40) return 'var(--status-warm)'
+  return 'var(--accent-gold)'
 }
 
 export default async function DashboardPage() {
@@ -114,32 +117,32 @@ export default async function DashboardPage() {
       label: 'Total Leads',
       value: stats.total,
       icon: <Users size={16} />,
-      iconColor: '#C9A96E',
-      iconBg:    'rgba(201,169,110,0.12)',
+      iconColor: 'var(--accent-gold)',
+      iconBg:    'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
       desc: 'en el sistema',
     },
     {
       label: 'Leads Calientes',
       value: stats.hot,
       icon: <Flame size={16} />,
-      iconColor: '#E04040',
-      iconBg:    'rgba(224,64,64,0.12)',
+      iconColor: 'var(--status-hot)',
+      iconBg:    'color-mix(in srgb, var(--status-hot) 12%, transparent)',
       desc: 'temperatura ≥ 70',
     },
     {
       label: 'En Proceso',
       value: stats.inProcess,
       icon: <ArrowRightCircle size={16} />,
-      iconColor: '#9B72CF',
-      iconBg:    'rgba(155,114,207,0.12)',
+      iconColor: 'var(--status-process-started)',
+      iconBg:    'color-mix(in srgb, var(--status-process-started) 12%, transparent)',
       desc: 'comprando actualmente',
     },
     {
       label: 'Cerrados',
       value: stats.closed,
       icon: <CheckCircle2 size={16} />,
-      iconColor: '#6BA368',
-      iconBg:    'rgba(107,163,104,0.12)',
+      iconColor: 'var(--accent-green)',
+      iconBg:    'color-mix(in srgb, var(--accent-green) 12%, transparent)',
       desc: 'este ciclo',
     },
   ]
@@ -148,19 +151,12 @@ export default async function DashboardPage() {
     // Content gutter is owned by .app-shell-main (single source of truth); no inner
     // padding here — avoids the double-gutter and the dead utility classes.
     <div>
-      <style>{`
-        .stat-card { transition: border-color 200ms, transform 200ms; }
-        .stat-card:hover { border-color: var(--border-accent) !important; transform: translateY(-1px); }
-        .lead-row:hover  { background: var(--bg-elevated); }
-        .agent-row:hover { background: var(--bg-elevated); }
-      `}</style>
-
       {/* ── BLOQUE 1: Stats Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {statCards.map(card => (
-          <div
+          <StaggerItem
             key={card.label}
-            className="stat-card"
+            className="card-interactive"
             style={{
               background:   'var(--bg-surface)',
               border:       '1px solid var(--border-subtle)',
@@ -186,14 +182,14 @@ export default async function DashboardPage() {
               </span>
             </div>
             <div style={{ fontSize: '32px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1, marginBottom: '8px' }}>
-              {card.value}
+              <AnimatedNumber value={card.value} />
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
               ↑ {card.desc}
             </div>
-          </div>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGroup>
 
       {/* ── BLOQUE 2: Pipeline Visual ── */}
       <div style={{
@@ -224,7 +220,12 @@ export default async function DashboardPage() {
               <div key={key} style={{ display: 'flex', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '76px' }}>
                   <span style={{ fontSize: '22px', fontWeight: 500, color: cfg.color, lineHeight: 1 }}>{count}</span>
-                  <div style={{ width: '100%', height: `${h}px`, background: cfg.color + 'CC', borderRadius: '4px' }} />
+                  {/* La altura queda reservada por el div externo: cero layout shift */}
+                  <GrowBar
+                    axis="y"
+                    delay={idx * 0.05}
+                    style={{ width: '100%', height: `${h}px`, background: cfg.color + 'CC', borderRadius: '4px' }}
+                  />
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
                     {cfg.label}
                   </span>
@@ -243,12 +244,16 @@ export default async function DashboardPage() {
               <span style={{ fontSize: '22px', fontWeight: 500, color: STATUS_CONFIG.lost.color, lineHeight: 1 }}>
                 {statusCounts.lost}
               </span>
-              <div style={{
-                width: '100%',
-                height: `${barHeight(statusCounts.lost)}px`,
-                background: STATUS_CONFIG.lost.color + 'CC',
-                borderRadius: '4px',
-              }} />
+              <GrowBar
+                axis="y"
+                delay={mainStages.length * 0.05}
+                style={{
+                  width: '100%',
+                  height: `${barHeight(statusCounts.lost)}px`,
+                  background: STATUS_CONFIG.lost.color + 'CC',
+                  borderRadius: '4px',
+                }}
+              />
               <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
                 {STATUS_CONFIG.lost.label}
               </span>
@@ -258,14 +263,14 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── BLOQUE 3: Hot Leads + Actividad ── */}
-      <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
+      <FadeIn delay={0.1} className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
 
         {/* Leads Calientes */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Leads Calientes</span>
-              <span style={{ fontSize: '10px', color: '#E04040', background: 'rgba(224,64,64,0.12)', padding: '1px 6px', borderRadius: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--status-hot)', background: 'color-mix(in srgb, var(--status-hot) 12%, transparent)', padding: '1px 6px', borderRadius: '4px' }}>
                 {hotLeads.length}
               </span>
             </div>
@@ -288,7 +293,7 @@ export default async function DashboardPage() {
               return (
                 <div
                   key={lead.id}
-                  className="lead-row"
+                  className="row-hover"
                   style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'default' }}
                 >
                   {/* Avatar */}
@@ -366,11 +371,11 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
+      </FadeIn>
 
       {/* ── BLOQUE 4: Rendimiento por Agente ── (hidden for role 'agent' — they only see their own leads) */}
       {!isAgent && (
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px 20px' }}>
+      <FadeIn delay={0.15} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px 20px' }}>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Rendimiento por Agente</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Distribución actual de leads</div>
@@ -380,7 +385,7 @@ export default async function DashboardPage() {
           {agentStats.map(({ agent, total, hot, percentage }) => (
             <div
               key={agent.id}
-              className="agent-row"
+              className="row-hover"
               style={{
                 display:      'flex',
                 alignItems:   'center',
@@ -426,12 +431,12 @@ export default async function DashboardPage() {
               {/* Specialty + hot */}
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{specialtyLabel[agent.specialty]}</div>
-                <div style={{ fontSize: '11px', color: '#E04040' }}>{hot} calientes</div>
+                <div style={{ fontSize: '11px', color: 'var(--status-hot)' }}>{hot} calientes</div>
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </FadeIn>
       )}
     </div>
   )

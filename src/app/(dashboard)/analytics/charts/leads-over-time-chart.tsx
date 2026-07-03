@@ -10,6 +10,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
+import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
 
 interface MonthDataPoint {
   month: string
@@ -32,6 +33,13 @@ const tooltipStyle: React.CSSProperties = {
 }
 
 export function LeadsOverTimeChart({ data }: Props) {
+  const reduced = usePrefersReducedMotion()
+  const anim = {
+    isAnimationActive: !reduced,
+    animationBegin: 0,
+    animationDuration: 700,
+    animationEasing: 'ease-out' as const,
+  }
   return (
     <ResponsiveContainer width="100%" height={280}>
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
@@ -54,6 +62,7 @@ export function LeadsOverTimeChart({ data }: Props) {
           iconType="circle"
         />
         <Area
+          {...anim}
           type="monotone"
           dataKey="leads"
           stackId="1"
@@ -64,6 +73,7 @@ export function LeadsOverTimeChart({ data }: Props) {
           name="Nuevos leads"
         />
         <Area
+          {...anim}
           type="monotone"
           dataKey="nurturing"
           stackId="2"
@@ -74,6 +84,7 @@ export function LeadsOverTimeChart({ data }: Props) {
           name="En nurturing"
         />
         <Area
+          {...anim}
           type="monotone"
           dataKey="hot"
           stackId="3"
