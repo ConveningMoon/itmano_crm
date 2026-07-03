@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
 import { STATUS_CONFIG } from '@/lib/config'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
 import { ActivityRow } from '../activity/activity-ui'
@@ -38,7 +38,7 @@ function getTempColor(score: number): string {
 }
 
 export default async function DashboardPage() {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const scope = scopeFor(ctx)
   const isAgent = role === 'agent'

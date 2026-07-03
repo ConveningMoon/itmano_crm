@@ -1,26 +1,34 @@
 import 'server-only'
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getSelectedTenant } from './admin-tenant'
 
 export type TenantRole = 'super_admin' | 'agent_owner' | 'agent'
 
 export interface TenantContext {
   user_id:   string
   role:      TenantRole
-  // null for super_admin (sees all tenants); set for all other roles
+  // null for super_admin WITHOUT a selected tenant (hub mode); the selected
+  // tenant id when acting as a tenant; always set for all other roles
   tenant_id: string | null
   // agents.id of the team-member record linked to this login (agents.user_id =
   // auth uid). Only set for role 'agent'; null for super_admin and agent_owner
   // (the owner manages the whole tenant and is not itself an agent record).
   agent_id:  string | null
+  // true only for super_admin with a valid tenant-selection cookie
+  acting_as_tenant: boolean
 }
 
 /**
  * Returns the tenant context for the currently authenticated user.
  * Redirects to /login if no session exists.
  * Throws if the user has no user_profile row (misconfigured account).
+ *
+ * Wrapped in React cache(): dedups the profile queries across layout, page and
+ * actions within the same request, and makes the cookie validation free.
  */
-export async function getCurrentTenantContext(): Promise<TenantContext> {
+export const getCurrentTenantContext = cache(async (): Promise<TenantContext> => {
   const supabase = await createClient()
 
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -67,10 +75,37 @@ export async function getCurrentTenantContext(): Promise<TenantContext> {
     agent_id = agent.id as string
   }
 
-  return {
-    user_id:   user.id,
-    role,
-    tenant_id: profile.tenant_id ?? null,
-    agent_id,
+  // Super admin: honrar la cookie de tenant seleccionado (validada contra la
+  // tabla tenants). Para cualquier otro rol la cookie se ignora siempre — el
+  // rol se revalida contra user_profiles en cada request.
+  let tenant_id = profile.tenant_id ?? null
+  let acting_as_tenant = false
+  if (role === 'super_admin') {
+    const selected = await getSelectedTenant()
+    if (selected) {
+      tenant_id = selected.id
+      acting_as_tenant = true
+    }
   }
+
+  return {
+    user_id: user.id,
+    role,
+    tenant_id,
+    agent_id,
+    acting_as_tenant,
+  }
+})
+
+/**
+ * Guarda para páginas que solo tienen sentido dentro de un tenant. Un
+ * super_admin sin tenant seleccionado va al centro de control (elimina la
+ * mega-vista sin filtro). No-op para roles con tenant propio.
+ */
+export async function requireTenantContext(): Promise<TenantContext> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role === 'super_admin' && !ctx.tenant_id) {
+    redirect('/admin')
+  }
+  return ctx
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { listSequences } from '@/lib/data/email-sequences'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceListActions } from './sequence-list-actions'
 import { getAllPurchaseTemplatesByTenant } from './purchase-templates-actions'
@@ -15,7 +15,7 @@ const LANG_COLOR: Record<string, string> = {
 }
 
 export default async function EmailsPage() {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)

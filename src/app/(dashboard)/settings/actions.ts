@@ -19,9 +19,10 @@ export async function updateTenantName(
   if (denied) return denied
 
   const supabase = createAdminClient()
-  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
-  // onboarding prompt; until then super_admin falls back to 'tenant-aj'.
-  const tenantId = ctx.tenant_id ?? 'tenant-aj'
+  // El tenant viene siempre del contexto (super_admin actuando como tenant
+  // incluido). Sin selección no hay destino válido — error claro, sin fallback.
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
   const { error } = await supabase
     .from('tenants')
     .update({ name: name.trim() })
@@ -53,9 +54,10 @@ export async function updateAgent(
   if (denied) return denied
 
   const supabase = createAdminClient()
-  // TODO(admin-onboarding): super_admin tenant selection arrives with the admin
-  // onboarding prompt; until then super_admin falls back to 'tenant-aj'.
-  const tenantId = ctx.tenant_id ?? 'tenant-aj'
+  // El tenant viene siempre del contexto (super_admin actuando como tenant
+  // incluido). Sin selección no hay destino válido — error claro, sin fallback.
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
   const { error } = await supabase
     .from('agents')
     .update({

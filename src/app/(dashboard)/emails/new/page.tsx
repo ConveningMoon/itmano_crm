@@ -1,17 +1,18 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewSequenceForm } from './new-sequence-form'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
 export default async function NewSequencePage() {
-  const { tenant_id, role } = await getCurrentTenantContext()
-  const isSuperAdmin = role === 'super_admin'
+  const { tenant_id, role } = await requireTenantContext()
+  // Picker de tenant: solo super_admin SIN selección (hoy inalcanzable aquí por
+  // requireTenantContext; actuando como tenant, fixedTenantId ya viene del contexto).
+  const needsTenantPicker = role === 'super_admin' && !tenant_id
   const supabase = createAdminClient()
 
-  // super_admin needs a list of tenants for the select
   let tenants: Array<{ id: string; name: string }> = []
-  if (isSuperAdmin) {
+  if (needsTenantPicker) {
     const { data } = await supabase
       .from('tenants')
       .select('id, name')
@@ -20,10 +21,10 @@ export default async function NewSequencePage() {
     tenants = (data ?? []).map((t: any) => ({ id: t.id, name: t.name }))
   }
 
-  // Active agents for the organizational owner selector (scoped to the tenant; all
-  // tenants for super_admin — the form filters by the selected tenant).
+  // Active agents for the organizational owner selector, scoped al tenant del
+  // contexto (incluye al super_admin actuando como tenant).
   let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
-  if (!isSuperAdmin && tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  if (tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
   const { data: agentRows } = await agentsQ
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
@@ -49,7 +50,7 @@ export default async function NewSequencePage() {
         </p>
 
         <NewSequenceForm
-          isSuperAdmin={isSuperAdmin}
+          isSuperAdmin={needsTenantPicker}
           tenants={tenants}
           agents={agents}
           fixedTenantId={tenant_id ?? undefined}

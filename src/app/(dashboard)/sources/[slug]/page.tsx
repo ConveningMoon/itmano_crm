@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelBySlug } from '@/lib/data/channels'
 import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
 import { listSequences } from '@/lib/data/email-sequences'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { ChannelActions } from './channel-actions'
 import { SubmissionsList } from './submissions-list'
@@ -24,7 +24,7 @@ export default async function ChannelDetailPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id } = ctx
   const scope = scopeFor(ctx)
 

@@ -3,6 +3,7 @@ import { Topbar } from '@/components/layout/topbar'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
+import { getTenantsForSwitcher } from '@/lib/data/tenants'
 
 export default async function DashboardLayout({
   children,
@@ -14,6 +15,11 @@ export default async function DashboardLayout({
     ctx.tenant_id,
     ctx.role === 'agent' ? ctx.agent_id : null,
   )
+  // Modo hub: super_admin sin tenant seleccionado — el nav colapsa a
+  // Centro de control + Notificaciones (el resto redirigiría al hub).
+  const hubMode = ctx.role === 'super_admin' && !ctx.tenant_id
+  // Switcher del topbar: solo el super_admin carga la lista de tenants.
+  const switcherTenants = ctx.role === 'super_admin' ? await getTenantsForSwitcher() : null
 
   // The auth email isn't on the tenant context; read it from the session for the
   // sidebar footer (the session is already established — ctx redirected otherwise).
@@ -23,7 +29,7 @@ export default async function DashboardLayout({
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
-      <Sidebar role={ctx.role} userEmail={userEmail} />
+      <Sidebar role={ctx.role} userEmail={userEmail} hubMode={hubMode} />
       {/* Sidebar offset + content gutter come from the authoritative .app-shell-*
           rules in globals.css (a layered utility would lose to the unlayered
           `* { margin:0; padding:0 }` reset). ≥768px = 220px offset + 24px gutter
@@ -37,7 +43,14 @@ export default async function DashboardLayout({
           minHeight: '100vh',
         }}
       >
-        <Topbar role={ctx.role} unreadCount={unreadCount} userEmail={userEmail} />
+        <Topbar
+          role={ctx.role}
+          unreadCount={unreadCount}
+          userEmail={userEmail}
+          hubMode={hubMode}
+          tenants={switcherTenants ?? undefined}
+          activeTenantId={ctx.acting_as_tenant ? ctx.tenant_id : null}
+        />
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>

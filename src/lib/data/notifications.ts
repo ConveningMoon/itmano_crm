@@ -40,7 +40,7 @@ export async function getUnreadCount(
 
 export async function getNotifications(
   tenantId: string | null,
-  opts?: { type?: string | null; agentId?: string | null },
+  opts?: { type?: string | null; agentId?: string | null; limit?: number },
 ): Promise<NotificationRow[]> {
   if (tenantId === '') return []
 
@@ -52,6 +52,7 @@ export async function getNotifications(
   if (tenantId)      q = q.eq('tenant_id', tenantId)
   if (opts?.type)    q = q.eq('type', opts.type)
   if (opts?.agentId) q = q.eq('agent_id', opts.agentId)
+  if (opts?.limit)   q = q.limit(opts.limit)
 
   const { data, error } = await q
   if (error || !data) return []

@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { listSequences } from '@/lib/data/email-sequences'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { bandForScore, averageLiveTemperature } from '@/lib/scoring/temperature-band'
 import { getLeadSource } from '@/lib/leads/source'
@@ -36,7 +36,7 @@ const CARD_SUBTITLE: React.CSSProperties = {
 }
 
 export default async function AnalyticsPage() {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const scope = scopeFor(ctx)
   const isAgent = role === 'agent'

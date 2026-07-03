@@ -429,7 +429,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <FormSection title="Básico" first>
               {/* Tenant selector — super_admin only */}
-              {isSuperAdmin && !editingId && (
+              {isSuperAdmin && !editingId && tenants.length > 0 && (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     Tenant *

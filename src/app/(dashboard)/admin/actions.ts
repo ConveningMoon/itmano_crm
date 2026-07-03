@@ -1,9 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
@@ -15,6 +18,44 @@ const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Administrador ITMANO',
   agent_owner: 'Propietario',
   agent:       'Agente',
+}
+
+// ─── Selección de tenant (super_admin) ────────────────────────────────────────
+
+// Entra al CRM de un tenant: setea la cookie de selección y aterriza en su
+// dashboard. La cookie solo la honra tenant-context cuando el rol del request
+// es super_admin.
+export async function enterTenant(tenantId: string): Promise<void> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('id', tenantId)
+    .maybeSingle()
+  if (!tenant) return
+
+  const store = await cookies()
+  store.set(ADMIN_TENANT_COOKIE, tenantId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 3600,
+    secure: process.env.NODE_ENV === 'production',
+  })
+  redirect('/dashboard')
+}
+
+// Sale del CRM del tenant y vuelve al centro de control.
+export async function exitToHub(): Promise<void> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return
+
+  const store = await cookies()
+  store.delete(ADMIN_TENANT_COOKIE)
+  redirect('/admin')
 }
 
 // ─── Create tenant ──────────────────────────────────────────────────────────

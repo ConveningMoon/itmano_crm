@@ -20,6 +20,7 @@ function asRole(role: TenantContext['role']) {
     role,
     tenant_id: role === 'super_admin' ? null : 'tenant-x',
     agent_id:  null,
+    acting_as_tenant: false,
   } satisfies TenantContext)
 }
 

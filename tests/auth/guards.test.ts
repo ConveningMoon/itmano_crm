@@ -1,17 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { requireWriteAccess, assertCanWriteLead, assertCanWriteProperty } from '@/lib/auth/guards'
+import { requireWriteAccess, assertCanWriteLead, assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 
 // ─── Context factories ────────────────────────────────────────────────────────
 
 const superAdmin: TenantContext = {
-  user_id: 'u-super', role: 'super_admin', tenant_id: null, agent_id: null,
+  user_id: 'u-super', role: 'super_admin', tenant_id: null, agent_id: null, acting_as_tenant: false,
 }
 const ownerA: TenantContext = {
-  user_id: 'u-owner-a', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null,
+  user_id: 'u-owner-a', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: false,
 }
 const agentA1: TenantContext = {
-  user_id: 'u-agent-a1', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1',
+  user_id: 'u-agent-a1', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1', acting_as_tenant: false,
+}
+// super_admin con un tenant seleccionado vía cookie (actuando como tenant)
+const superActingAsA: TenantContext = {
+  user_id: 'u-super', role: 'super_admin', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: true,
 }
 
 // ─── requireWriteAccess (sources / email / settings / agents) ─────────────────
@@ -74,6 +78,30 @@ describe('assertCanWriteLead', () => {
 })
 
 // ─── assertCanWriteProperty (tenant-scoped + per-creator authorship) ──────────
+
+describe('resolveTargetTenant', () => {
+  it('super_admin without selection nor chosen tenant → error', () => {
+    const res = resolveTargetTenant(superAdmin)
+    expect(res).toEqual({ error: 'Selecciona un tenant desde el centro de control' })
+  })
+
+  it('super_admin with an explicitly chosen tenant → that tenant', () => {
+    expect(resolveTargetTenant(superAdmin, 'tenant-b')).toBe('tenant-b')
+  })
+
+  it('super_admin acting as tenant (cookie) → falls back to the selected tenant', () => {
+    expect(resolveTargetTenant(superActingAsA)).toBe('tenant-a')
+  })
+
+  it('super_admin acting as tenant with explicit choice → the explicit choice wins', () => {
+    expect(resolveTargetTenant(superActingAsA, 'tenant-b')).toBe('tenant-b')
+  })
+
+  it('agent_owner → always their own tenant, chosen id is ignored', () => {
+    expect(resolveTargetTenant(ownerA)).toBe('tenant-a')
+    expect(resolveTargetTenant(ownerA, 'tenant-b')).toBe('tenant-a')
+  })
+})
 
 describe('assertCanWriteProperty', () => {
   const propByAgent = { tenant_id: 'tenant-a', created_by_user_id: 'u-agent-a1' }

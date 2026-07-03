@@ -1,6 +1,26 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+export interface SwitcherTenant {
+  id: string
+  name: string
+  color: string
+}
+
+// Lista liviana para el switcher del topbar (solo super_admin).
+export async function getTenantsForSwitcher(): Promise<SwitcherTenant[]> {
+  const supabase = createAdminClient()
+  const { data } = await supabase
+    .from('tenants')
+    .select('id, name, primary_color')
+    .order('name')
+  return ((data ?? []) as { id: string; name: string; primary_color: string | null }[]).map(t => ({
+    id: t.id,
+    name: t.name,
+    color: t.primary_color ?? '#1E3A5F',
+  }))
+}
+
 export interface TenantWithOwner {
   id:           string
   name:         string

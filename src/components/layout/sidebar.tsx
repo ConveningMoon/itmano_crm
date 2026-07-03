@@ -5,9 +5,9 @@ import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: string }) {
+export function Sidebar({ role, userEmail, hubMode = false }: { role: TenantRole; userEmail: string; hubMode?: boolean }) {
   // Admin console is super_admin-only — hidden from the nav for everyone else.
-  const items = navItemsForRole(role)
+  const items = navItemsForRole(role, { hubMode })
 
   return (
     // Hidden on phones (drawer takes over <md); restored to the fixed flex column

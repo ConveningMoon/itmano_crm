@@ -1,4 +1,4 @@
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getGlobalEmailMetrics } from '@/lib/services/email-metrics'
 import Link from 'next/link'
 import { ArrowLeft, Send, MousePointer2, MessageCircle, AlertCircle, UserMinus, TrendingDown } from 'lucide-react'
@@ -23,7 +23,7 @@ function pctColor(val: number, thresholdGood: number, thresholdBad: number, inve
 }
 
 export default async function EmailAnalyticsPage() {
-  const { tenant_id, role } = await getCurrentTenantContext()
+  const { tenant_id, role } = await requireTenantContext()
   const isSuperAdmin = role === 'super_admin'
   const metrics = await getGlobalEmailMetrics(tenant_id)
 
