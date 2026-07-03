@@ -8,13 +8,13 @@ import type { Agent, Language } from '@/lib/types'
 import type { ChannelOption, TenantOption } from './page'
 import { createLead, createLeadsBulk, getExistingLeadEmails } from './actions'
 import { parseLeadRows, type ParseLeadsResult, type NormalizedLead } from '@/lib/import/parse-leads'
+import { Tabs } from '@/components/ui/tabs'
 import {
   ArrowLeft,
   CheckCircle2,
   Mail,
   Phone,
   Building2,
-  Upload,
   PenLine,
   FileUp,
   Download,
@@ -579,47 +579,17 @@ export function NewLeadClient({
           </p>
         </div>
 
-        {/* Mode tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '24px',
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '10px',
-          padding: '4px',
-          maxWidth: '400px',
-        }}>
-          {(['manual', 'import'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              style={{
-                flex: 1,
-                padding: '8px 16px',
-                borderRadius: '7px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: mode === m ? 500 : 400,
-                background: mode === m ? 'var(--bg-elevated)' : 'transparent',
-                color: mode === m ? 'var(--text-primary)' : 'var(--text-muted)',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              {m === 'manual'
-                ? <><PenLine size={14} /> Registro Manual</>
-                : <><Upload size={14} /> Importar CSV/XLSX</>
-              }
-            </button>
-          ))}
-        </div>
-
-        {mode === 'manual' && (
+        {/* Modo: registro manual o importación — el estado vive aquí (padre),
+            así que alternar tabs no pierde datos del formulario ni del import. */}
+        <Tabs
+          items={[
+            { key: 'manual', label: 'Registro manual' },
+            { key: 'import', label: 'Importar CSV/XLSX' },
+          ]}
+          value={mode}
+          onChange={m => setMode(m as 'manual' | 'import')}
+          content={{
+            manual: (
           <>
         {/* Form card */}
         <div style={{
@@ -1006,9 +976,8 @@ export function NewLeadClient({
           </button>
         </div>
           </>
-        )}
-
-        {mode === 'import' && (
+            ),
+            import: (
           <div style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-subtle)',
@@ -1295,7 +1264,9 @@ export function NewLeadClient({
             )}
 
           </div>
-        )}
+            ),
+          }}
+        />
       </div>
     </>
   )
