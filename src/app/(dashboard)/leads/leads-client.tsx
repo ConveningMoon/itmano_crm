@@ -4,9 +4,10 @@ import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, m } from 'motion/react'
 import {
-  Search, List, LayoutGrid, ChevronDown, X, Users,
+  Search, List, LayoutGrid, ChevronDown, X, Users, SlidersHorizontal,
   Camera, ThumbsUp, MessageCircle, PenLine, FileDown, Calendar, Globe,
 } from 'lucide-react'
+import { ModalShell } from '@/components/motion/modal-shell'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadStatus } from '@/lib/types'
 import type { ChannelOption } from './new/page'
@@ -128,14 +129,16 @@ function AgentAvatar({ agentId, agents, size = 'md' }: { agentId: string; agents
 }
 
 function FilterSelect({
-  value, onChange, options,
+  value, onChange, options, fullWidth = false,
 }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
+  // true dentro del panel de filtros: el select ocupa todo el ancho disponible.
+  fullWidth?: boolean
 }) {
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+    <div style={{ position: 'relative', display: fullWidth ? 'flex' : 'inline-flex', alignItems: 'center', width: fullWidth ? '100%' : undefined }}>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -150,6 +153,7 @@ function FilterSelect({
           appearance: 'none',
           cursor: 'pointer',
           minWidth: '160px',
+          width: fullWidth ? '100%' : undefined,
         }}
       >
         {options.map(opt => (
@@ -168,6 +172,16 @@ function FilterSelect({
 
 // Source kinds that have acquisition channels behind them → show channel sub-filter.
 const CHANNEL_SOURCE_TYPES = ['lead_magnet', 'event', 'contact_form']
+
+const FILTER_LABEL: React.CSSProperties = {
+  display: 'block',
+  fontSize: '11px',
+  fontWeight: 500,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: 'var(--text-muted)',
+  marginBottom: '6px',
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -209,6 +223,11 @@ export function LeadsClient({
   const [filterChannelId, setFilterChannelId] = useState(initialChannelId)
   const [filterLanguage, setFilterLanguage] = useState('all')
   const [page, setPage] = useState(1)
+  const [showFilters, setShowFilters] = useState(false)
+
+  // Dropdowns activos (los 5) — alimenta el contador del botón "Filtros".
+  const activeFilterCount = [filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage]
+    .filter(v => v !== 'all').length
 
   // Sync source + channelId to the URL so the filtered view is bookmarkable/shareable.
   // Uses replaceState to avoid Next.js server re-renders on every filter keystroke.
@@ -393,22 +412,32 @@ export function LeadsClient({
           />
         </div>
 
+        {/* Filtros primarios — solo desktop; en móvil viven en el panel */}
         {viewerRole !== 'agent' && (
-          <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} />
+          <div className="max-md:hidden">
+            <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} />
+          </div>
         )}
-        <FilterSelect value={filterStatus}  onChange={setFilterStatus}  options={statusOptions} />
-        <FilterSelect value={filterSource}  onChange={handleSourceChange} options={sourceOptions} />
-        {channelOptions.length > 0 && (
-          <FilterSelect
-            value={filterChannelId}
-            onChange={setFilterChannelId}
-            options={[
-              { value: 'all', label: 'Todos los canales' },
-              ...channelOptions.map(c => ({ value: c.id, label: c.name })),
-            ]}
-          />
-        )}
-        <FilterSelect value={filterLanguage} onChange={setFilterLanguage} options={languageOptions} />
+        <div className="max-md:hidden">
+          <FilterSelect value={filterStatus} onChange={setFilterStatus} options={statusOptions} />
+        </div>
+
+        {/* Filtros secundarios (Fuente, Canal, Idioma) viven solo en el panel */}
+        <button
+          onClick={() => setShowFilters(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            background: 'var(--bg-surface)',
+            border: `1px solid ${activeFilterCount > 0 ? 'var(--border-accent)' : 'var(--border-subtle)'}`,
+            borderRadius: '8px', padding: '7px 12px',
+            color: activeFilterCount > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)',
+            fontSize: '13px', cursor: 'pointer',
+            transition: 'border-color var(--dur-fast), color var(--dur-fast)',
+          }}
+        >
+          <SlidersHorizontal size={14} />
+          Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </button>
 
         {hasActiveFilters && (
           <button
@@ -444,6 +473,84 @@ export function LeadsClient({
           ))}
         </div>
       )}
+
+      {/* ── Panel de filtros ── Fuente/Canal/Idioma viven aquí; Estado y Agente se
+          duplican solo en móvil (mismo estado — cero desincronización). Los filtros
+          aplican en vivo; "Aplicar" solo cierra. */}
+      <ModalShell open={showFilters} onClose={() => setShowFilters(false)} maxWidth={400}>
+        <div style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Filtros</span>
+            <button
+              onClick={() => setShowFilters(false)}
+              aria-label="Cerrar filtros"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: '4px' }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '22px' }}>
+            {viewerRole !== 'agent' && (
+              <div className="md:hidden">
+                <label style={FILTER_LABEL}>Agente</label>
+                <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} fullWidth />
+              </div>
+            )}
+            <div className="md:hidden">
+              <label style={FILTER_LABEL}>Estado</label>
+              <FilterSelect value={filterStatus} onChange={setFilterStatus} options={statusOptions} fullWidth />
+            </div>
+            <div>
+              <label style={FILTER_LABEL}>Fuente</label>
+              <FilterSelect value={filterSource} onChange={handleSourceChange} options={sourceOptions} fullWidth />
+            </div>
+            {channelOptions.length > 0 && (
+              <div>
+                <label style={FILTER_LABEL}>Canal</label>
+                <FilterSelect
+                  value={filterChannelId}
+                  onChange={setFilterChannelId}
+                  options={[
+                    { value: 'all', label: 'Todos los canales' },
+                    ...channelOptions.map(c => ({ value: c.id, label: c.name })),
+                  ]}
+                  fullWidth
+                />
+              </div>
+            )}
+            <div>
+              <label style={FILTER_LABEL}>Idioma</label>
+              <FilterSelect value={filterLanguage} onChange={setFilterLanguage} options={languageOptions} fullWidth />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+            <button
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              style={{
+                padding: '8px 14px', fontSize: '13px', borderRadius: '8px',
+                background: 'transparent', border: '1px solid var(--border-subtle)',
+                color: 'var(--text-muted)', cursor: hasActiveFilters ? 'pointer' : 'not-allowed',
+                opacity: hasActiveFilters ? 1 : 0.5,
+              }}
+            >
+              Limpiar todo
+            </button>
+            <button
+              onClick={() => setShowFilters(false)}
+              className="btn-cta"
+              style={{
+                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+                background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
+              }}
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+      </ModalShell>
 
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
           Defensive horizontal scroll on phones so columns stay readable.)
