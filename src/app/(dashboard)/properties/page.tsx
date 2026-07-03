@@ -6,11 +6,14 @@ import { PropertiesClient } from './properties-client'
 export default async function PropertiesPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
-  const isSuperAdmin = role === 'super_admin'
+  // Picker de tenant en el modal: solo super_admin SIN selección (hoy
+  // inalcanzable aquí por requireTenantContext; actuando como tenant, la action
+  // resuelve el tenant desde el contexto).
+  const needsTenantPicker = role === 'super_admin' && !tenant_id
 
   const [properties, tenants] = await Promise.all([
     getProperties(tenant_id),
-    isSuperAdmin
+    needsTenantPicker
       ? createAdminClient()
           .from('tenants')
           .select('id, name')

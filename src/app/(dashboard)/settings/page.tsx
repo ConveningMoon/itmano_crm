@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
@@ -10,10 +11,11 @@ export default async function SettingsPage() {
   const supabase   = createAdminClient()
   const authClient = await createClient()
 
-  // Settings is "this tenant's configuration". Owner/agent → their own tenant.
-  // super_admin has no tenant of their own; until admin tenant-switching exists,
-  // Settings shows A&J. (Cross-tenant config lives in the /admin console.)
-  const tenantId = ctx.tenant_id ?? 'tenant-aj'
+  // Settings es "la configuración de este tenant": owner/agent → su tenant;
+  // super_admin → el tenant seleccionado (requireTenantContext garantiza que
+  // hay selección — sin ella, redirige al centro de control).
+  const tenantId = ctx.tenant_id
+  if (!tenantId) redirect('/admin')
 
   const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color').eq('id', tenantId).single(),

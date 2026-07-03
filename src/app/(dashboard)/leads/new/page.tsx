@@ -19,18 +19,21 @@ export interface TenantOption {
 
 export default async function NewLeadPage() {
   const ctx      = await requireTenantContext()
-  const isSuper  = ctx.role === 'super_admin'
+  // El picker de tenant solo aplica a un super_admin SIN selección — estado hoy
+  // inalcanzable aquí (requireTenantContext lo manda al hub), pero la expresión
+  // se mantiene explícita por si la guarda cambia.
+  const needsTenantPicker = ctx.role === 'super_admin' && !ctx.tenant_id
   const supabase = createAdminClient()
 
-  // Scope agents/channels by tenant. super_admin sees every tenant's (the client
-  // filters by the selected tenant); owner/agent are scoped to their own tenant.
+  // Scope agents/channels por tenant del contexto (incluye al super_admin
+  // actuando como tenant — su ctx.tenant_id viene de la selección).
   let agentsQ   = supabase.from('agents').select('*').eq('active', true).order('name')
   let channelsQ = supabase
     .from('acquisition_channels')
     .select('id, tenant_id, channel_type, name, slug, agent_id')
     .eq('active', true)
     .order('name')
-  if (!isSuper && ctx.tenant_id) {
+  if (ctx.tenant_id) {
     agentsQ   = agentsQ.eq('tenant_id', ctx.tenant_id)
     channelsQ = channelsQ.eq('tenant_id', ctx.tenant_id)
   }
@@ -38,7 +41,7 @@ export default async function NewLeadPage() {
   const [{ data: rawAgents }, { data: rawChannels }, { data: rawTenants }] = await Promise.all([
     agentsQ,
     channelsQ,
-    isSuper
+    needsTenantPicker
       ? supabase.from('tenants').select('id, name').order('name')
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
@@ -65,7 +68,7 @@ export default async function NewLeadPage() {
     <NewLeadClient
       agents={agents}
       channels={channels}
-      isSuperAdmin={isSuper}
+      isSuperAdmin={needsTenantPicker}
       tenants={tenants}
       myAgentId={myAgentId}
     />

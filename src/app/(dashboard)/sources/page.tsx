@@ -24,18 +24,21 @@ export default async function SourcesPage({
 
   const supabase = createAdminClient()
 
-  // super_admin needs tenant list for create-modal selects
+  // Picker de tenant en los modales: solo super_admin SIN selección (hoy
+  // inalcanzable aquí por requireTenantContext; actuando como tenant, las
+  // actions resuelven el tenant desde el contexto).
+  const needsTenantPicker = isSuperAdmin && !tenant_id
   let tenants: Array<{ id: string; name: string }> = []
-  if (isSuperAdmin) {
+  if (needsTenantPicker) {
     const { data } = await supabase.from('tenants').select('id, name').order('name')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
   }
 
-  // Active agents for the owner selector (scoped to tenant; all tenants for
-  // super_admin — the modals filter by the selected tenant).
+  // Active agents for the owner selector, scoped al tenant del contexto
+  // (incluye al super_admin actuando como tenant).
   let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
-  if (!isSuperAdmin && tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  if (tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
   const { data: agentRows } = await agentsQ
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
@@ -108,7 +111,7 @@ export default async function SourcesPage({
         channels={channels}
         archivedChannels={archivedChannels}
         windowDays={validWindow}
-        isSuperAdmin={isSuperAdmin}
+        isSuperAdmin={needsTenantPicker}
         tenants={tenants}
         agents={agents}
       />

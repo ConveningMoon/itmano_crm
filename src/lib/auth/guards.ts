@@ -104,8 +104,11 @@ export function resolveTargetTenant(
   chosenTenantId?: string,
 ): string | { error: string } {
   if (ctx.role === 'super_admin') {
-    if (!chosenTenantId) return { error: 'Selecciona un tenant' }
-    return chosenTenantId
+    // Con tenant seleccionado (actuando como tenant) los formularios ya no
+    // muestran picker: el destino cae al tenant del contexto.
+    const target = chosenTenantId ?? ctx.tenant_id
+    if (!target) return { error: 'Selecciona un tenant desde el centro de control' }
+    return target
   }
   if (!ctx.tenant_id) return { error: 'Acceso no autorizado' }
   return ctx.tenant_id
