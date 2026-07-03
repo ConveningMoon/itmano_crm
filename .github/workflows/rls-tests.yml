@@ -6,6 +6,14 @@ on:
       - 'supabase/migrations/**'
       - 'tests/rls/**'
 
+# All runs share one remote Supabase database with fixed fixture IDs
+# (tests/rls/setup.ts). Two concurrent runs interleave createFixtures/
+# cleanupFixtures and delete each other's users/leads mid-suite, so runs
+# must be serialized repo-wide — never run two in parallel.
+concurrency:
+  group: rls-tests-shared-db
+  cancel-in-progress: false
+
 jobs:
   rls-tests:
     runs-on: ubuntu-latest
