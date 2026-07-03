@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { AnimatePresence, m } from 'motion/react'
 
 interface Props {
   activeContent: React.ReactNode
@@ -32,14 +33,24 @@ export function LMTabs({ activeContent, historyContent }: Props) {
               borderBottom: tab === t ? '2px solid var(--accent-gold)' : '2px solid transparent',
               cursor: 'pointer',
               marginBottom: '-1px',
-              transition: 'color 0.2s',
+              transition: 'color var(--dur-fast), border-color var(--dur-fast)',
             }}
           >
             {t === 'active' ? 'Mes Actual · Abr 2026' : 'Historial'}
           </button>
         ))}
       </div>
-      {tab === 'active' ? activeContent : historyContent}
+      <AnimatePresence mode="wait" initial={false}>
+        <m.div
+          key={tab}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          {tab === 'active' ? activeContent : historyContent}
+        </m.div>
+      </AnimatePresence>
     </div>
   )
 }

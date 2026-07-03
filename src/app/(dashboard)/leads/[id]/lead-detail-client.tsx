@@ -14,6 +14,7 @@ import {
   Phone, Activity,
   Copy, Check,
 } from 'lucide-react'
+import { ModalShell } from '@/components/motion/modal-shell'
 import { EditLeadModal } from './edit-lead-modal'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
@@ -824,20 +825,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       />
 
       {/* ── Modal: Iniciar proceso ── */}
-      {showProcessModal && (
-        <>
-          <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }}
-            onClick={() => setShowProcessModal(false)}
-          />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px',
-            width: '480px', maxWidth: '90vw',
-            zIndex: 51,
-          }}>
+      <ModalShell open={showProcessModal} onClose={() => setShowProcessModal(false)} maxWidth={480}>
+          <div style={{ padding: '24px' }}>
             {/* Modal header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Iniciar proceso de compra</div>
@@ -950,18 +939,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
 
       {/* ── Modal: Eliminar lead — Step 1: first confirmation ── */}
-      {deleteStep === 1 && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setDeleteStep(0)} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px', width: '440px', maxWidth: '90vw', zIndex: 51,
-          }}>
+      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={440}>
+          <div style={{ padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar lead</span>
               <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
@@ -980,18 +962,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               }}>Continuar →</button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
 
       {/* ── Modal: Eliminar lead — Step 2: type confirmation ── */}
-      {deleteStep === 2 && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setDeleteStep(0)} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid rgba(201,123,107,0.35)',
-            borderRadius: '16px', padding: '24px', width: '420px', maxWidth: '90vw', zIndex: 51,
-          }}>
+      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
+          <div style={{ padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--accent-coral)' }}>Confirmar eliminación</span>
               <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
@@ -1013,7 +988,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               }}
             />
             {deleteError && (
-              <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>
                 {deleteError}
               </div>
             )}
@@ -1035,8 +1010,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
     </div>
   )
 }
