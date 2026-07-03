@@ -4,7 +4,9 @@ import { usePathname, useRouter } from 'next/navigation'
 import { m } from 'motion/react'
 import { Plus, Bell } from 'lucide-react'
 import { MobileNav } from './mobile-nav'
+import { TenantSwitcher } from './tenant-switcher'
 import type { TenantRole } from '@/lib/auth/tenant-context'
+import type { SwitcherTenant } from '@/lib/data/tenants'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
@@ -22,11 +24,16 @@ export function Topbar({
   unreadCount = 0,
   userEmail = '',
   hubMode = false,
+  tenants,
+  activeTenantId = null,
 }: {
   role?: TenantRole
   unreadCount?: number
   userEmail?: string
   hubMode?: boolean
+  // Solo definido para super_admin — activa el switcher de tenant.
+  tenants?: SwitcherTenant[]
+  activeTenantId?: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -63,6 +70,9 @@ export function Topbar({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Switcher de tenant — solo super_admin */}
+        {tenants && <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} />}
+
         {/* Notification bell */}
         <button
           aria-label="Notificaciones"
