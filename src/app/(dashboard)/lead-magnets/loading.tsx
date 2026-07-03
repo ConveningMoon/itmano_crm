@@ -1,24 +1,8 @@
-function Skeleton({ w, h, r = 8, style }: { w: string; h: number; r?: number; style?: React.CSSProperties }) {
-  return (
-    <div style={{
-      width: w, height: `${h}px`, borderRadius: `${r}px`,
-      background: 'var(--bg-elevated)',
-      animation: 'pulse 1.5s ease-in-out infinite',
-      ...style,
-    }} />
-  )
-}
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function LeadMagnetsLoading() {
   return (
     <>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.4; }
-        }
-      `}</style>
-
       {/* Header */}
       <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <Skeleton w="140px" h={20} r={4} />

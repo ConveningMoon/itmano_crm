@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, X, AlertTriangle, Mail } from 'lucide-react'
+import { ModalShell } from '@/components/motion/modal-shell'
 import type { SequenceStep } from '@/lib/data/email-sequences'
 import type { StepMetric } from '@/lib/services/email-metrics'
 import { addStep, updateStep, deleteStep } from '../actions'
@@ -245,14 +246,8 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
       </div>
 
       {/* Add / Edit step modal */}
-      {(mode === 'add' || mode === 'edit') && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={closeModal} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px', width: '520px', maxWidth: '92vw', zIndex: 51,
-          }}>
+      <ModalShell open={mode === 'add' || mode === 'edit'} onClose={closeModal} maxWidth={520}>
+          <div style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
                 {mode === 'add' ? 'Agregar paso' : 'Editar paso'}
@@ -314,7 +309,7 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
               </div>
             </div>
 
-            {error && <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button onClick={closeModal} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
@@ -331,18 +326,11 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
               </button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
 
       {/* Delete step confirmation */}
-      {mode === 'confirm_delete' && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={closeModal} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px', width: '380px', maxWidth: '90vw', zIndex: 51,
-          }}>
+      <ModalShell open={mode === 'confirm_delete'} onClose={closeModal} maxWidth={380}>
+          <div style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar paso</span>
               <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
@@ -350,7 +338,7 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '20px' }}>
               ¿Eliminar este paso? Los leads que estaban esperando este paso seguirán avanzando al siguiente si existe.
             </p>
-            {error && <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button onClick={closeModal} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
               <button onClick={handleDelete} disabled={pending} style={{
@@ -361,8 +349,7 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
               }}>{pending ? 'Eliminando...' : 'Eliminar'}</button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
     </>
   )
 }

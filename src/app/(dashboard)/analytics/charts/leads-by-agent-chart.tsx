@@ -1,6 +1,7 @@
 'use client'
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
 
 interface AgentDataPoint {
   name: string
@@ -42,6 +43,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function LeadsByAgentChart({ data }: Props) {
+  const reduced = usePrefersReducedMotion()
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 0 }}>
@@ -60,7 +62,7 @@ export function LeadsByAgentChart({ data }: Props) {
           width={70}
         />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-        <Bar dataKey="total" radius={[0, 4, 4, 0]} barSize={20}>
+        <Bar dataKey="total" radius={[0, 4, 4, 0]} barSize={20} isAnimationActive={!reduced} animationBegin={0} animationDuration={700} animationEasing="ease-out">
           {data.map((entry, i) => (
             <Cell key={i} fill={entry.color} />
           ))}

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { AnimatePresence, m } from 'motion/react'
 import {
   Search, List, LayoutGrid, ChevronDown, X, Users,
   Camera, ThumbsUp, MessageCircle, PenLine, FileDown, Calendar, Globe,
@@ -328,9 +329,8 @@ export function LeadsClient({
   return (
     <div style={{ padding: '24px' }}>
       <style>{`
-        .table-row:hover  { background: var(--bg-elevated); }
-        .kanban-card { transition: border-color 150ms, transform 150ms; }
-        .kanban-card:hover { border-color: var(--border-accent) !important; transform: translateY(-1px); }
+        .kanban-card { transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
+        .kanban-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-sm); }
         .filter-input:focus { border-color: var(--border-accent) !important; outline: none; }
         .clear-btn:hover { color: var(--text-secondary) !important; }
         .page-btn:not(:disabled):hover { border-color: var(--border-accent) !important; color: var(--text-primary) !important; }
@@ -446,9 +446,18 @@ export function LeadsClient({
       )}
 
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
-          Defensive horizontal scroll on phones so columns stay readable.) */}
-      {view === 'table' && (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
+          Defensive horizontal scroll on phones so columns stay readable.)
+          AnimatePresence mode="wait": crossfade de 150ms al alternar tabla↔kanban. */}
+      <AnimatePresence mode="wait" initial={false}>
+      {view === 'table' ? (
+        <m.div
+          key="table"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}
+        >
           <div className="max-md:overflow-x-auto">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -496,7 +505,7 @@ export function LeadsClient({
                   return (
                     <tr
                       key={lead.id}
-                      className="table-row"
+                      className="row-hover"
                       style={{
                         borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
                         cursor: 'pointer',
@@ -607,12 +616,18 @@ export function LeadsClient({
               </button>
             </div>
           )}
-        </div>
-      )}
+        </m.div>
+      ) : (
 
-      {/* ── ZONA 3B: Kanban view ── */}
-      {view === 'kanban' && (
-        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '12px', minHeight: 'calc(100vh - 280px)' }}>
+      /* ── ZONA 3B: Kanban view ── */
+        <m.div
+          key="kanban"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '12px', minHeight: 'calc(100vh - 280px)' }}
+        >
           {KANBAN_COLUMNS.map(col => {
             const colLeads = getKanbanLeads(col.key, filteredLeads)
 
@@ -657,9 +672,12 @@ export function LeadsClient({
                     const langCfg = LANGUAGE_CONFIG[lead.language]
 
                     return (
-                      <div
+                      <m.div
                         key={lead.id}
                         className="kanban-card"
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.99 }}
+                        transition={{ duration: 0.15 }}
                         style={{
                           background:   'var(--bg-elevated)',
                           border:       '1px solid var(--border-subtle)',
@@ -705,15 +723,16 @@ export function LeadsClient({
                             <StatusBadge status={lead.status} />
                           </div>
                         )}
-                      </div>
+                      </m.div>
                     )
                   })
                 )}
               </div>
             )
           })}
-        </div>
+        </m.div>
       )}
+      </AnimatePresence>
     </div>
   )
 }

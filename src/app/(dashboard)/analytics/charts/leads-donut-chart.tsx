@@ -1,6 +1,7 @@
 'use client'
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts'
+import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
 
 interface DataPoint {
   name: string
@@ -44,6 +45,7 @@ function CenterLabel({ viewBox, total }: CenterLabelProps) {
 }
 
 export function LeadsDonutChart({ data, total }: Props) {
+  const reduced = usePrefersReducedMotion()
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
@@ -55,6 +57,10 @@ export function LeadsDonutChart({ data, total }: Props) {
           outerRadius={100}
           paddingAngle={3}
           dataKey="value"
+          isAnimationActive={!reduced}
+          animationBegin={0}
+          animationDuration={700}
+          animationEasing="ease-out"
         >
           {data.map((_, i) => (
             <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />

@@ -148,9 +148,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   return (
     <>
       <style>{`
-        .prop-card { transition: border-color 0.12s; }
-        .prop-card:hover { border-color: var(--border-accent) !important; }
-        .tab-btn { transition: background 0.1s, color 0.1s; }
+        .prop-card { transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
+        .prop-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-md); }
+        .tab-btn { transition: background var(--dur-fast), color var(--dur-fast); }
       `}</style>
 
       {/* Header */}

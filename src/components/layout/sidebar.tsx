@@ -145,7 +145,7 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
               border: '1px solid var(--border-subtle)',
               borderRadius: '6px',
               cursor: 'pointer',
-              transition: 'all 0.15s',
+              transition: 'background-color var(--dur-fast), color var(--dur-fast)',
             }}
           >
             <LogOut size={14} strokeWidth={1.6} />

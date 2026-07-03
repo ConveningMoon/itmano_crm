@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
+import { m } from 'motion/react'
 import { Plus, Bell } from 'lucide-react'
 import { MobileNav } from './mobile-nav'
 import type { TenantRole } from '@/lib/auth/tenant-context'
@@ -63,6 +64,7 @@ export function Topbar({
         <button
           aria-label="Notificaciones"
           onClick={() => router.push('/notifications')}
+          className="btn-icon"
           style={{
             position: 'relative',
             display: 'flex',
@@ -72,23 +74,16 @@ export function Topbar({
             height: '34px',
             borderRadius: '8px',
             border: '1px solid var(--border-subtle)',
-            backgroundColor: 'transparent',
-            color: 'var(--text-secondary)',
             cursor: 'pointer',
-            transition: 'background-color 0.15s, color 0.15s',
-          }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-elevated)'
-            ;(e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'
-            ;(e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
           }}
         >
           <Bell size={16} strokeWidth={2} />
           {unreadCount > 0 && (
-            <span
+            <m.span
+              key={unreadCount}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 26 }}
               style={{
                 position: 'absolute',
                 top: '-5px',
@@ -98,7 +93,7 @@ export function Topbar({
                 padding: '0 4px',
                 borderRadius: '9px',
                 backgroundColor: 'var(--accent-coral)',
-                color: '#0B0C0E',
+                color: 'var(--bg-base)',
                 fontSize: '10px',
                 fontWeight: 700,
                 lineHeight: '17px',
@@ -106,11 +101,12 @@ export function Topbar({
               }}
             >
               {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
+            </m.span>
           )}
         </button>
 
         <button
+          className="btn-cta"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -119,16 +115,13 @@ export function Topbar({
             borderRadius: '8px',
             border: 'none',
             backgroundColor: 'var(--accent-gold)',
-            color: '#0B0C0E',
+            color: 'var(--bg-base)',
             fontSize: '12px',
             fontWeight: '600',
             letterSpacing: '0.04em',
             cursor: 'pointer',
-            transition: 'background-color 0.15s',
           }}
           onClick={() => router.push('/leads/new')}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--accent-gold-dim)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--accent-gold)' }}
           aria-label="Registrar Lead"
         >
           <Plus size={14} strokeWidth={2} />

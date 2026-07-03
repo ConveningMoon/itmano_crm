@@ -1,5 +1,6 @@
 import { ArrowRight } from 'lucide-react'
 import { STATUS_CONFIG } from '@/lib/config'
+import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import type { LeadStatus } from '@/lib/types'
 import type { StatusChange } from '@/lib/data/lead-status-history'
 
@@ -48,14 +49,14 @@ export function StatusHistoryTimeline({ changes }: { changes: StatusChange[] }) 
           Sin cambios de estado aún
         </div>
       ) : (
-        <div style={{ padding: '18px 20px' }}>
+        <StaggerGroup stagger={0.04} style={{ padding: '18px 20px' }}>
           {changes.map((c, i) => {
             const cfg      = STATUS_CONFIG[c.toStatus as LeadStatus]
             const dotColor = cfg?.color   ?? 'var(--text-muted)'
             const dotRing  = cfg?.bgColor ?? 'transparent'
             const isLast   = i === changes.length - 1
             return (
-              <div key={c.id} style={{ display: 'flex', gap: '14px' }}>
+              <StaggerItem key={c.id} style={{ display: 'flex', gap: '14px' }}>
                 {/* Dot + connector */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '12px', flexShrink: 0 }}>
                   <div style={{
@@ -82,10 +83,10 @@ export function StatusHistoryTimeline({ changes }: { changes: StatusChange[] }) 
                     <span>{SOURCE_LABELS[c.source] ?? c.source}</span>
                   </div>
                 </div>
-              </div>
+              </StaggerItem>
             )
           })}
-        </div>
+        </StaggerGroup>
       )}
     </div>
   )

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { m } from 'motion/react'
 import {
   LayoutDashboard,
   Users,
@@ -31,9 +32,12 @@ interface NavItemProps {
   href: string
   icon: string
   badge?: number
+  // Sidebar y MobileNav coexisten montados; cada lista necesita su propio
+  // layoutId para que el indicador no salte entre ambas.
+  indicatorId?: string
 }
 
-export function NavItem({ label, href, icon, badge }: NavItemProps) {
+export function NavItem({ label, href, icon, badge, indicatorId = 'nav-indicator' }: NavItemProps) {
   const pathname = usePathname()
   const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
   const Icon = ICONS[icon]
@@ -41,6 +45,7 @@ export function NavItem({ label, href, icon, badge }: NavItemProps) {
   return (
     <Link
       href={href}
+      className={isActive ? 'nav-item nav-item-active' : 'nav-item'}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -49,28 +54,25 @@ export function NavItem({ label, href, icon, badge }: NavItemProps) {
         borderRadius: '6px',
         textDecoration: 'none',
         fontSize: '13px',
-        fontWeight: isActive ? '500' : '400',
-        color: isActive ? 'var(--accent-gold)' : 'var(--text-secondary)',
-        backgroundColor: isActive ? 'rgba(201,169,110,0.08)' : 'transparent',
-        borderLeft: isActive ? '2px solid var(--accent-gold)' : '2px solid transparent',
-        transition: 'all 0.15s',
+        borderLeft: '2px solid transparent',
         position: 'relative',
       }}
-      onMouseEnter={e => {
-        if (!isActive) {
-          const el = e.currentTarget as HTMLElement
-          el.style.backgroundColor = 'var(--bg-elevated)'
-          el.style.color = 'var(--text-primary)'
-        }
-      }}
-      onMouseLeave={e => {
-        if (!isActive) {
-          const el = e.currentTarget as HTMLElement
-          el.style.backgroundColor = 'transparent'
-          el.style.color = 'var(--text-secondary)'
-        }
-      }}
     >
+      {isActive && (
+        <m.span
+          layoutId={indicatorId}
+          transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: '6px',
+            bottom: '6px',
+            width: '2px',
+            borderRadius: '1px',
+            backgroundColor: 'var(--accent-gold)',
+          }}
+        />
+      )}
       {Icon && <Icon size={16} strokeWidth={1.6} />}
       <span style={{ flex: 1 }}>{label}</span>
       {badge !== undefined && (

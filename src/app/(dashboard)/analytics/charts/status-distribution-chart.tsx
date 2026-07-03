@@ -1,6 +1,7 @@
 'use client'
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
 
 interface StatusDataPoint {
   agent: string
@@ -25,6 +26,13 @@ const tooltipStyle: React.CSSProperties = {
 }
 
 export function StatusDistributionChart({ data }: Props) {
+  const reduced = usePrefersReducedMotion()
+  const anim = {
+    isAnimationActive: !reduced,
+    animationBegin: 0,
+    animationDuration: 700,
+    animationEasing: 'ease-out' as const,
+  }
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data} barSize={18} margin={{ left: -16, top: 8 }}>
@@ -45,12 +53,12 @@ export function StatusDistributionChart({ data }: Props) {
           iconSize={8}
           iconType="square"
         />
-        <Bar dataKey="new"       stackId="a" fill="#5B8EC9" name="Nuevo"      radius={[0, 0, 0, 0]} />
-        <Bar dataKey="nurturing" stackId="a" fill="#C9A96E" name="Nurturing"  />
-        <Bar dataKey="warm"      stackId="a" fill="#E07B3A" name="Tibio"      />
-        <Bar dataKey="hot"       stackId="a" fill="#E04040" name="Caliente"   />
-        <Bar dataKey="process"   stackId="a" fill="#9B72CF" name="En Proceso" />
-        <Bar dataKey="closed"    stackId="a" fill="#6BA368" name="Cerrado"    radius={[4, 4, 0, 0]} />
+        <Bar {...anim} dataKey="new"       stackId="a" fill="#5B8EC9" name="Nuevo"      radius={[0, 0, 0, 0]} />
+        <Bar {...anim} dataKey="nurturing" stackId="a" fill="#C9A96E" name="Nurturing"  />
+        <Bar {...anim} dataKey="warm"      stackId="a" fill="#E07B3A" name="Tibio"      />
+        <Bar {...anim} dataKey="hot"       stackId="a" fill="#E04040" name="Caliente"   />
+        <Bar {...anim} dataKey="process"   stackId="a" fill="#9B72CF" name="En Proceso" />
+        <Bar {...anim} dataKey="closed"    stackId="a" fill="#6BA368" name="Cerrado"    radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )
