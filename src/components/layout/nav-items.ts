@@ -11,8 +11,9 @@ export interface NavItemDef {
 
 export const navItems: NavItemDef[] = [
   { label: 'Dashboard',     href: '/dashboard', icon: 'LayoutDashboard' },
-  { label: 'Leads',         href: '/leads',     icon: 'Users' },
-  { label: 'Fuentes',       href: '/sources',   icon: 'GitBranch' },
+  { label: 'Leads',         href: '/leads',       icon: 'Users'      },
+  { label: 'Propiedades',   href: '/properties', icon: 'Building2'  },
+  { label: 'Fuentes',       href: '/sources',    icon: 'GitBranch'  },
   { label: 'Emails',        href: '/emails',    icon: 'Mail' },
   { label: 'Analytics',     href: '/analytics', icon: 'BarChart2' },
   { label: 'Configuración', href: '/settings',  icon: 'Settings' },

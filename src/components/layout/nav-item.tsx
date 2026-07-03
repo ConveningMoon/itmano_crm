@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
+  Building2,
   FileDown,
   BarChart2,
   Settings,
@@ -16,6 +17,7 @@ import {
 const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
   LayoutDashboard,
   Users,
+  Building2,
   FileDown,
   BarChart2,
   Settings,

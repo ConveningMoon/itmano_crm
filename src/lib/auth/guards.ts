@@ -67,6 +67,34 @@ export function assertCanWriteLead(
 }
 
 /**
+ * Property-level write gate.
+ *   - super_admin → any property, any tenant.
+ *   - agent_owner → any property within their tenant.
+ *   - agent       → only properties they created (created_by_user_id === ctx.user_id).
+ *
+ * If created_by_user_id is null (property created by super_admin), agents are
+ * blocked — the property has no individual owner to match against.
+ *
+ * @returns an AuthDenial to return from the action, or null if allowed.
+ */
+export function assertCanWriteProperty(
+  ctx: TenantContext,
+  property: { tenant_id: string; created_by_user_id: string | null },
+): AuthDenial | null {
+  if (ctx.role === 'super_admin') return null
+
+  if (property.tenant_id !== ctx.tenant_id) {
+    return { ok: false, error: 'No tienes permiso sobre esta propiedad' }
+  }
+
+  if (ctx.role === 'agent' && property.created_by_user_id !== ctx.user_id) {
+    return { ok: false, error: 'No tienes permiso sobre esta propiedad' }
+  }
+
+  return null
+}
+
+/**
  * Resolves the target tenant for a write: owner/agent → their context tenant;
  * super_admin → the explicitly chosen tenant (no implicit fallback). Returns the
  * tenant id, or an { error } to surface from the action.
