@@ -1,23 +1,8 @@
-function Skeleton({ w, h, r = 8 }: { w: string; h: number; r?: number }) {
-  return (
-    <div style={{
-      width: w, height: `${h}px`, borderRadius: `${r}px`,
-      background: 'var(--bg-elevated)',
-      animation: 'pulse 1.5s ease-in-out infinite',
-    }} />
-  )
-}
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function AnalyticsLoading() {
   return (
     <div>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.4; }
-        }
-      `}</style>
-
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
         {[...Array(4)].map((_, i) => (

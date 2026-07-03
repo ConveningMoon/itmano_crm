@@ -63,6 +63,21 @@
   --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.06);
   --ring: #C9A96E;
+
+  /* Motion */
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 350ms;
+  --ease-out-premium: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Elevation — on #0B0C0E a shadow alone doesn't read; pair it with
+     --highlight-top (inner top edge) and a lighter border on hover */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.35);
+  --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-gold-hover: rgba(201, 169, 110, 0.3);
 }
 
 @theme inline {
@@ -154,3 +169,73 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Motion & interaction layer ────────────────────────────────────────────
+   Contract lives in src/components/motion/README.md. These classes replace
+   the inline onMouseEnter/onMouseLeave hover pattern: components add a class
+   and keep their base styles inline. Unlayered on purpose — same cascade
+   immunity as the app-shell rules above. */
+
+/* Focus ring — keyboard navigation only */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Skeleton shimmer — shared by every loading.tsx */
+.skeleton {
+  background-color: var(--bg-elevated);
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  background-size: 200% 100%;
+  background-position-x: 180%;
+  animation: shimmer 1.8s linear infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer {
+  to { background-position-x: -20%; }
+}
+
+/* Interactive surfaces */
+.card-interactive {
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast),
+    background-color var(--dur-fast);
+}
+.card-interactive:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--highlight-top), var(--shadow-md);
+}
+
+.row-hover { transition: background-color var(--dur-fast); }
+.row-hover:hover { background-color: var(--bg-elevated); }
+
+.btn-cta {
+  transition:
+    filter var(--dur-fast),
+    box-shadow var(--dur-fast),
+    transform var(--dur-fast);
+}
+.btn-cta:hover { filter: brightness(1.08); box-shadow: var(--shadow-sm); }
+.btn-cta:active { transform: scale(0.98); }
+
+.nav-item { transition: background-color var(--dur-fast), color var(--dur-fast); }
+.nav-item:hover:not(.nav-item-active) {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* Reduced motion — CSS side; motion/react is covered by MotionConfig */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
