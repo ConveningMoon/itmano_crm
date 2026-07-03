@@ -253,6 +253,29 @@ body {
   color: var(--text-primary);
 }
 
+/* ─── Tinte monocromo para assets raster ──────────────────────────────────
+   brightness(0) saturate(100%) aplana la imagen a negro preservando el alpha;
+   la cadena posterior la lleva al color objetivo. Valores aproximados,
+   afinados visualmente contra el token correspondiente. */
+
+/* → var(--accent-gold) #C9A96E (medido en canvas: ~#D1A766) */
+.img-tint-gold {
+  filter: brightness(0) saturate(100%) invert(75%) sepia(28%) saturate(620%)
+          hue-rotate(357deg) brightness(88%) contrast(88%);
+}
+/* Igual que .img-tint-gold + halo dorado; el drop-shadow va al final de la
+   cadena para tomar el color ya teñido. */
+.img-tint-gold-glow {
+  filter: brightness(0) saturate(100%) invert(75%) sepia(28%) saturate(620%)
+          hue-rotate(357deg) brightness(88%) contrast(88%)
+          drop-shadow(0 0 18px rgba(201, 169, 110, 0.25));
+}
+/* → var(--text-primary) #E8E6E1 */
+.img-tint-light {
+  filter: brightness(0) saturate(100%) invert(97%) sepia(4%) saturate(120%)
+          hue-rotate(20deg) brightness(101%) contrast(90%);
+}
+
 /* Reduced motion — CSS side; motion/react is covered by MotionConfig */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

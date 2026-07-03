@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, Suspense } from 'react'
+import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 import { FadeIn } from '@/components/motion/primitives'
 import { createClient } from '@/lib/supabase/client'
@@ -78,19 +79,47 @@ function LoginForm() {
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--bg-base)',
+        // Halo dorado apenas perceptible detrás de la composición
+        backgroundImage:
+          'radial-gradient(ellipse 620px 420px at 50% 28%, color-mix(in srgb, var(--accent-gold) 7%, transparent), transparent 70%)',
+        backgroundRepeat: 'no-repeat',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px',
       }}
     >
-      <FadeIn
-        y={12}
+      <div
         style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '28px',
           width: '100%',
           maxWidth: '380px',
+        }}
+      >
+        {/* Marca: la mano de ITMANO teñida al dorado del tema, flotando sobre la card */}
+        <FadeIn y={10}>
+          <Image
+            src="/itmano_logo.webp"
+            alt="ITMANO"
+            width={64}
+            height={64}
+            priority
+            className="img-tint-gold-glow"
+            style={{ display: 'block' }}
+          />
+        </FadeIn>
+
+      <FadeIn
+        y={12}
+        delay={0.08}
+        style={{
+          width: '100%',
           backgroundColor: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
+          borderTop: '1px solid var(--border-accent)',
           borderRadius: '16px',
           padding: '40px 32px',
           display: 'flex',
@@ -99,14 +128,14 @@ function LoginForm() {
           boxShadow: 'var(--highlight-top), var(--shadow-lg)',
         }}
       >
-        {/* Logo */}
+        {/* Wordmark — el dorado vive en la mano y el CTA */}
         <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              fontSize: '28px',
+              fontSize: '22px',
               fontWeight: '600',
-              letterSpacing: '0.08em',
-              color: 'var(--accent-gold)',
+              letterSpacing: '0.22em',
+              color: 'var(--text-primary)',
               marginBottom: '6px',
             }}
           >
@@ -202,6 +231,7 @@ function LoginForm() {
           ITMANO CRM
         </div>
       </FadeIn>
+      </div>
     </div>
   )
 }
