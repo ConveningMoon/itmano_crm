@@ -345,6 +345,7 @@ export async function deleteLead(
     tenant_id: l.tenant_id as string,
     type:      'lead_deleted',
     lead_id:   leadId,
+    agent_id:  l.agent_id as string | null,
     message:   `${fullName} (${l.email}) fue eliminado`,
   })
   if (notifError) {

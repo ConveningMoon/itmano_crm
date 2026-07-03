@@ -60,7 +60,10 @@ export default async function NotificationsPage({
   const typeFilter = type ?? null
   const isSuper    = ctx.role === 'super_admin'
 
-  const notifications = await getNotifications(ctx.tenant_id, { type: typeFilter })
+  const notifications = await getNotifications(ctx.tenant_id, {
+    type:    typeFilter,
+    agentId: ctx.role === 'agent' ? ctx.agent_id : null,
+  })
   const hasUnread     = notifications.some(n => !n.read)
 
   return (
