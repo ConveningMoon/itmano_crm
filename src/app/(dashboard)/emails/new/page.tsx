@@ -1,11 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewSequenceForm } from './new-sequence-form'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
 export default async function NewSequencePage() {
-  const { tenant_id, role } = await getCurrentTenantContext()
+  const { tenant_id, role } = await requireTenantContext()
   const isSuperAdmin = role === 'super_admin'
   const supabase = createAdminClient()
 

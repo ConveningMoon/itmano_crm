@@ -1,10 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getProperties } from '@/lib/data/properties'
 import { PropertiesClient } from './properties-client'
 
 export default async function PropertiesPage() {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const isSuperAdmin = role === 'super_admin'
 

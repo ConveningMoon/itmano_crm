@@ -12,9 +12,9 @@ import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 // Mobile navigation: a hamburger trigger (phones only) + a left-sliding drawer that
 // mirrors the desktop sidebar (logo · nav · user/sign-out). Closes on overlay tap and
 // on navigation. Entirely additive — the trigger is `md:hidden`, so ≥768px is unaffected.
-export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: string }) {
+export function MobileNav({ role, userEmail, hubMode = false }: { role: TenantRole; userEmail: string; hubMode?: boolean }) {
   const [open, setOpen] = useState(false)
-  const items = navItemsForRole(role)
+  const items = navItemsForRole(role, { hubMode })
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {

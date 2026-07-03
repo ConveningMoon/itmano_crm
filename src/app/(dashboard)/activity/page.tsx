@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getAllActivity } from '@/lib/data/activity'
 import { ActivityRow } from './activity-ui'
 
@@ -14,7 +14,7 @@ export default async function ActivityPage({
 }: {
   searchParams: Promise<{ count?: string }>
 }) {
-  const { tenant_id, role, user_id } = await getCurrentTenantContext()
+  const { tenant_id, role, user_id } = await requireTenantContext()
   const isSuper = role === 'super_admin'
 
   const { count: countParam } = await searchParams

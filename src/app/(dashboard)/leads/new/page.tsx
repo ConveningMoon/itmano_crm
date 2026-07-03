@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewLeadClient } from './new-lead-client'
 
 export interface ChannelOption {
@@ -18,7 +18,7 @@ export interface TenantOption {
 }
 
 export default async function NewLeadPage() {
-  const ctx      = await getCurrentTenantContext()
+  const ctx      = await requireTenantContext()
   const isSuper  = ctx.role === 'super_admin'
   const supabase = createAdminClient()
 

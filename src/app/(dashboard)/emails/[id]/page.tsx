@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { SequenceDetailActions } from './sequence-detail-actions'
 import { StepManager } from './step-manager'
@@ -43,7 +43,7 @@ export default async function EmailSequenceDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)

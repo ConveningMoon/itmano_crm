@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/data/channels'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
@@ -10,7 +10,7 @@ export default async function SourcesPage({
 }: {
   searchParams: Promise<{ window?: string }>
 }) {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)

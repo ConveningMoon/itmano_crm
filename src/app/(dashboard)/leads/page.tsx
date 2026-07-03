@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
 import { LeadsClient } from './leads-client'
@@ -14,8 +14,8 @@ export default async function LeadsPage({
   const initialSource    = params.source    ?? 'all'
   const initialChannelId = params.channelId ?? 'all'
 
-  // getCurrentTenantContext reads cookies → forces dynamic (non-cached) rendering
-  const ctx = await getCurrentTenantContext()
+  // requireTenantContext reads cookies → forces dynamic (non-cached) rendering
+  const ctx = await requireTenantContext()
   const scope = scopeFor(ctx)
   const { tenant_id, role } = ctx
   const supabase = createAdminClient()

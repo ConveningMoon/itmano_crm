@@ -28,7 +28,10 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const token_hash = searchParams.get('token_hash')
   const type       = (searchParams.get('type') ?? 'email') as EmailOtpType
-  const next       = searchParams.get('next') ?? '/dashboard'
+  // rawNext distingue "deep-link explícito" (se honra) de "aterrizaje por
+  // defecto" (bifurca por rol: el super_admin va al centro de control).
+  const rawNext    = searchParams.get('next')
+  const next       = rawNext ?? '/dashboard'
 
   if (token_hash) {
     const cookieStore = await cookies()
@@ -56,7 +59,18 @@ export async function GET(request: NextRequest) {
     if (!error) {
       await markInvitationAccepted(data.user?.email)
       // Validate `next` to prevent open redirect — only allow relative paths.
-      const redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
+      let redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
+      // Sin deep-link explícito: el super_admin aterriza en el centro de control
+      // (elige ahí a qué tenant entrar). Los demás roles siguen a /dashboard.
+      if (!rawNext && data.user) {
+        const admin = createAdminClient()
+        const { data: profile } = await admin
+          .from('user_profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .maybeSingle()
+        if (profile?.role === 'super_admin') redirectTo = '/admin'
+      }
       return NextResponse.redirect(`${origin}${redirectTo}`)
     }
   }

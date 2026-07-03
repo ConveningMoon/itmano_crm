@@ -20,10 +20,12 @@ export function Topbar({
   role = 'agent_owner',
   unreadCount = 0,
   userEmail = '',
+  hubMode = false,
 }: {
   role?: TenantRole
   unreadCount?: number
   userEmail?: string
+  hubMode?: boolean
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -44,7 +46,7 @@ export function Topbar({
     >
       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {/* Drawer trigger — phones only (md:hidden inside MobileNav). */}
-        <MobileNav role={role} userEmail={userEmail} />
+        <MobileNav role={role} userEmail={userEmail} hubMode={hubMode} />
         <h1
           style={{
             fontSize: '15px',

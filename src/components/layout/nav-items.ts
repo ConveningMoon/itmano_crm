@@ -19,11 +19,18 @@ export const navItems: NavItemDef[] = [
   { label: 'Configuración', href: '/settings',  icon: 'Settings' },
 ]
 
-// super_admin also gets the Admin console link appended.
-export function navItemsForRole(role: TenantRole): NavItemDef[] {
-  return role === 'super_admin'
-    ? [...navItems, { label: 'Admin', href: '/admin', icon: 'ShieldCheck' }]
-    : navItems
+// super_admin gets the control-center link appended. In hub mode (super_admin
+// without a selected tenant) the tenant pages would all redirect to the hub, so
+// the nav collapses to the only two routes that make sense there.
+export function navItemsForRole(role: TenantRole, opts?: { hubMode?: boolean }): NavItemDef[] {
+  if (role !== 'super_admin') return navItems
+  if (opts?.hubMode) {
+    return [
+      { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+      { label: 'Notificaciones', href: '/notifications', icon: 'Bell' },
+    ]
+  }
+  return [...navItems, { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' }]
 }
 
 export const ROLE_LABELS: Record<TenantRole, string> = {

@@ -13,7 +13,7 @@ import { LeadDetailClient } from './lead-detail-client'
 import { notFound } from 'next/navigation'
 import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, isRowVisible } from '@/lib/auth/visibility'
 import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
@@ -27,7 +27,7 @@ const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const scope = scopeFor(ctx)
   const supabase = createAdminClient()

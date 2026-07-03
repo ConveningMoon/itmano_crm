@@ -2,11 +2,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
-  const ctx        = await getCurrentTenantContext()
+  const ctx        = await requireTenantContext()
   const supabase   = createAdminClient()
   const authClient = await createClient()
 
