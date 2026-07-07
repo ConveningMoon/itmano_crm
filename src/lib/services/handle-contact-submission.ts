@@ -16,6 +16,17 @@ export interface ContactChannel {
   agent_id:  string | null
 }
 
+// "How can we help?" — the new coded-site form's required intent radio.
+// Optional here for backward compatibility with the Webflow webhook, whose form
+// never collected it.
+export type ContactReason = 'buy' | 'sell' | 'invest'
+
+const REASON_LABELS: Record<ContactReason, string> = {
+  buy:    'Quiere comprar',
+  sell:   'Quiere vender',
+  invest: 'Quiere invertir',
+}
+
 export interface ContactSubmissionParams {
   db:          AdminClient
   channel:     ContactChannel
@@ -23,7 +34,8 @@ export interface ContactSubmissionParams {
   last_name?:  string
   email:       string
   phone?:      string
-  message:     string
+  reason?:     ContactReason
+  message?:    string
   language?:   'es' | 'en' | 'pt'
 }
 
@@ -41,7 +53,12 @@ export async function handleContactSubmission(
   const lastName   = (params.last_name ?? '').trim()
   const email      = params.email.toLowerCase().trim()
   const phone      = params.phone?.trim() || null
-  const message    = params.message.slice(0, 2000)
+  const reason     = params.reason ?? null
+  const reasonLabel = reason ? REASON_LABELS[reason] : null
+  const message    = params.message?.trim().slice(0, 2000) || null
+  // lead_events.description is NOT NULL — fall back to the reason label, then a
+  // generic label, so a submission with no free-text message still logs cleanly.
+  const description = message || reasonLabel || 'Formulario de contacto enviado'
   const tenantId   = channel.tenant_id
 
   // ── Resolve agent — channel.agent_id (explicit) or round-robin. Language is NO
@@ -111,16 +128,17 @@ export async function handleContactSubmission(
     await emitLeadCreated(db, { leadId, tenantId, via: 'contact_form', actorUserId: null })
   }
 
-  // ── Always log the question as a scoring event ───────────────────────────────
-  // Each question is its own event (dedup_key null). The apply_lead_event_scoring
+  // ── Always log the submission as a scoring event ─────────────────────────────
+  // Each submission is its own event (dedup_key null). The apply_lead_event_scoring
   // trigger applies the +20 from lead_score_rules and may auto-promote / notify.
+  // description falls back to the reason label when no free-text message was sent.
   const { error: eventError } = await db.from('lead_events').insert({
     lead_id:     leadId,
     tenant_id:   tenantId,
     type:        'contact_us_question',
-    description: message,
+    description,
     points:      20,
-    metadata:    { channel_id: channel.id, source: 'contact_us' },
+    metadata:    { channel_id: channel.id, source: 'contact_us', reason },
   })
   if (eventError) {
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'event_insert_failed', detail: eventError.message }))
@@ -128,24 +146,35 @@ export async function handleContactSubmission(
 
   // ── Notify Telegram via the notifications webhook trigger ─────────────────────
   const name = `${firstName} ${lastName}`.trim() || 'Lead'
+  const intentSuffix = reasonLabel ? ` (${reasonLabel})` : ''
+  const notifMessage = message
+    ? `Nueva pregunta de ${name}${intentSuffix}: ${message.slice(0, 100)}`
+    : `Nueva consulta de ${name}${intentSuffix}`
   const { error: notifError } = await db.from('notifications').insert({
     tenant_id: tenantId,
     type:      'contact_us',
     lead_id:   leadId,
     agent_id:  agentId,
-    message:   `Nueva pregunta de ${name}: ${message.slice(0, 100)}`,
+    message:   notifMessage,
   })
   if (notifError) {
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'notification_insert_failed', detail: notifError.message }))
   }
 
-  // ── Structured submission snapshot (the message as a single Q&A item) ─────────
+  // ── Structured submission snapshot (reason + message as Q&A items) ────────────
   // lead_events above is the activity/scoring log; this is the display record.
+  const answers: Array<{ key: string; question: string; value: string; label: string }> = []
+  if (reason) {
+    answers.push({ key: 'reason', question: '¿Cómo podemos ayudarte?', value: reason, label: reasonLabel! })
+  }
+  if (message) {
+    answers.push({ key: 'message', question: 'Mensaje', value: message, label: message })
+  }
   const { error: submissionError } = await db.from('form_submissions').insert({
     tenant_id:  tenantId,
     channel_id: channel.id,
     lead_id:    leadId,
-    answers:    [{ key: 'message', question: 'Mensaje', value: message, label: message }],
+    answers,
   })
   if (submissionError) {
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))

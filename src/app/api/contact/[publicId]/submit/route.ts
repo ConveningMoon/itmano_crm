@@ -13,7 +13,8 @@ const SubmitSchema = z.object({
   last_name:  z.string().max(100).optional().default(''),
   email:      z.string().email().transform(s => s.toLowerCase().trim()),
   phone:      z.string().max(30).optional(),
-  message:    z.string().min(1).max(2000), // the Contact Us question — required
+  reason:     z.enum(['buy', 'sell', 'invest']), // "How can we help?" — required
+  message:    z.string().max(2000).optional(),   // free-text question — optional
   language:   z.enum(['es', 'en', 'pt']).optional().default('es'),
 })
 
@@ -79,6 +80,7 @@ export async function POST(
       last_name:  parsed.last_name,
       email:      parsed.email,
       phone:      parsed.phone,
+      reason:     parsed.reason,
       message:    parsed.message,
       language:   parsed.language,
     })
