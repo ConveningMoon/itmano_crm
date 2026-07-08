@@ -355,7 +355,7 @@ src/
     (dashboard)/              — protected (Phase 2), CRM dark theme
       dashboard/              — pipeline + KPI cards
       leads/                  — list, filters, detail, new
-      properties/             — agency property listings; write access is asymmetric (owner/super: all; agent: own-created)
+      properties/             — agency property listings; asymmetric writes (owner/super: all; agent: own-created). Also the source of truth for the A&J public web (see "Properties — Web Listings & AI Intake"). Media in Supabase Storage bucket `property-media` under `<tenant_id>/properties/`.
       analytics/              — Server pages + client chart wrappers
       lead-magnets/           — CRUD per agent (tracking only — landing pages live outside this app)
       settings/
@@ -482,6 +482,54 @@ endpoint no longer writes it). New answers live in `form_submissions`. The
 `already_submitted` = the lead had already sent this form (answers refreshed, nothing
 re-sent). A lead magnet with no linked sequence still returns `already_submitted` on
 re-submit — the LP decides the message (there's just no material to re-send).
+
+---
+
+## Properties — Web Listings & AI Intake
+
+The `properties` table is a **single source of truth**: it powers the internal CRM
+module *and* the A&J public marketing site (`E:\A&J\Web\main-web-ajreg`, which reads
+it directly with the CRM's anon key). Built across migrations `042` (base table +
+asymmetric-write RLS), `045` (web columns + anon SELECT policy for published rows +
+public `property-media` Storage bucket), `046` (seed of the 3 A&J listings), and
+`047` (column-level `anon` privileges).
+
+**Data contract & security:**
+- Web-facing columns on `properties`: `name`, `slug` (unique per tenant; the web URL
+  `/houses/<slug>`), `neighborhood`, `state`, `bathrooms_full`/`bathrooms_half`,
+  `garage_spaces`, `lot_sqft`, `description_en`/`description_es`,
+  `features_en`/`features_es` (text[]), `image_url`, `gallery` (text[]),
+  `floor_plans` (text[]), `detail_pdf_url`, `published_to_web`. The legacy
+  `bathrooms` numeric stays coherent (`full + 0.5 × half`, computed on save).
+- **Public exposure is two-layered:** an RLS policy (`045`) limits `anon` to rows
+  with `published_to_web = true`; column-level grants (`047`) limit `anon` to the
+  public columns only. `notes`, `created_by_*`, `mls_number`, `external_url` and the
+  legacy `bathrooms` are **withheld from `anon`** — so the web MUST select explicit
+  columns (`select('*')` returns 401 for anon). `authenticated`/service role are
+  unaffected; the CRM reads via the service-role admin client.
+- **Media** lives in the public Storage bucket `property-media` under
+  `<tenant_id>/properties/` (AI-intake PDFs under `<tenant_id>/properties/ai-intake/`).
+  Uploads go through the service-role client only (`uploadPropertyMedia` in
+  `properties/actions.ts`); the bucket is public-read by URL. **When a new host serves
+  these images, add it to the web project's `next.config.ts` `images.remotePatterns`**
+  — `next/image` blocks unlisted hosts (this is why images silently failed after the
+  web repointed from the AJREG project to the CRM project).
+
+**"Crear con IA" (Phase D) — built but GATED OFF.**
+`properties/ai-actions.ts#generatePropertyFromPdf` uploads a listing PDF and calls
+Claude (`claude-sonnet-5`, PDF as a base64 `document` block + forced tool use) to
+prefill the form for human review (`published_to_web` always starts false; photos are
+uploaded by hand, not extracted). The UI entry point is **disabled** behind
+`AI_ENABLED = false` in `properties-client.tsx` (shows a "Próximamente" badge).
+
+*Pending before enabling the Claude API feature (flip `AI_ENABLED` to `true`):*
+1. Set `ANTHROPIC_API_KEY` in `.env.local` **and** in Vercel (Production + Preview).
+2. Confirm Anthropic billing/credits are provisioned for the workspace.
+3. Verify the model id is still current (`claude-sonnet-5`) per `node_modules` docs /
+   the Claude API skill before shipping.
+4. Manually QA one real listing PDF end-to-end (extraction → prefill → review → save),
+   plus the error paths (non-listing PDF, > 10 MB, missing key).
+5. (Optional) add a cleanup job for orphaned `ai-intake` PDFs when a draft is cancelled.
 
 ---
 
@@ -620,7 +668,7 @@ Read these *before* writing code that touches their domain:
 | If you're working on… | Read first |
 |---|---|
 | Anything that uses leads, agents, sources, lead magnets | `src/lib/types.ts`, `src/lib/mockdata.ts` |
-| Anything in `properties/` | `src/lib/data/properties.ts` (types), `src/lib/auth/guards.ts` (`assertCanWriteProperty`), `supabase/migrations/041_properties.sql` |
+| Anything in `properties/` | `src/lib/data/properties.ts` (types), `src/lib/auth/guards.ts` (`assertCanWriteProperty`), the "Properties — Web Listings & AI Intake" section, and migrations `042_properties.sql` + `045`–`047` |
 | Anything that touches scoring, status auto-transitions, or notifications | The "Lead Scoring Model" section above, then the scoring migration files in `supabase/migrations/` |
 | Anything in `(dashboard)` | `src/app/globals.css` (design tokens), the closest existing page |
 | A new chart | An existing chart under `analytics/charts/` |
