@@ -1,12 +1,26 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Building2, Plus, ExternalLink, Pencil, Trash2, X } from 'lucide-react'
+import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import { createProperty, updateProperty, deleteProperty } from './actions'
+import { createProperty, updateProperty, deleteProperty, uploadPropertyMedia } from './actions'
 import type { PropertyInput } from './actions'
 import { FormSection } from '@/components/ui/form-section'
+
+// Kebab-case slug from a free-text name (matches the server-side SLUG_RE).
+function slugify(input: string): string {
+  return input
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120)
+}
+
+function splitLines(text: string): string[] {
+  return text.split('\n').map(s => s.trim()).filter(Boolean)
+}
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -60,9 +74,17 @@ function fmtPrice(n: number | null): string {
 const EMPTY_FORM: PropertyInput = {
   address: '', city: null, mls_number: null,
   property_type: 'residential', list_price: null,
-  bedrooms: null, bathrooms: null, sqft: null,
+  bedrooms: null, sqft: null,
   year_built: null, status: 'available',
   external_url: null, notes: null, tenant_id: undefined,
+  // Web listing
+  name: null, slug: null, neighborhood: null, state: null,
+  bathrooms_full: null, bathrooms_half: null,
+  garage_spaces: null, lot_sqft: null,
+  description_en: null, description_es: null,
+  features_en: [], features_es: [],
+  image_url: null, gallery: [], floor_plans: [],
+  detail_pdf_url: null, published_to_web: false,
 }
 
 function formFromProperty(p: Property): PropertyInput {
@@ -73,13 +95,29 @@ function formFromProperty(p: Property): PropertyInput {
     property_type: p.propertyType,
     list_price:    p.listPrice,
     bedrooms:      p.bedrooms,
-    bathrooms:     p.bathrooms,
     sqft:          p.sqft,
     year_built:    p.yearBuilt,
     status:        p.status,
     external_url:  p.externalUrl,
     notes:         p.notes,
     tenant_id:     p.tenantId,
+    name:            p.name,
+    slug:            p.slug,
+    neighborhood:    p.neighborhood,
+    state:           p.state,
+    bathrooms_full:  p.bathroomsFull,
+    bathrooms_half:  p.bathroomsHalf,
+    garage_spaces:   p.garageSpaces,
+    lot_sqft:        p.lotSqft,
+    description_en:  p.descriptionEn,
+    description_es:  p.descriptionEs,
+    features_en:     p.featuresEn,
+    features_es:     p.featuresEs,
+    image_url:       p.imageUrl,
+    gallery:         p.gallery,
+    floor_plans:     p.floorPlans,
+    detail_pdf_url:  p.detailPdfUrl,
+    published_to_web: p.publishedToWeb,
   }
 }
 
@@ -94,12 +132,22 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [formError, setFormError]   = useState<string | null>(null)
   const [form, setForm]             = useState<PropertyInput>(EMPTY_FORM)
+  // Free-text mirrors of the features arrays (one item per line) for smooth typing.
+  const [featuresEnText, setFeaturesEnText] = useState('')
+  const [featuresEsText, setFeaturesEsText] = useState('')
+  // Which media field is currently uploading ('image_url' | 'gallery' | ...).
+  const [uploadingField, setUploadingField] = useState<string | null>(null)
+  // Slug is auto-derived from name until the user edits it by hand.
+  const [slugTouched, setSlugTouched] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const filtered = tab === 'all' ? properties : properties.filter(p => p.status === tab)
 
   function openCreate() {
     setForm({ ...EMPTY_FORM, tenant_id: isSuperAdmin ? (tenants[0]?.id ?? undefined) : undefined })
+    setFeaturesEnText('')
+    setFeaturesEsText('')
+    setSlugTouched(false)
     setEditingId(null)
     setFormError(null)
     setShowForm(true)
@@ -107,6 +155,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
 
   function openEdit(prop: Property) {
     setForm(formFromProperty(prop))
+    setFeaturesEnText(prop.featuresEn.join('\n'))
+    setFeaturesEsText(prop.featuresEs.join('\n'))
+    setSlugTouched(true) // an existing property keeps its slug
     setEditingId(prop.id)
     setFormError(null)
     setShowForm(true)
@@ -116,19 +167,67 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setShowForm(false)
     setEditingId(null)
     setFormError(null)
+    setUploadingField(null)
   }
 
   function setField<K extends keyof PropertyInput>(key: K, value: PropertyInput[K]) {
     setForm(prev => ({ ...prev, [key]: value }))
   }
 
+  // Name → slug auto-fill (only while the slug hasn't been hand-edited).
+  function onNameChange(value: string) {
+    setForm(prev => ({
+      ...prev,
+      name: value || null,
+      slug: slugTouched ? prev.slug : (slugify(value) || null),
+    }))
+  }
+
+  async function uploadFiles(
+    files: FileList | null,
+    kind: 'image' | 'pdf',
+    target: 'image_url' | 'detail_pdf_url' | 'gallery' | 'floor_plans',
+  ) {
+    if (!files || files.length === 0) return
+    setUploadingField(target)
+    setFormError(null)
+    try {
+      const urls: string[] = []
+      for (const file of Array.from(files)) {
+        const fd = new FormData()
+        fd.set('file', file)
+        fd.set('kind', kind)
+        if (form.tenant_id) fd.set('tenant_id', form.tenant_id)
+        const res = await uploadPropertyMedia(fd)
+        if (!res.ok) { setFormError(res.error); break }
+        urls.push(res.url)
+      }
+      if (urls.length === 0) return
+      if (target === 'image_url')          setField('image_url', urls[0])
+      else if (target === 'detail_pdf_url') setField('detail_pdf_url', urls[0])
+      else if (target === 'gallery')        setForm(prev => ({ ...prev, gallery: [...(prev.gallery ?? []), ...urls] }))
+      else if (target === 'floor_plans')    setForm(prev => ({ ...prev, floor_plans: [...(prev.floor_plans ?? []), ...urls] }))
+    } finally {
+      setUploadingField(null)
+    }
+  }
+
+  function removeFromArray(target: 'gallery' | 'floor_plans', url: string) {
+    setForm(prev => ({ ...prev, [target]: (prev[target] ?? []).filter(u => u !== url) }))
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError(null)
+    const payload: PropertyInput = {
+      ...form,
+      features_en: splitLines(featuresEnText),
+      features_es: splitLines(featuresEsText),
+    }
     startTransition(async () => {
       const result = editingId
-        ? await updateProperty(editingId, form)
-        : await createProperty(form)
+        ? await updateProperty(editingId, payload)
+        : await createProperty(payload)
       if (!result.ok) {
         setFormError(result.error)
         return
@@ -297,6 +396,16 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   {prop.mlsNumber && (
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       MLS #{prop.mlsNumber}
+                    </span>
+                  )}
+                  {prop.publishedToWeb && (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '3px',
+                      fontSize: '10px', fontWeight: 500, padding: '2px 7px', borderRadius: '4px',
+                      background: 'rgba(107,163,104,0.12)', color: 'var(--accent-green)',
+                      letterSpacing: '0.04em',
+                    }}>
+                      <Globe size={10} /> Web
                     </span>
                   )}
                 </div>
@@ -544,7 +653,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 </label>
               </div>
 
-              {/* Bedrooms + Bathrooms + Sqft */}
+              {/* Bedrooms + Bathrooms (full / half) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <label style={labelStyle}>
                   <span style={labelTextStyle}>Habitaciones</span>
@@ -560,24 +669,41 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   />
                 </label>
                 <label style={labelStyle}>
-                  <span style={labelTextStyle}>Baños</span>
+                  <span style={labelTextStyle}>Baños completos</span>
                   <input
                     type="number"
                     min={0}
                     max={50}
-                    step={0.5}
-                    value={form.bathrooms ?? ''}
-                    onChange={e => setField('bathrooms', e.target.value ? Number(e.target.value) : null)}
-                    placeholder="2.5"
+                    step={1}
+                    value={form.bathrooms_full ?? ''}
+                    onChange={e => setField('bathrooms_full', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="2"
                     style={inputStyle}
                   />
                 </label>
                 <label style={labelStyle}>
-                  <span style={labelTextStyle}>Sqft</span>
+                  <span style={labelTextStyle}>Medios baños</span>
                   <input
                     type="number"
                     min={0}
-                    max={100000}
+                    max={10}
+                    step={1}
+                    value={form.bathrooms_half ?? ''}
+                    onChange={e => setField('bathrooms_half', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="1"
+                    style={inputStyle}
+                  />
+                </label>
+              </div>
+
+              {/* Sqft + Lot + Garage */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <label style={labelStyle}>
+                  <span style={labelTextStyle}>Sqft (interior)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000000}
                     step={1}
                     value={form.sqft ?? ''}
                     onChange={e => setField('sqft', e.target.value ? Number(e.target.value) : null)}
@@ -585,7 +711,238 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     style={inputStyle}
                   />
                 </label>
+                <label style={labelStyle}>
+                  <span style={labelTextStyle}>Lote (sqft)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={form.lot_sqft ?? ''}
+                    onChange={e => setField('lot_sqft', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="6000"
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  <span style={labelTextStyle}>Garaje (autos)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={form.garage_spaces ?? ''}
+                    onChange={e => setField('garage_spaces', e.target.value ? Number(e.target.value) : null)}
+                    placeholder="2"
+                    style={inputStyle}
+                  />
+                </label>
               </div>
+              </FormSection>
+
+              <FormSection title="Contenido web" description="Se muestra en el sitio público. Obligatorio solo si publicas la propiedad.">
+              {/* Name + slug */}
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Nombre de la propiedad</span>
+                <input
+                  type="text"
+                  value={form.name ?? ''}
+                  onChange={e => onNameChange(e.target.value)}
+                  placeholder="Oakmont Manor"
+                  style={inputStyle}
+                />
+              </label>
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Slug (URL: /houses/&lt;slug&gt;)</span>
+                <input
+                  type="text"
+                  value={form.slug ?? ''}
+                  onChange={e => { setSlugTouched(true); setField('slug', e.target.value || null) }}
+                  placeholder="oakmont-manor"
+                  style={inputStyle}
+                />
+              </label>
+
+              {/* Neighborhood + State */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                <label style={labelStyle}>
+                  <span style={labelTextStyle}>Vecindario</span>
+                  <input
+                    type="text"
+                    value={form.neighborhood ?? ''}
+                    onChange={e => setField('neighborhood', e.target.value || null)}
+                    placeholder="Norfolk, Ghent"
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={labelStyle}>
+                  <span style={labelTextStyle}>Estado</span>
+                  <input
+                    type="text"
+                    value={form.state ?? ''}
+                    onChange={e => setField('state', e.target.value || null)}
+                    placeholder="VA"
+                    style={inputStyle}
+                  />
+                </label>
+              </div>
+
+              {/* Descriptions EN / ES */}
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Descripción (inglés)</span>
+                <textarea
+                  value={form.description_en ?? ''}
+                  onChange={e => setField('description_en', e.target.value || null)}
+                  rows={4}
+                  placeholder="Welcome to…"
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                />
+              </label>
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Descripción (español)</span>
+                <textarea
+                  value={form.description_es ?? ''}
+                  onChange={e => setField('description_es', e.target.value || null)}
+                  rows={4}
+                  placeholder="Bienvenido a…"
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                />
+              </label>
+
+              {/* Features EN / ES — one per line */}
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Características (inglés) — una por línea</span>
+                <textarea
+                  value={featuresEnText}
+                  onChange={e => setFeaturesEnText(e.target.value)}
+                  rows={4}
+                  placeholder={'Updated kitchen\nTwo-car garage\nHardwood floors'}
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                />
+              </label>
+              <label style={labelStyle}>
+                <span style={labelTextStyle}>Características (español) — una por línea</span>
+                <textarea
+                  value={featuresEsText}
+                  onChange={e => setFeaturesEsText(e.target.value)}
+                  rows={4}
+                  placeholder={'Cocina renovada\nGaraje para dos autos\nPisos de madera'}
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                />
+              </label>
+              </FormSection>
+
+              <FormSection title="Multimedia" description="Se sube a Storage del CRM. Formatos: JPG, PNG, WebP, GIF, AVIF (máx 10 MB) y PDF.">
+              {/* Cover image */}
+              <div style={labelStyle}>
+                <span style={labelTextStyle}>Imagen de portada</span>
+                {form.image_url && (
+                  <div style={mediaRowStyle}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={form.image_url} alt="Portada" style={thumbStyle} />
+                    <a href={form.image_url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>Ver</a>
+                    <button type="button" onClick={() => setField('image_url', null)} style={mediaRemoveStyle}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+                <UploadButton
+                  label={form.image_url ? 'Reemplazar portada' : 'Subir portada'}
+                  busy={uploadingField === 'image_url'}
+                  accept="image/*"
+                  onFiles={files => uploadFiles(files, 'image', 'image_url')}
+                />
+              </div>
+
+              {/* Gallery */}
+              <div style={labelStyle}>
+                <span style={labelTextStyle}>Galería</span>
+                {(form.gallery ?? []).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {(form.gallery ?? []).map(url => (
+                      <div key={url} style={{ position: 'relative' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" style={thumbStyle} />
+                        <button type="button" onClick={() => removeFromArray('gallery', url)} style={thumbRemoveStyle}>
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <UploadButton
+                  label="Agregar imágenes"
+                  busy={uploadingField === 'gallery'}
+                  accept="image/*"
+                  multiple
+                  onFiles={files => uploadFiles(files, 'image', 'gallery')}
+                />
+              </div>
+
+              {/* Floor plans */}
+              <div style={labelStyle}>
+                <span style={labelTextStyle}>Planos</span>
+                {(form.floor_plans ?? []).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {(form.floor_plans ?? []).map(url => (
+                      <div key={url} style={{ position: 'relative' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" style={thumbStyle} />
+                        <button type="button" onClick={() => removeFromArray('floor_plans', url)} style={thumbRemoveStyle}>
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <UploadButton
+                  label="Agregar planos"
+                  busy={uploadingField === 'floor_plans'}
+                  accept="image/*"
+                  multiple
+                  onFiles={files => uploadFiles(files, 'image', 'floor_plans')}
+                />
+              </div>
+
+              {/* Detail PDF */}
+              <div style={labelStyle}>
+                <span style={labelTextStyle}>PDF de detalles</span>
+                {form.detail_pdf_url && (
+                  <div style={mediaRowStyle}>
+                    <a href={form.detail_pdf_url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>
+                      Ver PDF
+                    </a>
+                    <button type="button" onClick={() => setField('detail_pdf_url', null)} style={mediaRemoveStyle}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+                <UploadButton
+                  label={form.detail_pdf_url ? 'Reemplazar PDF' : 'Subir PDF'}
+                  busy={uploadingField === 'detail_pdf_url'}
+                  accept="application/pdf"
+                  onFiles={files => uploadFiles(files, 'pdf', 'detail_pdf_url')}
+                />
+              </div>
+              </FormSection>
+
+              <FormSection title="Publicación">
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.published_to_web ?? false}
+                  onChange={e => setField('published_to_web', e.target.checked)}
+                  style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: 'var(--accent-gold)', cursor: 'pointer' }}
+                />
+                <span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                    <Globe size={13} /> Publicar en la web
+                  </span>
+                  <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Al activarlo, la propiedad aparece en el sitio público. Requiere nombre, slug,
+                    vecindario, estado, ambas descripciones y una imagen de portada.
+                  </span>
+                </span>
+              </label>
               </FormSection>
 
               <FormSection title="Enlaces y notas">
@@ -711,6 +1068,43 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   )
 }
 
+// ─── Upload button ─────────────────────────────────────────────────────────────
+// A styled file picker that delegates the selected files to the parent's upload
+// handler. Resets its input value so re-selecting the same file still fires.
+
+interface UploadButtonProps {
+  label:    string
+  busy:     boolean
+  accept:   string
+  multiple?: boolean
+  onFiles:  (files: FileList | null) => void
+}
+
+function UploadButton({ label, busy, accept, multiple = false, onFiles }: UploadButtonProps) {
+  return (
+    <label
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start',
+        padding: '7px 14px', fontSize: '12px', fontWeight: 500,
+        background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+        border: '1px solid var(--border-subtle)', borderRadius: '8px',
+        cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1,
+      }}
+    >
+      <Upload size={13} />
+      {busy ? 'Subiendo…' : label}
+      <input
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        disabled={busy}
+        onChange={e => { onFiles(e.target.files); e.target.value = '' }}
+        style={{ display: 'none' }}
+      />
+    </label>
+  )
+}
+
 // ─── Shared style tokens ──────────────────────────────────────────────────────
 
 const labelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '6px' }
@@ -725,3 +1119,25 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
 }
 const selectStyle: React.CSSProperties = { ...inputStyle, cursor: 'pointer' }
+
+const thumbStyle: React.CSSProperties = {
+  width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px',
+  border: '1px solid var(--border-subtle)', display: 'block',
+}
+const thumbRemoveStyle: React.CSSProperties = {
+  position: 'absolute', top: '-6px', right: '-6px',
+  width: '18px', height: '18px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+  background: 'var(--accent-coral)', color: '#fff',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+}
+const mediaRowStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '10px',
+}
+const mediaLinkStyle: React.CSSProperties = {
+  fontSize: '12px', color: 'var(--accent-blue)', textDecoration: 'none',
+}
+const mediaRemoveStyle: React.CSSProperties = {
+  padding: '4px', borderRadius: '6px', border: 'none', cursor: 'pointer',
+  background: 'var(--bg-elevated)', color: 'var(--accent-coral)',
+  display: 'flex', alignItems: 'center',
+}
