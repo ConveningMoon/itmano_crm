@@ -234,7 +234,7 @@ export async function deleteProperty(
 
   const { data: existing } = await db
     .from('properties')
-    .select('tenant_id, created_by_user_id')
+    .select('tenant_id, created_by_user_id, slug, image_url, gallery, floor_plans, detail_pdf_url')
     .eq('id', id)
     .maybeSingle()
 
@@ -251,6 +251,19 @@ export async function deleteProperty(
   const { error } = await db.from('properties').delete().eq('id', id)
 
   if (error) return { ok: false, error: error.message }
+
+  // Best-effort: remove the property's images/PDF and its slug folder from Storage.
+  await removePropertyMedia(
+    db,
+    existingRow.tenant_id as string,
+    existingRow.slug as string | null,
+    [
+      existingRow.image_url,
+      ...((existingRow.gallery ?? []) as unknown[]),
+      ...((existingRow.floor_plans ?? []) as unknown[]),
+      existingRow.detail_pdf_url,
+    ],
+  )
 
   revalidatePath('/properties')
   return { ok: true }
@@ -283,6 +296,60 @@ const EXT_BY_TYPE: Record<string, string> = {
   'application/pdf': 'pdf',
 }
 
+const MEDIA_BUCKET = 'property-media'
+
+// kebab-case folder name from a property slug (each property gets its own folder).
+function sanitizeSlugFolder(raw: string | null | undefined): string | null {
+  const s = (raw ?? '')
+    .trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120)
+  return s || null
+}
+
+// Extracts the storage object path from a public property-media URL.
+function objectPathFromPublicUrl(url: unknown): string | null {
+  if (typeof url !== 'string') return null
+  const marker = `/${MEDIA_BUCKET}/`
+  const i = url.indexOf(marker)
+  if (i === -1) return null
+  const raw = url.slice(i + marker.length)
+  try { return decodeURIComponent(raw) } catch { return raw }
+}
+
+// Removes every stored file a property references, plus anything left in its
+// slug folder. Best-effort — failures are logged, never thrown.
+async function removePropertyMedia(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  slug: string | null | undefined,
+  urls: unknown[],
+): Promise<void> {
+  const bucket = db.storage.from(MEDIA_BUCKET)
+  const paths = new Set<string>()
+
+  // Referenced files (robust to slug renames / legacy paths).
+  for (const url of urls) {
+    const p = objectPathFromPublicUrl(url)
+    if (p) paths.add(p)
+  }
+
+  // Everything still sitting in the property's slug folder.
+  const folder = sanitizeSlugFolder(slug)
+  if (folder) {
+    const prefix = `${tenantId}/${folder}`
+    const { data: list } = await bucket.list(prefix, { limit: 1000 })
+    for (const obj of list ?? []) paths.add(`${prefix}/${obj.name}`)
+  }
+
+  if (paths.size === 0) return
+  const { error } = await bucket.remove([...paths])
+  if (error) {
+    console.error(JSON.stringify({ service: 'delete-property-media', tenant_id: tenantId, error: error.message }))
+  }
+}
+
 export async function uploadPropertyMedia(
   formData: FormData,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
@@ -307,9 +374,15 @@ export async function uploadPropertyMedia(
   const resolved = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
   const tenantFolder = typeof resolved === 'string' ? resolved : 'shared'
 
+  // Each property's media lives in its own folder named by its slug, so deleting
+  // the property can remove the whole folder. The slug is required to upload.
+  const slugFolder = sanitizeSlugFolder(formData.get('slug') as string)
+  if (!slugFolder) {
+    return { ok: false, error: 'Agrega el nombre (slug) de la propiedad antes de subir archivos.' }
+  }
+
   const ext = EXT_BY_TYPE[file.type] ?? 'bin'
-  // Group all property media under a `properties/` subfolder per tenant.
-  const path = `${tenantFolder}/properties/${crypto.randomUUID()}.${ext}`
+  const path = `${tenantFolder}/${slugFolder}/${crypto.randomUUID()}.${ext}`
 
   const db = createAdminClient()
   const bytes = new Uint8Array(await file.arrayBuffer())
