@@ -125,6 +125,10 @@ function formFromProperty(p: Property): PropertyInput {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// "Crear con IA" is built but gated off until the Claude API is provisioned
+// (ANTHROPIC_API_KEY + billing). Flip to true to re-enable. See CLAUDE.md.
+const AI_ENABLED = false
+
 export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId }: Props) {
   const isSuperAdmin = viewerRole === 'super_admin'
 
@@ -332,23 +336,35 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {/* Crear con IA — upload a listing PDF, prefill the form */}
+          {/* Crear con IA — upload a listing PDF, prefill the form.
+              Gated off until the Claude API is provisioned (see AI_ENABLED). */}
           <label
-            title="Sube el PDF del listado y la IA prellena el formulario"
+            title={AI_ENABLED ? 'Sube el PDF del listado y la IA prellena el formulario' : 'Disponible próximamente'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '8px 14px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+              background: 'var(--bg-surface)',
+              color: AI_ENABLED ? 'var(--text-secondary)' : 'var(--text-muted)',
               border: '1px solid var(--border-subtle)', borderRadius: '8px',
-              cursor: aiBusy ? 'default' : 'pointer', opacity: aiBusy ? 0.7 : 1,
+              cursor: (!AI_ENABLED || aiBusy) ? 'default' : 'pointer',
+              opacity: (!AI_ENABLED || aiBusy) ? 0.6 : 1,
             }}
           >
             <Sparkles size={14} color="var(--accent-gold)" />
             {aiBusy ? 'Procesando PDF…' : 'Crear con IA'}
+            {!AI_ENABLED && (
+              <span style={{
+                fontSize: '9px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                padding: '1px 6px', borderRadius: '10px',
+                background: 'rgba(201,169,110,0.15)', color: 'var(--accent-gold)',
+              }}>
+                Próximamente
+              </span>
+            )}
             <input
               type="file"
               accept="application/pdf"
-              disabled={aiBusy}
+              disabled={!AI_ENABLED || aiBusy}
               onChange={e => { triggerAiCreate(e.target.files); e.target.value = '' }}
               style={{ display: 'none' }}
             />

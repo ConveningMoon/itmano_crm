@@ -99,7 +99,8 @@ export async function generatePropertyFromPdf(
   // ── Store the original PDF in property-media and prefill detail_pdf_url ──────
   const resolved = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
   const tenantFolder = typeof resolved === 'string' ? resolved : 'shared'
-  const path = `${tenantFolder}/ai-intake/${crypto.randomUUID()}.pdf`
+  // Keep AI-intake PDFs under the same per-tenant `properties/` subfolder.
+  const path = `${tenantFolder}/properties/ai-intake/${crypto.randomUUID()}.pdf`
 
   const db = createAdminClient()
   let detailPdfUrl: string | null = null

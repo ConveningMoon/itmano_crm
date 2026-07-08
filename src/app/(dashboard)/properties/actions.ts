@@ -308,7 +308,8 @@ export async function uploadPropertyMedia(
   const tenantFolder = typeof resolved === 'string' ? resolved : 'shared'
 
   const ext = EXT_BY_TYPE[file.type] ?? 'bin'
-  const path = `${tenantFolder}/${crypto.randomUUID()}.${ext}`
+  // Group all property media under a `properties/` subfolder per tenant.
+  const path = `${tenantFolder}/properties/${crypto.randomUUID()}.${ext}`
 
   const db = createAdminClient()
   const bytes = new Uint8Array(await file.arrayBuffer())
