@@ -6,32 +6,127 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 
-const PropertySchema = z.object({
-  address:       z.string().trim().min(1, 'La dirección es obligatoria').max(300),
-  city:          z.string().trim().max(100).optional().nullable(),
-  mls_number:    z.string().trim().max(50).optional().nullable(),
-  property_type: z.enum(['residential', 'condo', 'townhouse', 'land', 'commercial', 'multifamily']),
-  list_price:    z.number().nonnegative().optional().nullable(),
-  bedrooms:      z.number().int().nonnegative().max(50).optional().nullable(),
-  bathrooms:     z.number().nonnegative().max(50).optional().nullable(),
-  sqft:          z.number().int().nonnegative().max(100000).optional().nullable(),
-  year_built:    z.number().int().min(1800).max(2100).optional().nullable(),
-  status:        z.enum(['available', 'in_process', 'sold']).default('available'),
-  external_url:  z
-    .string()
-    .trim()
-    .max(500)
-    .refine(
-      (u) => u === '' || /^https?:\/\//i.test(u),
-      'La URL debe comenzar con http:// o https://',
-    )
-    .optional()
-    .nullable(),
-  notes:         z.string().trim().max(2000).optional().nullable(),
-  tenant_id:     z.string().optional(), // super_admin picks tenant
-})
+// http(s)-only URL, empty string tolerated (normalized to null before insert).
+const httpUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine(
+    (u) => u === '' || /^https?:\/\//i.test(u),
+    'La URL debe comenzar con http:// o https://',
+  )
+
+// kebab-case: lowercase alphanumerics separated by single hyphens.
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+const PropertySchema = z
+  .object({
+    // ── Internal / core ────────────────────────────────────────────────────────
+    address:       z.string().trim().min(1, 'La dirección es obligatoria').max(300),
+    city:          z.string().trim().max(100).optional().nullable(),
+    mls_number:    z.string().trim().max(50).optional().nullable(),
+    property_type: z.enum(['residential', 'condo', 'townhouse', 'land', 'commercial', 'multifamily']),
+    list_price:    z.number().nonnegative().optional().nullable(),
+    bedrooms:      z.number().int().nonnegative().max(50).optional().nullable(),
+    sqft:          z.number().int().nonnegative().max(1000000).optional().nullable(),
+    year_built:    z.number().int().min(1800).max(2100).optional().nullable(),
+    status:        z.enum(['available', 'in_process', 'sold']).default('available'),
+    external_url:  httpUrl.optional().nullable(),
+    notes:         z.string().trim().max(2000).optional().nullable(),
+    tenant_id:     z.string().optional(), // super_admin picks tenant
+
+    // ── Web listing (migration 045) ─────────────────────────────────────────────
+    name:           z.string().trim().max(200).optional().nullable(),
+    slug:           z
+      .string()
+      .trim()
+      .max(120)
+      .refine((s) => s === '' || SLUG_RE.test(s), 'Slug inválido: usa minúsculas, números y guiones')
+      .optional()
+      .nullable(),
+    neighborhood:   z.string().trim().max(200).optional().nullable(),
+    state:          z.string().trim().max(100).optional().nullable(),
+    bathrooms_full: z.number().int().nonnegative().max(50).optional().nullable(),
+    bathrooms_half: z.number().int().nonnegative().max(10).optional().nullable(),
+    garage_spaces:  z.number().int().nonnegative().max(50).optional().nullable(),
+    lot_sqft:       z.number().int().nonnegative().max(100000000).optional().nullable(),
+    description_en: z.string().trim().max(5000).optional().nullable(),
+    description_es: z.string().trim().max(5000).optional().nullable(),
+    features_en:    z.array(z.string().trim().min(1).max(300)).max(30).optional().default([]),
+    features_es:    z.array(z.string().trim().min(1).max(300)).max(30).optional().default([]),
+    image_url:      httpUrl.optional().nullable(),
+    gallery:        z.array(httpUrl.min(1)).max(30).optional().default([]),
+    floor_plans:    z.array(httpUrl.min(1)).max(20).optional().default([]),
+    detail_pdf_url: httpUrl.optional().nullable(),
+    published_to_web: z.boolean().optional().default(false),
+  })
+  .superRefine((data, ctx) => {
+    // Web-required fields are only mandatory when the property is published.
+    if (!data.published_to_web) return
+    const requireField = (field: string, value: unknown, message: string) => {
+      if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: [field] })
+      }
+    }
+    requireField('name', data.name, 'El nombre es obligatorio para publicar en la web')
+    requireField('slug', data.slug, 'El slug es obligatorio para publicar en la web')
+    requireField('neighborhood', data.neighborhood, 'El vecindario es obligatorio para publicar en la web')
+    requireField('state', data.state, 'El estado es obligatorio para publicar en la web')
+    requireField('description_en', data.description_en, 'La descripción en inglés es obligatoria para publicar')
+    requireField('description_es', data.description_es, 'La descripción en español es obligatoria para publicar')
+    requireField('image_url', data.image_url, 'La imagen de portada es obligatoria para publicar')
+  })
 
 export type PropertyInput = z.infer<typeof PropertySchema>
+
+// Maps validated input → the shared property column set (everything except
+// tenant_id and authorship, which the create path sets separately). Empty
+// strings collapse to null; bathrooms is derived from the full/half split so the
+// legacy numeric column stays coherent (full + 0.5 × half).
+type ParsedProperty = z.infer<typeof PropertySchema>
+function toColumns(data: ParsedProperty) {
+  const nz = (v: string | null | undefined) => {
+    const t = (v ?? '').trim()
+    return t === '' ? null : t
+  }
+  const full = data.bathrooms_full ?? null
+  const half = data.bathrooms_half ?? null
+  const bathrooms =
+    full === null && half === null ? null : (full ?? 0) + 0.5 * (half ?? 0)
+
+  return {
+    address:          data.address,
+    city:             nz(data.city),
+    mls_number:       nz(data.mls_number),
+    property_type:    data.property_type,
+    list_price:       data.list_price ?? null,
+    bedrooms:         data.bedrooms ?? null,
+    bathrooms,
+    sqft:             data.sqft ?? null,
+    year_built:       data.year_built ?? null,
+    status:           data.status,
+    external_url:     nz(data.external_url),
+    notes:            nz(data.notes),
+    // Web listing
+    name:             nz(data.name),
+    slug:             nz(data.slug),
+    neighborhood:     nz(data.neighborhood),
+    state:            nz(data.state),
+    bathrooms_full:   full,
+    bathrooms_half:   half,
+    garage_spaces:    data.garage_spaces ?? null,
+    lot_sqft:         data.lot_sqft ?? null,
+    description_en:   nz(data.description_en),
+    description_es:   nz(data.description_es),
+    features_en:      data.features_en ?? [],
+    features_es:      data.features_es ?? [],
+    image_url:        nz(data.image_url),
+    gallery:          data.gallery ?? [],
+    floor_plans:      data.floor_plans ?? [],
+    detail_pdf_url:   nz(data.detail_pdf_url),
+    published_to_web: data.published_to_web ?? false,
+  }
+}
 
 export async function createProperty(
   input: PropertyInput,
@@ -76,23 +171,12 @@ export async function createProperty(
       tenant_id:          targetTenant,
       created_by_agent_id,
       created_by_user_id,
-      address:            parsed.data.address,
-      city:               parsed.data.city    ?? null,
-      mls_number:         parsed.data.mls_number ?? null,
-      property_type:      parsed.data.property_type,
-      list_price:         parsed.data.list_price  ?? null,
-      bedrooms:           parsed.data.bedrooms    ?? null,
-      bathrooms:          parsed.data.bathrooms   ?? null,
-      sqft:               parsed.data.sqft        ?? null,
-      year_built:         parsed.data.year_built  ?? null,
-      status:             parsed.data.status,
-      external_url:       parsed.data.external_url ?? null,
-      notes:              parsed.data.notes        ?? null,
+      ...toColumns(parsed.data),
     })
     .select('id')
     .single()
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: slugError(error.message) }
 
   revalidatePath('/properties')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,23 +215,12 @@ export async function updateProperty(
   const { error } = await db
     .from('properties')
     .update({
-      address:       parsed.data.address,
-      city:          parsed.data.city       ?? null,
-      mls_number:    parsed.data.mls_number ?? null,
-      property_type: parsed.data.property_type,
-      list_price:    parsed.data.list_price  ?? null,
-      bedrooms:      parsed.data.bedrooms    ?? null,
-      bathrooms:     parsed.data.bathrooms   ?? null,
-      sqft:          parsed.data.sqft        ?? null,
-      year_built:    parsed.data.year_built  ?? null,
-      status:        parsed.data.status,
-      external_url:  parsed.data.external_url ?? null,
-      notes:         parsed.data.notes        ?? null,
-      updated_at:    new Date().toISOString(),
+      ...toColumns(parsed.data),
+      updated_at: new Date().toISOString(),
     })
     .eq('id', id)
 
-  if (error) return { ok: false, error: error.message }
+  if (error) return { ok: false, error: slugError(error.message) }
 
   revalidatePath('/properties')
   return { ok: true }
@@ -181,4 +254,70 @@ export async function deleteProperty(
 
   revalidatePath('/properties')
   return { ok: true }
+}
+
+// Translates the (tenant_id, slug) unique-index violation into a friendly
+// message; passes any other DB error through unchanged.
+function slugError(message: string): string {
+  if (/properties_tenant_slug_key|duplicate key/i.test(message)) {
+    return 'Ya existe otra propiedad con ese slug. Usa uno distinto.'
+  }
+  return message
+}
+
+// ── Media upload ──────────────────────────────────────────────────────────────
+// Uploads one file to the public `property-media` bucket and returns its public
+// URL. Any authenticated CRM user may upload (the property-level write gate still
+// applies when the URL is saved onto a property). Uploads go through the
+// service-role client — the bucket has no anon write policy.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
+const PDF_TYPES = ['application/pdf']
+
+const EXT_BY_TYPE: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+  'application/pdf': 'pdf',
+}
+
+export async function uploadPropertyMedia(
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+
+  const file = formData.get('file')
+  const kind = (formData.get('kind') as string) === 'pdf' ? 'pdf' : 'image'
+  if (!(file instanceof File)) return { ok: false, error: 'Archivo no válido' }
+
+  const allowed = kind === 'pdf' ? PDF_TYPES : IMAGE_TYPES
+  if (!allowed.includes(file.type)) {
+    return {
+      ok: false,
+      error: kind === 'pdf' ? 'El archivo debe ser un PDF' : 'Formato no soportado (usa JPG, PNG, WebP, GIF o AVIF)',
+    }
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { ok: false, error: 'El archivo supera el límite de 10 MB' }
+  }
+
+  // Tenant folder — resolved for hygiene; the bucket is public either way.
+  const resolved = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
+  const tenantFolder = typeof resolved === 'string' ? resolved : 'shared'
+
+  const ext = EXT_BY_TYPE[file.type] ?? 'bin'
+  const path = `${tenantFolder}/${crypto.randomUUID()}.${ext}`
+
+  const db = createAdminClient()
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const { error } = await db.storage
+    .from('property-media')
+    .upload(path, bytes, { contentType: file.type, upsert: false })
+
+  if (error) return { ok: false, error: error.message }
+
+  const { data: pub } = db.storage.from('property-media').getPublicUrl(path)
+  return { ok: true, url: pub.publicUrl }
 }

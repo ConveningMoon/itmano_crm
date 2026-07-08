@@ -30,6 +30,24 @@ export interface Property {
   status:              PropertyStatus
   externalUrl:         string | null
   notes:               string | null
+  // ── Web listing fields (migration 045) ──────────────────────────────────────
+  name:                string | null
+  slug:                string | null
+  neighborhood:        string | null
+  state:               string | null
+  bathroomsFull:       number | null
+  bathroomsHalf:       number | null
+  garageSpaces:        number | null
+  lotSqft:             number | null
+  descriptionEn:       string | null
+  descriptionEs:       string | null
+  featuresEn:          string[]
+  featuresEs:          string[]
+  imageUrl:            string | null
+  gallery:             string[]
+  floorPlans:          string[]
+  detailPdfUrl:        string | null
+  publishedToWeb:      boolean
   createdAt:           string
   updatedAt:           string
 }
@@ -96,6 +114,23 @@ export async function getProperties(
     status:             r.status as PropertyStatus,
     externalUrl:        r.external_url ?? null,
     notes:              r.notes ?? null,
+    name:               r.name ?? null,
+    slug:               r.slug ?? null,
+    neighborhood:       r.neighborhood ?? null,
+    state:              r.state ?? null,
+    bathroomsFull:      r.bathrooms_full !== null && r.bathrooms_full !== undefined ? Number(r.bathrooms_full) : null,
+    bathroomsHalf:      r.bathrooms_half !== null && r.bathrooms_half !== undefined ? Number(r.bathrooms_half) : null,
+    garageSpaces:       r.garage_spaces !== null && r.garage_spaces !== undefined ? Number(r.garage_spaces) : null,
+    lotSqft:            r.lot_sqft !== null && r.lot_sqft !== undefined ? Number(r.lot_sqft) : null,
+    descriptionEn:      r.description_en ?? null,
+    descriptionEs:      r.description_es ?? null,
+    featuresEn:         Array.isArray(r.features_en) ? (r.features_en as string[]) : [],
+    featuresEs:         Array.isArray(r.features_es) ? (r.features_es as string[]) : [],
+    imageUrl:           r.image_url ?? null,
+    gallery:            Array.isArray(r.gallery) ? (r.gallery as string[]) : [],
+    floorPlans:         Array.isArray(r.floor_plans) ? (r.floor_plans as string[]) : [],
+    detailPdfUrl:       r.detail_pdf_url ?? null,
+    publishedToWeb:     r.published_to_web === true,
     createdAt:          r.created_at as string,
     updatedAt:          r.updated_at as string,
   }))
