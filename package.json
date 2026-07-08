@@ -16,6 +16,7 @@
     "test:visibility": "vitest run tests/visibility"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@base-ui/react": "^1.4.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",

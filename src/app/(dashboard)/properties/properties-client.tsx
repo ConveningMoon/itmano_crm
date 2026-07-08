@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe } from 'lucide-react'
+import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { createProperty, updateProperty, deleteProperty, uploadPropertyMedia } from './actions'
 import type { PropertyInput } from './actions'
+import { generatePropertyFromPdf } from './ai-actions'
+import type { AiPropertyDraft } from './ai-actions'
 import { FormSection } from '@/components/ui/form-section'
 
 // Kebab-case slug from a free-text name (matches the server-side SLUG_RE).
@@ -139,6 +141,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   const [uploadingField, setUploadingField] = useState<string | null>(null)
   // Slug is auto-derived from name until the user edits it by hand.
   const [slugTouched, setSlugTouched] = useState(false)
+  // Fields prefilled by "Crear con IA" — flagged for review until the user edits them.
+  const [aiFields, setAiFields] = useState<Set<string>>(new Set())
+  const [aiBusy, setAiBusy] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const filtered = tab === 'all' ? properties : properties.filter(p => p.status === tab)
@@ -148,6 +153,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEnText('')
     setFeaturesEsText('')
     setSlugTouched(false)
+    setAiFields(new Set())
     setEditingId(null)
     setFormError(null)
     setShowForm(true)
@@ -158,6 +164,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEnText(prop.featuresEn.join('\n'))
     setFeaturesEsText(prop.featuresEs.join('\n'))
     setSlugTouched(true) // an existing property keeps its slug
+    setAiFields(new Set())
     setEditingId(prop.id)
     setFormError(null)
     setShowForm(true)
@@ -168,10 +175,70 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setEditingId(null)
     setFormError(null)
     setUploadingField(null)
+    setAiFields(new Set())
+  }
+
+  // Clear a field's AI-review flag once the user edits it by hand.
+  function clearAiFlag(key: string) {
+    setAiFields(prev => {
+      if (!prev.has(key)) return prev
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
   }
 
   function setField<K extends keyof PropertyInput>(key: K, value: PropertyInput[K]) {
     setForm(prev => ({ ...prev, [key]: value }))
+    clearAiFlag(key as string)
+  }
+
+  // Amber-highlight fields the AI prefilled (until edited); plain otherwise.
+  function fieldStyle(key: string, select = false): React.CSSProperties {
+    const base = select ? selectStyle : inputStyle
+    return aiFields.has(key)
+      ? { ...base, borderColor: 'var(--accent-gold)', boxShadow: '0 0 0 1px var(--accent-gold-dim)' }
+      : base
+  }
+
+  // ── "Crear con IA": upload a listing PDF and open the form prefilled ─────────
+  function triggerAiCreate(files: FileList | null) {
+    const file = files?.[0]
+    if (!file) return
+    setAiBusy(true)
+    startTransition(async () => {
+      const fd = new FormData()
+      fd.set('file', file)
+      if (isSuperAdmin && tenants[0]?.id) fd.set('tenant_id', tenants[0].id)
+      const res = await generatePropertyFromPdf(fd)
+      setAiBusy(false)
+      if (!res.ok) {
+        // Surface the failure in the modal so the user can retry or fill manually.
+        openCreate()
+        setFormError(res.error)
+        return
+      }
+      applyAiDraft(res.draft, res.fields)
+    })
+  }
+
+  function applyAiDraft(draft: AiPropertyDraft, fields: Array<keyof AiPropertyDraft>) {
+    const { features_en, features_es, ...scalar } = draft
+    setForm({
+      ...EMPTY_FORM,
+      ...scalar,
+      features_en,
+      features_es,
+      tenant_id: isSuperAdmin ? (tenants[0]?.id ?? undefined) : undefined,
+      published_to_web: false, // never auto-publish AI drafts
+    })
+    setFeaturesEnText(features_en.join('\n'))
+    setFeaturesEsText(features_es.join('\n'))
+    setSlugTouched(true) // AI filled the slug; don't clobber it from the name
+    setAiFields(new Set(fields as string[]))
+    setEditingId(null)
+    setFormError(null)
+    setShowForm(true)
   }
 
   // Name → slug auto-fill (only while the slug hasn't been hand-edited).
@@ -181,6 +248,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       name: value || null,
       slug: slugTouched ? prev.slug : (slugify(value) || null),
     }))
+    clearAiFlag('name')
   }
 
   async function uploadFiles(
@@ -263,18 +331,41 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
             {properties.length} {properties.length === 1 ? 'propiedad' : 'propiedades'} en el inventario
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-            background: 'var(--accent-gold)', color: 'var(--bg-base)',
-            borderRadius: '8px', border: 'none', cursor: 'pointer',
-          }}
-        >
-          <Plus size={14} />
-          Nueva propiedad
-        </button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* Crear con IA — upload a listing PDF, prefill the form */}
+          <label
+            title="Sube el PDF del listado y la IA prellena el formulario"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)', borderRadius: '8px',
+              cursor: aiBusy ? 'default' : 'pointer', opacity: aiBusy ? 0.7 : 1,
+            }}
+          >
+            <Sparkles size={14} color="var(--accent-gold)" />
+            {aiBusy ? 'Procesando PDF…' : 'Crear con IA'}
+            <input
+              type="file"
+              accept="application/pdf"
+              disabled={aiBusy}
+              onChange={e => { triggerAiCreate(e.target.files); e.target.value = '' }}
+              style={{ display: 'none' }}
+            />
+          </label>
+          <button
+            onClick={openCreate}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--accent-gold)', color: 'var(--bg-base)',
+              borderRadius: '8px', border: 'none', cursor: 'pointer',
+            }}
+          >
+            <Plus size={14} />
+            Nueva propiedad
+          </button>
+        </div>
       </div>
 
       {/* Filter tabs */}
@@ -536,6 +627,20 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
             </div>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {aiFields.size > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '8px',
+                  fontSize: '12px', color: 'var(--text-secondary)',
+                  background: 'rgba(201,169,110,0.1)', border: '1px solid var(--accent-gold-dim)',
+                  borderRadius: '8px', padding: '10px 12px',
+                }}>
+                  <Sparkles size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <span>
+                    Prellenado con IA desde el PDF. Los campos resaltados en dorado son sugerencias —
+                    revísalos y corrige antes de guardar. La publicación en web queda desactivada hasta que confirmes.
+                  </span>
+                </div>
+              )}
               <FormSection title="Básico" first>
               {/* Tenant selector — super_admin only */}
               {isSuperAdmin && !editingId && tenants.length > 0 && (
@@ -566,7 +671,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   onChange={e => setField('address', e.target.value)}
                   placeholder="123 Main St"
                   required
-                  style={inputStyle}
+                  style={fieldStyle('address')}
                 />
               </label>
 
@@ -579,7 +684,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.city ?? ''}
                     onChange={e => setField('city', e.target.value || null)}
                     placeholder="Virginia Beach"
-                    style={inputStyle}
+                    style={fieldStyle('city')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -589,7 +694,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.mls_number ?? ''}
                     onChange={e => setField('mls_number', e.target.value || null)}
                     placeholder="10234567"
-                    style={inputStyle}
+                    style={fieldStyle('mls_number')}
                   />
                 </label>
               </div>
@@ -602,7 +707,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.property_type}
                     onChange={e => setField('property_type', e.target.value as PropertyType)}
                     required
-                    style={selectStyle}
+                    style={fieldStyle('property_type', true)}
                   >
                     {Object.entries(TYPE_LABELS).map(([v, l]) => (
                       <option key={v} value={v}>{l}</option>
@@ -636,7 +741,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.list_price ?? ''}
                     onChange={e => setField('list_price', e.target.value ? Number(e.target.value) : null)}
                     placeholder="350000"
-                    style={inputStyle}
+                    style={fieldStyle('list_price')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -648,7 +753,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.year_built ?? ''}
                     onChange={e => setField('year_built', e.target.value ? Number(e.target.value) : null)}
                     placeholder="2005"
-                    style={inputStyle}
+                    style={fieldStyle('year_built')}
                   />
                 </label>
               </div>
@@ -665,7 +770,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.bedrooms ?? ''}
                     onChange={e => setField('bedrooms', e.target.value ? Number(e.target.value) : null)}
                     placeholder="3"
-                    style={inputStyle}
+                    style={fieldStyle('bedrooms')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -678,7 +783,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.bathrooms_full ?? ''}
                     onChange={e => setField('bathrooms_full', e.target.value ? Number(e.target.value) : null)}
                     placeholder="2"
-                    style={inputStyle}
+                    style={fieldStyle('bathrooms_full')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -691,7 +796,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.bathrooms_half ?? ''}
                     onChange={e => setField('bathrooms_half', e.target.value ? Number(e.target.value) : null)}
                     placeholder="1"
-                    style={inputStyle}
+                    style={fieldStyle('bathrooms_half')}
                   />
                 </label>
               </div>
@@ -708,7 +813,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.sqft ?? ''}
                     onChange={e => setField('sqft', e.target.value ? Number(e.target.value) : null)}
                     placeholder="1800"
-                    style={inputStyle}
+                    style={fieldStyle('sqft')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -720,7 +825,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.lot_sqft ?? ''}
                     onChange={e => setField('lot_sqft', e.target.value ? Number(e.target.value) : null)}
                     placeholder="6000"
-                    style={inputStyle}
+                    style={fieldStyle('lot_sqft')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -733,7 +838,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.garage_spaces ?? ''}
                     onChange={e => setField('garage_spaces', e.target.value ? Number(e.target.value) : null)}
                     placeholder="2"
-                    style={inputStyle}
+                    style={fieldStyle('garage_spaces')}
                   />
                 </label>
               </div>
@@ -748,7 +853,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   value={form.name ?? ''}
                   onChange={e => onNameChange(e.target.value)}
                   placeholder="Oakmont Manor"
-                  style={inputStyle}
+                  style={fieldStyle('name')}
                 />
               </label>
               <label style={labelStyle}>
@@ -758,7 +863,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   value={form.slug ?? ''}
                   onChange={e => { setSlugTouched(true); setField('slug', e.target.value || null) }}
                   placeholder="oakmont-manor"
-                  style={inputStyle}
+                  style={fieldStyle('slug')}
                 />
               </label>
 
@@ -771,7 +876,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.neighborhood ?? ''}
                     onChange={e => setField('neighborhood', e.target.value || null)}
                     placeholder="Norfolk, Ghent"
-                    style={inputStyle}
+                    style={fieldStyle('neighborhood')}
                   />
                 </label>
                 <label style={labelStyle}>
@@ -781,7 +886,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     value={form.state ?? ''}
                     onChange={e => setField('state', e.target.value || null)}
                     placeholder="VA"
-                    style={inputStyle}
+                    style={fieldStyle('state')}
                   />
                 </label>
               </div>
@@ -794,7 +899,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   onChange={e => setField('description_en', e.target.value || null)}
                   rows={4}
                   placeholder="Welcome to…"
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                  style={{ ...fieldStyle('description_en'), resize: 'vertical', minHeight: '88px' }}
                 />
               </label>
               <label style={labelStyle}>
@@ -804,7 +909,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   onChange={e => setField('description_es', e.target.value || null)}
                   rows={4}
                   placeholder="Bienvenido a…"
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                  style={{ ...fieldStyle('description_es'), resize: 'vertical', minHeight: '88px' }}
                 />
               </label>
 
@@ -813,20 +918,20 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 <span style={labelTextStyle}>Características (inglés) — una por línea</span>
                 <textarea
                   value={featuresEnText}
-                  onChange={e => setFeaturesEnText(e.target.value)}
+                  onChange={e => { setFeaturesEnText(e.target.value); clearAiFlag('features_en') }}
                   rows={4}
                   placeholder={'Updated kitchen\nTwo-car garage\nHardwood floors'}
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                  style={{ ...fieldStyle('features_en'), resize: 'vertical', minHeight: '88px' }}
                 />
               </label>
               <label style={labelStyle}>
                 <span style={labelTextStyle}>Características (español) — una por línea</span>
                 <textarea
                   value={featuresEsText}
-                  onChange={e => setFeaturesEsText(e.target.value)}
+                  onChange={e => { setFeaturesEsText(e.target.value); clearAiFlag('features_es') }}
                   rows={4}
                   placeholder={'Cocina renovada\nGaraje para dos autos\nPisos de madera'}
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: '88px' }}
+                  style={{ ...fieldStyle('features_es'), resize: 'vertical', minHeight: '88px' }}
                 />
               </label>
               </FormSection>
