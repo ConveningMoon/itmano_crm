@@ -148,6 +148,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   // Fields prefilled by "Crear con IA" — flagged for review until the user edits them.
   const [aiFields, setAiFields] = useState<Set<string>>(new Set())
   const [aiBusy, setAiBusy] = useState(false)
+  // Unsaved-changes tracking → confirm before an accidental outside-click close.
+  const [dirty, setDirty] = useState(false)
+  const [confirmingClose, setConfirmingClose] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const filtered = tab === 'all' ? properties : properties.filter(p => p.status === tab)
@@ -158,6 +161,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEsText('')
     setSlugTouched(false)
     setAiFields(new Set())
+    setDirty(false)
+    setConfirmingClose(false)
     setEditingId(null)
     setFormError(null)
     setShowForm(true)
@@ -169,6 +174,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEsText(prop.featuresEs.join('\n'))
     setSlugTouched(true) // an existing property keeps its slug
     setAiFields(new Set())
+    setDirty(false)
+    setConfirmingClose(false)
     setEditingId(prop.id)
     setFormError(null)
     setShowForm(true)
@@ -180,6 +187,14 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFormError(null)
     setUploadingField(null)
     setAiFields(new Set())
+    setDirty(false)
+    setConfirmingClose(false)
+  }
+
+  // Outside-click on the modal: confirm if there are unsaved changes, else close.
+  function requestClose() {
+    if (dirty) setConfirmingClose(true)
+    else closeForm()
   }
 
   // Clear a field's AI-review flag once the user edits it by hand.
@@ -195,6 +210,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   function setField<K extends keyof PropertyInput>(key: K, value: PropertyInput[K]) {
     setForm(prev => ({ ...prev, [key]: value }))
     clearAiFlag(key as string)
+    setDirty(true)
   }
 
   // Amber-highlight fields the AI prefilled (until edited); plain otherwise.
@@ -240,6 +256,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEsText(features_es.join('\n'))
     setSlugTouched(true) // AI filled the slug; don't clobber it from the name
     setAiFields(new Set(fields as string[]))
+    setDirty(true) // an unsaved AI draft counts as unsaved changes
+    setConfirmingClose(false)
     setEditingId(null)
     setFormError(null)
     setShowForm(true)
@@ -253,6 +271,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       slug: slugTouched ? prev.slug : (slugify(value) || null),
     }))
     clearAiFlag('name')
+    setDirty(true)
   }
 
   async function uploadFiles(
@@ -270,11 +289,14 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
         fd.set('file', file)
         fd.set('kind', kind)
         if (form.tenant_id) fd.set('tenant_id', form.tenant_id)
+        // Media is stored per-property under a folder named by the slug.
+        fd.set('slug', form.slug ?? '')
         const res = await uploadPropertyMedia(fd)
         if (!res.ok) { setFormError(res.error); break }
         urls.push(res.url)
       }
       if (urls.length === 0) return
+      setDirty(true)
       if (target === 'image_url')          setField('image_url', urls[0])
       else if (target === 'detail_pdf_url') setField('detail_pdf_url', urls[0])
       else if (target === 'gallery')        setForm(prev => ({ ...prev, gallery: [...(prev.gallery ?? []), ...urls] }))
@@ -286,10 +308,10 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
 
   function removeFromArray(target: 'gallery' | 'floor_plans', url: string) {
     setForm(prev => ({ ...prev, [target]: (prev[target] ?? []).filter(u => u !== url) }))
+    setDirty(true)
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  function submitForm() {
     setFormError(null)
     const payload: PropertyInput = {
       ...form,
@@ -302,10 +324,16 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
         : await createProperty(payload)
       if (!result.ok) {
         setFormError(result.error)
+        setConfirmingClose(false) // return to the form so the error is visible
         return
       }
       closeForm()
     })
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    submitForm()
   }
 
   function handleDelete(id: string) {
@@ -613,7 +641,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '16px',
           }}
-          onClick={e => { if (e.target === e.currentTarget) closeForm() }}
+          onClick={e => { if (e.target === e.currentTarget) requestClose() }}
         >
           <div style={{
             background: 'var(--bg-surface)',
@@ -1129,6 +1157,69 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unsaved-changes confirmation (accidental outside-click) ───────────── */}
+      {showForm && confirmingClose && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 60,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setConfirmingClose(false) }}
+        >
+          <div style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '12px',
+            padding: '28px',
+            width: '100%',
+            maxWidth: '420px',
+          }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Tienes cambios sin guardar
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              ¿Quieres guardar los cambios de esta propiedad antes de cerrar?
+            </p>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setConfirmingClose(false)}
+                style={{
+                  padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+                  background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                  borderRadius: '8px', border: '1px solid var(--border-subtle)', cursor: 'pointer',
+                }}
+              >
+                Seguir editando
+              </button>
+              <button
+                onClick={closeForm}
+                style={{
+                  padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+                  background: 'var(--bg-elevated)', color: 'var(--accent-coral)',
+                  borderRadius: '8px', border: '1px solid var(--border-subtle)', cursor: 'pointer',
+                }}
+              >
+                Descartar
+              </button>
+              <button
+                onClick={submitForm}
+                disabled={isPending}
+                style={{
+                  padding: '8px 20px', fontSize: '13px', fontWeight: 500,
+                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                  borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
+                  opacity: isPending ? 0.7 : 1,
+                }}
+              >
+                {isPending ? 'Guardando…' : 'Guardar cambios'}
+              </button>
+            </div>
           </div>
         </div>
       )}
