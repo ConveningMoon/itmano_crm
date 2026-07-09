@@ -5,7 +5,7 @@ import { unstable_rethrow } from 'next/navigation'
 import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import { createProperty, updateProperty, deleteProperty, uploadPropertyMedia, deletePropertyMediaByUrls } from './actions'
+import { createProperty, updateProperty, deleteProperty, deletePropertyMediaByUrls } from './actions'
 import type { PropertyInput } from './actions'
 import { generatePropertyFromPdf } from './ai-actions'
 import type { AiPropertyDraft } from './ai-actions'
@@ -326,15 +326,28 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setDirty(true)
   }
 
-  // Uploads one file to Storage immediately and returns its result.
-  async function uploadOne(file: File, kind: 'image' | 'pdf') {
+  // Uploads one file to Storage immediately and returns its result. This is a
+  // plain fetch to a Route Handler, not a Server Action call: Server Actions
+  // POST to the page route itself, which src/proxy.ts (the auth middleware)
+  // intercepts — and passing a binary File through that layer corrupted the
+  // upload. /api/* is excluded from the proxy matcher, so the route handler
+  // receives the raw multipart body untouched.
+  async function uploadOne(
+    file: File,
+    kind: 'image' | 'pdf',
+  ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
     const fd = new FormData()
     fd.set('file', file)
     fd.set('kind', kind)
     if (form.tenant_id) fd.set('tenant_id', form.tenant_id)
     // Media is stored per-property under a folder named by the slug.
     fd.set('slug', form.slug ?? '')
-    return uploadPropertyMedia(fd)
+    const res = await fetch('/api/properties/media', { method: 'POST', body: fd })
+    try {
+      return await res.json()
+    } catch {
+      return { ok: false, error: 'No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.' }
+    }
   }
 
   // Uploads the selected files right away and stores their URLs on the form.
