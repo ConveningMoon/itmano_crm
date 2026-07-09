@@ -1,5 +1,6 @@
 'use server'
 
+import sharp from 'sharp'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -284,16 +285,28 @@ function slugError(message: string): string {
 // applies when the URL is saved onto a property). Uploads go through the
 // service-role client — the bucket has no anon write policy.
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
+const IMAGE_MIME_PREFIX = 'image/'
+// Browsers report inconsistent (or blank) MIME types for some of these — e.g.
+// .jfif is often "" or "image/pjpeg" depending on OS/browser — so an image is
+// accepted by either a recognized image/* MIME type OR one of these
+// extensions; sharp does the real validation when it tries to decode it.
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tif', 'tiff', 'jfif', 'ico']
 const PDF_TYPES = ['application/pdf']
 
+// Every accepted image is normalized to WebP (see convertImageToWebp) before
+// upload, so only the PDF extension is looked up here.
 const EXT_BY_TYPE: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'image/avif': 'avif',
   'application/pdf': 'pdf',
+}
+
+// Mirrors the team's batch_to_webp.py defaults: quality 82, method/effort 6,
+// EXIF-based auto-rotation, animated GIFs preserved as animated WebP. No
+// forced resize (same as running that script with no --max-width/--max-height).
+async function convertImageToWebp(bytes: Buffer): Promise<Buffer> {
+  return sharp(bytes, { animated: true })
+    .rotate() // auto-orients from EXIF, then strips the orientation tag
+    .webp({ quality: 82, effort: 6 })
+    .toBuffer()
 }
 
 const MEDIA_BUCKET = 'property-media'
@@ -359,11 +372,15 @@ export async function uploadPropertyMedia(
   const kind = (formData.get('kind') as string) === 'pdf' ? 'pdf' : 'image'
   if (!(file instanceof File)) return { ok: false, error: 'Archivo no válido' }
 
-  const allowed = kind === 'pdf' ? PDF_TYPES : IMAGE_TYPES
-  if (!allowed.includes(file.type)) {
-    return {
-      ok: false,
-      error: kind === 'pdf' ? 'El archivo debe ser un PDF' : 'Formato no soportado (usa JPG, PNG, WebP, GIF o AVIF)',
+  if (kind === 'pdf') {
+    if (!PDF_TYPES.includes(file.type)) {
+      return { ok: false, error: 'El archivo debe ser un PDF' }
+    }
+  } else {
+    const fileExt = (file.name.split('.').pop() ?? '').toLowerCase()
+    const looksLikeImage = file.type.startsWith(IMAGE_MIME_PREFIX) || IMAGE_EXTENSIONS.includes(fileExt)
+    if (!looksLikeImage) {
+      return { ok: false, error: 'Formato no soportado (usa JPG, PNG, WebP, GIF, AVIF, BMP o TIFF)' }
     }
   }
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -381,14 +398,29 @@ export async function uploadPropertyMedia(
     return { ok: false, error: 'Agrega el nombre (slug) de la propiedad antes de subir archivos.' }
   }
 
-  const ext = EXT_BY_TYPE[file.type] ?? 'bin'
+  let bytes: Buffer = Buffer.from(await file.arrayBuffer())
+  let contentType = file.type
+  let ext = EXT_BY_TYPE[file.type] ?? 'bin'
+
+  // Every image is normalized to optimized WebP before it ever reaches
+  // Storage — smaller files, one consistent format, EXIF rotation baked in.
+  if (kind === 'image') {
+    try {
+      bytes = await convertImageToWebp(bytes)
+    } catch (err) {
+      console.error(JSON.stringify({ service: 'property-media-webp-convert', error: err instanceof Error ? err.message : 'unknown' }))
+      return { ok: false, error: 'No se pudo procesar la imagen. Verifica que el archivo no esté dañado.' }
+    }
+    contentType = 'image/webp'
+    ext = 'webp'
+  }
+
   const path = `${tenantFolder}/${slugFolder}/${crypto.randomUUID()}.${ext}`
 
   const db = createAdminClient()
-  const bytes = new Uint8Array(await file.arrayBuffer())
   const { error } = await db.storage
     .from('property-media')
-    .upload(path, bytes, { contentType: file.type, upsert: false })
+    .upload(path, bytes, { contentType, upsert: false })
 
   if (error) return { ok: false, error: error.message }
 

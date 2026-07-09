@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // sharp ships a native binary; keep it as a real require() at runtime instead
+  // of letting the bundler trace/link it (Turbopack's Windows junction-point
+  // creation for it fails outright on some filesystems).
+  serverExternalPackages: ["sharp"],
   experimental: {
     serverActions: {
       // Default is 1 MB, which silently rejects any Server Action request body

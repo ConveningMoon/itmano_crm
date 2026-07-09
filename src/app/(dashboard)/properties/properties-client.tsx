@@ -1122,7 +1122,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
               </label>
               </FormSection>
 
-              <FormSection title="Multimedia" description="Cada archivo se sube al seleccionarlo. Formatos: JPG, PNG, WebP, GIF, AVIF (máx 10 MB) y PDF.">
+              <FormSection title="Multimedia" description="Cada archivo se sube al seleccionarlo. Acepta JPG, PNG, WebP, GIF, AVIF, BMP, TIFF (máx 10 MB) y PDF — las imágenes se optimizan y convierten a WebP automáticamente.">
               {/* Cover image */}
               <div style={labelStyle}>
                 <span style={labelTextStyle}>Imagen de portada</span>
