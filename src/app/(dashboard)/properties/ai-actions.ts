@@ -104,9 +104,11 @@ export async function generatePropertyFromPdf(
 
   const db = createAdminClient()
   let detailPdfUrl: string | null = null
+  // Blob, not Buffer: raw Buffer fetch bodies get UTF-8-mangled on Vercel's
+  // runtime (see the note in api/properties/media/route.ts).
   const { error: uploadErr } = await db.storage
     .from('property-media')
-    .upload(path, bytes, { contentType: 'application/pdf', upsert: false })
+    .upload(path, new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), { contentType: 'application/pdf', upsert: false })
   if (!uploadErr) {
     detailPdfUrl = db.storage.from('property-media').getPublicUrl(path).data.publicUrl
   } else {

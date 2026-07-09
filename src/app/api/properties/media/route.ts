@@ -90,10 +90,18 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const path = `${tenantFolder}/${slugFolder}/${crypto.randomUUID()}.${ext}`
 
+  // CRITICAL: wrap the bytes in a Blob. On Vercel's runtime, passing a raw Node
+  // Buffer as a fetch body corrupts the binary (it gets round-tripped through
+  // lossy UTF-8 — high bytes become U+FFFD). Verified empirically on the
+  // deployed runtime: Buffer body → corrupt, Blob body → byte-perfect. This was
+  // the root cause of every broken image since the WebP-conversion commit
+  // switched the upload body from Uint8Array to Buffer.
+  const blob = new Blob([new Uint8Array(bytes)], { type: contentType })
+
   const db = createAdminClient()
   const { error } = await db.storage
     .from(MEDIA_BUCKET)
-    .upload(path, bytes, { contentType, upsert: false })
+    .upload(path, blob, { contentType, upsert: false })
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
