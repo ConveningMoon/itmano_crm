@@ -33,6 +33,15 @@ function revokePreview(p: PendingFile | null | undefined) {
   if (p?.preview) URL.revokeObjectURL(p.preview)
 }
 
+// TEMP DEBUG (remove once upload/save failures are confirmed fixed): renders
+// whatever the thrown value actually is, so a failure shows its real cause
+// instead of only a generic message.
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name
+  if (typeof err === 'string') return err
+  try { return JSON.stringify(err) } catch { return String(err) }
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<PropertyType, string> = {
@@ -411,7 +420,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       // reported as an upload failure.
       unstable_rethrow(err)
       console.error('[properties] media upload threw', err)
-      return { ok: false, error: 'No se pudieron subir los archivos. Intenta de nuevo.' }
+      // TEMP DEBUG: appends the real error so we can see the underlying cause.
+      return { ok: false, error: `No se pudieron subir los archivos. [DEBUG: ${describeError(err)}]` }
     }
   }
 
@@ -456,10 +466,11 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       } catch (err) {
         unstable_rethrow(err)
         console.error('[properties] save threw', err)
+        // TEMP DEBUG: appends the real error so we can see the underlying cause.
         setFormError(
-          hasPending
-            ? 'Los archivos se subieron, pero no se pudo guardar la propiedad. Intenta de nuevo.'
-            : 'No se pudo guardar la propiedad. Intenta de nuevo.',
+          `${hasPending
+            ? 'Los archivos se subieron, pero no se pudo guardar la propiedad.'
+            : 'No se pudo guardar la propiedad.'} [DEBUG: ${describeError(err)}]`,
         )
         setConfirmingClose(false)
       }
