@@ -1,11 +1,11 @@
 'use server'
 
-import sharp from 'sharp'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
+import { MEDIA_BUCKET, sanitizeSlugFolder, objectPathFromPublicUrl } from '@/lib/services/property-media'
 
 // http(s)-only URL, empty string tolerated (normalized to null before insert).
 const httpUrl = z
@@ -279,57 +279,10 @@ function slugError(message: string): string {
   return message
 }
 
-// ── Media upload ──────────────────────────────────────────────────────────────
-// Uploads one file to the public `property-media` bucket and returns its public
-// URL. Any authenticated CRM user may upload (the property-level write gate still
-// applies when the URL is saved onto a property). Uploads go through the
-// service-role client — the bucket has no anon write policy.
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
-const IMAGE_MIME_PREFIX = 'image/'
-// Browsers report inconsistent (or blank) MIME types for some of these — e.g.
-// .jfif is often "" or "image/pjpeg" depending on OS/browser — so an image is
-// accepted by either a recognized image/* MIME type OR one of these
-// extensions; sharp does the real validation when it tries to decode it.
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'tif', 'tiff', 'jfif', 'ico']
-const PDF_TYPES = ['application/pdf']
-
-// Every accepted image is normalized to WebP (see convertImageToWebp) before
-// upload, so only the PDF extension is looked up here.
-const EXT_BY_TYPE: Record<string, string> = {
-  'application/pdf': 'pdf',
-}
-
-// Mirrors the team's batch_to_webp.py defaults: quality 82, method/effort 6,
-// EXIF-based auto-rotation, animated GIFs preserved as animated WebP. No
-// forced resize (same as running that script with no --max-width/--max-height).
-async function convertImageToWebp(bytes: Buffer): Promise<Buffer> {
-  return sharp(bytes, { animated: true })
-    .rotate() // auto-orients from EXIF, then strips the orientation tag
-    .webp({ quality: 82, effort: 6 })
-    .toBuffer()
-}
-
-const MEDIA_BUCKET = 'property-media'
-
-// kebab-case folder name from a property slug (each property gets its own folder).
-function sanitizeSlugFolder(raw: string | null | undefined): string | null {
-  const s = (raw ?? '')
-    .trim().toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120)
-  return s || null
-}
-
-// Extracts the storage object path from a public property-media URL.
-function objectPathFromPublicUrl(url: unknown): string | null {
-  if (typeof url !== 'string') return null
-  const marker = `/${MEDIA_BUCKET}/`
-  const i = url.indexOf(marker)
-  if (i === -1) return null
-  const raw = url.slice(i + marker.length)
-  try { return decodeURIComponent(raw) } catch { return raw }
-}
+// ── Media ─────────────────────────────────────────────────────────────────────
+// Upload lives in a Route Handler (src/app/api/properties/media/route.ts), not a
+// Server Action — see that file for why. Constants/helpers shared with it live in
+// src/lib/services/property-media.ts.
 
 // Removes every stored file a property references, plus anything left in its
 // slug folder. Best-effort — failures are logged, never thrown.
@@ -361,71 +314,6 @@ async function removePropertyMedia(
   if (error) {
     console.error(JSON.stringify({ service: 'delete-property-media', tenant_id: tenantId, error: error.message }))
   }
-}
-
-export async function uploadPropertyMedia(
-  formData: FormData,
-): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const ctx = await getCurrentTenantContext()
-
-  const file = formData.get('file')
-  const kind = (formData.get('kind') as string) === 'pdf' ? 'pdf' : 'image'
-  if (!(file instanceof File)) return { ok: false, error: 'Archivo no válido' }
-
-  if (kind === 'pdf') {
-    if (!PDF_TYPES.includes(file.type)) {
-      return { ok: false, error: 'El archivo debe ser un PDF' }
-    }
-  } else {
-    const fileExt = (file.name.split('.').pop() ?? '').toLowerCase()
-    const looksLikeImage = file.type.startsWith(IMAGE_MIME_PREFIX) || IMAGE_EXTENSIONS.includes(fileExt)
-    if (!looksLikeImage) {
-      return { ok: false, error: 'Formato no soportado (usa JPG, PNG, WebP, GIF, AVIF, BMP o TIFF)' }
-    }
-  }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return { ok: false, error: 'El archivo supera el límite de 10 MB' }
-  }
-
-  // Tenant folder — resolved for hygiene; the bucket is public either way.
-  const resolved = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
-  const tenantFolder = typeof resolved === 'string' ? resolved : 'shared'
-
-  // Each property's media lives in its own folder named by its slug, so deleting
-  // the property can remove the whole folder. The slug is required to upload.
-  const slugFolder = sanitizeSlugFolder(formData.get('slug') as string)
-  if (!slugFolder) {
-    return { ok: false, error: 'Agrega el nombre (slug) de la propiedad antes de subir archivos.' }
-  }
-
-  let bytes: Buffer = Buffer.from(await file.arrayBuffer())
-  let contentType = file.type
-  let ext = EXT_BY_TYPE[file.type] ?? 'bin'
-
-  // Every image is normalized to optimized WebP before it ever reaches
-  // Storage — smaller files, one consistent format, EXIF rotation baked in.
-  if (kind === 'image') {
-    try {
-      bytes = await convertImageToWebp(bytes)
-    } catch (err) {
-      console.error(JSON.stringify({ service: 'property-media-webp-convert', error: err instanceof Error ? err.message : 'unknown' }))
-      return { ok: false, error: 'No se pudo procesar la imagen. Verifica que el archivo no esté dañado.' }
-    }
-    contentType = 'image/webp'
-    ext = 'webp'
-  }
-
-  const path = `${tenantFolder}/${slugFolder}/${crypto.randomUUID()}.${ext}`
-
-  const db = createAdminClient()
-  const { error } = await db.storage
-    .from('property-media')
-    .upload(path, bytes, { contentType, upsert: false })
-
-  if (error) return { ok: false, error: error.message }
-
-  const { data: pub } = db.storage.from('property-media').getPublicUrl(path)
-  return { ok: true, url: pub.publicUrl }
 }
 
 // Deletes specific media objects by their public URLs. Used to reconcile
