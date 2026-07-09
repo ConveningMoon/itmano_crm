@@ -5,7 +5,7 @@ import { unstable_rethrow } from 'next/navigation'
 import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import { createProperty, updateProperty, deleteProperty, deletePropertyMediaByUrls } from './actions'
+import { createProperty, updateProperty, deleteProperty, deletePropertyMediaByUrls, deletePropertyFolder } from './actions'
 import type { PropertyInput } from './actions'
 import { generatePropertyFromPdf } from './ai-actions'
 import type { AiPropertyDraft } from './ai-actions'
@@ -228,15 +228,32 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   }
 
   // Fire-and-forget Storage cleanup; never blocks the UI.
-  function fireDeleteMedia(urls: string[]) {
+  function fireDeleteMedia(urls: string[], tenantId?: string) {
     if (urls.length === 0) return
-    void deletePropertyMediaByUrls(urls, form.tenant_id)
+    void deletePropertyMediaByUrls(urls, tenantId ?? form.tenant_id)
   }
 
-  // Discard: files uploaded this session were never persisted → remove them.
+  // Discard: nothing was persisted, so this session's uploads must be removed
+  // from Storage. For a brand-new property whose slug isn't already taken by an
+  // existing property, its folder holds ONLY this session's uploads → purge the
+  // whole folder (catches files that weren't tracked, e.g. an in-flight upload).
+  // Otherwise (editing an existing property, or a slug that collides with one)
+  // only this session's tracked uploads are removed, never the saved images.
   function discardAndClose() {
-    fireDeleteMedia([...sessionUrls])
+    // Capture before closeForm() resets the form state.
+    const isNew = editingId === null
+    const slug = (form.slug ?? '').trim()
+    const tenantId = form.tenant_id
+    const urls = [...sessionUrls]
+    const slugTakenByExisting = properties.some(p => p.slug === slug)
+
     closeForm()
+
+    if (isNew && slug && !slugTakenByExisting) {
+      void deletePropertyFolder(slug, tenantId)
+    } else {
+      fireDeleteMedia(urls, tenantId)
+    }
   }
 
   // Outside-click on the modal: confirm if there are unsaved changes, else close.
@@ -444,12 +461,25 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     }
   }
 
-  function removeCover() { setField('image_url', null) }
-  function removePdf() { setField('detail_pdf_url', null) }
+  // If `url` was uploaded during THIS session (never persisted), delete it from
+  // Storage the moment it's removed from the form — no orphan left behind if the
+  // user later abandons the form. Previously-saved images are left untouched
+  // (save-reconcile handles them) so cancelling an edit keeps them intact.
+  function dropSessionUpload(url: string | null | undefined) {
+    if (!url) return
+    if (sessionUrls.includes(url) && !initialUrls.includes(url)) {
+      setSessionUrls(prev => prev.filter(u => u !== url))
+      fireDeleteMedia([url])
+    }
+  }
 
-  // Remove a stored gallery/floor-plan URL from the form. Storage is reconciled
-  // on save/discard, so this is instant and does not hit the network.
+  function removeCover() { dropSessionUpload(form.image_url); setField('image_url', null) }
+  function removePdf() { dropSessionUpload(form.detail_pdf_url); setField('detail_pdf_url', null) }
+
+  // Remove a stored gallery/floor-plan URL from the form. Session uploads are
+  // deleted from Storage immediately; saved images are reconciled on save.
   function removeFromArray(target: 'gallery' | 'floor_plans', url: string) {
+    dropSessionUpload(url)
     setForm(prev => ({ ...prev, [target]: (prev[target] ?? []).filter(u => u !== url) }))
     setDirty(true)
   }
