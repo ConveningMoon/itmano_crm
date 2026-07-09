@@ -316,6 +316,38 @@ async function removePropertyMedia(
   }
 }
 
+// Deletes an entire property media folder (every file under
+// `<tenant>/<slug>/`). Used when a brand-new property is abandoned: its folder
+// holds only this session's uploads, so purging the whole folder cleans up even
+// files that weren't tracked in the client's session list (e.g. an upload the
+// tab was closed on). The CALLER must ensure the slug is not shared with an
+// existing property — this action does not check that, it just empties the
+// folder. Tenant-scoped and best-effort.
+export async function deletePropertyFolder(
+  slug: string,
+  tenantId?: string,
+): Promise<{ ok: true }> {
+  const ctx = await getCurrentTenantContext()
+  const resolved = resolveTargetTenant(ctx, tenantId)
+  const tenantFolder = typeof resolved === 'string' ? resolved : null
+  if (!tenantFolder) return { ok: true }
+
+  const folder = sanitizeSlugFolder(slug)
+  if (!folder) return { ok: true }
+
+  const db = createAdminClient()
+  const prefix = `${tenantFolder}/${folder}`
+  const { data: list } = await db.storage.from(MEDIA_BUCKET).list(prefix, { limit: 1000 })
+  const paths = (list ?? []).map(obj => `${prefix}/${obj.name}`)
+  if (paths.length === 0) return { ok: true }
+
+  const { error } = await db.storage.from(MEDIA_BUCKET).remove(paths)
+  if (error) {
+    console.error(JSON.stringify({ service: 'delete-property-folder', tenant_id: tenantFolder, folder, error: error.message }))
+  }
+  return { ok: true }
+}
+
 // Deletes specific media objects by their public URLs. Used to reconcile
 // Storage when the form is saved (removed files) or discarded (files uploaded
 // during the session but never persisted). Scoped to the caller's tenant folder
