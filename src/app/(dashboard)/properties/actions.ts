@@ -29,7 +29,7 @@ const PropertySchema = z
     list_price:    z.number().nonnegative().optional().nullable(),
     bedrooms:      z.number().int().nonnegative().max(50).optional().nullable(),
     sqft:          z.number().int().nonnegative().max(1000000).optional().nullable(),
-    year_built:    z.number().int().min(1800).max(2100).optional().nullable(),
+    year_built:    z.number().int().optional().nullable(),
     status:        z.enum(['available', 'in_process', 'sold']).default('available'),
     external_url:  httpUrl.optional().nullable(),
     notes:         z.string().trim().max(2000).optional().nullable(),
