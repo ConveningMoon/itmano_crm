@@ -160,6 +160,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   //   - initialUrls: URLs the property already had when the modal opened.
   //   - galleryNames/floorNames: original filenames uploaded this session (dedup).
   const [uploadingField, setUploadingField] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
   const [sessionUrls, setSessionUrls] = useState<string[]>([])
   const [initialUrls, setInitialUrls] = useState<string[]>([])
   const [galleryNames, setGalleryNames] = useState<Set<string>>(new Set())
@@ -179,6 +180,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   // Reset the media-tracking state (does not touch Storage).
   function resetMediaState() {
     setUploadingField(null)
+    setUploadProgress(null)
     setSessionUrls([])
     setInitialUrls([])
     setGalleryNames(new Set())
@@ -352,12 +354,18 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     // ── Single slots: cover / PDF ──────────────────────────────────────────────
     if (target === 'image_url' || target === 'detail_pdf_url') {
       setUploadingField(target)
-      const r = await uploadOne(arr[0], kind)
-      setUploadingField(null)
-      if (!r.ok) { setFormError(r.error); return }
-      // The previous value (session upload or saved URL) is reconciled on save.
-      setField(target, r.url)
-      setSessionUrls(prev => [...prev, r.url])
+      try {
+        const r = await uploadOne(arr[0], kind)
+        if (!r.ok) { setFormError(r.error); return }
+        // The previous value (session upload or saved URL) is reconciled on save.
+        setField(target, r.url)
+        setSessionUrls(prev => [...prev, r.url])
+      } catch (err) {
+        console.error('[properties] upload threw', err)
+        setFormError('No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.')
+      } finally {
+        setUploadingField(null)
+      }
       return
     }
 
@@ -388,24 +396,38 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     if (toUpload.length === 0) return
 
     setUploadingField(target)
-    const results = await Promise.all(toUpload.map(f => uploadOne(f, 'image')))
-    setUploadingField(null)
+    setUploadProgress({ done: 0, total: toUpload.length })
+    try {
+      let done = 0
+      const results = await Promise.all(toUpload.map(async f => {
+        const r = await uploadOne(f, 'image')
+        done += 1
+        setUploadProgress({ done, total: toUpload.length })
+        return r
+      }))
 
-    const urls: string[] = []
-    const okNames: string[] = []
-    let firstErr: string | null = null
-    results.forEach((r, i) => {
-      if (r.ok) { urls.push(r.url); okNames.push(toUpload[i].name) }
-      else if (!firstErr) firstErr = r.error
-    })
-    if (firstErr) setFormError(firstErr)
-    if (urls.length === 0) return
+      const urls: string[] = []
+      const okNames: string[] = []
+      let firstErr: string | null = null
+      results.forEach((r, i) => {
+        if (r.ok) { urls.push(r.url); okNames.push(toUpload[i].name) }
+        else if (!firstErr) firstErr = r.error
+      })
+      if (firstErr) setFormError(firstErr)
+      if (urls.length === 0) return
 
-    const setNames = target === 'gallery' ? setGalleryNames : setFloorNames
-    setNames(prev => { const n = new Set(prev); okNames.forEach(x => n.add(x)); return n })
-    setForm(prev => ({ ...prev, [target]: [...(prev[target] ?? []), ...urls] }))
-    setSessionUrls(prev => [...prev, ...urls])
-    setDirty(true)
+      const setNames = target === 'gallery' ? setGalleryNames : setFloorNames
+      setNames(prev => { const n = new Set(prev); okNames.forEach(x => n.add(x)); return n })
+      setForm(prev => ({ ...prev, [target]: [...(prev[target] ?? []), ...urls] }))
+      setSessionUrls(prev => [...prev, ...urls])
+      setDirty(true)
+    } catch (err) {
+      console.error('[properties] batch upload threw', err)
+      setFormError('No se pudieron subir los archivos. Verifica tu conexión e intenta de nuevo.')
+    } finally {
+      setUploadingField(null)
+      setUploadProgress(null)
+    }
   }
 
   function removeCover() { setField('image_url', null) }
@@ -444,7 +466,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       } catch (err) {
         unstable_rethrow(err)
         console.error('[properties] save threw', err)
-        setFormError('No se pudo guardar la propiedad. Intenta de nuevo.')
+        const detail = err instanceof Error && err.message ? ` (${err.message})` : ''
+        setFormError(`No se pudo guardar la propiedad. Intenta de nuevo.${detail}`)
         setConfirmingClose(false)
       }
     })
@@ -1140,6 +1163,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 <UploadButton
                   label="Agregar imágenes"
                   busy={uploadingField === 'gallery'}
+                  progress={uploadingField === 'gallery' ? uploadProgress : null}
                   accept="image/*"
                   multiple
                   onFiles={files => uploadFiles(files, 'image', 'gallery')}
@@ -1165,6 +1189,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 <UploadButton
                   label="Agregar planos"
                   busy={uploadingField === 'floor_plans'}
+                  progress={uploadingField === 'floor_plans' ? uploadProgress : null}
                   accept="image/*"
                   multiple
                   onFiles={files => uploadFiles(files, 'image', 'floor_plans')}
@@ -1406,12 +1431,16 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
 interface UploadButtonProps {
   label:    string
   busy:     boolean
+  progress?: { done: number; total: number } | null
   accept:   string
   multiple?: boolean
   onFiles:  (files: FileList | null) => void
 }
 
-function UploadButton({ label, busy, accept, multiple = false, onFiles }: UploadButtonProps) {
+function UploadButton({ label, busy, progress, accept, multiple = false, onFiles }: UploadButtonProps) {
+  const busyLabel = progress && progress.total > 0
+    ? `Subiendo ${progress.done}/${progress.total} (${Math.round((progress.done / progress.total) * 100)}%)`
+    : 'Subiendo…'
   return (
     <label
       style={{
@@ -1423,7 +1452,7 @@ function UploadButton({ label, busy, accept, multiple = false, onFiles }: Upload
       }}
     >
       <Upload size={13} />
-      {busy ? 'Subiendo…' : label}
+      {busy ? busyLabel : label}
       <input
         type="file"
         accept={accept}
