@@ -935,8 +935,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   <span style={labelTextStyle}>Año de construcción</span>
                   <input
                     type="number"
-                    min={1800}
-                    max={2100}
+                    step="any"
                     value={form.year_built ?? ''}
                     onChange={e => setField('year_built', e.target.value ? Number(e.target.value) : null)}
                     placeholder="2005"
