@@ -5,7 +5,7 @@ import { unstable_rethrow } from 'next/navigation'
 import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import { createProperty, updateProperty, deleteProperty, uploadPropertyMedia } from './actions'
+import { createProperty, updateProperty, deleteProperty, uploadPropertyMedia, deletePropertyMediaByUrls } from './actions'
 import type { PropertyInput } from './actions'
 import { generatePropertyFromPdf } from './ai-actions'
 import type { AiPropertyDraft } from './ai-actions'
@@ -25,22 +25,15 @@ function splitLines(text: string): string[] {
   return text.split('\n').map(s => s.trim()).filter(Boolean)
 }
 
-// A file the user selected but hasn't uploaded yet. `preview` is an object URL
-// (empty for PDFs, which show a filename instead of a thumbnail).
-type PendingFile = { file: File; preview: string }
-
-function revokePreview(p: PendingFile | null | undefined) {
-  if (p?.preview) URL.revokeObjectURL(p.preview)
+// All media URLs referenced by a form — used to reconcile Storage on save/discard.
+function mediaUrlsOf(f: PropertyInput): string[] {
+  return [f.image_url, f.detail_pdf_url, ...(f.gallery ?? []), ...(f.floor_plans ?? [])]
+    .filter((u): u is string => typeof u === 'string' && u.length > 0)
 }
 
-// TEMP DEBUG (remove once upload/save failures are confirmed fixed): renders
-// whatever the thrown value actually is, so a failure shows its real cause
-// instead of only a generic message.
-function describeError(err: unknown): string {
-  if (err instanceof Error) return err.message || err.name
-  if (typeof err === 'string') return err
-  try { return JSON.stringify(err) } catch { return String(err) }
-}
+// Per-list caps (kept in sync with the Zod schema in actions.ts).
+const MAX_GALLERY = 60
+const MAX_FLOOR_PLANS = 30
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -159,11 +152,18 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   // Free-text mirrors of the features arrays (one item per line) for smooth typing.
   const [featuresEnText, setFeaturesEnText] = useState('')
   const [featuresEsText, setFeaturesEsText] = useState('')
-  // Media selected but NOT yet uploaded — previews shown; uploaded on save.
-  const [pendingCover, setPendingCover]           = useState<PendingFile | null>(null)
-  const [pendingPdf, setPendingPdf]               = useState<PendingFile | null>(null)
-  const [pendingGallery, setPendingGallery]       = useState<PendingFile[]>([])
-  const [pendingFloorPlans, setPendingFloorPlans] = useState<PendingFile[]>([])
+  // Media model: files upload to Storage immediately on selection and their URL
+  // goes straight into the form. Storage is reconciled at save/discard so files
+  // that were removed (or uploaded then abandoned) don't linger.
+  //   - uploadingField: which slot is currently uploading (per-field spinner).
+  //   - sessionUrls: URLs uploaded during THIS modal session (not yet persisted).
+  //   - initialUrls: URLs the property already had when the modal opened.
+  //   - galleryNames/floorNames: original filenames uploaded this session (dedup).
+  const [uploadingField, setUploadingField] = useState<string | null>(null)
+  const [sessionUrls, setSessionUrls] = useState<string[]>([])
+  const [initialUrls, setInitialUrls] = useState<string[]>([])
+  const [galleryNames, setGalleryNames] = useState<Set<string>>(new Set())
+  const [floorNames, setFloorNames] = useState<Set<string>>(new Set())
   // Slug is auto-derived from name until the user edits it by hand.
   const [slugTouched, setSlugTouched] = useState(false)
   // Fields prefilled by "Crear con IA" — flagged for review until the user edits them.
@@ -176,16 +176,13 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
 
   const filtered = tab === 'all' ? properties : properties.filter(p => p.status === tab)
 
-  // Revoke object URLs and drop any files queued but not yet uploaded.
-  function clearPendingMedia() {
-    revokePreview(pendingCover)
-    revokePreview(pendingPdf)
-    pendingGallery.forEach(revokePreview)
-    pendingFloorPlans.forEach(revokePreview)
-    setPendingCover(null)
-    setPendingPdf(null)
-    setPendingGallery([])
-    setPendingFloorPlans([])
+  // Reset the media-tracking state (does not touch Storage).
+  function resetMediaState() {
+    setUploadingField(null)
+    setSessionUrls([])
+    setInitialUrls([])
+    setGalleryNames(new Set())
+    setFloorNames(new Set())
   }
 
   function openCreate() {
@@ -194,7 +191,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEsText('')
     setSlugTouched(false)
     setAiFields(new Set())
-    clearPendingMedia()
+    resetMediaState()
     setDirty(false)
     setConfirmingClose(false)
     setEditingId(null)
@@ -203,12 +200,14 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   }
 
   function openEdit(prop: Property) {
-    setForm(formFromProperty(prop))
+    const initialForm = formFromProperty(prop)
+    setForm(initialForm)
     setFeaturesEnText(prop.featuresEn.join('\n'))
     setFeaturesEsText(prop.featuresEs.join('\n'))
     setSlugTouched(true) // an existing property keeps its slug
     setAiFields(new Set())
-    clearPendingMedia()
+    resetMediaState()
+    setInitialUrls(mediaUrlsOf(initialForm)) // media already saved on this property
     setDirty(false)
     setConfirmingClose(false)
     setEditingId(prop.id)
@@ -220,10 +219,22 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setShowForm(false)
     setEditingId(null)
     setFormError(null)
-    clearPendingMedia()
+    resetMediaState()
     setAiFields(new Set())
     setDirty(false)
     setConfirmingClose(false)
+  }
+
+  // Fire-and-forget Storage cleanup; never blocks the UI.
+  function fireDeleteMedia(urls: string[]) {
+    if (urls.length === 0) return
+    void deletePropertyMediaByUrls(urls, form.tenant_id)
+  }
+
+  // Discard: files uploaded this session were never persisted → remove them.
+  function discardAndClose() {
+    fireDeleteMedia([...sessionUrls])
+    closeForm()
   }
 
   // Outside-click on the modal: confirm if there are unsaved changes, else close.
@@ -291,6 +302,9 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setFeaturesEsText(features_es.join('\n'))
     setSlugTouched(true) // AI filled the slug; don't clobber it from the name
     setAiFields(new Set(fields as string[]))
+    resetMediaState()
+    // The AI-intake PDF was already uploaded — track it so it's cleaned on discard.
+    if (draft.detail_pdf_url) setSessionUrls([draft.detail_pdf_url])
     setDirty(true) // an unsaved AI draft counts as unsaved changes
     setConfirmingClose(false)
     setEditingId(null)
@@ -309,69 +323,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setDirty(true)
   }
 
-  // Queue selected files as previews — nothing is uploaded until save.
-  // Cover/PDF are single slots; gallery/floor_plans are lists with a same-name
-  // dedup guard (a repeated file name is rejected and the user is alerted).
-  function queueMedia(
-    files: FileList | null,
-    target: 'image_url' | 'detail_pdf_url' | 'gallery' | 'floor_plans',
-  ) {
-    if (!files || files.length === 0) return
-    setFormError(null)
-    const arr = Array.from(files)
-
-    if (target === 'image_url') {
-      revokePreview(pendingCover)
-      setPendingCover({ file: arr[0], preview: URL.createObjectURL(arr[0]) })
-      setDirty(true)
-      return
-    }
-    if (target === 'detail_pdf_url') {
-      revokePreview(pendingPdf)
-      setPendingPdf({ file: arr[0], preview: '' })
-      setDirty(true)
-      return
-    }
-
-    // gallery | floor_plans — append with same-name dedup
-    const current = target === 'gallery' ? pendingGallery : pendingFloorPlans
-    const names = new Set(current.map(p => p.file.name))
-    const toAdd: PendingFile[] = []
-    const dups: string[] = []
-    for (const f of arr) {
-      if (names.has(f.name)) { dups.push(f.name); continue }
-      names.add(f.name)
-      toAdd.push({ file: f, preview: URL.createObjectURL(f) })
-    }
-    if (dups.length > 0) {
-      setFormError(
-        dups.length === 1
-          ? `"${dups[0]}" ya está en la lista; no se agregó de nuevo.`
-          : `Estas imágenes ya estaban en la lista y no se agregaron: ${dups.join(', ')}.`,
-      )
-    }
-    if (toAdd.length > 0) {
-      const setList = target === 'gallery' ? setPendingGallery : setPendingFloorPlans
-      setList(prev => [...prev, ...toAdd])
-      setDirty(true)
-    }
-  }
-
-  function removePendingCover() { revokePreview(pendingCover); setPendingCover(null); setDirty(true) }
-  function removePendingPdf() { revokePreview(pendingPdf); setPendingPdf(null); setDirty(true) }
-  function removePendingItem(target: 'gallery' | 'floor_plans', idx: number) {
-    const setList = target === 'gallery' ? setPendingGallery : setPendingFloorPlans
-    setList(prev => { revokePreview(prev[idx]); return prev.filter((_, i) => i !== idx) })
-    setDirty(true)
-  }
-
-  // Remove an already-saved (stored URL) gallery/floor-plan item.
-  function removeFromArray(target: 'gallery' | 'floor_plans', url: string) {
-    setForm(prev => ({ ...prev, [target]: (prev[target] ?? []).filter(u => u !== url) }))
-    setDirty(true)
-  }
-
-  // Uploads one queued file to Storage (only invoked at save time).
+  // Uploads one file to Storage immediately and returns its result.
   async function uploadOne(file: File, kind: 'image' | 'pdf') {
     const fd = new FormData()
     fd.set('file', file)
@@ -382,77 +334,98 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     return uploadPropertyMedia(fd)
   }
 
-  // Uploads every queued file. Scoped separately from the save call below so a
-  // failure here is never confused with a failure to persist the property.
-  async function uploadQueuedMedia(): Promise<
-    | { ok: true; imageUrl: string | null; pdfUrl: string | null; galleryUrls: string[]; floorUrls: string[] }
-    | { ok: false; error: string }
-  > {
-    try {
-      let imageUrl = form.image_url ?? null
-      if (pendingCover) {
-        const r = await uploadOne(pendingCover.file, 'image')
-        if (!r.ok) return { ok: false, error: r.error }
-        imageUrl = r.url
-      }
-      let pdfUrl = form.detail_pdf_url ?? null
-      if (pendingPdf) {
-        const r = await uploadOne(pendingPdf.file, 'pdf')
-        if (!r.ok) return { ok: false, error: r.error }
-        pdfUrl = r.url
-      }
-      const galleryUrls = [...(form.gallery ?? [])]
-      for (const p of pendingGallery) {
-        const r = await uploadOne(p.file, 'image')
-        if (!r.ok) return { ok: false, error: r.error }
-        galleryUrls.push(r.url)
-      }
-      const floorUrls = [...(form.floor_plans ?? [])]
-      for (const p of pendingFloorPlans) {
-        const r = await uploadOne(p.file, 'image')
-        if (!r.ok) return { ok: false, error: r.error }
-        floorUrls.push(r.url)
-      }
-      return { ok: true, imageUrl, pdfUrl, galleryUrls, floorUrls }
-    } catch (err) {
-      // Let Next.js control-flow errors (e.g. redirect() on an expired session
-      // inside getCurrentTenantContext) propagate untouched instead of being
-      // reported as an upload failure.
-      unstable_rethrow(err)
-      console.error('[properties] media upload threw', err)
-      // TEMP DEBUG: appends the real error so we can see the underlying cause.
-      return { ok: false, error: `No se pudieron subir los archivos. [DEBUG: ${describeError(err)}]` }
+  // Uploads the selected files right away and stores their URLs on the form.
+  // Gallery/floor lists enforce a per-list cap and a same-name dedup guard.
+  async function uploadFiles(
+    files: FileList | null,
+    kind: 'image' | 'pdf',
+    target: 'image_url' | 'detail_pdf_url' | 'gallery' | 'floor_plans',
+  ) {
+    if (!files || files.length === 0) return
+    if (!(form.slug ?? '').trim()) {
+      setFormError('Agrega el nombre de la propiedad antes de subir archivos.')
+      return
     }
+    setFormError(null)
+    const arr = Array.from(files)
+
+    // ── Single slots: cover / PDF ──────────────────────────────────────────────
+    if (target === 'image_url' || target === 'detail_pdf_url') {
+      setUploadingField(target)
+      const r = await uploadOne(arr[0], kind)
+      setUploadingField(null)
+      if (!r.ok) { setFormError(r.error); return }
+      // The previous value (session upload or saved URL) is reconciled on save.
+      setField(target, r.url)
+      setSessionUrls(prev => [...prev, r.url])
+      return
+    }
+
+    // ── Lists: gallery / floor_plans ───────────────────────────────────────────
+    const max = target === 'gallery' ? MAX_GALLERY : MAX_FLOOR_PLANS
+    const namesState = target === 'gallery' ? galleryNames : floorNames
+    const seen = new Set(namesState)
+    const unique: File[] = []
+    const dups: string[] = []
+    for (const f of arr) {
+      if (seen.has(f.name)) { dups.push(f.name); continue }
+      seen.add(f.name)
+      unique.push(f)
+    }
+    const room = Math.max(0, max - (form[target] ?? []).length)
+    const toUpload = unique.slice(0, room)
+
+    const notes: string[] = []
+    if (dups.length > 0) {
+      notes.push(dups.length === 1
+        ? `"${dups[0]}" ya está en la lista; no se agregó de nuevo.`
+        : `${dups.length} imágenes repetidas se omitieron.`)
+    }
+    if (toUpload.length < unique.length) {
+      notes.push(`Máximo ${max} ${target === 'gallery' ? 'imágenes' : 'planos'}.`)
+    }
+    if (notes.length > 0) setFormError(notes.join(' '))
+    if (toUpload.length === 0) return
+
+    setUploadingField(target)
+    const results = await Promise.all(toUpload.map(f => uploadOne(f, 'image')))
+    setUploadingField(null)
+
+    const urls: string[] = []
+    const okNames: string[] = []
+    let firstErr: string | null = null
+    results.forEach((r, i) => {
+      if (r.ok) { urls.push(r.url); okNames.push(toUpload[i].name) }
+      else if (!firstErr) firstErr = r.error
+    })
+    if (firstErr) setFormError(firstErr)
+    if (urls.length === 0) return
+
+    const setNames = target === 'gallery' ? setGalleryNames : setFloorNames
+    setNames(prev => { const n = new Set(prev); okNames.forEach(x => n.add(x)); return n })
+    setForm(prev => ({ ...prev, [target]: [...(prev[target] ?? []), ...urls] }))
+    setSessionUrls(prev => [...prev, ...urls])
+    setDirty(true)
+  }
+
+  function removeCover() { setField('image_url', null) }
+  function removePdf() { setField('detail_pdf_url', null) }
+
+  // Remove a stored gallery/floor-plan URL from the form. Storage is reconciled
+  // on save/discard, so this is instant and does not hit the network.
+  function removeFromArray(target: 'gallery' | 'floor_plans', url: string) {
+    setForm(prev => ({ ...prev, [target]: (prev[target] ?? []).filter(u => u !== url) }))
+    setDirty(true)
   }
 
   function submitForm() {
     setFormError(null)
-    // Queued media need the slug for their storage folder.
-    const hasPending = !!pendingCover || !!pendingPdf || pendingGallery.length > 0 || pendingFloorPlans.length > 0
-    if (hasPending && !(form.slug ?? '').trim()) {
-      setFormError('Agrega el nombre de la propiedad antes de guardar las imágenes.')
-      setConfirmingClose(false)
-      return
-    }
     startTransition(async () => {
-      // Upload queued files first; only then persist the property.
-      const uploaded = await uploadQueuedMedia()
-      if (!uploaded.ok) {
-        setFormError(uploaded.error)
-        setConfirmingClose(false)
-        return
-      }
-
       const payload: PropertyInput = {
         ...form,
-        image_url:      uploaded.imageUrl,
-        detail_pdf_url: uploaded.pdfUrl,
-        gallery:        uploaded.galleryUrls,
-        floor_plans:    uploaded.floorUrls,
-        features_en:    splitLines(featuresEnText),
-        features_es:    splitLines(featuresEsText),
+        features_en: splitLines(featuresEnText),
+        features_es: splitLines(featuresEsText),
       }
-
       try {
         const result = editingId
           ? await updateProperty(editingId, payload)
@@ -462,16 +435,16 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
           setConfirmingClose(false) // return to the form so the error is visible
           return
         }
+        // Reconcile Storage: delete files that were saved before or uploaded
+        // this session but are no longer referenced by the saved property.
+        const finalUrls = mediaUrlsOf(payload)
+        const orphans = [...new Set([...initialUrls, ...sessionUrls])].filter(u => !finalUrls.includes(u))
+        fireDeleteMedia(orphans)
         closeForm()
       } catch (err) {
         unstable_rethrow(err)
         console.error('[properties] save threw', err)
-        // TEMP DEBUG: appends the real error so we can see the underlying cause.
-        setFormError(
-          `${hasPending
-            ? 'Los archivos se subieron, pero no se pudo guardar la propiedad.'
-            : 'No se pudo guardar la propiedad.'} [DEBUG: ${describeError(err)}]`,
-        )
+        setFormError('No se pudo guardar la propiedad. Intenta de nuevo.')
         setConfirmingClose(false)
       }
     })
@@ -805,7 +778,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 {editingId ? 'Editar propiedad' : 'Nueva propiedad'}
               </h2>
               <button
-                onClick={closeForm}
+                onClick={discardAndClose}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   color: 'var(--text-muted)', padding: '4px',
@@ -1126,40 +1099,32 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
               </label>
               </FormSection>
 
-              <FormSection title="Multimedia" description="Los archivos se suben al guardar la propiedad; mientras tanto ves una vista previa. Formatos: JPG, PNG, WebP, GIF, AVIF (máx 10 MB) y PDF.">
+              <FormSection title="Multimedia" description="Cada archivo se sube al seleccionarlo. Formatos: JPG, PNG, WebP, GIF, AVIF (máx 10 MB) y PDF.">
               {/* Cover image */}
               <div style={labelStyle}>
                 <span style={labelTextStyle}>Imagen de portada</span>
-                {pendingCover ? (
-                  <div style={mediaRowStyle}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={pendingCover.preview} alt="Portada (vista previa)" style={pendingThumbStyle} />
-                    <button type="button" onClick={removePendingCover} style={mediaRemoveStyle}>
-                      <X size={13} />
-                    </button>
-                  </div>
-                ) : form.image_url && (
+                {form.image_url && (
                   <div style={mediaRowStyle}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={form.image_url} alt="Portada" style={thumbStyle} />
                     <a href={form.image_url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>Ver</a>
-                    <button type="button" onClick={() => setField('image_url', null)} style={mediaRemoveStyle}>
+                    <button type="button" onClick={removeCover} style={mediaRemoveStyle}>
                       <X size={13} />
                     </button>
                   </div>
                 )}
                 <UploadButton
-                  label={(pendingCover || form.image_url) ? 'Reemplazar portada' : 'Subir portada'}
-                  busy={false}
+                  label={form.image_url ? 'Reemplazar portada' : 'Subir portada'}
+                  busy={uploadingField === 'image_url'}
                   accept="image/*"
-                  onFiles={files => queueMedia(files, 'image_url')}
+                  onFiles={files => uploadFiles(files, 'image', 'image_url')}
                 />
               </div>
 
               {/* Gallery */}
               <div style={labelStyle}>
                 <span style={labelTextStyle}>Galería</span>
-                {((form.gallery ?? []).length > 0 || pendingGallery.length > 0) && (
+                {(form.gallery ?? []).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {(form.gallery ?? []).map(url => (
                       <div key={url} style={{ position: 'relative' }}>
@@ -1170,30 +1135,21 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                         </button>
                       </div>
                     ))}
-                    {pendingGallery.map((p, i) => (
-                      <div key={p.preview} style={{ position: 'relative' }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.preview} alt="" style={pendingThumbStyle} />
-                        <button type="button" onClick={() => removePendingItem('gallery', i)} style={thumbRemoveStyle}>
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
                   </div>
                 )}
                 <UploadButton
                   label="Agregar imágenes"
-                  busy={false}
+                  busy={uploadingField === 'gallery'}
                   accept="image/*"
                   multiple
-                  onFiles={files => queueMedia(files, 'gallery')}
+                  onFiles={files => uploadFiles(files, 'image', 'gallery')}
                 />
               </div>
 
               {/* Floor plans */}
               <div style={labelStyle}>
                 <span style={labelTextStyle}>Planos</span>
-                {((form.floor_plans ?? []).length > 0 || pendingFloorPlans.length > 0) && (
+                {(form.floor_plans ?? []).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {(form.floor_plans ?? []).map(url => (
                       <div key={url} style={{ position: 'relative' }}>
@@ -1204,51 +1160,35 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                         </button>
                       </div>
                     ))}
-                    {pendingFloorPlans.map((p, i) => (
-                      <div key={p.preview} style={{ position: 'relative' }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.preview} alt="" style={pendingThumbStyle} />
-                        <button type="button" onClick={() => removePendingItem('floor_plans', i)} style={thumbRemoveStyle}>
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
                   </div>
                 )}
                 <UploadButton
                   label="Agregar planos"
-                  busy={false}
+                  busy={uploadingField === 'floor_plans'}
                   accept="image/*"
                   multiple
-                  onFiles={files => queueMedia(files, 'floor_plans')}
+                  onFiles={files => uploadFiles(files, 'image', 'floor_plans')}
                 />
               </div>
 
               {/* Detail PDF */}
               <div style={labelStyle}>
                 <span style={labelTextStyle}>PDF de detalles</span>
-                {pendingPdf ? (
-                  <div style={mediaRowStyle}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{pendingPdf.file.name}</span>
-                    <button type="button" onClick={removePendingPdf} style={mediaRemoveStyle}>
-                      <X size={13} />
-                    </button>
-                  </div>
-                ) : form.detail_pdf_url && (
+                {form.detail_pdf_url && (
                   <div style={mediaRowStyle}>
                     <a href={form.detail_pdf_url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>
                       Ver PDF
                     </a>
-                    <button type="button" onClick={() => setField('detail_pdf_url', null)} style={mediaRemoveStyle}>
+                    <button type="button" onClick={removePdf} style={mediaRemoveStyle}>
                       <X size={13} />
                     </button>
                   </div>
                 )}
                 <UploadButton
-                  label={(pendingPdf || form.detail_pdf_url) ? 'Reemplazar PDF' : 'Subir PDF'}
-                  busy={false}
+                  label={form.detail_pdf_url ? 'Reemplazar PDF' : 'Subir PDF'}
+                  busy={uploadingField === 'detail_pdf_url'}
                   accept="application/pdf"
-                  onFiles={files => queueMedia(files, 'detail_pdf_url')}
+                  onFiles={files => uploadFiles(files, 'pdf', 'detail_pdf_url')}
                 />
               </div>
               </FormSection>
@@ -1313,7 +1253,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
                 <button
                   type="button"
-                  onClick={closeForm}
+                  onClick={discardAndClose}
                   style={{
                     padding: '8px 16px', fontSize: '13px', fontWeight: 500,
                     background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
@@ -1377,7 +1317,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 Seguir editando
               </button>
               <button
-                onClick={closeForm}
+                onClick={discardAndClose}
                 style={{
                   padding: '8px 16px', fontSize: '13px', fontWeight: 500,
                   background: 'var(--bg-elevated)', color: 'var(--accent-coral)',
@@ -1514,12 +1454,6 @@ const selectStyle: React.CSSProperties = { ...inputStyle, cursor: 'pointer' }
 const thumbStyle: React.CSSProperties = {
   width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px',
   border: '1px solid var(--border-subtle)', display: 'block',
-}
-// Pending (not-yet-uploaded) media: gold ring to distinguish from saved files.
-const pendingThumbStyle: React.CSSProperties = {
-  width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px',
-  border: '1px solid var(--accent-gold)', boxShadow: '0 0 0 1px var(--accent-gold-dim)',
-  display: 'block',
 }
 const thumbRemoveStyle: React.CSSProperties = {
   position: 'absolute', top: '-6px', right: '-6px',

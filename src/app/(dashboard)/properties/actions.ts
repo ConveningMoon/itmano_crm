@@ -55,8 +55,8 @@ const PropertySchema = z
     features_en:    z.array(z.string().trim().min(1).max(300)).max(30).optional().default([]),
     features_es:    z.array(z.string().trim().min(1).max(300)).max(30).optional().default([]),
     image_url:      httpUrl.optional().nullable(),
-    gallery:        z.array(httpUrl.min(1)).max(30).optional().default([]),
-    floor_plans:    z.array(httpUrl.min(1)).max(20).optional().default([]),
+    gallery:        z.array(httpUrl.min(1)).max(60).optional().default([]),
+    floor_plans:    z.array(httpUrl.min(1)).max(30).optional().default([]),
     detail_pdf_url: httpUrl.optional().nullable(),
     published_to_web: z.boolean().optional().default(false),
   })
@@ -394,4 +394,33 @@ export async function uploadPropertyMedia(
 
   const { data: pub } = db.storage.from('property-media').getPublicUrl(path)
   return { ok: true, url: pub.publicUrl }
+}
+
+// Deletes specific media objects by their public URLs. Used to reconcile
+// Storage when the form is saved (removed files) or discarded (files uploaded
+// during the session but never persisted). Scoped to the caller's tenant folder
+// so a user can only delete media within their own tenant. Best-effort.
+export async function deletePropertyMediaByUrls(
+  urls: string[],
+  tenantId?: string,
+): Promise<{ ok: true }> {
+  const ctx = await getCurrentTenantContext()
+  const resolved = resolveTargetTenant(ctx, tenantId)
+  const tenantFolder = typeof resolved === 'string' ? resolved : null
+  if (!tenantFolder) return { ok: true }
+
+  const paths: string[] = []
+  for (const url of urls) {
+    const p = objectPathFromPublicUrl(url)
+    // Security: only allow deleting within the caller's tenant folder.
+    if (p && p.startsWith(`${tenantFolder}/`)) paths.push(p)
+  }
+  if (paths.length === 0) return { ok: true }
+
+  const db = createAdminClient()
+  const { error } = await db.storage.from(MEDIA_BUCKET).remove(paths)
+  if (error) {
+    console.error(JSON.stringify({ service: 'delete-property-media-urls', tenant_id: tenantFolder, error: error.message }))
+  }
+  return { ok: true }
 }
