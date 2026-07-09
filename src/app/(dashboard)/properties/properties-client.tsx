@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { unstable_rethrow } from 'next/navigation'
 import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
@@ -372,6 +373,48 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     return uploadPropertyMedia(fd)
   }
 
+  // Uploads every queued file. Scoped separately from the save call below so a
+  // failure here is never confused with a failure to persist the property.
+  async function uploadQueuedMedia(): Promise<
+    | { ok: true; imageUrl: string | null; pdfUrl: string | null; galleryUrls: string[]; floorUrls: string[] }
+    | { ok: false; error: string }
+  > {
+    try {
+      let imageUrl = form.image_url ?? null
+      if (pendingCover) {
+        const r = await uploadOne(pendingCover.file, 'image')
+        if (!r.ok) return { ok: false, error: r.error }
+        imageUrl = r.url
+      }
+      let pdfUrl = form.detail_pdf_url ?? null
+      if (pendingPdf) {
+        const r = await uploadOne(pendingPdf.file, 'pdf')
+        if (!r.ok) return { ok: false, error: r.error }
+        pdfUrl = r.url
+      }
+      const galleryUrls = [...(form.gallery ?? [])]
+      for (const p of pendingGallery) {
+        const r = await uploadOne(p.file, 'image')
+        if (!r.ok) return { ok: false, error: r.error }
+        galleryUrls.push(r.url)
+      }
+      const floorUrls = [...(form.floor_plans ?? [])]
+      for (const p of pendingFloorPlans) {
+        const r = await uploadOne(p.file, 'image')
+        if (!r.ok) return { ok: false, error: r.error }
+        floorUrls.push(r.url)
+      }
+      return { ok: true, imageUrl, pdfUrl, galleryUrls, floorUrls }
+    } catch (err) {
+      // Let Next.js control-flow errors (e.g. redirect() on an expired session
+      // inside getCurrentTenantContext) propagate untouched instead of being
+      // reported as an upload failure.
+      unstable_rethrow(err)
+      console.error('[properties] media upload threw', err)
+      return { ok: false, error: 'No se pudieron subir los archivos. Intenta de nuevo.' }
+    }
+  }
+
   function submitForm() {
     setFormError(null)
     // Queued media need the slug for their storage folder.
@@ -382,42 +425,25 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       return
     }
     startTransition(async () => {
-      try {
-        // Upload queued files first; only then persist the property.
-        let imageUrl = form.image_url ?? null
-        if (pendingCover) {
-          const r = await uploadOne(pendingCover.file, 'image')
-          if (!r.ok) { setFormError(r.error); setConfirmingClose(false); return }
-          imageUrl = r.url
-        }
-        let pdfUrl = form.detail_pdf_url ?? null
-        if (pendingPdf) {
-          const r = await uploadOne(pendingPdf.file, 'pdf')
-          if (!r.ok) { setFormError(r.error); setConfirmingClose(false); return }
-          pdfUrl = r.url
-        }
-        const galleryUrls = [...(form.gallery ?? [])]
-        for (const p of pendingGallery) {
-          const r = await uploadOne(p.file, 'image')
-          if (!r.ok) { setFormError(r.error); setConfirmingClose(false); return }
-          galleryUrls.push(r.url)
-        }
-        const floorUrls = [...(form.floor_plans ?? [])]
-        for (const p of pendingFloorPlans) {
-          const r = await uploadOne(p.file, 'image')
-          if (!r.ok) { setFormError(r.error); setConfirmingClose(false); return }
-          floorUrls.push(r.url)
-        }
+      // Upload queued files first; only then persist the property.
+      const uploaded = await uploadQueuedMedia()
+      if (!uploaded.ok) {
+        setFormError(uploaded.error)
+        setConfirmingClose(false)
+        return
+      }
 
-        const payload: PropertyInput = {
-          ...form,
-          image_url:      imageUrl,
-          detail_pdf_url: pdfUrl,
-          gallery:        galleryUrls,
-          floor_plans:    floorUrls,
-          features_en:    splitLines(featuresEnText),
-          features_es:    splitLines(featuresEsText),
-        }
+      const payload: PropertyInput = {
+        ...form,
+        image_url:      uploaded.imageUrl,
+        detail_pdf_url: uploaded.pdfUrl,
+        gallery:        uploaded.galleryUrls,
+        floor_plans:    uploaded.floorUrls,
+        features_en:    splitLines(featuresEnText),
+        features_es:    splitLines(featuresEsText),
+      }
+
+      try {
         const result = editingId
           ? await updateProperty(editingId, payload)
           : await createProperty(payload)
@@ -427,8 +453,14 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
           return
         }
         closeForm()
-      } catch {
-        setFormError('No se pudieron subir los archivos. Intenta de nuevo.')
+      } catch (err) {
+        unstable_rethrow(err)
+        console.error('[properties] save threw', err)
+        setFormError(
+          hasPending
+            ? 'Los archivos se subieron, pero no se pudo guardar la propiedad. Intenta de nuevo.'
+            : 'No se pudo guardar la propiedad. Intenta de nuevo.',
+        )
         setConfirmingClose(false)
       }
     })
@@ -1091,7 +1123,6 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   <div style={mediaRowStyle}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={pendingCover.preview} alt="Portada (vista previa)" style={pendingThumbStyle} />
-                    <span style={pendingTagStyle}>Pendiente de subir</span>
                     <button type="button" onClick={removePendingCover} style={mediaRemoveStyle}>
                       <X size={13} />
                     </button>
@@ -1129,7 +1160,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                       </div>
                     ))}
                     {pendingGallery.map((p, i) => (
-                      <div key={p.preview} style={{ position: 'relative' }} title="Pendiente de subir">
+                      <div key={p.preview} style={{ position: 'relative' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={p.preview} alt="" style={pendingThumbStyle} />
                         <button type="button" onClick={() => removePendingItem('gallery', i)} style={thumbRemoveStyle}>
@@ -1163,7 +1194,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                       </div>
                     ))}
                     {pendingFloorPlans.map((p, i) => (
-                      <div key={p.preview} style={{ position: 'relative' }} title="Pendiente de subir">
+                      <div key={p.preview} style={{ position: 'relative' }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={p.preview} alt="" style={pendingThumbStyle} />
                         <button type="button" onClick={() => removePendingItem('floor_plans', i)} style={thumbRemoveStyle}>
@@ -1188,7 +1219,6 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 {pendingPdf ? (
                   <div style={mediaRowStyle}>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{pendingPdf.file.name}</span>
-                    <span style={pendingTagStyle}>Pendiente de subir</span>
                     <button type="button" onClick={removePendingPdf} style={mediaRemoveStyle}>
                       <X size={13} />
                     </button>
@@ -1479,11 +1509,6 @@ const pendingThumbStyle: React.CSSProperties = {
   width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px',
   border: '1px solid var(--accent-gold)', boxShadow: '0 0 0 1px var(--accent-gold-dim)',
   display: 'block',
-}
-const pendingTagStyle: React.CSSProperties = {
-  fontSize: '9px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase',
-  padding: '1px 6px', borderRadius: '10px',
-  background: 'rgba(201,169,110,0.15)', color: 'var(--accent-gold)',
 }
 const thumbRemoveStyle: React.CSSProperties = {
   position: 'absolute', top: '-6px', right: '-6px',
