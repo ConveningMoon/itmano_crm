@@ -28,7 +28,7 @@ export type AiPropertyDraft = Pick<
 > & { detail_pdf_url: string | null }
 
 export type AiExtractResult =
-  | { ok: true; draft: AiPropertyDraft; fields: Array<keyof AiPropertyDraft> }
+  | { ok: true; draft: AiPropertyDraft; fields: Array<keyof AiPropertyDraft>; warning?: string }
   | { ok: false; error: string }
 
 const PROPERTY_TYPES = ['residential', 'condo', 'townhouse', 'land', 'commercial', 'multifamily'] as const
@@ -109,6 +109,8 @@ export async function generatePropertyFromPdf(
     .upload(path, bytes, { contentType: 'application/pdf', upsert: false })
   if (!uploadErr) {
     detailPdfUrl = db.storage.from('property-media').getPublicUrl(path).data.publicUrl
+  } else {
+    console.error(JSON.stringify({ service: 'ai-property-intake', path: 'storage_upload_failed', detail: uploadErr.message }))
   }
 
   // ── Ask Claude to extract structured data from the PDF ───────────────────────
@@ -190,5 +192,10 @@ export async function generatePropertyFromPdf(
     return v !== null && v !== ''
   })
 
-  return { ok: true, draft, fields }
+  return {
+    ok: true,
+    draft,
+    fields,
+    ...(uploadErr ? { warning: 'El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.' } : {}),
+  }
 }

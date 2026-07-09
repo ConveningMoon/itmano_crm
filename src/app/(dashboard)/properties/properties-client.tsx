@@ -138,7 +138,7 @@ function formFromProperty(p: Property): PropertyInput {
 
 // "Crear con IA" is built but gated off until the Claude API is provisioned
 // (ANTHROPIC_API_KEY + billing). Flip to true to re-enable. See CLAUDE.md.
-const AI_ENABLED = false
+const AI_ENABLED = true
 
 export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId }: Props) {
   const isSuperAdmin = viewerRole === 'super_admin'
@@ -287,6 +287,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
         return
       }
       applyAiDraft(res.draft, res.fields)
+      if (res.warning) setFormError(res.warning)
     })
   }
 
