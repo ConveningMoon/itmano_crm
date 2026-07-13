@@ -249,6 +249,37 @@ export async function removeTenantLogo(
   return { ok: true }
 }
 
+// ─── Firma de correo por agente ───────────────────────────────────────────────
+// Se muestra al final de todos los correos (secuencias, compra, one-off) del
+// agente asignado al lead. Texto libre multilínea; vacío = sin firma.
+
+export async function updateAgentSignature(
+  agentId: string,
+  signature: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const trimmed = signature.trim()
+  if (trimmed.length > 600) return { ok: false, error: 'La firma es demasiado larga (máx. 600 caracteres).' }
+
+  const supabase = createAdminClient()
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const { error } = await supabase
+    .from('agents')
+    .update({ email_signature: trimmed || null })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
 // ─── Agents: create + login access (invite / revoke) ──────────────────────────
 // All three are owner/super_admin only; requireWriteAccess blocks role 'agent'
 // (read-only). Login access uses the same PRE-PROVISION pattern as provisionOwner:

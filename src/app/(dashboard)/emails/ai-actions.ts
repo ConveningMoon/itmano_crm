@@ -6,13 +6,15 @@ import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
 
 // ── "Generar con IA" — borrador de correo para el composer ───────────────────
-// Genera el contenido estructurado (asunto + párrafos + CTA opcional) que
-// prellena el composer. NUNCA envía nada: el humano revisa, edita y guarda.
-// Espejo del patrón de properties/ai-actions.ts (tool use forzado, thinking
-// off, coerción defensiva del output).
+// Genera el contenido (asunto + cuerpo) que prellena el composer. NUNCA envía
+// nada: el humano revisa, edita y guarda. Espejo del patrón de
+// properties/ai-actions.ts (tool use forzado, thinking off, coerción defensiva).
+//
+// El correo debe leerse como un mensaje personal escrito a mano, NO como un
+// correo de ventas/marketing. El usuario aporta varios campos (objetivo, tono,
+// idea, puntos) para que la IA produzca el correo ideal.
 
-// Convención del proyecto (misma que ai-property-intake; id vigente verificado
-// contra el skill de la Claude API).
+// Convención del proyecto (id vigente verificado contra el skill de la Claude API).
 const MODEL = 'claude-sonnet-5'
 
 export type EmailAiPurpose =
@@ -24,20 +26,23 @@ export type EmailAiPurpose =
   | 'one_off'
 
 export interface EmailAiInput {
-  purpose:         EmailAiPurpose
-  language:        'es' | 'en' | 'pt'
-  brief:           string
-  leadMagnetName?: string
-  agentName?:      string
-  tenantName?:     string
-  leadFirstName?:  string
+  purpose:   EmailAiPurpose
+  language:  'es' | 'en' | 'pt'
+  // Campos que aporta el usuario para guiar a la IA.
+  objective: string           // objetivo del correo
+  tone:      string           // tono del mensaje
+  idea:      string           // idea general / qué se quiere decir
+  keyPoints?: string          // puntos a incluir (opcional)
+  length:    'short' | 'medium'
+  // Contexto (ya scoped al tenant).
+  agentName?:     string
+  tenantName?:    string
+  leadFirstName?: string
 }
 
 export interface EmailAiDraft {
-  subject:           string
-  paragraphs:        string[]
-  cta:               { label: string; url: string } | null
-  include_signature: boolean
+  subject: string
+  body:    string
 }
 
 export type EmailAiResult =
@@ -46,44 +51,30 @@ export type EmailAiResult =
 
 const COMPOSE_TOOL: Anthropic.Tool = {
   name: 'compose_email',
-  description: 'Return the structured content for one marketing/CRM email.',
+  description: 'Return the subject and body for one personal email.',
   input_schema: {
     type: 'object',
     properties: {
       subject: {
         type: 'string',
-        description: 'Email subject line. May include merge tags like {{customer_name}}.',
+        description: 'A short, personal subject line — like something a friend would write. May include {{customer_name}}.',
       },
-      paragraphs: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '2 to 5 short paragraphs of plain text (no HTML, no markdown). May include merge tags.',
-      },
-      cta: {
-        type: ['object', 'null'],
-        properties: {
-          label: { type: 'string', description: 'Button text (short).' },
-          url:   { type: 'string', description: 'The exact http(s) URL provided in the brief. Never invent one.' },
-        },
-        required: ['label', 'url'],
-        description: 'Call-to-action button. MUST be null unless the brief explicitly provides a URL.',
-      },
-      include_signature: {
-        type: 'boolean',
-        description: 'Whether to end with the agent signature (name + email). Usually true.',
+      body: {
+        type: 'string',
+        description: 'The full email body as plain text. Use blank lines to separate paragraphs and single newlines for line breaks. No HTML, no markdown, no bullet lists. Do NOT include a signature or sign-off name (it is added automatically). Do NOT mention unsubscribing.',
       },
     },
-    required: ['subject', 'paragraphs', 'cta', 'include_signature'],
+    required: ['subject', 'body'],
   },
 }
 
 const PURPOSE_LABEL: Record<EmailAiPurpose, string> = {
-  lead_magnet_delivery: 'Delivery email for a downloadable lead magnet the lead just requested',
-  nurture:              'Nurture email in an automated follow-up sequence for a real-estate lead',
-  purchase_start:       'Milestone email: the lead just STARTED an active home-purchase process with the agency',
-  purchase_pre_close:   'Milestone email: reminder shortly BEFORE the closing date of the purchase',
-  purchase_completed:   'Milestone email: the home purchase was COMPLETED (congratulations + next steps)',
-  one_off:              'One-off personal email from the agent to a specific lead',
+  lead_magnet_delivery: 'The recipient just requested a downloadable resource; this email delivers it',
+  nurture:              'A follow-up email keeping in touch with a real-estate lead',
+  purchase_start:       'The person just started an active home-purchase process',
+  purchase_pre_close:   'A friendly reminder shortly before the closing date',
+  purchase_completed:   'The home purchase was completed — warm congratulations',
+  one_off:              'A personal one-off email to a specific person',
 }
 
 const LANGUAGE_RULES: Record<'es' | 'en' | 'pt', string> = {
@@ -92,29 +83,40 @@ const LANGUAGE_RULES: Record<'es' | 'en' | 'pt', string> = {
   pt: 'Write in BRAZILIAN PORTUGUESE.',
 }
 
+const LENGTH_RULES: Record<'short' | 'medium', string> = {
+  short:  'Keep it short: 2 to 3 brief paragraphs.',
+  medium: 'Medium length: 3 to 5 short paragraphs.',
+}
+
 function buildPrompt(input: EmailAiInput): string {
   const context: string[] = []
-  if (input.tenantName)     context.push(`Real-estate team / brand: ${input.tenantName}`)
-  if (input.agentName)      context.push(`Agent (sender): ${input.agentName}`)
-  if (input.leadMagnetName) context.push(`Lead magnet: ${input.leadMagnetName}`)
-  if (input.leadFirstName)  context.push(`Recipient first name: ${input.leadFirstName}`)
+  if (input.agentName)     context.push(`You are writing as: ${input.agentName}`)
+  if (input.tenantName)    context.push(`Real-estate team: ${input.tenantName}`)
+  if (input.leadFirstName) context.push(`Recipient first name: ${input.leadFirstName}`)
+
+  const brief: string[] = []
+  brief.push(`Objective: ${input.objective.trim()}`)
+  brief.push(`Tone: ${input.tone.trim()}`)
+  brief.push(`Main idea / what to say: ${input.idea.trim()}`)
+  if (input.keyPoints?.trim()) brief.push(`Points to include: ${input.keyPoints.trim()}`)
 
   return [
-    `Write the content for this email: ${PURPOSE_LABEL[input.purpose]}.`,
+    `Write a PERSONAL email. Situation: ${PURPOSE_LABEL[input.purpose]}.`,
     '',
     context.length > 0 ? `Context:\n${context.map(c => `- ${c}`).join('\n')}\n` : '',
-    `Brief from the user (follow it):\n${input.brief.trim()}`,
+    `Brief:\n${brief.map(b => `- ${b}`).join('\n')}`,
     '',
-    'Rules:',
+    'CRITICAL — this must NOT look like a sales, marketing, or promotional email:',
+    '- Write exactly like a real person writing to someone they know — warm, natural, conversational, as if typed by hand.',
+    '- NO marketing language, NO hype, NO salesy phrasing, NO calls-to-action like "click here" or "don\'t miss out".',
+    '- NO bullet lists, NO headings, NO ALL-CAPS, NO emojis, NO exclamation stacking. Just flowing prose in short paragraphs.',
     `- ${LANGUAGE_RULES[input.language]}`,
-    '- Tone: premium, strategic, calm, trustworthy real-estate voice. No hype, no marketing-speak, NO emojis, no exclamation stacking.',
-    '- 2 to 5 short paragraphs of PLAIN TEXT (no HTML, no markdown, no bullet lists).',
-    '- Personalization: use the merge tags {{customer_name}}, {{agent_name}} and {{lead_magnet_name}} (double braces) where natural — e.g. greet with {{customer_name}}. Do NOT use any other tag.',
-    '- cta: set it ONLY if the brief explicitly provides an http(s) URL; copy that URL exactly. Otherwise cta must be null. NEVER invent a URL.',
-    '- Do NOT mention unsubscribing (an unsubscribe footer is added automatically).',
-    '- Do NOT write a signature inside the paragraphs — set include_signature to true instead (the system appends the agent name + email).',
+    `- ${LENGTH_RULES[input.length]}`,
+    '- Greet the person naturally using {{customer_name}}. You may use {{agent_name}} if it reads naturally, but usually not needed.',
+    '- Do NOT write a signature or sign-off name at the end — it is appended automatically.',
+    '- Do NOT mention unsubscribing.',
     '',
-    'Call the compose_email tool with the result.',
+    'Call the compose_email tool with the subject and body.',
   ].join('\n')
 }
 
@@ -127,9 +129,13 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
     return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
   }
 
-  const brief = input.brief?.trim()
-  if (!brief) return { ok: false, error: 'Describe brevemente el correo que necesitas.' }
-  if (brief.length > 2000) return { ok: false, error: 'El brief es demasiado largo (máx. 2000 caracteres).' }
+  const objective = input.objective?.trim()
+  const idea      = input.idea?.trim()
+  if (!objective) return { ok: false, error: 'Indica el objetivo del correo.' }
+  if (!idea)      return { ok: false, error: 'Describe la idea general del correo.' }
+  if ((input.keyPoints?.length ?? 0) > 2000 || idea.length > 2000 || objective.length > 500) {
+    return { ok: false, error: 'Los campos son demasiado largos.' }
+  }
 
   let toolInput: Record<string, unknown>
   try {
@@ -156,43 +162,19 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
 
   // ── Coerción defensiva del output de la tool ─────────────────────────────────
   const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
-  const arr = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map(x => x.trim()) : []
 
-  const subject    = str(toolInput.subject)
-  const paragraphs = arr(toolInput.paragraphs).slice(0, 12)
-  if (!subject || paragraphs.length === 0) {
-    return { ok: false, error: 'El borrador generado está incompleto. Intenta de nuevo con un brief más específico.' }
+  const subject = str(toolInput.subject)
+  const body    = str(toolInput.body)
+  if (!subject || !body) {
+    return { ok: false, error: 'El borrador generado está incompleto. Intenta de nuevo con más detalle.' }
   }
 
-  let cta: EmailAiDraft['cta'] = null
-  if (toolInput.cta && typeof toolInput.cta === 'object') {
-    const c = toolInput.cta as Record<string, unknown>
-    const label = str(c.label)
-    const url   = str(c.url)
-    if (label && url && /^https?:\/\/\S+$/i.test(url)) cta = { label, url }
-  }
-
-  // Validación final con el mismo schema del composer — si la IA devolvió algo
-  // fuera de rango (párrafos > 2000 chars, etc.) se recorta o se rechaza aquí.
-  const content: EmailContent = {
-    v: EMAIL_CONTENT_VERSION,
-    paragraphs: paragraphs.map(p => p.slice(0, 2000)),
-    cta,
-    include_signature: toolInput.include_signature !== false,
-  }
+  // Validación final con el mismo schema del composer.
+  const content: EmailContent = { v: EMAIL_CONTENT_VERSION, body: body.slice(0, 8000) }
   const parsed = EmailContentSchema.safeParse(content)
   if (!parsed.success) {
     return { ok: false, error: 'El borrador generado no es válido. Intenta de nuevo.' }
   }
 
-  return {
-    ok: true,
-    draft: {
-      subject: subject.slice(0, 200),
-      paragraphs: parsed.data.paragraphs,
-      cta: parsed.data.cta,
-      include_signature: parsed.data.include_signature,
-    },
-  }
+  return { ok: true, draft: { subject: subject.slice(0, 200), body: parsed.data.body } }
 }

@@ -60,11 +60,11 @@ export async function processSequenceRun(params: {
   // ── Bulk-fetch related entities in parallel ────────────────────────────────
   const [leadRes, tenantRes, stepRes, channelRes, seqRes] = await Promise.all([
     db.from('leads')
-      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email)')
+      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email, email_signature)')
       .eq('id', leadId)
       .maybeSingle(),
     db.from('tenants')
-      .select('id, email_from_address, name, primary_color')
+      .select('id, email_from_address')
       .eq('id', tenantId)
       .maybeSingle(),
     db.from('email_sequence_steps')
@@ -135,10 +135,9 @@ export async function processSequenceRun(params: {
     email_blocked:         (lead?.email_blocked as boolean) ?? false,
     email_blocked_reason:  (lead?.email_blocked_reason as string | null) ?? null,
     email_from_address:   tenant?.email_from_address ?? null,
-    tenant_name:          (tenant?.name as string) ?? '',
-    tenant_primary_color: (tenant?.primary_color as string) ?? '#1E3A5F',
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',
+    agent_signature:    (agent?.email_signature as string | null) ?? null,
     channel_name:       channel?.name ?? null,
     sequence_language:  seqLang,
   }

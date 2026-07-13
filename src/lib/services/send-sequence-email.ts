@@ -26,11 +26,10 @@ export type PendingRun = {
   email_blocked_reason:  string | null
   // Tenant
   email_from_address:   string | null
-  tenant_name:          string
-  tenant_primary_color: string
   // Agent
   agent_name:         string
   agent_email:        string
+  agent_signature:    string | null
   // Channel (optional)
   channel_name:       string | null
   // Sequence
@@ -121,13 +120,11 @@ export async function sendSequenceEmail(
       subject:  crmSubject,
       content:  crmContent,
       vars: {
-        customer_name:    run.first_name,
-        agent_name:       run.agent_name,
-        agent_email:      run.agent_email,
-        lead_magnet_name: run.channel_name ?? '',
+        customer_name: run.first_name,
+        agent_name:    run.agent_name,
+        agent_email:   run.agent_email,
       },
-      branding:       { tenantName: run.tenant_name, primaryColor: run.tenant_primary_color },
-      signature:      run.agent_name ? { agentName: run.agent_name, agentEmail: run.agent_email } : null,
+      signature:      run.agent_signature,
       unsubscribeUrl,
       locale:         run.sequence_language,
     })
