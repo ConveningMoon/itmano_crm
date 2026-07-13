@@ -12,6 +12,9 @@ node_modules/
 
 # Testing
 coverage/
+graphify-out/
+.graphifyignore
+.claudignore
 
 # Next.js
 .next/
