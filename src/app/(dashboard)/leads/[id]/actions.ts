@@ -1,9 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteLead } from '@/lib/auth/guards'
+import { EmailContentSchema } from '@/lib/email-content'
 import type { LeadStatus } from '@/lib/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -78,6 +80,40 @@ export async function updateLeadStatus(
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
   revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+// ─── Enviar un correo one-off al lead ────────────────────────────────────────
+
+const SendLeadEmailSchema = z.object({
+  subject: z.string().trim().min(1, 'El asunto es obligatorio').max(200),
+  content: EmailContentSchema,
+})
+
+export async function sendLeadEmail(
+  leadId: string,
+  fields: z.infer<typeof SendLeadEmailSchema>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = SendLeadEmailSchema.safeParse(fields)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+
+  const ctx      = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  // Misma verificación de visibilidad/atribución que el resto de acciones del lead.
+  const guard = await loadGuardedLead(supabase, ctx, leadId)
+  if ('ok' in guard) return guard
+
+  const { sendOneOffEmail } = await import('@/lib/services/send-one-off-email')
+  const res = await sendOneOffEmail(supabase, {
+    leadId,
+    tenantId: guard.tenant_id,
+    subject:  parsed.data.subject,
+    content:  parsed.data.content,
+  })
+  if (!res.ok) return res
+
+  revalidatePath(`/leads/${leadId}`)
   return { ok: true }
 }
 

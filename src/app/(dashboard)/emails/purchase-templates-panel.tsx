@@ -1,14 +1,30 @@
 'use client'
 
-import { useState } from 'react'
-import { AlertTriangle, Check, Loader } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { AlertTriangle, Check, X, Pencil } from 'lucide-react'
+import { ModalShell } from '@/components/motion/modal-shell'
 import type { PurchaseTemplateRow } from './purchase-templates-actions'
-import { updatePurchaseTemplate } from './purchase-templates-actions'
+import { updatePurchaseTemplate, updatePurchaseTemplateContent, clearPurchaseTemplateContent } from './purchase-templates-actions'
+import {
+  EmailComposer,
+  composerValueFrom,
+  composerValueToInput,
+  type ComposerValue,
+} from '@/components/dashboard/email-composer'
+import { parseEmailContent } from '@/lib/email-content'
+import type { EmailAiPurpose } from './ai-actions'
 
 const MILESTONE_LABEL: Record<string, string> = {
   start:     'Inicio de proceso',
   pre_close: 'Pre-cierre (día antes)',
   completed: 'Proceso completado',
+}
+
+const MILESTONE_PURPOSE: Record<string, EmailAiPurpose> = {
+  start:     'purchase_start',
+  pre_close: 'purchase_pre_close',
+  completed: 'purchase_completed',
 }
 
 const LANG_LABEL: Record<string, string>  = { es: 'Español', en: 'English', pt: 'Português' }
@@ -24,88 +40,199 @@ function isPlaceholder(id: string) {
   return !id || id.startsWith('REPLACE_ME')
 }
 
-function TemplateCell({
-  row,
-  readOnly,
+// Estado de una celda: contenido del CRM, template de Resend, o sin configurar.
+function cellState(row: PurchaseTemplateRow): 'crm' | 'template' | 'empty' {
+  if (parseEmailContent(row.body_json) && row.subject?.trim()) return 'crm'
+  if (!isPlaceholder(row.resend_template_id)) return 'template'
+  return 'empty'
+}
+
+const STATE_META: Record<'crm' | 'template' | 'empty', { label: string; color: string; bg: string }> = {
+  crm:      { label: 'Contenido CRM', color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
+  template: { label: 'Template Resend', color: 'var(--accent-blue)', bg: 'rgba(91,142,201,0.12)' },
+  empty:    { label: 'Sin configurar', color: 'var(--accent-coral)', bg: 'rgba(201,123,107,0.1)' },
+}
+
+// ─── Editor modal ──────────────────────────────────────────────────────────────
+
+function EditModal({
+  row, tenantId, tenantName, onClose,
 }: {
   row: PurchaseTemplateRow
-  readOnly: boolean
+  tenantId: string
+  tenantName?: string
+  onClose: () => void
 }) {
-  const [value,   setValue]   = useState(row.resend_template_id)
-  const [status,  setStatus]  = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [errMsg,  setErrMsg]  = useState('')
+  const router = useRouter()
+  const [advanced, setAdvanced] = useState(cellState(row) === 'template')
+  const [composer, setComposer] = useState<ComposerValue>(() => composerValueFrom(row.subject, row.body_json))
+  const [templateId, setTemplateId] = useState(row.resend_template_id === '' || isPlaceholder(row.resend_template_id) ? '' : row.resend_template_id)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, start] = useTransition()
 
-  const dirty      = value !== row.resend_template_id
-  const placeholder = isPlaceholder(value)
+  function handleSaveContent() {
+    setError(null)
+    const input = composerValueToInput(composer)
+    if (!input.ok) { setError(input.error); return }
+    start(async () => {
+      const res = await updatePurchaseTemplateContent(row.id, { subject: input.subject, content: input.content })
+      if (!res.ok) { setError(res.error); return }
+      onClose()
+      router.refresh()
+    })
+  }
 
-  async function handleSave() {
-    if (!dirty || readOnly) return
-    setStatus('saving'); setErrMsg('')
-    const res = await updatePurchaseTemplate(row.id, value)
-    if (res.ok) {
-      setStatus('saved')
-      setTimeout(() => setStatus('idle'), 2000)
-    } else {
-      setStatus('error'); setErrMsg(res.error)
-    }
+  function handleSaveTemplate() {
+    setError(null)
+    if (!templateId.trim()) { setError('El Template ID es obligatorio'); return }
+    start(async () => {
+      // Modo avanzado: guardar el template id Y limpiar el contenido CRM para que
+      // el envío use el template (la precedencia es body_json > template).
+      const res = await updatePurchaseTemplate(row.id, templateId.trim())
+      if (!res.ok) { setError(res.error); return }
+      if (cellState(row) === 'crm') await clearPurchaseTemplateContent(row.id)
+      onClose()
+      router.refresh()
+    })
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      {placeholder && (
-        <AlertTriangle size={13} color="var(--accent-coral)" style={{ flexShrink: 0 }} />
-      )}
-      {readOnly ? (
-        <span style={{ fontSize: '12px', color: placeholder ? 'var(--accent-coral)' : 'var(--text-secondary)', fontFamily: 'monospace' }}>
-          {value || '—'}
-        </span>
-      ) : (
-        <>
-          <input
-            value={value}
-            onChange={e => { setValue(e.target.value); setStatus('idle') }}
-            onBlur={handleSave}
-            onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
-            placeholder="resend_template_id"
-            style={{
-              flex: 1,
-              background: 'var(--bg-overlay)',
-              border: `1px solid ${dirty ? 'var(--border-accent)' : 'var(--border-subtle)'}`,
-              borderRadius: '6px',
-              padding: '5px 10px',
-              fontSize: '12px',
-              fontFamily: 'monospace',
-              color: placeholder ? 'var(--accent-coral)' : 'var(--text-primary)',
-              outline: 'none',
-            }}
-          />
-          <div style={{ width: '18px', flexShrink: 0 }}>
-            {status === 'saving' && <Loader size={13} color="var(--text-muted)" style={{ animation: 'spin 1s linear infinite' }} />}
-            {status === 'saved'  && <Check  size={13} color="var(--accent-green)" />}
-            {status === 'error'  && <span title={errMsg}><AlertTriangle size={13} color="var(--accent-coral)" /></span>}
-          </div>
-        </>
-      )}
-    </div>
+    <ModalShell open onClose={onClose} maxWidth={680}>
+      <div style={{ padding: '24px', maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {MILESTONE_LABEL[row.milestone]} · {LANG_LABEL[row.language]}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+        </div>
+        {tenantName && (
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '18px' }}>{tenantName}</div>
+        )}
+
+        {!advanced ? (
+          <>
+            <EmailComposer
+              value={composer}
+              onChange={setComposer}
+              locale={row.language}
+              previewTenantId={tenantId}
+              ai={{
+                purpose:    MILESTONE_PURPOSE[row.milestone],
+                language:   row.language,
+                tenantName,
+              }}
+            />
+            {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px' }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '20px' }}>
+              <button onClick={() => setAdvanced(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer', padding: 0 }}>
+                Usar template de Resend (avanzado)
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={onClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={handleSaveContent} disabled={pending} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+                  {pending ? 'Guardando…' : 'Guardar contenido'}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <label style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', display: 'block' }}>
+              Resend Template ID
+            </label>
+            <input
+              value={templateId}
+              onChange={e => setTemplateId(e.target.value)}
+              placeholder="resend_template_id"
+              style={{ width: '100%', background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '8px 12px', color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Al guardar el template, se descarta el contenido creado en el CRM para este correo.
+            </div>
+            {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px' }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '20px' }}>
+              <button onClick={() => setAdvanced(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer', padding: 0 }}>
+                ← Crear contenido en el CRM
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={onClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={handleSaveTemplate} disabled={pending} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+                  {pending ? 'Guardando…' : 'Guardar template'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </ModalShell>
   )
 }
 
+// ─── Cell (status chip + edit button) ────────────────────────────────────────────
+
+function TemplateCell({
+  row, tenantId, tenantName, readOnly,
+}: {
+  row: PurchaseTemplateRow
+  tenantId: string
+  tenantName?: string
+  readOnly: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const state = cellState(row)
+  const meta  = STATE_META[state]
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+          letterSpacing: '0.04em', color: meta.color, background: meta.bg,
+        }}>
+          {state === 'empty' && <AlertTriangle size={10} />}
+          {state === 'crm' && <Check size={10} />}
+          {meta.label}
+        </span>
+        {!readOnly && (
+          <button
+            onClick={() => setOpen(true)}
+            title="Editar"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px',
+              borderRadius: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <Pencil size={11} />
+          </button>
+        )}
+      </div>
+      {open && <EditModal row={row} tenantId={tenantId} tenantName={tenantName} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+// ─── Panel ────────────────────────────────────────────────────────────────────
+
 export function PurchaseTemplatesPanel({
   templates,
+  tenantId,
+  tenantName,
   readOnly = false,
 }: {
   templates: PurchaseTemplateRow[]
+  tenantId: string
+  tenantName?: string
   readOnly?: boolean
 }) {
   const byKey = Object.fromEntries(templates.map(t => [`${t.milestone}_${t.language}`, t]))
   const langs = ['es', 'en', 'pt'] as const
 
-  const pendingCount = templates.filter(t => isPlaceholder(t.resend_template_id)).length
+  const pendingCount = templates.filter(t => cellState(t) === 'empty').length
 
   return (
     <div style={{ marginTop: '32px' }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
-
       {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
         <div>
@@ -113,7 +240,7 @@ export function PurchaseTemplatesPanel({
             Emails de cierre
           </h2>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Plantillas Resend para los hitos del proceso de compra (inicio, pre-cierre, completado).
+            Contenido de los correos de los hitos del proceso de compra (inicio, pre-cierre, completado).
           </p>
         </div>
         {pendingCount > 0 && (
@@ -168,7 +295,7 @@ export function PurchaseTemplatesPanel({
             {langs.map(lang => {
               const row = byKey[`${milestone}_${lang}`]
               if (!row) return <span key={lang} style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
-              return <TemplateCell key={lang} row={row} readOnly={readOnly} />
+              return <TemplateCell key={lang} row={row} tenantId={tenantId} tenantName={tenantName} readOnly={readOnly} />
             })}
           </div>
         ))}
@@ -176,9 +303,9 @@ export function PurchaseTemplatesPanel({
 
       {!readOnly && (
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-          Edita directamente la celda y presiona Enter o haz clic fuera para guardar. Los IDs marcados con
+          Haz clic en el lápiz para crear el contenido de cada correo dentro del CRM (con IA opcional). Los correos
           {' '}<AlertTriangle size={11} color="var(--accent-coral)" style={{ verticalAlign: 'middle' }} />{' '}
-          aún no están configurados — los emails de ese idioma no se enviarán hasta que se reemplacen.
+          sin configurar no se envían hasta tener contenido.
         </p>
       )}
     </div>

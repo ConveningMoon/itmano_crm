@@ -2,6 +2,8 @@ import 'server-only'
 import { resend } from '@/lib/resend'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
+import { parseEmailContent } from '@/lib/email-content'
+import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 
 export type PendingRun = {
   run_id:             string
@@ -13,6 +15,9 @@ export type PendingRun = {
   step_id:            string | null
   resend_template_id: string | null
   next_delay_hours:   number | null
+  // Contenido CRM del step (modo composer; tiene precedencia sobre el template)
+  step_subject:       string | null
+  step_body_json:     unknown
   // Lead
   first_name:            string
   lead_email:            string
@@ -20,12 +25,16 @@ export type PendingRun = {
   email_blocked:         boolean
   email_blocked_reason:  string | null
   // Tenant
-  email_from_address: string | null
+  email_from_address:   string | null
+  tenant_name:          string
+  tenant_primary_color: string
   // Agent
   agent_name:         string
   agent_email:        string
   // Channel (optional)
   channel_name:       string | null
+  // Sequence
+  sequence_language:  EmailLocale
 }
 
 export type SendResult =
@@ -58,9 +67,15 @@ export async function sendSequenceEmail(
     return { ok: false, reason: 'no_step', action: 'paused' }
   }
 
-  if (!run.resend_template_id) {
-    if (!dryRun) await pauseRun(db, run_id, 'no_template')
-    return { ok: false, reason: 'no_template', action: 'paused' }
+  // Contenido CRM (composer) tiene precedencia; el template de Resend es el
+  // modo legacy/avanzado. Sin ninguno de los dos → no hay qué enviar.
+  const crmContent   = parseEmailContent(run.step_body_json)
+  const crmSubject   = run.step_subject?.trim() || null
+  const hasCrmEmail  = !!(crmContent && crmSubject)
+
+  if (!hasCrmEmail && !run.resend_template_id) {
+    if (!dryRun) await pauseRun(db, run_id, 'no_content')
+    return { ok: false, reason: 'no_content', action: 'paused' }
   }
 
   if (!run.email_from_address) {
@@ -97,28 +112,61 @@ export async function sendSequenceEmail(
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   }
 
+  // Compilar el HTML si el step tiene contenido CRM (merge tags resueltos aquí;
+  // Resend ya no interpola nada en este modo).
+  let compiledSubject: string | null = null
+  let compiledHtml:    string | null = null
+  if (hasCrmEmail && crmContent && crmSubject) {
+    const rendered = renderEmail({
+      subject:  crmSubject,
+      content:  crmContent,
+      vars: {
+        customer_name:    run.first_name,
+        agent_name:       run.agent_name,
+        agent_email:      run.agent_email,
+        lead_magnet_name: run.channel_name ?? '',
+      },
+      branding:       { tenantName: run.tenant_name, primaryColor: run.tenant_primary_color },
+      signature:      run.agent_name ? { agentName: run.agent_name, agentEmail: run.agent_email } : null,
+      unsubscribeUrl,
+      locale:         run.sequence_language,
+    })
+    compiledSubject = rendered.subject
+    compiledHtml    = rendered.html
+  }
+
   let resendEmailId: string
   try {
-    const { data, error } = await resend.emails.send({
-      from:    run.email_from_address,
-      to:      run.lead_email,
-      headers: listUnsubscribeHeaders,
-      template: {
-        id:        run.resend_template_id,
-        variables,
-      },
-    })
+    const { data, error } = await resend.emails.send(
+      compiledHtml && compiledSubject
+        ? {
+            from:    run.email_from_address,
+            to:      run.lead_email,
+            headers: listUnsubscribeHeaders,
+            subject: compiledSubject,
+            html:    compiledHtml,
+          }
+        : {
+            from:    run.email_from_address,
+            to:      run.lead_email,
+            headers: listUnsubscribeHeaders,
+            template: {
+              id:        run.resend_template_id as string,
+              variables,
+            },
+          },
+    )
 
     if (error || !data?.id) {
       const msg = error?.message ?? 'Resend returned no id'
-      await pauseRun(db, run_id, `resend_error: ${msg}`)
+      await pauseRun(db, run_id, 'resend_error', msg)
       return { ok: false, reason: msg, action: 'paused' }
     }
 
     resendEmailId = data.id
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    await pauseRun(db, run_id, `resend_error: ${msg}`)
+    await pauseRun(db, run_id, 'resend_error', msg)
     return { ok: false, reason: msg, action: 'paused' }
   }
 
@@ -129,7 +177,9 @@ export async function sendSequenceEmail(
     sequence_run_id:    run_id,
     step_order:         current_step_order,
     resend_email_id:    resendEmailId,
-    resend_template_id: run.resend_template_id,
+    resend_template_id: hasCrmEmail ? null : run.resend_template_id,
+    send_type:          'sequence',
+    subject:            compiledSubject,
     sent_at:            new Date().toISOString(),
   })
 
@@ -181,16 +231,28 @@ export async function sendSequenceEmail(
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
+// Razones permitidas por el CHECK de lead_sequence_runs.cancelled_reason (050).
+// El detalle libre (p. ej. el mensaje de error de Resend) va al log, nunca a la
+// columna — escribir texto libre violaba el CHECK y la pausa fallaba en silencio.
+type PauseReason = 'no_step' | 'no_template' | 'no_content' | 'no_from_address' | 'resend_error'
+
 async function pauseRun(
   db: ReturnType<typeof createAdminClient>,
   runId: string,
-  reason: string,
+  reason: PauseReason,
+  detail?: string,
 ) {
-  await db
+  if (detail) {
+    console.error(JSON.stringify({ service: 'send-sequence-email', run_id: runId, reason, detail }))
+  }
+  const { error } = await db
     .from('lead_sequence_runs')
     .update({
       status:           'paused',
       cancelled_reason: reason,
     })
     .eq('id', runId)
+  if (error) {
+    console.error(JSON.stringify({ service: 'send-sequence-email', run_id: runId, reason: 'pause_failed', detail: error.message }))
+  }
 }

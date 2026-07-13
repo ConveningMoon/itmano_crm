@@ -2,6 +2,8 @@ import 'server-only'
 import { resend } from '@/lib/resend'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
+import { parseEmailContent } from '@/lib/email-content'
+import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 
 export type PurchaseMilestone = 'start' | 'pre_close' | 'completed'
 
@@ -67,7 +69,8 @@ export async function sendPurchaseEmail(
         email,
         language,
         email_blocked,
-        email_blocked_reason
+        email_blocked_reason,
+        agents (name, email)
       )
     `)
     .eq('id', processId)
@@ -103,10 +106,13 @@ export async function sendPurchaseEmail(
   }
 
   const tenantId   = p.tenant_id as string
-  const language   = (['es', 'en', 'pt'].includes(lead.language as string) ? lead.language : 'es') as string
+  const language   = (['es', 'en', 'pt'].includes(lead.language as string) ? lead.language : 'es') as EmailLocale
   const firstName  = lead.first_name as string
   const leadEmail  = lead.email as string
   const leadId     = lead.id as string
+  const agent      = Array.isArray(lead.agents) ? lead.agents[0] : lead.agents
+  const agentName  = (agent?.name as string | undefined) ?? ''
+  const agentEmail = (agent?.email as string | undefined) ?? ''
 
   // Block purchase emails only for hard_bounce (the address doesn't exist).
   // unsubscribed: these are transactional confirmations for a process the lead
@@ -124,35 +130,42 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Look up the template for this (tenant, milestone, language).
+  // Look up the template for this (tenant, milestone, language). Contenido CRM
+  // (subject + body_json del composer) tiene precedencia; el template de Resend
+  // queda como modo legacy/avanzado.
   const { data: tmpl } = await db
     .from('purchase_email_templates')
-    .select('resend_template_id')
+    .select('resend_template_id, subject, body_json')
     .eq('tenant_id', tenantId)
     .eq('milestone', milestone)
     .eq('language', language)
     .maybeSingle()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const templateId = (tmpl as any)?.resend_template_id as string | undefined
+  const t = tmpl as any
+  const templateId  = t?.resend_template_id as string | undefined
+  const crmContent  = parseEmailContent(t?.body_json)
+  const crmSubject  = (t?.subject as string | null)?.trim() || null
+  const hasCrmEmail = !!(crmContent && crmSubject)
 
-  if (!templateId || isPlaceholder(templateId)) {
+  if (!hasCrmEmail && (!templateId || isPlaceholder(templateId))) {
     console.warn(JSON.stringify({
       service: 'sendPurchaseEmail', processId, milestone, language,
-      warning: 'template_placeholder_skipped', template_id: templateId ?? '(none)',
+      warning: 'no_content_skipped', template_id: templateId ?? '(none)',
     }))
     return
   }
 
-  // Load the tenant's from address.
+  // Load the tenant's from address + branding for the CRM-content wrapper.
   const { data: tenant } = await db
     .from('tenants')
-    .select('email_from_address')
+    .select('email_from_address, name, primary_color')
     .eq('id', tenantId)
     .single()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fromAddress = (tenant as any)?.email_from_address as string | null
+  const tn = tenant as any
+  const fromAddress = tn?.email_from_address as string | null
   if (!fromAddress) {
     console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'no_from_address' }))
     return
@@ -169,21 +182,71 @@ export async function sendPurchaseEmail(
     'List-Unsubscribe':      `<${unsubscribeUrl}>`,
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   }
+  let resendEmailId: string | null = null
+  let sentSubject:   string | null = null
   try {
-    const { error: sendErr } = await resend.emails.send({
-      from:     fromAddress,
-      to:       leadEmail,
-      headers:  listUnsubscribeHeaders,
-      template: { id: templateId, variables: { customer_name: firstName, unsubscribe_url: unsubscribeUrl } },
-    })
+    let payload
+    if (hasCrmEmail && crmContent && crmSubject) {
+      const rendered = renderEmail({
+        subject:  crmSubject,
+        content:  crmContent,
+        vars: {
+          customer_name:    firstName,
+          agent_name:       agentName,
+          agent_email:      agentEmail,
+          lead_magnet_name: '',
+        },
+        branding:       { tenantName: (tn?.name as string) ?? '', primaryColor: (tn?.primary_color as string) ?? '#1E3A5F' },
+        signature:      agentName ? { agentName, agentEmail } : null,
+        unsubscribeUrl,
+        locale:         language,
+      })
+      sentSubject = rendered.subject
+      payload = {
+        from:    fromAddress,
+        to:      leadEmail,
+        headers: listUnsubscribeHeaders,
+        subject: rendered.subject,
+        html:    rendered.html,
+      }
+    } else {
+      payload = {
+        from:     fromAddress,
+        to:       leadEmail,
+        headers:  listUnsubscribeHeaders,
+        template: { id: templateId as string, variables: { customer_name: firstName, unsubscribe_url: unsubscribeUrl } },
+      }
+    }
+
+    const { data: sendData, error: sendErr } = await resend.emails.send(payload)
 
     if (sendErr) {
       console.error(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, error: sendErr.message }))
       return
     }
+    resendEmailId = sendData?.id ?? null
   } catch (err) {
     console.error(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, error: err instanceof Error ? err.message : String(err) }))
     return
+  }
+
+  // email_sends row → el webhook de Resend puede atribuir clicks/replies de
+  // correos de compra al lead (antes eran inatribuibles). Best-effort.
+  if (resendEmailId) {
+    const { error: sendRowErr } = await db.from('email_sends').insert({
+      tenant_id:          tenantId,
+      lead_id:            leadId,
+      sequence_run_id:    null,
+      step_order:         null,
+      resend_email_id:    resendEmailId,
+      resend_template_id: hasCrmEmail ? null : templateId,
+      send_type:          'purchase',
+      subject:            sentSubject,
+      sent_at:            new Date().toISOString(),
+    })
+    if (sendRowErr) {
+      console.error(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, error: 'email_sends_insert_failed', detail: sendRowErr.message }))
+    }
   }
 
   // Mark idempotency flag + insert activity event — both best-effort after a

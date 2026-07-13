@@ -16,6 +16,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { FormSection } from '@/components/ui/form-section'
 import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
+import { SendEmailModal } from './send-email-modal'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
@@ -174,6 +175,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [modalClosingDate, setModalClosingDate] = useState('')
   const [modalNotes, setModalNotes]         = useState('')
   const [showEditModal, setShowEditModal]   = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
   const [confirmClose, setConfirmClose]     = useState(false)
   const [confirmLost, setConfirmLost]       = useState(false)
   const [actionError, setActionError]       = useState<string | null>(null)
@@ -283,6 +285,19 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
           {/* Header actions */}
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <button
+              onClick={() => setShowEmailModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                height: '32px', padding: '0 12px', borderRadius: '8px',
+                background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.25)',
+                cursor: 'pointer', color: 'var(--accent-gold)', fontSize: '12px', fontWeight: 500,
+              }}
+              title="Enviar correo al lead"
+            >
+              <Mail size={14} />
+              <span>Enviar correo</span>
+            </button>
             <button
               onClick={() => setShowEditModal(true)}
               style={{
@@ -759,6 +774,16 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         channels={channels}
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
+      />
+
+      <SendEmailModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        leadId={lead.id}
+        tenantId={lead.tenantId}
+        language={lead.language}
+        leadFirstName={lead.firstName}
+        agentName={agent?.name}
       />
 
       {/* ── Modal: Iniciar proceso ── */}

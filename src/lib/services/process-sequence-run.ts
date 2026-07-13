@@ -1,6 +1,8 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendSequenceEmail, type PendingRun } from '@/lib/services/send-sequence-email'
+import { parseEmailContent } from '@/lib/email-content'
+import type { EmailLocale } from '@/lib/services/email-render'
 
 // Resend template IDs are UUIDs; anything else is a placeholder.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -62,11 +64,11 @@ export async function processSequenceRun(params: {
       .eq('id', leadId)
       .maybeSingle(),
     db.from('tenants')
-      .select('id, email_from_address')
+      .select('id, email_from_address, name, primary_color')
       .eq('id', tenantId)
       .maybeSingle(),
     db.from('email_sequence_steps')
-      .select('id, sequence_id, step_order, resend_template_id, delay_hours')
+      .select('id, sequence_id, step_order, resend_template_id, delay_hours, subject, body_json')
       .eq('sequence_id', sequenceId)
       .eq('step_order', stepOrder)
       .eq('active', true)
@@ -77,7 +79,7 @@ export async function processSequenceRun(params: {
       .limit(1)
       .maybeSingle(),
     db.from('email_sequences')
-      .select('name')
+      .select('name, language')
       .eq('id', sequenceId)
       .maybeSingle(),
   ])
@@ -92,7 +94,9 @@ export async function processSequenceRun(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channel = channelRes.data as any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seqName = (seqRes.data as any)?.name as string | undefined
+  const seq     = seqRes.data as any
+  const seqName = seq?.name as string | undefined
+  const seqLang: EmailLocale = seq?.language === 'en' || seq?.language === 'pt' ? seq.language : 'es'
 
   // ── Guard: email channel blocked ──────────────────────────────────────────
   // Cancel the run so the cron never retries it. The block is permanent until
@@ -123,15 +127,20 @@ export async function processSequenceRun(params: {
     step_id:            step?.id ?? null,
     resend_template_id: step?.resend_template_id ?? null,
     next_delay_hours:   step?.delay_hours ?? null,
+    step_subject:       (step?.subject as string | null) ?? null,
+    step_body_json:     step?.body_json ?? null,
     first_name:            lead?.first_name ?? '',
     lead_email:            lead?.email ?? '',
     agent_id:              lead?.agent_id ?? '',
     email_blocked:         (lead?.email_blocked as boolean) ?? false,
     email_blocked_reason:  (lead?.email_blocked_reason as string | null) ?? null,
-    email_from_address: tenant?.email_from_address ?? null,
+    email_from_address:   tenant?.email_from_address ?? null,
+    tenant_name:          (tenant?.name as string) ?? '',
+    tenant_primary_color: (tenant?.primary_color as string) ?? '#1E3A5F',
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',
     channel_name:       channel?.name ?? null,
+    sequence_language:  seqLang,
   }
 
   const diag = { leadEmail: pending.lead_email, sequenceName: seqName ?? sequenceId, stepOrder }
@@ -141,11 +150,16 @@ export async function processSequenceRun(params: {
     if (!pending.step_id) {
       return { action: 'paused', reason: 'no_step', details: `No active step at order ${stepOrder}`, ...diag }
     }
-    if (!pending.resend_template_id) {
-      return { action: 'paused', reason: 'no_template', details: 'resend_template_id is null on this step', ...diag }
-    }
-    if (!UUID_RE.test(pending.resend_template_id)) {
-      return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
+    // Un step es válido con contenido CRM (composer) O con un template de
+    // Resend (legacy). El contenido CRM tiene precedencia en el envío.
+    const hasCrmContent = !!(parseEmailContent(pending.step_body_json) && pending.step_subject?.trim())
+    if (!hasCrmContent) {
+      if (!pending.resend_template_id) {
+        return { action: 'paused', reason: 'no_content', details: 'Step has neither CRM content (subject + body_json) nor a Resend template id', ...diag }
+      }
+      if (!UUID_RE.test(pending.resend_template_id)) {
+        return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
+      }
     }
     if (!pending.email_from_address) {
       return { action: 'paused', reason: 'no_from_address', details: 'tenant.email_from_address is null', ...diag }

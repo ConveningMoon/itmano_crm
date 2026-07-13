@@ -223,7 +223,7 @@ export default async function EmailsPage() {
           }}>
             {tenant_name}
           </div>
-          <PurchaseTemplatesPanel templates={templates} />
+          <PurchaseTemplatesPanel templates={templates} tenantId={tid} tenantName={tenant_name} />
         </div>
       ))}
     </>

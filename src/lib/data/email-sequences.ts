@@ -15,6 +15,9 @@ export interface SequenceStep {
   subject:          string | null
   active:           boolean
   resendTemplateId: string | null
+  // Contenido CRM del composer ({ v, paragraphs, cta, include_signature }) o
+  // null cuando el step usa un template de Resend (modo legacy).
+  bodyJson:         unknown
 }
 
 export interface SequenceRun {
@@ -73,7 +76,7 @@ export async function listSequences(
 
   let stepQ = supabase
     .from('email_sequence_steps')
-    .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
+    .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, body_json, active')
     .eq('active', true)
     .order('step_order')
   if (tenantId) stepQ = stepQ.eq('tenant_id', tenantId)
@@ -122,6 +125,7 @@ export async function listSequences(
       subject:          row.subject,
       active:           row.active,
       resendTemplateId: row.resend_template_id,
+      bodyJson:         row.body_json ?? null,
     })
   }
 
@@ -212,7 +216,7 @@ export async function getSequenceWithRuns(
 
     supabase
       .from('email_sequence_steps')
-      .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, active')
+      .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, body_json, active')
       .eq('sequence_id', sequenceId)
       .order('step_order'),
 
@@ -270,6 +274,7 @@ export async function getSequenceWithRuns(
       subject:          sr.subject,
       active:           sr.active,
       resendTemplateId: sr.resend_template_id,
+      bodyJson:         sr.body_json ?? null,
     }
   })
 

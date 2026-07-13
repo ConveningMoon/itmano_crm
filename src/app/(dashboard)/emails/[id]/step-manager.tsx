@@ -6,7 +6,15 @@ import { Plus, Pencil, Trash2, X, AlertTriangle, Mail } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import type { SequenceStep } from '@/lib/data/email-sequences'
 import type { StepMetric } from '@/lib/services/email-metrics'
-import { addStep, updateStep, deleteStep } from '../actions'
+import { addStep, updateStep, deleteStep, type StepInput } from '../actions'
+import {
+  EmailComposer,
+  emptyComposerValue,
+  composerValueFrom,
+  composerValueToInput,
+  type ComposerValue,
+} from '@/components/dashboard/email-composer'
+import { parseEmailContent } from '@/lib/email-content'
 
 const INPUT: React.CSSProperties = {
   width: '100%',
@@ -39,20 +47,33 @@ function delayLabel(hours: number): string {
 
 interface StepFormState {
   delayHours:       number
+  contentMode:      'crm' | 'template'
   resendTemplateId: string
+  composer:         ComposerValue
 }
 
 interface Props {
   sequenceId:  string
   steps:       SequenceStep[]
   stepMetrics?: StepMetric[]
+  // Contexto para preview + generación con IA
+  language?:       'es' | 'en' | 'pt'
+  tenantId?:       string
+  tenantName?:     string
+  agentName?:      string
+  leadMagnetName?: string
 }
 
-export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Props) {
+export function StepManager({
+  sequenceId, steps: initialSteps, stepMetrics,
+  language = 'es', tenantId, tenantName, agentName, leadMagnetName,
+}: Props) {
   const router   = useRouter()
   const [mode,    setMode]    = useState<'idle' | 'add' | 'edit' | 'confirm_delete'>('idle')
   const [target,  setTarget]  = useState<string | null>(null)   // stepId for edit/delete
-  const [form,    setForm]    = useState<StepFormState>({ delayHours: 0, resendTemplateId: '' })
+  const [form,    setForm]    = useState<StepFormState>({
+    delayHours: 0, contentMode: 'crm', resendTemplateId: '', composer: emptyComposerValue(),
+  })
   const [error,   setError]   = useState<string | null>(null)
   const [pending, start]      = useTransition()
 
@@ -62,14 +83,25 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
   const metricsMap = new Map((stepMetrics ?? []).map(m => [m.stepOrder, m]))
 
   function openAdd() {
-    setForm({ delayHours: steps.length === 0 ? 0 : 72, resendTemplateId: '' })
+    setForm({
+      delayHours:       steps.length === 0 ? 0 : 72,
+      contentMode:      'crm',
+      resendTemplateId: '',
+      composer:         emptyComposerValue(),
+    })
     setError(null)
     setMode('add')
   }
 
   function openEdit(step: SequenceStep) {
     setTarget(step.id)
-    setForm({ delayHours: step.delayHours, resendTemplateId: step.resendTemplateId ?? '' })
+    const hasCrmContent = parseEmailContent(step.bodyJson) !== null
+    setForm({
+      delayHours:       step.delayHours,
+      contentMode:      hasCrmContent ? 'crm' : 'template',
+      resendTemplateId: step.resendTemplateId ?? '',
+      composer:         composerValueFrom(step.subject, step.bodyJson),
+    })
     setError(null)
     setMode('edit')
   }
@@ -82,11 +114,23 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
 
   function closeModal() { setMode('idle'); setTarget(null); setError(null) }
 
+  // Construye el payload de la action según el modo; null + error visible si falta algo.
+  function buildStepInput(): StepInput | null {
+    if (form.contentMode === 'template') {
+      if (!form.resendTemplateId.trim()) { setError('El Template ID es obligatorio'); return null }
+      return { mode: 'template', delayHours: form.delayHours, resendTemplateId: form.resendTemplateId }
+    }
+    const input = composerValueToInput(form.composer)
+    if (!input.ok) { setError(input.error); return null }
+    return { mode: 'crm', delayHours: form.delayHours, subject: input.subject, content: input.content }
+  }
+
   function handleAdd() {
-    if (!form.resendTemplateId.trim()) { setError('El Template ID es obligatorio'); return }
     setError(null)
+    const input = buildStepInput()
+    if (!input) return
     start(async () => {
-      const res = await addStep(sequenceId, { delayHours: form.delayHours, resendTemplateId: form.resendTemplateId })
+      const res = await addStep(sequenceId, input)
       if (!res.ok) { setError(res.error); return }
       closeModal()
       router.refresh()
@@ -95,10 +139,11 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
 
   function handleUpdate() {
     if (!target) return
-    if (!form.resendTemplateId.trim()) { setError('El Template ID es obligatorio'); return }
     setError(null)
+    const input = buildStepInput()
+    if (!input) return
     start(async () => {
-      const res = await updateStep(target, { delayHours: form.delayHours, resendTemplateId: form.resendTemplateId })
+      const res = await updateStep(target, input)
       if (!res.ok) { setError(res.error); return }
       closeModal()
       router.refresh()
@@ -187,20 +232,28 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
                 {delayLabel(step.delayHours)}
               </div>
 
-              {/* Template ID + step metrics */}
+              {/* Contenido (CRM o template) + step metrics */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {step.resendTemplateId ? (
+                {parseEmailContent(step.bodyJson) && step.subject ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                    <span style={{
+                      flexShrink: 0, fontSize: '9px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
+                      letterSpacing: '0.05em', textTransform: 'uppercase',
+                      color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.12)',
+                    }}>
+                      CRM
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {step.subject}
+                    </span>
+                  </span>
+                ) : step.resendTemplateId ? (
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                     {step.resendTemplateId}
                   </span>
                 ) : (
                   <span style={{ fontSize: '12px', color: 'var(--accent-coral)', fontStyle: 'italic' }}>
-                    Sin template — el cron pausará este paso
-                  </span>
-                )}
-                {step.subject && (
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {step.subject}
+                    Sin contenido — el cron pausará este paso
                   </span>
                 )}
                 {(() => {
@@ -246,8 +299,8 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
       </div>
 
       {/* Add / Edit step modal */}
-      <ModalShell open={mode === 'add' || mode === 'edit'} onClose={closeModal} maxWidth={520}>
-          <div style={{ padding: '24px' }}>
+      <ModalShell open={mode === 'add' || mode === 'edit'} onClose={closeModal} maxWidth={680}>
+          <div style={{ padding: '24px', maxHeight: '85vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
                 {mode === 'add' ? 'Agregar paso' : 'Editar paso'}
@@ -273,40 +326,88 @@ export function StepManager({ sequenceId, steps: initialSteps, stepMetrics }: Pr
                 />
               </div>
 
+              {/* Modo de contenido: composer del CRM (default) o template de Resend (avanzado) */}
               <div>
-                <label style={LABEL}>
-                  Resend Template ID <span style={{ color: 'var(--accent-coral)' }}>*</span>
-                </label>
-                <input
-                  value={form.resendTemplateId}
-                  onChange={e => setForm(f => ({ ...f, resendTemplateId: e.target.value }))}
-                  placeholder="tmpl_xxxxxxxx o uuid"
-                  className="sm-input"
-                  style={INPUT}
-                />
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
-                  Resend Dashboard → Templates → click en el template → botón &quot;Copy ID&quot;
+                <label style={LABEL}>Contenido del correo</label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {([
+                    { key: 'crm',      label: 'Crear en el CRM' },
+                    { key: 'template', label: 'Template de Resend (avanzado)' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, contentMode: opt.key }))}
+                      style={{
+                        padding: '6px 14px', fontSize: '12px', fontWeight: 500, borderRadius: '8px', cursor: 'pointer',
+                        background: form.contentMode === opt.key ? 'rgba(201,169,110,0.12)' : 'transparent',
+                        color: form.contentMode === opt.key ? 'var(--accent-gold)' : 'var(--text-muted)',
+                        border: `1px solid ${form.contentMode === opt.key ? 'rgba(201,169,110,0.3)' : 'var(--border-subtle)'}`,
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
+                {mode === 'edit' && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                    Al guardar, el paso usa solo el modo seleccionado (el otro se limpia).
+                  </div>
+                )}
               </div>
 
-              {/* Template variables warning */}
-              <div style={{
-                background: 'rgba(201,169,110,0.06)', border: '1px solid rgba(201,169,110,0.18)',
-                borderRadius: '8px', padding: '12px 14px',
-                fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.6,
-              }}>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <AlertTriangle size={13} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
-                  <strong style={{ color: 'var(--accent-gold)' }}>Variables disponibles en tu template de Resend</strong>
-                </div>
-                <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                  {`{{{customer_name}}}  {{{agent_name}}}  {{{agent_email}}}`}<br />
-                  {`{{{lead_magnet_name}}}  {{{unsubscribe_url}}}`}
-                </div>
-                <div style={{ marginTop: '8px', color: 'var(--accent-coral)' }}>
-                  <strong>Usa triple llave</strong> {`{{{variable}}}`}, no doble. No metas {`{{{unsubscribe_url}}}`} dentro de un <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '3px' }}>{`<a href="...">`}</code> — bug conocido de Resend; ponlo como texto plano al final del email.
-                </div>
-              </div>
+              {form.contentMode === 'crm' ? (
+                <EmailComposer
+                  value={form.composer}
+                  onChange={v => setForm(f => ({ ...f, composer: v }))}
+                  locale={language}
+                  previewTenantId={tenantId}
+                  ai={{
+                    purpose:  steps.length === 0 || (mode === 'edit' && form.delayHours === 0) ? 'lead_magnet_delivery' : 'nurture',
+                    language,
+                    leadMagnetName,
+                    agentName,
+                    tenantName,
+                  }}
+                />
+              ) : (
+                <>
+                  <div>
+                    <label style={LABEL}>
+                      Resend Template ID <span style={{ color: 'var(--accent-coral)' }}>*</span>
+                    </label>
+                    <input
+                      value={form.resendTemplateId}
+                      onChange={e => setForm(f => ({ ...f, resendTemplateId: e.target.value }))}
+                      placeholder="tmpl_xxxxxxxx o uuid"
+                      className="sm-input"
+                      style={INPUT}
+                    />
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                      Resend Dashboard → Templates → click en el template → botón &quot;Copy ID&quot;
+                    </div>
+                  </div>
+
+                  {/* Template variables warning (solo aplica al modo template) */}
+                  <div style={{
+                    background: 'rgba(201,169,110,0.06)', border: '1px solid rgba(201,169,110,0.18)',
+                    borderRadius: '8px', padding: '12px 14px',
+                    fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.6,
+                  }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <AlertTriangle size={13} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                      <strong style={{ color: 'var(--accent-gold)' }}>Variables disponibles en tu template de Resend</strong>
+                    </div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                      {`{{{customer_name}}}  {{{agent_name}}}  {{{agent_email}}}`}<br />
+                      {`{{{lead_magnet_name}}}  {{{unsubscribe_url}}}`}
+                    </div>
+                    <div style={{ marginTop: '8px', color: 'var(--accent-coral)' }}>
+                      <strong>Usa triple llave</strong> {`{{{variable}}}`}, no doble. No metas {`{{{unsubscribe_url}}}`} dentro de un <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '3px' }}>{`<a href="...">`}</code> — bug conocido de Resend; ponlo como texto plano al final del email.
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
