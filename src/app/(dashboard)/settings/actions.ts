@@ -123,6 +123,132 @@ export async function updateScoreRules(
   return { ok: true }
 }
 
+// ─── Tenant logo (bucket tenant-assets) ───────────────────────────────────────
+// El logo del tenant vive en el bucket público `tenant-assets` bajo
+// `<tenant_id>/logo-<uuid>.<ext>` y su URL pública en tenants.logo_url (lo lee
+// el sidebar). Escriben: super_admin (cualquier tenant — flujo de creación en
+// /admin) y agent_owner (su propio tenant, vía resolveTargetTenant).
+
+const LOGO_BUCKET     = 'tenant-assets'
+const MAX_LOGO_BYTES  = 2 * 1024 * 1024 // 2 MB
+const LOGO_EXT_BY_TYPE: Record<string, string> = {
+  'image/png':     'png',
+  'image/jpeg':    'jpg',
+  'image/webp':    'webp',
+  'image/svg+xml': 'svg',
+}
+
+// Extrae el path del objeto desde una URL pública del bucket de logos.
+function logoPathFromPublicUrl(url: unknown): string | null {
+  if (typeof url !== 'string') return null
+  const marker = `/${LOGO_BUCKET}/`
+  const i = url.indexOf(marker)
+  if (i === -1) return null
+  const raw = url.slice(i + marker.length)
+  try { return decodeURIComponent(raw) } catch { return raw }
+}
+
+// Borra el objeto anterior del bucket (best-effort — nunca falla la action).
+async function removeOldLogoObject(
+  supabase: ReturnType<typeof createAdminClient>,
+  oldUrl: string | null,
+): Promise<void> {
+  const path = logoPathFromPublicUrl(oldUrl)
+  if (!path) return
+  const { error } = await supabase.storage.from(LOGO_BUCKET).remove([path])
+  if (error) {
+    console.error(JSON.stringify({ service: 'tenant-logo-cleanup', path, error: error.message }))
+  }
+}
+
+export async function updateTenantLogo(
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  // super_admin puede nombrar el tenant destino (creación desde /admin);
+  // agent_owner siempre opera sobre su propio tenant.
+  const requested = formData.get('tenantId')
+  const target = resolveTargetTenant(ctx, typeof requested === 'string' && requested ? requested : undefined)
+  if (typeof target === 'object') return { ok: false, error: target.error }
+
+  const file = formData.get('file')
+  if (!(file instanceof File)) return { ok: false, error: 'Archivo no válido' }
+  if (!LOGO_EXT_BY_TYPE[file.type]) {
+    return { ok: false, error: 'El logo debe ser PNG, JPG, WebP o SVG.' }
+  }
+  if (file.size > MAX_LOGO_BYTES) {
+    return { ok: false, error: 'El logo supera el tamaño máximo de 2 MB.' }
+  }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id, logo_url')
+    .eq('id', target)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'El tenant no existe.' }
+
+  const ext   = LOGO_EXT_BY_TYPE[file.type]
+  const path  = `${target}/logo-${crypto.randomUUID()}.${ext}`
+  const bytes = Buffer.from(await file.arrayBuffer())
+
+  const { error: uploadErr } = await supabase.storage
+    .from(LOGO_BUCKET)
+    .upload(path, bytes, { contentType: file.type, upsert: false })
+  if (uploadErr) return { ok: false, error: uploadErr.message }
+
+  const { data: pub } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path)
+
+  const { error: updateErr } = await supabase
+    .from('tenants')
+    .update({ logo_url: pub.publicUrl })
+    .eq('id', target)
+  if (updateErr) {
+    // No dejar el archivo huérfano si la fila no se pudo actualizar.
+    await supabase.storage.from(LOGO_BUCKET).remove([path])
+    return { ok: false, error: updateErr.message }
+  }
+
+  await removeOldLogoObject(supabase, (tenant as { logo_url: string | null }).logo_url)
+
+  // El sidebar lee el logo en el layout — revalidar todo el árbol protegido.
+  revalidatePath('/', 'layout')
+  return { ok: true, url: pub.publicUrl }
+}
+
+export async function removeTenantLogo(
+  tenantId?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const target = resolveTargetTenant(ctx, tenantId)
+  if (typeof target === 'object') return { ok: false, error: target.error }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id, logo_url')
+    .eq('id', target)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'El tenant no existe.' }
+
+  const { error } = await supabase
+    .from('tenants')
+    .update({ logo_url: null })
+    .eq('id', target)
+  if (error) return { ok: false, error: error.message }
+
+  await removeOldLogoObject(supabase, (tenant as { logo_url: string | null }).logo_url)
+
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
 // ─── Agents: create + login access (invite / revoke) ──────────────────────────
 // All three are owner/super_admin only; requireWriteAccess blocks role 'agent'
 // (read-only). Login access uses the same PRE-PROVISION pattern as provisionOwner:

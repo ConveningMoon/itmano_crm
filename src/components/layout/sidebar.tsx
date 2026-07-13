@@ -1,11 +1,17 @@
-import Image from 'next/image'
 import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { BrandLogo } from './brand-logo'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-export function Sidebar({ role, userEmail, hubMode = false }: { role: TenantRole; userEmail: string; hubMode?: boolean }) {
+export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null }: {
+  role: TenantRole
+  userEmail: string
+  hubMode?: boolean
+  logoUrl?: string | null
+  tenantName?: string | null
+}) {
   // Admin console is super_admin-only — hidden from the nav for everyone else.
   const items = navItemsForRole(role, { hubMode })
 
@@ -37,14 +43,7 @@ export function Sidebar({ role, userEmail, hubMode = false }: { role: TenantRole
           alignItems: 'flex-start',
         }}
       >
-        <Image
-          src="/A&J_Logo_White.png"
-          alt="ITMANO"
-          width={120}
-          height={44}
-          priority
-          style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }}
-        />
+        <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
         <div
           style={{
             fontSize: '10px',

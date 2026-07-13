@@ -109,6 +109,97 @@ export async function createTenant(
   return { ok: true, id }
 }
 
+// ─── Update tenant ────────────────────────────────────────────────────────────
+
+const UpdateTenantSchema = z.object({
+  tenantId:     z.string().trim().min(1),
+  name:         z.string().trim().min(1, 'El nombre es obligatorio').max(100),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)'),
+})
+
+export async function updateTenant(
+  input: { tenantId: string; name: string; primaryColor: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede editar tenants.' }
+  }
+
+  const parsed = UpdateTenantSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('tenants')
+    .update({ name: parsed.data.name, primary_color: parsed.data.primaryColor })
+    .eq('id', parsed.data.tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  // El nombre/branding se lee en el layout (sidebar, switcher) — revalidar todo.
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
+// ─── Delete tenant ────────────────────────────────────────────────────────────
+
+// Eliminación real de la fila. La mayoría de las FKs a tenants NO son cascade
+// (leads, agents, canales, emails…), así que un tenant con datos operativos es
+// rechazado por Postgres — eso es intencional: borrar un tenant productivo
+// requiere limpieza deliberada, no un botón. `confirmSlug` obliga a teclear el
+// slug exacto como confirmación.
+export async function deleteTenant(
+  tenantId: string,
+  confirmSlug: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede eliminar tenants.' }
+  }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id, slug, logo_url')
+    .eq('id', tenantId)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'El tenant no existe.' }
+
+  const t = tenant as { id: string; slug: string; logo_url: string | null }
+  if (confirmSlug.trim() !== t.slug) {
+    return { ok: false, error: `Escribe el slug exacto (“${t.slug}”) para confirmar.` }
+  }
+
+  const { error } = await supabase.from('tenants').delete().eq('id', tenantId)
+  if (error) {
+    if (/foreign key|violates/i.test(error.message)) {
+      return {
+        ok: false,
+        error: 'El tenant tiene datos asociados (leads, agentes, canales…). Elimina o migra esos datos antes de borrarlo.',
+      }
+    }
+    return { ok: false, error: error.message }
+  }
+
+  // Limpieza best-effort del branding en Storage (la fila ya no existe).
+  const { data: assets } = await supabase.storage.from('tenant-assets').list(tenantId, { limit: 100 })
+  const paths = (assets ?? []).map(o => `${tenantId}/${o.name}`)
+  if (paths.length > 0) {
+    const { error: rmErr } = await supabase.storage.from('tenant-assets').remove(paths)
+    if (rmErr) console.error(JSON.stringify({ service: 'delete-tenant-assets', tenant_id: tenantId, error: rmErr.message }))
+  }
+
+  // Si el super_admin estaba actuando como este tenant, soltar la selección.
+  const store = await cookies()
+  if (store.get(ADMIN_TENANT_COOKIE)?.value === tenantId) {
+    store.delete(ADMIN_TENANT_COOKIE)
+  }
+
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
 // ─── Provision owner ──────────────────────────────────────────────────────────
 
 const ProvisionOwnerSchema = z.object({

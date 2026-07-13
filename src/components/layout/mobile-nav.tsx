@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
 import { AnimatePresence, m } from 'motion/react'
 import { Menu, X, LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { BrandLogo } from './brand-logo'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
@@ -12,7 +12,13 @@ import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 // Mobile navigation: a hamburger trigger (phones only) + a left-sliding drawer that
 // mirrors the desktop sidebar (logo · nav · user/sign-out). Closes on overlay tap and
 // on navigation. Entirely additive — the trigger is `md:hidden`, so ≥768px is unaffected.
-export function MobileNav({ role, userEmail, hubMode = false }: { role: TenantRole; userEmail: string; hubMode?: boolean }) {
+export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null }: {
+  role: TenantRole
+  userEmail: string
+  hubMode?: boolean
+  logoUrl?: string | null
+  tenantName?: string | null
+}) {
   const [open, setOpen] = useState(false)
   const items = navItemsForRole(role, { hubMode })
 
@@ -98,7 +104,7 @@ export function MobileNav({ role, userEmail, hubMode = false }: { role: TenantRo
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <Image src="/A&J_Logo_White.png" alt="ITMANO" width={120} height={44} priority style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }} />
+              <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
               <div style={{ fontSize: '10px', fontWeight: 300, color: 'var(--text-muted)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
                 CRM by ITMANO
               </div>
