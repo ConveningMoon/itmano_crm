@@ -638,6 +638,42 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   gap: '12px',
                 }}
               >
+                {/* Cover preview — bleeds over the card padding to the rounded top edge */}
+                {prop.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={prop.imageUrl}
+                    alt={`Portada de ${prop.address}`}
+                    loading="lazy"
+                    style={{
+                      margin: '-20px -20px 0',
+                      width: 'calc(100% + 40px)',
+                      height: '160px',
+                      objectFit: 'cover',
+                      borderRadius: '11px 11px 0 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      display: 'block',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      margin: '-20px -20px 0',
+                      width: 'calc(100% + 40px)',
+                      height: '160px',
+                      borderRadius: '11px 11px 0 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      background: 'var(--bg-elevated)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <Building2 size={28} strokeWidth={1.2} />
+                  </div>
+                )}
+
                 {/* Top: address + status */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>

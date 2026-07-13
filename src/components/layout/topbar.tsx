@@ -26,6 +26,8 @@ export function Topbar({
   hubMode = false,
   tenants,
   activeTenantId = null,
+  logoUrl = null,
+  tenantName = null,
 }: {
   role?: TenantRole
   unreadCount?: number
@@ -34,6 +36,9 @@ export function Topbar({
   // Solo definido para super_admin — activa el switcher de tenant.
   tenants?: SwitcherTenant[]
   activeTenantId?: string | null
+  // Branding del tenant activo — solo lo consume el drawer móvil.
+  logoUrl?: string | null
+  tenantName?: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -54,7 +59,7 @@ export function Topbar({
     >
       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {/* Drawer trigger — phones only (md:hidden inside MobileNav). */}
-        <MobileNav role={role} userEmail={userEmail} hubMode={hubMode} />
+        <MobileNav role={role} userEmail={userEmail} hubMode={hubMode} logoUrl={logoUrl} tenantName={tenantName} />
         <h1
           style={{
             fontSize: '15px',
@@ -118,29 +123,33 @@ export function Topbar({
           )}
         </button>
 
-        <button
-          className="btn-cta"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '7px 14px',
-            borderRadius: '8px',
-            border: 'none',
-            backgroundColor: 'var(--accent-gold)',
-            color: 'var(--bg-base)',
-            fontSize: '12px',
-            fontWeight: '600',
-            letterSpacing: '0.04em',
-            cursor: 'pointer',
-          }}
-          onClick={() => router.push('/leads/new')}
-          aria-label="Registrar Lead"
-        >
-          <Plus size={14} strokeWidth={2} />
-          {/* Label collapses to an icon-only button on phones; full text at sm:+. */}
-          <span className="hidden sm:inline">Registrar Lead</span>
-        </button>
+        {/* Registrar Lead — oculto en modo hub (sin tenant seleccionado no hay
+            destino para el lead; /leads/new redirigiría al centro de control). */}
+        {!hubMode && (
+          <button
+            className="btn-cta"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: 'var(--accent-gold)',
+              color: 'var(--bg-base)',
+              fontSize: '12px',
+              fontWeight: '600',
+              letterSpacing: '0.04em',
+              cursor: 'pointer',
+            }}
+            onClick={() => router.push('/leads/new')}
+            aria-label="Registrar Lead"
+          >
+            <Plus size={14} strokeWidth={2} />
+            {/* Label collapses to an icon-only button on phones; full text at sm:+. */}
+            <span className="hidden sm:inline">Registrar Lead</span>
+          </button>
+        )}
 
       </div>
     </header>

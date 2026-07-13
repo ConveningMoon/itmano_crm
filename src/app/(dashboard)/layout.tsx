@@ -3,7 +3,7 @@ import { Topbar } from '@/components/layout/topbar'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
-import { getTenantsForSwitcher } from '@/lib/data/tenants'
+import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
 
 export default async function DashboardLayout({
   children,
@@ -21,6 +21,10 @@ export default async function DashboardLayout({
   // Switcher del topbar: solo el super_admin carga la lista de tenants.
   const switcherTenants = ctx.role === 'super_admin' ? await getTenantsForSwitcher() : null
 
+  // Branding del tenant activo (logo del sidebar). En modo hub no hay tenant —
+  // el shell muestra el wordmark de ITMANO.
+  const branding = ctx.tenant_id ? await getTenantBranding(ctx.tenant_id) : null
+
   // The auth email isn't on the tenant context; read it from the session for the
   // sidebar footer (the session is already established — ctx redirected otherwise).
   const supabase = await createClient()
@@ -29,7 +33,13 @@ export default async function DashboardLayout({
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
-      <Sidebar role={ctx.role} userEmail={userEmail} hubMode={hubMode} />
+      <Sidebar
+        role={ctx.role}
+        userEmail={userEmail}
+        hubMode={hubMode}
+        logoUrl={branding?.logoUrl ?? null}
+        tenantName={branding?.name ?? null}
+      />
       {/* Sidebar offset + content gutter come from the authoritative .app-shell-*
           rules in globals.css (a layered utility would lose to the unlayered
           `* { margin:0; padding:0 }` reset). ≥768px = 220px offset + 24px gutter
@@ -50,6 +60,8 @@ export default async function DashboardLayout({
           hubMode={hubMode}
           tenants={switcherTenants ?? undefined}
           activeTenantId={ctx.acting_as_tenant ? ctx.tenant_id : null}
+          logoUrl={branding?.logoUrl ?? null}
+          tenantName={branding?.name ?? null}
         />
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
