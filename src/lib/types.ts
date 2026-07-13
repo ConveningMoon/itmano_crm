@@ -32,6 +32,7 @@ export interface Agent {
   avatarInitials: string
   accentColor: string
   active: boolean
+  emailSignature?: string | null
 }
 
 export interface LeadMagnet {

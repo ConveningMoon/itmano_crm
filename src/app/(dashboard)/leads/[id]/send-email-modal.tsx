@@ -15,12 +15,11 @@ import { sendLeadEmail } from './actions'
 // Envío de un correo puntual a un lead desde su página de detalle. Reusa el
 // composer (mismo preview + generación con IA) y delega en sendLeadEmail.
 export function SendEmailModal({
-  open, onClose, leadId, tenantId, language, leadFirstName, agentName, tenantName,
+  open, onClose, leadId, language, leadFirstName, agentName, tenantName,
 }: {
   open:           boolean
   onClose:        () => void
   leadId:         string
-  tenantId:       string
   language:       'es' | 'en' | 'pt'
   leadFirstName?: string
   agentName?:     string
@@ -82,7 +81,6 @@ export function SendEmailModal({
               value={composer}
               onChange={setComposer}
               locale={language}
-              previewTenantId={tenantId}
               ai={{ purpose: 'one_off', language, agentName, tenantName, leadFirstName }}
             />
             {error && (

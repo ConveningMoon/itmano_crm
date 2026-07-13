@@ -405,12 +405,9 @@ export async function moveStep(
 // steps de secuencia, correos de compra y envío one-off desde el lead.
 
 const PreviewSchema = z.object({
-  subject:  z.string().trim().min(1).max(200),
-  content:  EmailContentSchema,
-  locale:   z.enum(['es', 'en', 'pt']).default('es'),
-  // Solo la respeta super_admin (preview de un tenant específico, p. ej. en el
-  // panel de correos de compra); los demás roles usan su propio tenant.
-  tenantId: z.string().optional(),
+  subject: z.string().trim().min(1).max(200),
+  content: EmailContentSchema,
+  locale:  z.enum(['es', 'en', 'pt']).default('es'),
 })
 
 export async function previewEmailHtml(
@@ -419,35 +416,25 @@ export async function previewEmailHtml(
   const parsed = PreviewSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
-  const ctx = await getCurrentTenantContext()
-  const tenantId = ctx.role === 'super_admin'
-    ? (parsed.data.tenantId ?? ctx.tenant_id)
-    : ctx.tenant_id
+  // Solo verifica que haya sesión (la preview no lee datos por-tenant).
+  await getCurrentTenantContext()
 
-  // Branding real del tenant si hay uno resuelto; genérico si no (super_admin
-  // en el hub sin selección).
-  let branding = { tenantName: 'ITMANO CRM', primaryColor: '#1E3A5F' }
-  if (tenantId) {
-    const supabase = createAdminClient()
-    const { data } = await supabase.from('tenants').select('name, primary_color').eq('id', tenantId).maybeSingle()
-    if (data) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const t = data as any
-      branding = { tenantName: t.name as string, primaryColor: (t.primary_color as string) ?? '#1E3A5F' }
-    }
+  const SAMPLE_SIGNATURE: Record<string, string> = {
+    es: 'Un abrazo,\nAdriana',
+    en: 'Warmly,\nAdriana',
+    pt: 'Um abraço,\nAdriana',
   }
 
   const rendered = renderEmail({
     subject: parsed.data.subject,
     content: parsed.data.content,
     vars: {
-      customer_name:    'María',
-      agent_name:       'Adriana Melendez',
-      agent_email:      'agente@ejemplo.com',
-      lead_magnet_name: 'Guía del comprador',
+      customer_name: 'María',
+      agent_name:    'Adriana',
+      agent_email:   'agente@ejemplo.com',
     },
-    branding,
-    signature:      { agentName: 'Adriana Melendez', agentEmail: 'agente@ejemplo.com' },
+    // Firma de muestra — la real se configura en Configuración → Email.
+    signature:      SAMPLE_SIGNATURE[parsed.data.locale] ?? SAMPLE_SIGNATURE.es,
     unsubscribeUrl: '#',
     locale:         parsed.data.locale as EmailLocale,
   })

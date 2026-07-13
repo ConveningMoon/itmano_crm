@@ -1,42 +1,32 @@
 import { z } from 'zod'
 
-// Contenido estructurado de un correo creado en el CRM (composer).
-// Vive en email_sequence_steps.body_json y purchase_email_templates.body_json,
-// y viaja por las server actions de envío one-off. El HTML final NUNCA se
-// guarda: lo compila el servidor en cada envío/preview (email-render.ts).
+// Contenido de un correo creado en el CRM (composer). Vive en
+// email_sequence_steps.body_json y purchase_email_templates.body_json, y viaja
+// por las server actions de envío one-off. El HTML final NUNCA se guarda: lo
+// compila el servidor en cada envío/preview (email-render.ts).
+//
+// Los correos se redactan como un mensaje personal (estilo "correo de un
+// amigo"): un único cuerpo de texto libre, sin párrafos estructurados, sin
+// botón CTA. La firma NO vive aquí — se configura por agente en Configuración
+// → Email y se agrega automáticamente al final.
 //
 // Este módulo NO es server-only a propósito: el composer (client) necesita el
 // tipo y el schema para validar antes de enviar; el renderer sí es server-only.
 
 export const EMAIL_CONTENT_VERSION = 1 as const
 
-export const EmailCtaSchema = z.object({
-  label: z.string().trim().min(1, 'El botón necesita un texto').max(80),
-  url:   z.string().trim().url('URL inválida').refine(
-    u => /^https?:\/\//i.test(u),
-    'La URL debe empezar con http:// o https://',
-  ),
-})
-
 export const EmailContentSchema = z.object({
-  v:          z.literal(EMAIL_CONTENT_VERSION),
-  paragraphs: z.array(z.string().trim().min(1).max(2000))
-                .min(1, 'El correo necesita al menos un párrafo')
-                .max(12),
-  cta:        EmailCtaSchema.nullable(),
-  include_signature: z.boolean(),
+  v:    z.literal(EMAIL_CONTENT_VERSION),
+  body: z.string().trim().min(1, 'El correo necesita un mensaje').max(8000),
 })
 
-export type EmailCta     = z.infer<typeof EmailCtaSchema>
 export type EmailContent = z.infer<typeof EmailContentSchema>
 
-// Merge tags disponibles en asunto y párrafos (doble llave — la resolución la
-// hace el CRM al enviar, NO Resend; la triple llave era del flujo de templates).
+// Merge tags disponibles en asunto y cuerpo (doble llave — la resolución la
+// hace el CRM al enviar, NO Resend).
 export const MERGE_TAGS = [
-  { tag: '{{customer_name}}',    label: 'Nombre del lead' },
-  { tag: '{{agent_name}}',       label: 'Nombre del agente' },
-  { tag: '{{agent_email}}',      label: 'Email del agente' },
-  { tag: '{{lead_magnet_name}}', label: 'Nombre del lead magnet' },
+  { tag: '{{customer_name}}', label: 'Nombre del lead' },
+  { tag: '{{agent_name}}',    label: 'Nombre del agente' },
 ] as const
 
 /**

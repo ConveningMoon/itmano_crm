@@ -1,46 +1,37 @@
 'use client'
 
-import { useCallback, useRef, useState, useTransition } from 'react'
-import { Plus, Trash2, ArrowUp, ArrowDown, Eye, Sparkles, X } from 'lucide-react'
+import { useRef, useState, useTransition } from 'react'
+import { Eye, Sparkles, X } from 'lucide-react'
 import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, MERGE_TAGS, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
 import { previewEmailHtml } from '@/app/(dashboard)/emails/actions'
 import { generateEmailDraft, type EmailAiPurpose } from '@/app/(dashboard)/emails/ai-actions'
 
-// Composer estructurado de correos del CRM. Lo comparten tres superficies:
-// pasos de secuencia (step-manager), correos de hitos de compra
-// (purchase-templates-panel) y envío one-off desde el detalle del lead.
-// El HTML final NUNCA se arma aquí — la vista previa y el envío usan el mismo
-// renderer server-side (email-render.ts vía previewEmailHtml / send services).
+// Composer de correos del CRM. Lo comparten tres superficies: pasos de secuencia
+// (step-manager), correos de hitos de compra (purchase-templates-panel) y envío
+// one-off desde el detalle del lead.
+//
+// El correo se redacta como un mensaje personal: asunto + un único cuerpo de
+// texto libre (sin párrafos estructurados, sin botón CTA). La firma NO se edita
+// aquí — se configura por agente en Configuración → Email y se agrega
+// automáticamente al final. El HTML final lo compila el servidor
+// (email-render.ts vía previewEmailHtml / send services).
 
 // ─── Value model ──────────────────────────────────────────────────────────────
 
 export interface ComposerValue {
-  subject:          string
-  paragraphs:       string[]
-  ctaEnabled:       boolean
-  ctaLabel:         string
-  ctaUrl:           string
-  includeSignature: boolean
+  subject: string
+  body:    string
 }
 
 export function emptyComposerValue(): ComposerValue {
-  return { subject: '', paragraphs: [''], ctaEnabled: false, ctaLabel: '', ctaUrl: '', includeSignature: true }
+  return { subject: '', body: '' }
 }
 
 // Reconstruye el estado del composer desde una fila de la DB (subject + body_json).
 export function composerValueFrom(subject: string | null, bodyJson: unknown): ComposerValue {
   const parsed = EmailContentSchema.safeParse(bodyJson)
-  if (!parsed.success) return { ...emptyComposerValue(), subject: subject ?? '' }
-  const c = parsed.data
-  return {
-    subject:          subject ?? '',
-    paragraphs:       c.paragraphs.length > 0 ? c.paragraphs : [''],
-    ctaEnabled:       c.cta !== null,
-    ctaLabel:         c.cta?.label ?? '',
-    ctaUrl:           c.cta?.url ?? '',
-    includeSignature: c.include_signature,
-  }
+  return { subject: subject ?? '', body: parsed.success ? parsed.data.body : '' }
 }
 
 // Convierte el estado del composer al payload de las actions. Devuelve un error
@@ -51,22 +42,10 @@ export function composerValueToInput(
   const subject = v.subject.trim()
   if (!subject) return { ok: false, error: 'El asunto es obligatorio' }
 
-  const paragraphs = v.paragraphs.map(p => p.trim()).filter(Boolean)
-  if (paragraphs.length === 0) return { ok: false, error: 'El correo necesita al menos un párrafo' }
+  const body = v.body.trim()
+  if (!body) return { ok: false, error: 'El correo necesita un mensaje' }
 
-  let cta: EmailContent['cta'] = null
-  if (v.ctaEnabled) {
-    if (!v.ctaLabel.trim()) return { ok: false, error: 'El botón necesita un texto' }
-    if (!/^https?:\/\/\S+$/i.test(v.ctaUrl.trim())) return { ok: false, error: 'La URL del botón debe empezar con http:// o https://' }
-    cta = { label: v.ctaLabel.trim(), url: v.ctaUrl.trim() }
-  }
-
-  const content: EmailContent = {
-    v: EMAIL_CONTENT_VERSION,
-    paragraphs,
-    cta,
-    include_signature: v.includeSignature,
-  }
+  const content: EmailContent = { v: EMAIL_CONTENT_VERSION, body }
   const parsed = EmailContentSchema.safeParse(content)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Contenido inválido' }
   return { ok: true, subject, content: parsed.data }
@@ -96,22 +75,23 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-const ICON_BTN: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: '24px', height: '24px', borderRadius: '6px',
-  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-  color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0,
-}
+// ─── AI form ──────────────────────────────────────────────────────────────────
+
+const TONE_OPTIONS = [
+  'Cercano y cálido',
+  'Casual y directo',
+  'Cordial y profesional',
+  'Entusiasta pero genuino',
+] as const
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export interface ComposerAiContext {
   purpose:        EmailAiPurpose
   language:       'es' | 'en' | 'pt'
-  leadMagnetName?: string
-  agentName?:      string
-  tenantName?:     string
-  leadFirstName?:  string
+  agentName?:     string
+  tenantName?:    string
+  leadFirstName?: string
 }
 
 interface Props {
@@ -119,80 +99,45 @@ interface Props {
   onChange: (v: ComposerValue) => void
   // Idioma del footer/preview (idioma de la secuencia / del template / del lead).
   locale?:  'es' | 'en' | 'pt'
-  // super_admin: branding de un tenant específico en la vista previa.
-  previewTenantId?: string
   // Contexto para "Generar con IA"; sin él, el botón no se muestra.
   ai?: ComposerAiContext
 }
 
-export function EmailComposer({ value, onChange, locale = 'es', previewTenantId, ai }: Props) {
+export function EmailComposer({ value, onChange, locale = 'es', ai }: Props) {
   const [previewHtml, setPreviewHtml]   = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, startPreview]      = useTransition()
 
+  // Estado del formulario de IA.
   const [aiOpen, setAiOpen]     = useState(false)
-  const [aiBrief, setAiBrief]   = useState('')
+  const [aiObjective, setAiObjective] = useState('')
+  const [aiTone, setAiTone]     = useState<string>(TONE_OPTIONS[0])
+  const [aiIdea, setAiIdea]     = useState('')
+  const [aiPoints, setAiPoints] = useState('')
+  const [aiLength, setAiLength] = useState<'short' | 'medium'>('short')
   const [aiError, setAiError]   = useState<string | null>(null)
   const [aiBusy, startAi]       = useTransition()
 
-  // Última posición de cursor conocida para insertar merge tags.
-  const focusRef = useRef<{ field: 'subject' | number; pos: number } | null>(null)
+  // Última posición del cursor en el cuerpo, para insertar merge tags.
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   function set<K extends keyof ComposerValue>(key: K, val: ComposerValue[K]) {
     onChange({ ...value, [key]: val })
   }
 
-  function setParagraph(idx: number, text: string) {
-    const next = [...value.paragraphs]
-    next[idx] = text
-    set('paragraphs', next)
-  }
-
-  function addParagraph() {
-    set('paragraphs', [...value.paragraphs, ''])
-  }
-
-  function removeParagraph(idx: number) {
-    if (value.paragraphs.length <= 1) return
-    set('paragraphs', value.paragraphs.filter((_, i) => i !== idx))
-  }
-
-  function moveParagraph(idx: number, dir: -1 | 1) {
-    const to = idx + dir
-    if (to < 0 || to >= value.paragraphs.length) return
-    const next = [...value.paragraphs]
-    ;[next[idx], next[to]] = [next[to], next[idx]]
-    set('paragraphs', next)
-  }
-
-  // Un solo handler estable (no una factory por-render) para no violar la regla
-  // react-hooks/refs. El campo se lee del atributo data-field del elemento:
-  // "subject" o "p:<índice>".
-  const trackFocus = useCallback((e: React.SyntheticEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const el = e.currentTarget
-    const raw = el.dataset.field
-    if (!raw) return
-    const field: 'subject' | number = raw === 'subject' ? 'subject' : Number(raw.slice(2))
-    focusRef.current = { field, pos: el.selectionStart ?? el.value.length }
-  }, [])
-
   function insertTag(tag: string) {
-    const focus = focusRef.current
-    if (focus === null) {
-      // Sin foco previo: al final del último párrafo.
-      const idx = value.paragraphs.length - 1
-      setParagraph(idx, value.paragraphs[idx] + tag)
-      return
-    }
-    if (focus.field === 'subject') {
-      const s = value.subject
-      set('subject', s.slice(0, focus.pos) + tag + s.slice(focus.pos))
-      focusRef.current = { field: 'subject', pos: focus.pos + tag.length }
-    } else {
-      const p = value.paragraphs[focus.field] ?? ''
-      setParagraph(focus.field, p.slice(0, focus.pos) + tag + p.slice(focus.pos))
-      focusRef.current = { field: focus.field, pos: focus.pos + tag.length }
-    }
+    const el = bodyRef.current
+    if (!el) { set('body', value.body + tag); return }
+    const start = el.selectionStart ?? value.body.length
+    const end   = el.selectionEnd ?? value.body.length
+    const next  = value.body.slice(0, start) + tag + value.body.slice(end)
+    set('body', next)
+    // Reposiciona el cursor tras el tag insertado.
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = start + tag.length
+      el.setSelectionRange(pos, pos)
+    })
   }
 
   function handlePreview() {
@@ -200,12 +145,7 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
     const input = composerValueToInput(value)
     if (!input.ok) { setPreviewError(input.error); return }
     startPreview(async () => {
-      const res = await previewEmailHtml({
-        subject:  input.subject,
-        content:  input.content,
-        locale,
-        tenantId: previewTenantId,
-      })
+      const res = await previewEmailHtml({ subject: input.subject, content: input.content, locale })
       if (!res.ok) { setPreviewError(res.error); return }
       setPreviewHtml(res.html)
     })
@@ -216,26 +156,20 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
     setAiError(null)
     startAi(async () => {
       const res = await generateEmailDraft({
-        purpose:        ai.purpose,
-        language:       ai.language,
-        brief:          aiBrief,
-        leadMagnetName: ai.leadMagnetName,
-        agentName:      ai.agentName,
-        tenantName:     ai.tenantName,
-        leadFirstName:  ai.leadFirstName,
+        purpose:       ai.purpose,
+        language:      ai.language,
+        objective:     aiObjective,
+        tone:          aiTone,
+        idea:          aiIdea,
+        keyPoints:     aiPoints || undefined,
+        length:        aiLength,
+        agentName:     ai.agentName,
+        tenantName:    ai.tenantName,
+        leadFirstName: ai.leadFirstName,
       })
       if (!res.ok) { setAiError(res.error); return }
-      const d = res.draft
-      onChange({
-        subject:          d.subject,
-        paragraphs:       d.paragraphs.length > 0 ? d.paragraphs : [''],
-        ctaEnabled:       d.cta !== null,
-        ctaLabel:         d.cta?.label ?? '',
-        ctaUrl:           d.cta?.url ?? '',
-        includeSignature: d.include_signature,
-      })
+      onChange({ subject: res.draft.subject, body: res.draft.body })
       setAiOpen(false)
-      setAiBrief('')
     })
   }
 
@@ -263,7 +197,7 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
           ) : (
             <div style={{
               background: 'rgba(201,169,110,0.05)', border: '1px solid rgba(201,169,110,0.2)',
-              borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px',
+              borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -273,24 +207,68 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
                   <X size={14} />
                 </button>
               </div>
-              <textarea
-                value={aiBrief}
-                onChange={e => setAiBrief(e.target.value)}
-                rows={3}
-                placeholder="Describe el correo: objetivo, qué debe comunicar, enlaces si aplica…"
-                className="ec-input"
-                style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-              />
+
+              <div>
+                <label style={LABEL}>Objetivo del correo <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                <input
+                  value={aiObjective}
+                  onChange={e => setAiObjective(e.target.value)}
+                  placeholder="Ej.: reconectar con el lead, compartir un recurso, invitar a una llamada…"
+                  className="ec-input"
+                  style={INPUT}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={LABEL}>Tono</label>
+                  <select value={aiTone} onChange={e => setAiTone(e.target.value)} className="ec-input" style={{ ...INPUT, cursor: 'pointer' }}>
+                    {TONE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: '0 0 140px' }}>
+                  <label style={LABEL}>Extensión</label>
+                  <select value={aiLength} onChange={e => setAiLength(e.target.value as 'short' | 'medium')} className="ec-input" style={{ ...INPUT, cursor: 'pointer' }}>
+                    <option value="short">Corto</option>
+                    <option value="medium">Medio</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>Idea general / qué quieres decir <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                <textarea
+                  value={aiIdea}
+                  onChange={e => setAiIdea(e.target.value)}
+                  rows={3}
+                  placeholder="Explica en tus palabras el mensaje central del correo."
+                  className="ec-input"
+                  style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                />
+              </div>
+
+              <div>
+                <label style={LABEL}>Puntos a incluir (opcional)</label>
+                <textarea
+                  value={aiPoints}
+                  onChange={e => setAiPoints(e.target.value)}
+                  rows={2}
+                  placeholder="Detalles concretos que no deben faltar (fechas, nombres, un enlace…)."
+                  className="ec-input"
+                  style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                />
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <button
                   type="button"
                   onClick={handleGenerate}
-                  disabled={aiBusy || !aiBrief.trim()}
+                  disabled={aiBusy || !aiObjective.trim() || !aiIdea.trim()}
                   style={{
                     padding: '7px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
                     background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
-                    cursor: aiBusy || !aiBrief.trim() ? 'not-allowed' : 'pointer',
-                    opacity: aiBusy || !aiBrief.trim() ? 0.6 : 1,
+                    cursor: aiBusy || !aiObjective.trim() || !aiIdea.trim() ? 'not-allowed' : 'pointer',
+                    opacity: aiBusy || !aiObjective.trim() || !aiIdea.trim() ? 0.6 : 1,
                   }}
                 >
                   {aiBusy ? 'Generando…' : 'Generar borrador'}
@@ -309,12 +287,9 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
       <div>
         <label style={LABEL}>Asunto <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
         <input
-          data-field="subject"
           value={value.subject}
-          onChange={e => { set('subject', e.target.value); focusRef.current = { field: 'subject', pos: e.target.selectionStart ?? e.target.value.length } }}
-          onFocus={trackFocus}
-          onSelect={trackFocus}
-          placeholder="Tu guía está lista, {{customer_name}}"
+          onChange={e => set('subject', e.target.value)}
+          placeholder="Hola {{customer_name}}"
           maxLength={200}
           className="ec-input"
           style={INPUT}
@@ -341,104 +316,24 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
         ))}
       </div>
 
-      {/* Párrafos */}
+      {/* Cuerpo */}
       <div>
-        <label style={LABEL}>Contenido <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {value.paragraphs.map((p, idx) => (
-            <div key={idx} style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-              <textarea
-                data-field={`p:${idx}`}
-                value={p}
-                onChange={e => { setParagraph(idx, e.target.value); focusRef.current = { field: idx, pos: e.target.selectionStart ?? e.target.value.length } }}
-                onFocus={trackFocus}
-                onSelect={trackFocus}
-                rows={3}
-                maxLength={2000}
-                placeholder={idx === 0 ? 'Hola {{customer_name}}, …' : 'Siguiente párrafo…'}
-                className="ec-input"
-                style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <button type="button" title="Subir" onClick={() => moveParagraph(idx, -1)} disabled={idx === 0}
-                  style={{ ...ICON_BTN, opacity: idx === 0 ? 0.35 : 1, cursor: idx === 0 ? 'default' : 'pointer' }}>
-                  <ArrowUp size={11} />
-                </button>
-                <button type="button" title="Bajar" onClick={() => moveParagraph(idx, 1)} disabled={idx === value.paragraphs.length - 1}
-                  style={{ ...ICON_BTN, opacity: idx === value.paragraphs.length - 1 ? 0.35 : 1, cursor: idx === value.paragraphs.length - 1 ? 'default' : 'pointer' }}>
-                  <ArrowDown size={11} />
-                </button>
-                <button type="button" title="Eliminar párrafo" onClick={() => removeParagraph(idx)} disabled={value.paragraphs.length <= 1}
-                  style={{ ...ICON_BTN, color: 'var(--accent-coral)', opacity: value.paragraphs.length <= 1 ? 0.35 : 1, cursor: value.paragraphs.length <= 1 ? 'default' : 'pointer' }}>
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        {value.paragraphs.length < 12 && (
-          <button
-            type="button"
-            onClick={addParagraph}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '8px',
-              padding: '5px 10px', fontSize: '11px',
-              background: 'transparent', border: '1px dashed var(--border-subtle)',
-              borderRadius: '8px', color: 'var(--text-muted)', cursor: 'pointer',
-            }}
-          >
-            <Plus size={11} /> Agregar párrafo
-          </button>
-        )}
-      </div>
-
-      {/* CTA */}
-      <div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <input
-            type="checkbox"
-            checked={value.ctaEnabled}
-            onChange={e => set('ctaEnabled', e.target.checked)}
-            style={{ accentColor: 'var(--accent-gold)' }}
-          />
-          Botón de acción (CTA)
-        </label>
-        {value.ctaEnabled && (
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
-            <input
-              value={value.ctaLabel}
-              onChange={e => set('ctaLabel', e.target.value)}
-              placeholder="Descargar guía"
-              maxLength={80}
-              className="ec-input"
-              style={{ ...INPUT, flex: '1 1 160px' }}
-            />
-            <input
-              value={value.ctaUrl}
-              onChange={e => set('ctaUrl', e.target.value)}
-              placeholder="https://…"
-              className="ec-input"
-              style={{ ...INPUT, flex: '2 1 220px', fontFamily: 'monospace', fontSize: '12px' }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Firma */}
-      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        <input
-          type="checkbox"
-          checked={value.includeSignature}
-          onChange={e => set('includeSignature', e.target.checked)}
-          style={{ accentColor: 'var(--accent-gold)' }}
+        <label style={LABEL}>Mensaje <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+        <textarea
+          ref={bodyRef}
+          value={value.body}
+          onChange={e => set('body', e.target.value)}
+          rows={10}
+          maxLength={8000}
+          placeholder={'Hola {{customer_name}},\n\nEscribe aquí tu mensaje como si le escribieras a un conocido…'}
+          className="ec-input"
+          style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, fontSize: '14px' }}
         />
-        Incluir firma del agente (nombre + email)
-      </label>
-
-      {/* Nota fija: unsubscribe automático */}
-      <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        El correo se envía con el branding del equipo y un enlace de cancelar suscripción
-        automático en el pie — no hace falta agregarlo.
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>
+          Escríbelo en tono personal, como un correo normal. Deja una línea en blanco entre párrafos. La firma
+          del agente y el enlace para cancelar suscripción se agregan automáticamente — la firma se configura en{' '}
+          <strong style={{ color: 'var(--text-secondary)' }}>Configuración → Email</strong>.
+        </div>
       </div>
 
       {/* Vista previa */}
@@ -460,7 +355,7 @@ export function EmailComposer({ value, onChange, locale = 'es', previewTenantId,
         </button>
         {previewError && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '8px' }}>{previewError}</div>}
         {previewHtml && (
-          <div style={{ marginTop: '10px', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: '#f2f2f0' }}>
+          <div style={{ marginTop: '10px', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
             <iframe
               sandbox=""
               srcDoc={previewHtml}

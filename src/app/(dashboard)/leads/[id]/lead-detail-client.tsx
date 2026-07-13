@@ -780,7 +780,6 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         open={showEmailModal}
         onClose={() => setShowEmailModal(false)}
         leadId={lead.id}
-        tenantId={lead.tenantId}
         language={lead.language}
         leadFirstName={lead.firstName}
         agentName={agent?.name}

@@ -14,6 +14,7 @@ export interface AgentRow {
   accent_color: string
   active: boolean
   created_at: string
+  email_signature: string | null
 }
 
 export interface LeadRow {
@@ -92,6 +93,7 @@ export function mapAgent(r: AgentRow): Agent {
     avatarInitials: r.avatar_initials,
     accentColor: r.accent_color,
     active: r.active,
+    emailSignature: r.email_signature ?? null,
   }
 }
 

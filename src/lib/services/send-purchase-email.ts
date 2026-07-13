@@ -70,7 +70,7 @@ export async function sendPurchaseEmail(
         language,
         email_blocked,
         email_blocked_reason,
-        agents (name, email)
+        agents (name, email, email_signature)
       )
     `)
     .eq('id', processId)
@@ -113,6 +113,7 @@ export async function sendPurchaseEmail(
   const agent      = Array.isArray(lead.agents) ? lead.agents[0] : lead.agents
   const agentName  = (agent?.name as string | undefined) ?? ''
   const agentEmail = (agent?.email as string | undefined) ?? ''
+  const agentSignature = (agent?.email_signature as string | null | undefined) ?? null
 
   // Block purchase emails only for hard_bounce (the address doesn't exist).
   // unsubscribed: these are transactional confirmations for a process the lead
@@ -156,10 +157,10 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Load the tenant's from address + branding for the CRM-content wrapper.
+  // Load the tenant's from address.
   const { data: tenant } = await db
     .from('tenants')
-    .select('email_from_address, name, primary_color')
+    .select('email_from_address')
     .eq('id', tenantId)
     .single()
 
@@ -191,13 +192,11 @@ export async function sendPurchaseEmail(
         subject:  crmSubject,
         content:  crmContent,
         vars: {
-          customer_name:    firstName,
-          agent_name:       agentName,
-          agent_email:      agentEmail,
-          lead_magnet_name: '',
+          customer_name: firstName,
+          agent_name:    agentName,
+          agent_email:   agentEmail,
         },
-        branding:       { tenantName: (tn?.name as string) ?? '', primaryColor: (tn?.primary_color as string) ?? '#1E3A5F' },
-        signature:      agentName ? { agentName, agentEmail } : null,
+        signature:      agentSignature,
         unsubscribeUrl,
         locale:         language,
       })

@@ -56,10 +56,9 @@ const STATE_META: Record<'crm' | 'template' | 'empty', { label: string; color: s
 // ─── Editor modal ──────────────────────────────────────────────────────────────
 
 function EditModal({
-  row, tenantId, tenantName, onClose,
+  row, tenantName, onClose,
 }: {
   row: PurchaseTemplateRow
-  tenantId: string
   tenantName?: string
   onClose: () => void
 }) {
@@ -115,7 +114,6 @@ function EditModal({
               value={composer}
               onChange={setComposer}
               locale={row.language}
-              previewTenantId={tenantId}
               ai={{
                 purpose:    MILESTONE_PURPOSE[row.milestone],
                 language:   row.language,
@@ -171,10 +169,9 @@ function EditModal({
 // ─── Cell (status chip + edit button) ────────────────────────────────────────────
 
 function TemplateCell({
-  row, tenantId, tenantName, readOnly,
+  row, tenantName, readOnly,
 }: {
   row: PurchaseTemplateRow
-  tenantId: string
   tenantName?: string
   readOnly: boolean
 }) {
@@ -208,7 +205,7 @@ function TemplateCell({
           </button>
         )}
       </div>
-      {open && <EditModal row={row} tenantId={tenantId} tenantName={tenantName} onClose={() => setOpen(false)} />}
+      {open && <EditModal row={row} tenantName={tenantName} onClose={() => setOpen(false)} />}
     </>
   )
 }
@@ -217,12 +214,10 @@ function TemplateCell({
 
 export function PurchaseTemplatesPanel({
   templates,
-  tenantId,
   tenantName,
   readOnly = false,
 }: {
   templates: PurchaseTemplateRow[]
-  tenantId: string
   tenantName?: string
   readOnly?: boolean
 }) {
@@ -295,7 +290,7 @@ export function PurchaseTemplatesPanel({
             {langs.map(lang => {
               const row = byKey[`${milestone}_${lang}`]
               if (!row) return <span key={lang} style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
-              return <TemplateCell key={lang} row={row} tenantId={tenantId} tenantName={tenantName} readOnly={readOnly} />
+              return <TemplateCell key={lang} row={row} tenantName={tenantName} readOnly={readOnly} />
             })}
           </div>
         ))}

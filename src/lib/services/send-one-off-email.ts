@@ -24,7 +24,7 @@ export async function sendOneOffEmail(
   // Lead + agente asignado (para la firma).
   const { data: lead } = await db
     .from('leads')
-    .select('id, first_name, email, language, email_blocked, email_blocked_reason, agents (name, email)')
+    .select('id, first_name, email, language, email_blocked, email_blocked_reason, agents (name, email, email_signature)')
     .eq('id', leadId)
     .maybeSingle()
   if (!lead) return { ok: false, error: 'Lead no encontrado.' }
@@ -41,12 +41,13 @@ export async function sendOneOffEmail(
   const agent      = Array.isArray(l.agents) ? l.agents[0] : l.agents
   const agentName  = (agent?.name as string | undefined) ?? ''
   const agentEmail = (agent?.email as string | undefined) ?? ''
+  const agentSignature = (agent?.email_signature as string | null | undefined) ?? null
   const language   = (['es', 'en', 'pt'].includes(l.language as string) ? l.language : 'es') as EmailLocale
 
-  // Tenant: from address + branding.
+  // Tenant: from address.
   const { data: tenant } = await db
     .from('tenants')
-    .select('email_from_address, name, primary_color')
+    .select('email_from_address')
     .eq('id', tenantId)
     .maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,13 +62,11 @@ export async function sendOneOffEmail(
     subject,
     content,
     vars: {
-      customer_name:    (l.first_name as string) ?? '',
-      agent_name:       agentName,
-      agent_email:      agentEmail,
-      lead_magnet_name: '',
+      customer_name: (l.first_name as string) ?? '',
+      agent_name:    agentName,
+      agent_email:   agentEmail,
     },
-    branding:       { tenantName: (t?.name as string) ?? '', primaryColor: (t?.primary_color as string) ?? '#1E3A5F' },
-    signature:      agentName ? { agentName, agentEmail } : null,
+    signature:      agentSignature,
     unsubscribeUrl,
     locale:         language,
   })

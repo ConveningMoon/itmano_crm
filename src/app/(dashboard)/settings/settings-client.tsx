@@ -6,7 +6,7 @@ import { Building2 } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature } from './actions'
 import { ScoringSection } from './scoring-section'
 import { Tabs } from '@/components/ui/tabs'
 
@@ -583,6 +583,90 @@ function AgentsSection({
   )
 }
 
+// ─── Email settings: firma por agente ─────────────────────────────────────────
+
+function AgentSignatureRow({ agent, canManage }: { agent: Agent; canManage: boolean }) {
+  const [value, setValue]   = useState(agent.emailSignature ?? '')
+  const [saved, setSaved]   = useState<string>(agent.emailSignature ?? '')
+  const [error, setError]   = useState<string | null>(null)
+  const [ok, setOk]         = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  const dirty = value !== saved
+
+  function handleSave() {
+    setError(null); setOk(false)
+    startTransition(async () => {
+      const res = await updateAgentSignature(agent.id, value)
+      if (!res.ok) { setError(res.error); return }
+      setSaved(value)
+      setOk(true)
+      setTimeout(() => setOk(false), 2000)
+    })
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '50%',
+          background: `${agent.accentColor}22`, border: `1px solid ${agent.accentColor}44`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '11px', fontWeight: 700, color: agent.accentColor, flexShrink: 0,
+        }}>
+          {agent.avatarInitials}
+        </div>
+        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
+      </div>
+
+      <textarea
+        value={value}
+        onChange={e => { setValue(e.target.value); setError(null) }}
+        disabled={!canManage}
+        rows={3}
+        maxLength={600}
+        placeholder={`Ej.:\nUn abrazo,\n${agent.name}`}
+        style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: canManage ? 1 : 0.7 }}
+      />
+
+      {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+
+      {canManage && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
+            {pending ? 'Guardando…' : 'Guardar firma'}
+          </button>
+          {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Firma guardada.</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EmailSettingsSection({ agents, canManage }: { agents: Agent[]; canManage: boolean }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={CARD}>
+        <div style={CARD_HEADER}>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Firma de correo</span>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            La firma de cada agente se agrega automáticamente al final de todos los correos que se envían a sus
+            leads (secuencias, hitos de compra y envíos puntuales). Escríbela en tono personal, como cerrarías
+            un correo a un conocido.
+          </div>
+        </div>
+        {agents.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+            No hay agentes todavía.
+          </div>
+        ) : (
+          agents.map(agent => <AgentSignatureRow key={agent.id} agent={agent} canManage={canManage} />)
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Account section ──────────────────────────────────────────────────────────
 
 function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
@@ -649,11 +733,12 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'agentes' | 'scoring' | 'cuenta'
+type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'cuenta'
 
 const TABS: Array<{ value: Tab; label: string }> = [
   { value: 'perfil',  label: 'Perfil del equipo' },
   { value: 'agentes', label: 'Agentes' },
+  { value: 'email',   label: 'Email' },
   { value: 'scoring', label: 'Scoring' },
   { value: 'cuenta',  label: 'Cuenta y acceso' },
 ]
@@ -695,6 +780,7 @@ export function SettingsClient({
             isSuper={userRole === 'super_admin'}
           />
         ),
+        email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
         scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
         cuenta: (
           <AccountSection

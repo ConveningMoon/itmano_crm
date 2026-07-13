@@ -56,17 +56,15 @@ interface Props {
   sequenceId:  string
   steps:       SequenceStep[]
   stepMetrics?: StepMetric[]
-  // Contexto para preview + generación con IA
-  language?:       'es' | 'en' | 'pt'
-  tenantId?:       string
-  tenantName?:     string
-  agentName?:      string
-  leadMagnetName?: string
+  // Contexto para generación con IA
+  language?:    'es' | 'en' | 'pt'
+  tenantName?:  string
+  agentName?:   string
 }
 
 export function StepManager({
   sequenceId, steps: initialSteps, stepMetrics,
-  language = 'es', tenantId, tenantName, agentName, leadMagnetName,
+  language = 'es', tenantName, agentName,
 }: Props) {
   const router   = useRouter()
   const [mode,    setMode]    = useState<'idle' | 'add' | 'edit' | 'confirm_delete'>('idle')
@@ -361,11 +359,9 @@ export function StepManager({
                   value={form.composer}
                   onChange={v => setForm(f => ({ ...f, composer: v }))}
                   locale={language}
-                  previewTenantId={tenantId}
                   ai={{
                     purpose:  steps.length === 0 || (mode === 'edit' && form.delayHours === 0) ? 'lead_magnet_delivery' : 'nurture',
                     language,
-                    leadMagnetName,
                     agentName,
                     tenantName,
                   }}
