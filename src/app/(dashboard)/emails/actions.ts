@@ -6,6 +6,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
+import { EmailContentSchema } from '@/lib/email-content'
+import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -191,17 +193,49 @@ export async function deleteSequence(
 
 // ─── Step CRUD ────────────────────────────────────────────────────────────────
 
-const StepSchema = z.object({
-  delayHours:        z.number().int().min(0),
-  resendTemplateId:  z.string().min(1).max(200),
-})
+// Un paso guarda su contenido de UNA de dos formas (mutuamente excluyentes):
+//   - 'crm':      subject + content del composer (body_json) — el CRM compila
+//                 el HTML al enviar. resend_template_id queda null.
+//   - 'template': UUID de un template de Resend (modo legacy/avanzado) —
+//                 body_json queda null.
+const StepSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode:       z.literal('crm'),
+    delayHours: z.number().int().min(0),
+    subject:    z.string().trim().min(1, 'El asunto es obligatorio').max(200),
+    content:    EmailContentSchema,
+  }),
+  z.object({
+    mode:             z.literal('template'),
+    delayHours:       z.number().int().min(0),
+    resendTemplateId: z.string().trim().min(1).max(200),
+  }),
+])
+
+export type StepInput = z.infer<typeof StepSchema>
+
+function stepColumns(data: StepInput) {
+  return data.mode === 'crm'
+    ? {
+        delay_hours:        data.delayHours,
+        subject:            data.subject,
+        body_json:          data.content,
+        resend_template_id: null,
+      }
+    : {
+        delay_hours:        data.delayHours,
+        subject:            null,
+        body_json:          null,
+        resend_template_id: data.resendTemplateId.trim(),
+      }
+}
 
 export async function addStep(
   sequenceId: string,
-  fields: z.infer<typeof StepSchema>,
+  fields: StepInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = StepSchema.safeParse(fields)
-  if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const ctx = await getCurrentTenantContext()
   const denied = requireWriteAccess(ctx)
@@ -229,12 +263,11 @@ export async function addStep(
   const stepOrder = maxOrder + 1
 
   const { error } = await supabase.from('email_sequence_steps').insert({
-    sequence_id:       sequenceId,
-    tenant_id:         tenantId,
-    step_order:        stepOrder,
-    delay_hours:       parsed.data.delayHours,
-    resend_template_id: parsed.data.resendTemplateId.trim(),
-    active:            true,
+    sequence_id: sequenceId,
+    tenant_id:   tenantId,
+    step_order:  stepOrder,
+    active:      true,
+    ...stepColumns(parsed.data),
   })
 
   if (error) return { ok: false, error: error.message }
@@ -245,10 +278,10 @@ export async function addStep(
 
 export async function updateStep(
   stepId: string,
-  fields: z.infer<typeof StepSchema>,
+  fields: StepInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = StepSchema.safeParse(fields)
-  if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const ctx = await getCurrentTenantContext()
   const denied = requireWriteAccess(ctx)
@@ -257,10 +290,7 @@ export async function updateStep(
 
   let q = supabase
     .from('email_sequence_steps')
-    .update({
-      delay_hours:        parsed.data.delayHours,
-      resend_template_id: parsed.data.resendTemplateId.trim(),
-    })
+    .update(stepColumns(parsed.data))
     .eq('id', stepId)
 
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
@@ -367,6 +397,62 @@ export async function moveStep(
 
   revalidateEmails()
   return { ok: true }
+}
+
+// ─── Vista previa del composer ────────────────────────────────────────────────
+// Compila el HTML con el MISMO renderer que usan los envíos (email-render.ts)
+// y variables de muestra. La consumen las tres superficies del composer:
+// steps de secuencia, correos de compra y envío one-off desde el lead.
+
+const PreviewSchema = z.object({
+  subject:  z.string().trim().min(1).max(200),
+  content:  EmailContentSchema,
+  locale:   z.enum(['es', 'en', 'pt']).default('es'),
+  // Solo la respeta super_admin (preview de un tenant específico, p. ej. en el
+  // panel de correos de compra); los demás roles usan su propio tenant.
+  tenantId: z.string().optional(),
+})
+
+export async function previewEmailHtml(
+  input: z.infer<typeof PreviewSchema>,
+): Promise<{ ok: true; html: string; subject: string } | { ok: false; error: string }> {
+  const parsed = PreviewSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+
+  const ctx = await getCurrentTenantContext()
+  const tenantId = ctx.role === 'super_admin'
+    ? (parsed.data.tenantId ?? ctx.tenant_id)
+    : ctx.tenant_id
+
+  // Branding real del tenant si hay uno resuelto; genérico si no (super_admin
+  // en el hub sin selección).
+  let branding = { tenantName: 'ITMANO CRM', primaryColor: '#1E3A5F' }
+  if (tenantId) {
+    const supabase = createAdminClient()
+    const { data } = await supabase.from('tenants').select('name, primary_color').eq('id', tenantId).maybeSingle()
+    if (data) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const t = data as any
+      branding = { tenantName: t.name as string, primaryColor: (t.primary_color as string) ?? '#1E3A5F' }
+    }
+  }
+
+  const rendered = renderEmail({
+    subject: parsed.data.subject,
+    content: parsed.data.content,
+    vars: {
+      customer_name:    'María',
+      agent_name:       'Adriana Melendez',
+      agent_email:      'agente@ejemplo.com',
+      lead_magnet_name: 'Guía del comprador',
+    },
+    branding,
+    signature:      { agentName: 'Adriana Melendez', agentEmail: 'agente@ejemplo.com' },
+    unsubscribeUrl: '#',
+    locale:         parsed.data.locale as EmailLocale,
+  })
+
+  return { ok: true, html: rendered.html, subject: rendered.subject }
 }
 
 // ─── Manual enrollment ────────────────────────────────────────────────────────

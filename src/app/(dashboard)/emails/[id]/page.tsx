@@ -251,6 +251,11 @@ export default async function EmailSequenceDetailPage({
           sequenceId={sequence.id}
           steps={sequence.steps}
           stepMetrics={stepMetrics}
+          language={(['es', 'en', 'pt'].includes(sequence.language) ? sequence.language : 'es') as 'es' | 'en' | 'pt'}
+          tenantId={sequence.tenantId}
+          tenantName={sequence.tenantName ?? undefined}
+          agentName={sequence.agentName ?? undefined}
+          leadMagnetName={sequence.channels[0]?.name}
         />
       </div>
 
