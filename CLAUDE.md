@@ -11,11 +11,11 @@ Read it at the start of every session. When in doubt, this file overrides assump
 
 | Field | Value |
 |---|---|
-| **Product** | Multi-tenant SaaS CRM for real estate teams, owned by ITMANO |
+| **Product** | Multi-tenant SaaS CRM for real estate teams, owned by ITMANO — see "El Producto" below |
 | **Primary domain** | `app.itmano.com` · subdomain of `itmano.com` (Dylan owns the apex) |
 | **Pilot tenant** | A&J Real Estate Group (Hampton Roads, VA) |
-| **Active phase** | **Phase 2 — Supabase backend + Auth** (Phase 1 mockup is shipped) |
-| **Stack** | Next.js 16.2.4 · React 19.2.4 · TypeScript · Tailwind v4 · shadcn/ui · Supabase (planned) |
+| **Active phase** | **Comercialización** — public landing + legal pages, then billing (Phases 1–3 shipped) |
+| **Stack** | Next.js 16.2 · React 19.2 · TypeScript · Tailwind v4 · shadcn/ui · Supabase (live) · Resend (live) · Anthropic SDK (live) · motion v12 |
 | **Package manager** | `npm` |
 | **Path alias** | `@/*` → `./src/*` |
 | **Tenant per user** | 1 auth user per tenant (see "Auth Model") |
@@ -31,8 +31,8 @@ Read it at the start of every session. When in doubt, this file overrides assump
 These are working principles for *every* session, not preferences.
 
 1. **Explore → Plan → Code → Verify.** For any change that touches more than one file, enter plan mode first. List the files that will change and why. Get confirmation. Then code.
-2. **Read before writing.** Before adding a component, read an existing similar one to match conventions (e.g. before building a new chart, read `analytics/charts/*.tsx`). Before changing data shape, read `src/lib/types.ts` and `src/lib/mockdata.ts`.
-3. **Reference files, don't reinvent.** This document points to where the truth lives. Don't reimplement `STATUS_CONFIG`, `LANGUAGE_CONFIG`, `MOCK_AGENTS`, design tokens, or types — import them.
+2. **Read before writing.** Before adding a component, read an existing similar one to match conventions (e.g. before building a new chart, read `analytics/charts/*.tsx`). Before changing data shape, read `src/lib/types.ts` and the relevant migration in `supabase/migrations/`.
+3. **Reference files, don't reinvent.** This document points to where the truth lives. Don't reimplement `STATUS_CONFIG`, `LANGUAGE_CONFIG` (in `src/lib/config.ts`), design tokens, or types — import them.
 4. **Verify your own work.** After any change: run `npm run lint`. After UI changes: describe what to look at and what should be visible. After data-layer changes: confirm types still compile (`npx tsc --noEmit`).
 5. **Address root causes, not symptoms.** If a build fails, never suppress the error. If a type is wrong, fix the type, not the cast.
 6. **Stay inside scope.** Don't refactor unrelated code, rename files, or "improve" patterns the user didn't ask about. If you notice something worth fixing, mention it and ask — don't act.
@@ -41,48 +41,53 @@ These are working principles for *every* session, not preferences.
 
 ---
 
-## Active Phase — Phase 2: Supabase Backend + Auth
+## El Producto — Qué es ITMANO CRM
 
-**Status:** Just started. Phase 1 (static UI mockup) is shipped and live at `https://app.itmano.com/dashboard`.
+ITMANO CRM is a **white-labeled, multi-tenant SaaS CRM for real estate teams**, sold as the visible centerpiece of ITMANO's Growth Partner service. Each client (tenant) gets a live, branded dashboard at `app.itmano.com` instead of a monthly PDF report. It is sold **sales-led by subscription** ("Contáctanos" — no self-serve signup); public plans: Esencial $149/mes · Growth $299/mes · Partner (custom). Payment processing is not integrated yet (see Roadmap — Billing).
 
-### What Phase 2 must deliver
+**What the CRM includes today:**
 
-1. **Cleanup of the legacy `(funnel)` experiment.** Phase 1 included a sample lead-magnet landing page at `src/app/(funnel)/lm/guia-familias-hispanas/`. That experiment is over — this app does not host funnels. Delete the entire `(funnel)/` route group, remove `framer-motion` from `package.json`, drop the funnel components directory if it exists, and remove orphan assets from `/public/` (`adriana_face.JPG`, `mockup.png`, `family_home.png`). Do this **first**, before installing Supabase, so the repo is clean.
-2. **Supabase project** wired up (`@supabase/supabase-js` + `@supabase/ssr` for Next.js App Router).
-3. **Schema** mirroring `src/lib/types.ts` with `tenant_id` on every row, *plus* the new scoring tables (`lead_events`, `lead_score_rules`, `lead_status_history`, `notifications`) described in the "Lead Scoring Model" section.
-4. **Row Level Security (RLS)** policies enforcing tenant isolation. RLS is the source of truth for security — never trust code-level filtering alone.
-5. **Auth** via Supabase Auth using **Magic Link only** (`signInWithOtp`). No password flow. The login page at `(auth)/login` becomes a real authenticator: user enters email → receives one-time link → lands authenticated. Roles: `super_admin` (ITMANO internal) and `agent_owner` (the tenant's single login).
-6. **Tenant seed** for A&J Real Estate Group with the 4 team-member agents preserved (only `agent-adriana` has `user_id` populated). See "Auth Model" for credentials.
-7. **HubSpot migration of the 114 real contacts** as `status = 'cerrado'` with `current_score = NULL` and `peak_score = NULL` — they are post-funnel newsletter recipients, not scored leads. They can re-enter the funnel if a new engagement event arrives (then scoring begins from that moment).
-8. **Migration of the 75 Phase-1 mock leads** if useful for QA continuity, otherwise drop them.
-9. **Real-data wiring** of the existing pages: dashboard, leads list, lead detail, lead creation, analytics, lead magnets, settings. Replace direct mockdata imports with server-side Supabase reads.
-10. **Scoring triggers** in Postgres on `lead_events` (event insert → score update → status auto-promotion → notification fire). See "Lead Scoring Model — Database Architecture".
-11. **Decay cron** scheduled hourly via `pg_cron` or Supabase Edge Function. Recalculates `current_score` for inactive leads, demotes status bands.
-12. **`.env.local`** populated; `.env.example` updated with all new vars. Never commit secrets.
+- **Automatic lead scoring (0–100)** — source baseline + weighted behavioral events + time-decay; drives pipeline status automatically (see "Lead Scoring Model"). Postgres triggers + hourly decay cron.
+- **Pipeline dashboard** — leads grouped by status band, KPI cards, Supabase Realtime updates.
+- **Lead management** — list/filters/detail/manual creation, CSV/XLSX import, language auto-routing to agents, form-submission snapshots.
+- **Email nurturing (Resend)** — per-agent sequences with AI bootstrap, in-CRM composer with AI drafting and per-agent signatures, purchase-process lifecycle emails, one-off sends, inbound reply capture, unsubscribe/bounce/spam guards. Click rate is the engagement metric (never opens).
+- **Properties module** — listings CRUD with media in Supabase Storage; doubles as the data source for the client's public website (anon reads published rows/columns only).
+- **Acquisition channels** — lead magnets, event forms, contact forms, Webflow/ManyChat intake endpoints with dedup and scoring.
+- **Analytics** — per-agent, per-channel, and email analytics; platform KPIs in the super-admin hub.
+- **Notifications** — in-app bell + Telegram dispatch (score ≥80 rising edge, contact-form questions, event submissions, email replies).
+- **Admin panel** (`/admin`) — super_admin hub: platform KPIs, tenant cards, tenant management, "act as tenant" switcher.
+- **Auth** — Supabase Magic Link only, closed signups; roles `super_admin` / `agent_owner` / `agent` (see "Auth Model").
 
-### What Phase 2 must NOT do (yet)
+**AI integrations (Anthropic SDK, `claude-sonnet-5`):**
 
-- No Resend integration (Phase 3). The scoring system has hooks for email events but those webhook endpoints are scaffolded only — they do nothing until Phase 3.
-- No WhatsApp Business Cloud API (Phase 4).
-- No velocity multiplier or advanced analytics (Phase 5).
-- No ManyChat webhook receiver (Phase 3).
-- No new pages or features that weren't in the Phase 1 mockup. Phase 2 is *backend underneath the existing UI*, not new UX.
+- **Email drafting** — the composer writes/rewrites personal-letter-style emails per agent voice.
+- **Sequence bootstrap** — generates a 3-step sequence for an empty sequence in one click.
+- **Property intake from PDF** ("Crear con IA") — extracts a listing PDF into a prefilled form for human review (gated behind `AI_ENABLED` in `properties-client.tsx`).
+- **Per-tenant AI usage tracking** — `ai_usage_events` (migration 052) records tokens/cost per call; dashboards for the super admin. AI cost is paid by ITMANO, so watch this before pricing changes.
 
-### Order of operations for Phase 2
+---
 
-Work in this sequence. Each step must end in a green build and a working dev server before moving on.
+## Estado del proyecto — Phases 1–3 completadas
 
-0. **Funnel cleanup** (see deliverable 1). PR titled `chore/funnel-cleanup`. Verify `npm run build` is green afterwards.
-1. Supabase project setup + env vars + client helpers (`src/lib/supabase/server.ts`, `src/lib/supabase/client.ts`).
-2. Schema migration files in `supabase/migrations/`. One file per logical unit (`tenants`, `agents`, `lead_sources`, `lead_magnets`, `leads`, `lead_events`, `lead_score_rules`, `lead_status_history`, `notifications`, `purchase_processes`).
-3. RLS policies in a dedicated migration file. Pattern: every table policy joins through `agents.user_id = auth.uid()` to derive `tenant_id`. `super_admin` role bypasses via a separate permissive policy.
-4. Scoring rules seed: global `lead_score_rules` populated with the source baselines and event weights defined in "Lead Scoring Model". Scoring triggers installed on `lead_events`. Hourly decay cron registered (`pg_cron` or Edge Function).
-5. Seed file for A&J tenant + 4 agents (only `agent-adriana` has `user_id`) + lead sources.
-6. Auth: middleware (`src/middleware.ts`) protecting `(dashboard)` routes; login form wired to `supabase.auth.signInWithOtp` (Magic Link); callback route handles the OTP redirect; `super_admin` users go to `/admin`, `agent_owner` users go to `/dashboard`.
-7. HubSpot CSV migration script for the 114 closed contacts (insert as `status = 'cerrado'`, `current_score = NULL`, `peak_score = NULL`).
-8. Data access layer (`src/lib/data/*.ts`) — one file per entity, server-only, replaces mockdata imports page by page.
-9. CSV/XLSX import in `leads/new` now writes to Supabase inside a single transaction; new leads receive a source baseline score automatically.
-10. Realtime: subscribe the dashboard pipeline to `leads` table changes and the topbar notification bell to `notifications` table changes. Mobile-friendly, no flicker.
+**Live at `https://app.itmano.com`.** The old phase plan is done:
+
+- **Phase 1 ✅** — static UI mockup (all CRM pages).
+- **Phase 2 ✅** — Supabase Postgres + RLS on every table, Magic Link auth, scoring tables/triggers/decay cron, A&J seed, HubSpot migration, Realtime, data-access layer (`src/lib/data/*`). `mockdata.ts` is no longer a data source.
+- **Phase 3 ✅** — Resend integration end-to-end (sequences, webhooks → scoring events, inbound replies), acquisition-channel intake endpoints, Telegram notifications. Plus work beyond the original plan: properties module + web listings, super-admin hub, AI features, per-tenant AI usage tracking (52 migrations as of 2026-07).
+
+**Test suites exist** (Vitest): `npm run test:rls | test:scoring | test:auth | test:import | test:leads | test:routing | test:visibility`. Keep them green; `tests/auth/middleware-matcher.test.ts` mirrors the proxy matcher literal.
+
+### Active phase — Comercialización
+
+Getting the product sellable as a subscription. In order:
+
+1. **Public landing page at `/`** (route group `(marketing)`) — Spanish neutro latino, dark/premium, motion v12, sales-led CTAs ("Contáctanos" form → Resend). Replaces the old redirect-to-login root.
+2. **Legal pages** — `/terminos`, `/privacidad`, `/reembolsos`. Entity: UAE (Dubái) with placeholders for the legal name/license; drafts pending lawyer review before paying clients.
+3. **Billing / subscriptions** — evaluate Stripe direct vs. Lemon Squeezy (MoR; favored because tenants span US + Spain tax jurisdictions). `subscriptions` data keyed by `tenant_id` with RLS like everything else. Not started.
+4. **Tenant onboarding** — provision a new tenant (branding, agents, channels) without manual seed work. Not started.
+5. **Advanced analytics (old Phase 5)** — velocity multiplier, reactivation campaigns, per-tenant scoring overrides. Not started.
+
+**Explicitly postponed:** WhatsApp Business Cloud API (old Phase 4) and the ManyChat webhook receiver.
 
 ---
 
@@ -114,9 +119,9 @@ This is not a generic CRM. Without this context, Claude Code will make wrong pro
 - Never hardcode `aj-real-estate` or any A&J value in shared code. If a value is A&J-specific, it's seed data, not code.
 - Branding (logo, primary color, name) lives on the `tenants` row and is read into the layout. Don't hardcode any tenant-specific colors into shared components.
 
-### Auth Model — One user per tenant (today)
+### Auth Model — Owner login per tenant + optional agent logins
 
-**The decision:** each tenant has exactly **one** Supabase Auth user. That user has the `agent_owner` role and full access to their tenant's data.
+**The model:** each tenant has one primary Supabase Auth user with the `agent_owner` role and full access to the tenant's data. Additional team agents **can** be invited as `agent`-role logins (invitation flow shipped post-Phase-2); an `agent` sees only their own leads/notifications (`tests/visibility` covers this). Roles live in `src/lib/auth/tenant-context.ts` (`TenantRole = 'super_admin' | 'agent_owner' | 'agent'`).
 
 **Why this matters for the schema:** the `agents` table represents **team members** of the real estate firm, *not* login users. A&J has four agents (Adriana, John, Melanie, Viviane) tracked for lead assignment, language routing, accent colors, and per-agent metrics — but only one of them logs in. Concretely:
 
@@ -130,7 +135,7 @@ This is not a generic CRM. Without this context, Claude Code will make wrong pro
 
 **Auth method:** Magic Link only (`signInWithOtp`). No passwords are ever set, stored, or reset. The user enters their email, receives a one-time link, and lands authenticated. Reasons: zero passwords to manage, zero password-reuse attack surface, simpler UX for non-technical real estate agents, works on any device with email access, no OAuth provider dependency.
 
-**Current state of the repo:** the Phase 1 mockup created 4 demo logins. These will be consolidated to 1 during Phase 2 seeding. For A&J Real Estate, the single login is `agent-adriana` authenticated via Magic Link sent to **`adrysofirealestate@gmail.com`** (Adriana's personal Gmail). The other three agents remain as team members with `agents.user_id = NULL`.
+**Current state:** for A&J Real Estate, the owner login is `agent-adriana` authenticated via Magic Link sent to **`adrysofirealestate@gmail.com`** (Adriana's personal Gmail). Other agents may hold `agent`-role logins via invitation; agents without a login remain team members with `agents.user_id = NULL`.
 
 ### Data flows in one direction
 
@@ -232,11 +237,12 @@ Promotion is automatic. **Demotion is also automatic** — a `caliente` lead tha
 
 ### Notifications (separate from status)
 
-Adriana receives an immediate notification (in-app bell + email backup) when:
+The tenant's users receive an immediate notification (in-app bell + Telegram dispatch) when:
 - Any lead crosses `current_score ≥ 80` (rising edge — fires once when transitioning from <80 to ≥80, not repeatedly).
 - Any new lead is created from the "contáctanos" web form, regardless of score.
+- Plus later additions: event-form submissions and inbound email replies.
 
-In Phase 4, these same triggers also push to WhatsApp. The notification logic lives in a single place — the scoring trigger — and fans out to channels.
+Notifications carry an `agent_id` scope (agent-role users see only their own). If WhatsApp ships (postponed), the same triggers fan out there. The notification logic lives in a single place — the scoring trigger — and fans out to channels via `/api/notifications/dispatch`.
 
 ### Event deduplication
 
@@ -320,16 +326,18 @@ The scoring system uses **stored scores updated by Postgres triggers, with a per
 | UI primitives | shadcn/ui via `components.json` | When you need a new primitive, prefer `npx shadcn@latest add <name>` over rolling one |
 | Forms | Native + Server Actions | No `react-hook-form` unless explicitly requested |
 | Charts | `recharts` | Client-only; never import in a Server Component |
-| Animations | None by default | The CRM is deliberately static and calm. Don't add animation libraries without a request. |
-| Tables | Hand-rolled today (Phase 1) | If we need sorting/virtualization, evaluate `@tanstack/table` before reinventing |
-| Auth | Supabase Auth (Phase 2) | Use `@supabase/ssr` cookies, not localStorage |
-| Database | Supabase Postgres (Phase 2) | RLS mandatory on every table |
-| Realtime | Supabase Realtime (Phase 2, dashboard only) | WebSockets via the JS client |
-| CSV/XLSX | `papaparse` + `xlsx` | Already wired in `leads/new`; max 500 rows |
-| Email | Resend + React Email (Phase 3) | Not yet |
-| WhatsApp | Meta Cloud API direct (Phase 4) | Not yet |
-| Hosting | Vercel | Preview deploys on every PR |
-| **Forbidden** | AOS, jQuery, any DOM-mutating animation library | They break SSR. The CRM doesn't need animations. |
+| Animations | `motion` v12 (motion.dev) | Contract in `src/components/motion/README.md`: `m.*` via LazyMotion strict, reduced-motion respected, entrances only on first render. Calm and subtle in the CRM; freer on the marketing landing. |
+| Tables | Hand-rolled | If we need sorting/virtualization, evaluate `@tanstack/table` before reinventing |
+| Auth | Supabase Auth (live) | Magic Link only, `@supabase/ssr` cookies, closed signups |
+| Database | Supabase Postgres (live) | RLS mandatory on every table; 52 migrations in `supabase/migrations/` |
+| Realtime | Supabase Realtime (live) | Dashboard pipeline + notification bell |
+| CSV/XLSX | `papaparse` + `xlsx` (SheetJS patched build) | Wired in `leads/new`; max 500 rows |
+| Email | Resend (live) | Sequences, one-offs, purchase lifecycle, inbound replies, webhooks → scoring |
+| AI | `@anthropic-ai/sdk` (live) | `claude-sonnet-5`; usage logged to `ai_usage_events` |
+| Notifications | Telegram bot (live) | Fan-out via `/api/notifications/dispatch` |
+| WhatsApp | Meta Cloud API direct | Postponed |
+| Hosting | Vercel | Preview deploys on every PR; hourly crons via cron-job.org |
+| **Forbidden** | AOS, jQuery, any DOM-mutating animation library | They break SSR. |
 
 ---
 
@@ -340,9 +348,17 @@ npm run dev      # Dev server
 npm run build    # Production build (run this before opening a PR)
 npm run lint     # ESLint
 npx tsc --noEmit # Type check without emit — run after any types/* change
+
+npm run test:rls        # RLS tenant-isolation suite (hits the remote DB — serialize, never parallel)
+npm run test:scoring    # Scoring triggers / decay
+npm run test:auth       # Auth + proxy matcher mirror
+npm run test:import     # CSV/XLSX import
+npm run test:leads      # Lead flows
+npm run test:routing    # Language auto-routing
+npm run test:visibility # Agent visibility scope
 ```
 
-No test suite exists. Don't fabricate one without a request from the user. If tests are needed for a tricky function, write a single focused file and ask whether to wire up Vitest properly.
+Run the suite(s) that cover the area you touched. If you change `src/proxy.ts`'s matcher, update `tests/auth/middleware-matcher.test.ts` in the same commit — it mirrors the literal.
 
 ---
 
@@ -351,34 +367,40 @@ No test suite exists. Don't fabricate one without a request from the user. If te
 ```
 src/
   app/
-    (auth)/login/             — public, dark theme
-    (dashboard)/              — protected (Phase 2), CRM dark theme
-      dashboard/              — pipeline + KPI cards
-      leads/                  — list, filters, detail, new
+    (marketing)/              — PUBLIC: landing page at `/`, /terminos, /privacidad, /reembolsos
+    (auth)/login/             — public, dark theme, Magic Link
+    auth/                     — OTP callback route
+    unsubscribe/              — public signed unsubscribe page
+    (dashboard)/              — protected, CRM dark theme
+      dashboard/              — pipeline + KPI cards (Realtime)
+      leads/                  — list, filters, detail, new (manual + CSV/XLSX import)
       properties/             — agency property listings; asymmetric writes (owner/super: all; agent: own-created). Also the source of truth for the A&J public web (see "Properties — Web Listings & AI Intake"). Media in Supabase Storage bucket `property-media` under `<tenant_id>/properties/`.
-      analytics/              — Server pages + client chart wrappers
+      emails/                 — sequences (list/detail/new), AI bootstrap, in-CRM composer
+      sources/                — acquisition channels (lead magnets, events, contact forms)
+      analytics/              — Server pages + client chart wrappers; /analytics/emails
       lead-magnets/           — CRUD per agent (tracking only — landing pages live outside this app)
+      notifications/          — full notification inbox
+      activity/               — activity feed
+      admin/                  — super_admin hub: platform KPIs, tenant management
       settings/
-    api/                      — route handlers for external callers (webhooks, forms)
+    api/                      — route handlers for external callers (webhooks, intake, crons)
   components/
     ui/                       — shadcn primitives
     dashboard/                — CRM-specific composites
+    marketing/                — landing page components (nav, hero, contact form…)
+    motion/                   — motion primitives + README (the motion contract)
   lib/
     types.ts                  — domain types (single source of truth)
-    mockdata.ts               — Phase 1 only; deprecated as data sources move to Supabase
-    supabase/                 — Phase 2: server.ts, client.ts, middleware helpers
-    data/                     — Phase 2: typed data-access functions per entity
-    services/
-      email-metrics.ts        — getSequenceMetrics, getStepMetrics, getGlobalEmailMetrics
-      enroll-lead-in-sequence.ts
-      send-sequence-email.ts
-      unsubscribe-url.ts
+    supabase/                 — server.ts, client.ts, admin.ts helpers
+    auth/                     — guards (getCurrentTenantContext, assertCanWriteProperty…)
+    data/                     — typed data-access functions per entity (server-only)
+    services/                 — email sending/metrics, sequence processing, AI helpers
     utils.ts
-  middleware.ts               — Phase 2: route protection
+  proxy.ts                    — Next 16 renamed middleware → proxy; edge auth guard (denylist matcher)
 supabase/
-  migrations/                 — Phase 2: SQL migrations, sequentially numbered
-  seed.sql                    — Phase 2: A&J tenant + agents + 75 leads
-public/                       — static assets
+  migrations/                 — SQL migrations, sequentially numbered (052+ as of 2026-07)
+tests/                        — Vitest suites (rls, scoring, auth, import, leads, routing, visibility)
+public/                       — static assets (itmano_logo.webp, itmano_banner.webp…)
 ```
 
 ---
@@ -537,10 +559,11 @@ uploaded by hand, not extracted). The UI entry point is **disabled** behind
 
 | Group | Path prefix | Theme | Auth |
 |---|---|---|---|
+| `(marketing)` | `/`, `/terminos`, `/privacidad`, `/reembolsos` | Dark premium (same tokens), marketing nav + footer | Public |
 | `(auth)` | `/login` | Dark | Public |
-| `(dashboard)` | `/dashboard`, `/leads`, `/properties`, `/analytics`, `/analytics/emails`, `/emails`, `/lead-magnets`, `/settings` | Dark premium (CSS vars) | Protected (Phase 2) |
+| `(dashboard)` | `/dashboard`, `/leads`, `/properties`, `/emails`, `/sources`, `/analytics`, `/analytics/emails`, `/lead-magnets`, `/notifications`, `/activity`, `/admin`, `/settings` | Dark premium (CSS vars) | Protected (`src/proxy.ts` + `getCurrentTenantContext`) |
 
-The `(dashboard)` layout wraps content in a fixed 220px `Sidebar` + `Topbar` + main area. This is the only design system in the app.
+The `(dashboard)` layout wraps content in a fixed 220px `Sidebar` + `Topbar` + main area. The `(marketing)` layout is nav + footer only. Both share the same design tokens — one visual identity across the product.
 
 ---
 
@@ -553,7 +576,7 @@ LeadSourceType:   lead_magnet | web_form | open_house | manual | ads | referral
 Language:         es | en | pt
 ```
 
-Read the file before adding any field. When extending it, also extend `STATUS_CONFIG`, `LANGUAGE_CONFIG`, or `SOURCE_CONFIG` in `mockdata.ts` to keep labels/colors consistent.
+Read the file before adding any field. When extending it, also extend `STATUS_CONFIG` / `LANGUAGE_CONFIG` in `src/lib/config.ts` to keep labels/colors consistent. (Statuses are English in code, Spanish in the UI labels.)
 
 ---
 
@@ -615,19 +638,19 @@ Agent accent color is used for avatar backgrounds at 15% opacity (`${color}26`).
 
 ## CSV/XLSX Import (`leads/new`)
 
-Already implemented in Phase 1. Phase 2 must preserve the contract:
+The contract to preserve:
 
 - Columns: `firstName`, `lastName`, `email`, `phone`, `language`, `agentId`, `sourceType`, `lender`, `notes`.
 - Max 500 rows.
 - Comment lines starting with `#` are skipped in CSV.
-- `papaparse` for CSV, `xlsx` for XLSX.
-- In Phase 2, the import writes to the `leads` table inside a single transaction, with `tenant_id` derived from the authenticated user. Partial failures roll back.
+- `papaparse` for CSV, `xlsx` (patched SheetJS build) for XLSX.
+- The import writes to the `leads` table inside a single transaction, with `tenant_id` derived from the authenticated user. Partial failures roll back. Covered by `npm run test:import`.
 
 ---
 
 ## Hard Rules — Never Cross These
 
-1. **Never commit directly to `main`.** Always a feature branch + PR. Branch naming: `phase2/<short-slug>`, `fix/<short-slug>`, `chore/<short-slug>`.
+1. **Never commit directly to `main`.** Always a feature branch + PR. Branch naming: `feat/<short-slug>`, `fix/<short-slug>`, `chore/<short-slug>`, `design/<short-slug>`.
 2. **Never commit secrets.** No keys in code, no keys in `.env.example`. `.env.example` lists variable *names* only.
 3. **Never bypass RLS.** No `service_role` key in the browser. No code that fetches data without going through an authenticated Supabase client (server-side) or a server-side data function.
 4. **Never hardcode tenant data.** A&J's name, color, logo, slug, agents — all come from the database.
@@ -635,7 +658,7 @@ Already implemented in Phase 1. Phase 2 must preserve the contract:
 6. **Never run destructive operations without a plan.** `DROP TABLE`, `TRUNCATE`, `rm -rf`, mass deletes — describe what will happen first, get confirmation, then act.
 7. **Never copy a snippet from this CLAUDE.md as if it were code.** The file referenced is the source of truth.
 8. **Never expose internal IDs in URLs that don't need them.** Use slugs where the user-facing route benefits (e.g. `/lm/guia-familias-hispanas`); use IDs where uniqueness matters (e.g. `/leads/<uuid>`).
-9. **Never start a Phase 3+ feature** (email, WhatsApp, scoring) during Phase 2 unless explicitly asked.
+9. **Never start a postponed or future-roadmap feature** (WhatsApp, billing integration, tenant self-serve signup) unless explicitly asked.
 
 ---
 
@@ -667,12 +690,13 @@ Read these *before* writing code that touches their domain:
 
 | If you're working on… | Read first |
 |---|---|
-| Anything that uses leads, agents, sources, lead magnets | `src/lib/types.ts`, `src/lib/mockdata.ts` |
+| Anything that uses leads, agents, sources, lead magnets | `src/lib/types.ts`, `src/lib/config.ts`, the relevant `src/lib/data/*.ts` |
+| The marketing landing or legal pages | `src/app/(marketing)/`, `src/components/marketing/`, `src/components/motion/README.md` |
 | Anything in `properties/` | `src/lib/data/properties.ts` (types), `src/lib/auth/guards.ts` (`assertCanWriteProperty`), the "Properties — Web Listings & AI Intake" section, and migrations `042_properties.sql` + `045`–`047` |
 | Anything that touches scoring, status auto-transitions, or notifications | The "Lead Scoring Model" section above, then the scoring migration files in `supabase/migrations/` |
 | Anything in `(dashboard)` | `src/app/globals.css` (design tokens), the closest existing page |
 | A new chart | An existing chart under `analytics/charts/` |
-| Auth or middleware | Supabase SSR docs at https://supabase.com/docs/guides/auth/server-side/nextjs |
+| Auth or the proxy (middleware) | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, and Supabase SSR docs at https://supabase.com/docs/guides/auth/server-side/nextjs |
 | Migrations or RLS | The most recent migration file in `supabase/migrations/` |
 | Routing, layouts, or server actions | The Next.js 16 guide in `node_modules/next/dist/docs/` |
 
@@ -682,11 +706,14 @@ Read these *before* writing code that touches their domain:
 
 | Phase | Scope | Status |
 |---|---|---|
-| **Phase 1** | Static UI mockup with `mockdata.ts` (75 leads, 4 agents, all CRM pages) | ✅ Shipped |
-| **Phase 2** | Funnel cleanup; Supabase Auth (Magic Link) + DB + RLS + Realtime; scoring tables + triggers + hourly decay cron; A&J seed (1 login per tenant); HubSpot 114-contact migration as `cerrado`/no-score | 🚧 **Active** |
-| Phase 3 | Resend + React Email; webhook receivers fire scoring events; per-agent sequences; ManyChat webhook receiver replaces manual import | ⏳ |
-| Phase 4 | Meta WhatsApp Cloud API; same triggers as email; notifications to Adriana fan out to WhatsApp | ⏳ |
-| Phase 5 | Velocity multiplier; quarterly reactivation campaigns; lead-magnet CRUD UI; per-tenant scoring rule overrides if any tenant requests them; analytics deep-dive | ⏳ |
+| **Phase 1** | Static UI mockup (all CRM pages) | ✅ Shipped |
+| **Phase 2** | Supabase Auth (Magic Link) + DB + RLS + Realtime; scoring tables + triggers + hourly decay cron; A&J seed; HubSpot 114-contact migration | ✅ Shipped |
+| **Phase 3** | Resend end-to-end (sequences, webhooks → scoring, inbound replies); intake endpoints; Telegram notifications; plus properties module, super-admin hub, AI features, AI usage tracking | ✅ Shipped |
+| **Comercialización — landing + legal** | Public landing at `/` (route group `(marketing)`), pricing sales-led, contact form via Resend; `/terminos`, `/privacidad`, `/reembolsos` (UAE entity, drafts pending lawyer review) | 🚧 **Active** |
+| Billing / suscripciones | Payment integration (Stripe direct vs. Lemon Squeezy MoR — MoR favored for US+Spain tax); `subscriptions` keyed by `tenant_id` with RLS | ⏳ Next |
+| Tenant onboarding | Provision a new tenant (branding, agents, channels) without manual seed work | ⏳ |
+| Analytics avanzado (old Phase 5) | Velocity multiplier; reactivation campaigns; per-tenant scoring overrides | ⏳ |
+| WhatsApp (old Phase 4) | Meta Cloud API; notification fan-out to WhatsApp; ManyChat receiver | ⏸️ Postponed |
 
 ---
 
