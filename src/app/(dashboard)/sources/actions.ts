@@ -373,6 +373,8 @@ export async function createEvent(fields: {
   tenantId?:  string  // required when caller is super_admin
 }): Promise<CreateEventResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
+  if (!fields.eventDate?.trim()) return { ok: false, error: 'La fecha del evento es obligatoria' }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fields.eventDate.trim())) return { ok: false, error: 'Fecha del evento inválida' }
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }

@@ -14,8 +14,11 @@ import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 async function getTenantId(overrideTenantId?: string): Promise<string | { error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role === 'super_admin') {
-    if (!overrideTenantId) return { error: 'Tenant requerido para super_admin' }
-    return overrideTenantId
+    // Con un tenant seleccionado (actuando como tenant), el destino cae al
+    // tenant del contexto — no se pide picker. Solo sin selección se exige uno.
+    const target = overrideTenantId ?? ctx.tenant_id
+    if (!target) return { error: 'Selecciona un tenant desde el centro de control.' }
+    return target
   }
   if (!ctx.tenant_id) return { error: 'Acceso no autorizado' }
   return ctx.tenant_id
@@ -311,15 +314,8 @@ export async function deleteStep(
   if (denied) return denied
   const supabase = createAdminClient()
 
-  // Guard: don't allow deleting the last step
-  const { count } = await supabase
-    .from('email_sequence_steps')
-    .select('id', { count: 'exact', head: true })
-    .eq('sequence_id', sequenceId)
-
-  if ((count ?? 0) <= 1) {
-    return { ok: false, error: 'No se puede eliminar el único paso de una secuencia' }
-  }
+  // Se permite borrar cualquier paso, incluido el último — la secuencia queda
+  // vacía y vuelve a ofrecer el bootstrap con IA.
 
   // Get the step's current order before deleting
   const { data: step } = await supabase
@@ -408,6 +404,10 @@ const PreviewSchema = z.object({
   subject: z.string().trim().min(1).max(200),
   content: EmailContentSchema,
   locale:  z.enum(['es', 'en', 'pt']).default('es'),
+  // Contexto opcional para mostrar la FIRMA REAL del agente que firmaría el
+  // envío: por lead (one-off) o por secuencia (steps). Sin contexto → muestra.
+  leadId:     z.string().optional(),
+  sequenceId: z.string().optional(),
 })
 
 export async function previewEmailHtml(
@@ -416,8 +416,8 @@ export async function previewEmailHtml(
   const parsed = PreviewSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
-  // Solo verifica que haya sesión (la preview no lee datos por-tenant).
-  await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
+  const supabase = createAdminClient()
 
   const SAMPLE_SIGNATURE: Record<string, string> = {
     es: 'Un abrazo,\nAdriana',
@@ -425,16 +425,44 @@ export async function previewEmailHtml(
     pt: 'Um abraço,\nAdriana',
   }
 
+  // Firma real del agente que firmaría este envío. Se resuelve del agente
+  // asignado al lead (one-off) o del agente de la secuencia (steps); si no hay
+  // firma configurada o no hay contexto, cae a la de muestra para que la vista
+  // previa nunca aparezca sin firma.
+  let signature: string | null = null
+  let agentName = 'Adriana'
+  if (parsed.data.leadId) {
+    let q = supabase.from('leads').select('agents (name, email_signature)').eq('id', parsed.data.leadId)
+    if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+    const { data } = await q.maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ag = data ? (Array.isArray((data as any).agents) ? (data as any).agents[0] : (data as any).agents) : null
+    signature = (ag?.email_signature as string | null) ?? null
+    if (ag?.name) agentName = ag.name as string
+  } else if (parsed.data.sequenceId) {
+    let sq = supabase.from('email_sequences').select('agent_id').eq('id', parsed.data.sequenceId)
+    if (ctx.tenant_id) sq = sq.eq('tenant_id', ctx.tenant_id)
+    const { data: seq } = await sq.maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agentId = (seq as any)?.agent_id as string | null
+    if (agentId) {
+      const { data: ag } = await supabase.from('agents').select('name, email_signature').eq('id', agentId).maybeSingle()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      signature = ((ag as any)?.email_signature as string | null) ?? null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((ag as any)?.name) agentName = (ag as any).name as string
+    }
+  }
+
   const rendered = renderEmail({
     subject: parsed.data.subject,
     content: parsed.data.content,
     vars: {
       customer_name: 'María',
-      agent_name:    'Adriana',
+      agent_name:    agentName,
       agent_email:   'agente@ejemplo.com',
     },
-    // Firma de muestra — la real se configura en Configuración → Email.
-    signature:      SAMPLE_SIGNATURE[parsed.data.locale] ?? SAMPLE_SIGNATURE.es,
+    signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.es,
     unsubscribeUrl: '#',
     locale:         parsed.data.locale as EmailLocale,
   })

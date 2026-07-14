@@ -383,6 +383,7 @@ export function StepManager({
                     agentName,
                     tenantName,
                   }}
+                  previewContext={{ sequenceId }}
                 />
               ) : (
                 <>
