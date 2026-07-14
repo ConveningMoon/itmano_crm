@@ -62,23 +62,33 @@ export default async function EmailSequenceDetailPage({
 
   // For manual sequences: fetch leads eligible to be added (exclude those with active run in this seq)
   let eligibleLeads: PickerLead[] = []
+  let pickerAgents: Array<{ id: string; name: string }> = []
   if (sequence.activationType === 'manual') {
     const supabase = createAdminClient()
-    const [leadsRes, activeRunsRes] = await Promise.all([
+    const [leadsRes, activeRunsRes, agentsRes] = await Promise.all([
       applyVisibilityScope(
-        supabase.from('leads').select('id, first_name, last_name, email').order('created_at', { ascending: false }),
+        supabase.from('leads').select('id, first_name, last_name, email, status, agent_id, language').order('created_at', { ascending: false }),
         scope,
       ),
       supabase.from('lead_sequence_runs').select('lead_id').eq('sequence_id', id).eq('status', 'active'),
+      supabase.from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name'),
     ])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const activeLeadIds = new Set((activeRunsRes.data ?? []).map((r: any) => r.lead_id as string))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agentName = new Map((agentsRes.data ?? []).map((a: any) => [a.id as string, a.name as string]))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pickerAgents = (agentsRes.data ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     eligibleLeads = (leadsRes.data ?? []).filter((l: any) => !activeLeadIds.has(l.id as string)).map((l: any) => ({
       id:        l.id as string,
       firstName: l.first_name as string,
       lastName:  l.last_name as string,
       email:     l.email as string,
+      status:    l.status as string,
+      agentId:   (l.agent_id as string | null) ?? null,
+      agentName: l.agent_id ? (agentName.get(l.agent_id as string) ?? null) : null,
+      language:  (l.language as string | null) ?? null,
     }))
   }
 
@@ -239,7 +249,7 @@ export default async function EmailSequenceDetailPage({
                 Todos los leads ya tienen un run activo en esta secuencia.
               </p>
             ) : (
-              <ManualLeadPicker sequenceId={sequence.id} leads={eligibleLeads} />
+              <ManualLeadPicker sequenceId={sequence.id} leads={eligibleLeads} agents={pickerAgents} />
             )}
           </div>
         </div>

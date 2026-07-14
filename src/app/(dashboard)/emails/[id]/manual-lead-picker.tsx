@@ -3,33 +3,56 @@
 import { useState, useMemo, useTransition } from 'react'
 import { Search, X, UserPlus } from 'lucide-react'
 import { addLeadsToSequence } from '../actions'
+import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import type { LeadStatus, Language } from '@/lib/types'
 
 export interface PickerLead {
   id:        string
   firstName: string
   lastName:  string
   email:     string
+  status:    string
+  agentId:   string | null
+  agentName: string | null
+  language:  string | null
 }
 
 interface Props {
   sequenceId: string
   leads:      PickerLead[]
+  agents:     Array<{ id: string; name: string }>
 }
 
-export function ManualLeadPicker({ sequenceId, leads }: Props) {
+const SELECT_STYLE: React.CSSProperties = {
+  background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
+  borderRadius: '8px', padding: '6px 10px', color: 'var(--text-primary)',
+  fontSize: '12px', cursor: 'pointer', outline: 'none',
+}
+
+export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
   const [search,   setSearch]   = useState('')
+  const [fStatus,  setFStatus]  = useState<string>('all')
+  const [fAgent,   setFAgent]   = useState<string>('all')
+  const [fLang,    setFLang]    = useState<string>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [toast,    setToast]    = useState<string | null>(null)
   const [pending,  start]       = useTransition()
 
+  // Estados/idiomas presentes en los leads elegibles (para no ofrecer filtros vacíos).
+  const presentStatuses = useMemo(() => [...new Set(leads.map(l => l.status))], [leads])
+  const presentLangs    = useMemo(() => [...new Set(leads.map(l => l.language).filter(Boolean) as string[])], [leads])
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return leads.filter(l =>
-      q === '' ||
-      `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
-      l.email.toLowerCase().includes(q)
+      (q === '' ||
+        `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
+        l.email.toLowerCase().includes(q)) &&
+      (fStatus === 'all' || l.status === fStatus) &&
+      (fAgent  === 'all' || (fAgent === 'none' ? !l.agentId : l.agentId === fAgent)) &&
+      (fLang   === 'all' || l.language === fLang)
     )
-  }, [leads, search])
+  }, [leads, search, fStatus, fAgent, fLang])
 
   function toggle(id: string) {
     setSelected(prev => {
@@ -109,6 +132,42 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
         )}
       </div>
 
+      {/* Filtros — permiten seleccionar grupos (p. ej. todos los "tibio" de un agente) */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={SELECT_STYLE}>
+          <option value="all">Todos los estados</option>
+          {presentStatuses.map(s => (
+            <option key={s} value={s}>{STATUS_CONFIG[s as LeadStatus]?.label ?? s}</option>
+          ))}
+        </select>
+
+        {agents.length > 0 && (
+          <select value={fAgent} onChange={e => setFAgent(e.target.value)} style={SELECT_STYLE}>
+            <option value="all">Todos los agentes</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="none">Sin agente asignado</option>
+          </select>
+        )}
+
+        {presentLangs.length > 1 && (
+          <select value={fLang} onChange={e => setFLang(e.target.value)} style={SELECT_STYLE}>
+            <option value="all">Todos los idiomas</option>
+            {presentLangs.map(l => (
+              <option key={l} value={l}>{LANGUAGE_CONFIG[l as Language]?.label ?? l}</option>
+            ))}
+          </select>
+        )}
+
+        {(fStatus !== 'all' || fAgent !== 'all' || fLang !== 'all') && (
+          <button
+            onClick={() => { setFStatus('all'); setFAgent('all'); setFLang('all') }}
+            style={{ ...SELECT_STYLE, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <X size={11} /> Limpiar filtros
+          </button>
+        )}
+      </div>
+
       {/* Lead list */}
       <div style={{
         background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
@@ -159,9 +218,19 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
                   {lead.firstName} {lead.lastName}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {lead.email}
+                  {lead.email}{lead.agentName ? ` · ${lead.agentName}` : ''}
                 </div>
               </div>
+              {STATUS_CONFIG[lead.status as LeadStatus] && (
+                <span style={{
+                  flexShrink: 0, fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+                  letterSpacing: '0.04em',
+                  color: STATUS_CONFIG[lead.status as LeadStatus].color,
+                  background: STATUS_CONFIG[lead.status as LeadStatus].bgColor,
+                }}>
+                  {STATUS_CONFIG[lead.status as LeadStatus].label}
+                </span>
+              )}
             </label>
           ))
         )}

@@ -279,6 +279,25 @@ function bootstrapPrompt(params: {
   ].join('\n')
 }
 
+// Desenvuelve el valor `emails` de la tool, tolerando el doble-encoding que el
+// modelo produce a veces: el array directo, un string JSON de un array, o un
+// string JSON de un objeto `{ emails: [...] }` (anidado a cualquier nivel).
+function unwrapEmails(value: unknown, depth = 0): unknown {
+  if (Array.isArray(value)) return value
+  if (depth > 4) return value
+  if (typeof value === 'string') {
+    try {
+      return unwrapEmails(JSON.parse(value), depth + 1)
+    } catch {
+      return value
+    }
+  }
+  if (value && typeof value === 'object' && 'emails' in (value as Record<string, unknown>)) {
+    return unwrapEmails((value as Record<string, unknown>).emails, depth + 1)
+  }
+  return value
+}
+
 export type SequenceBootstrapResult =
   | { ok: true; created: number }
   | { ok: false; error: string }
@@ -395,7 +414,9 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
 
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 8000,
+      // Amplio: el doble-encoding ocasional del modelo (emails como string JSON)
+      // casi duplica los tokens de salida; con holgura evitamos truncar.
+      max_tokens: 16000,
       thinking: { type: 'disabled' },
       tools: [SEQUENCE_TOOL],
       tool_choice: { type: 'tool', name: 'compose_sequence' },
@@ -411,6 +432,11 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
     console.error(JSON.stringify({ service: 'ai-sequence-bootstrap', error: e instanceof Error ? e.message : 'unknown' }))
     return { ok: false, error: 'No se pudieron generar los correos con IA. Intenta más tarde.' }
   }
+
+  // El modelo a veces devuelve `emails` como string JSON doble-encodado
+  // (p. ej. `{"emails": "{\"emails\":[...]}"}` o `"[...]"`) en vez de un array.
+  // Lo desenvolvemos de forma tolerante antes de validar.
+  emailsRaw = unwrapEmails(emailsRaw)
 
   // ── Coerción + validación de los 3 correos ───────────────────────────────────
   if (!Array.isArray(emailsRaw) || emailsRaw.length < 3) {
