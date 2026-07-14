@@ -3,6 +3,8 @@ import { Building2, Users, Flame, TrendingUp } from 'lucide-react'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getHubData } from '@/lib/data/super-admin'
 import { getNotifications } from '@/lib/data/notifications'
+import { getAiUsageSummary } from '@/lib/data/ai-usage'
+import { AiUsagePanel } from '@/components/dashboard/ai-usage-panel'
 import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { AnimatedNumber } from '@/components/motion/animated-number'
 import { Tabs } from '@/components/ui/tabs'
@@ -16,9 +18,11 @@ export default async function AdminPage() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
-  const [{ kpis, tenants }, feed] = await Promise.all([
+  const [{ kpis, tenants }, feed, aiUsage] = await Promise.all([
     getHubData(),
     getNotifications(null, { limit: 10 }),
+    // Vista global: todos los tenants + uso ITMANO sin tenant.
+    getAiUsageSummary(null),
   ])
 
   const kpiCards = [
@@ -81,6 +85,7 @@ export default async function AdminPage() {
       <Tabs
         items={[
           { key: 'tenants', label: 'Tenants', badge: kpis.tenants },
+          { key: 'ia', label: 'Uso de IA' },
           { key: 'gestion', label: 'Gestión' },
         ]}
         content={{
@@ -101,6 +106,7 @@ export default async function AdminPage() {
               <HubFeed notifications={feed} />
             </>
           ),
+          ia: <AiUsagePanel summary={aiUsage} />,
           gestion: <AdminClient tenants={tenants} />,
         }}
       />

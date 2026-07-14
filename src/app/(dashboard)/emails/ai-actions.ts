@@ -5,6 +5,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
+import { recordAiUsage } from '@/lib/services/ai-usage'
 import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
 
@@ -126,7 +127,7 @@ function buildPrompt(input: EmailAiInput): string {
 export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiResult> {
   // Cualquier usuario autenticado del CRM puede generar borradores (guardar
   // sigue gateado por las actions correspondientes).
-  await getCurrentTenantContext()
+  const ctx = await getCurrentTenantContext()
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
@@ -151,6 +152,16 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
       tools: [COMPOSE_TOOL],
       tool_choice: { type: 'tool', name: 'compose_email' },
       messages: [{ role: 'user', content: buildPrompt(input) }],
+    })
+
+    // Registro de uso (tokens + costo) — best-effort, nunca bloquea.
+    await recordAiUsage({
+      tenantId: ctx.tenant_id,
+      userId:   ctx.user_id,
+      feature:  'email_draft',
+      model:    MODEL,
+      usage:    message.usage,
+      metadata: { purpose: input.purpose, language: input.language },
     })
 
     const block = message.content.find(b => b.type === 'tool_use')
@@ -421,6 +432,17 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
       tools: [SEQUENCE_TOOL],
       tool_choice: { type: 'tool', name: 'compose_sequence' },
       messages: [{ role: 'user', content: userContent }],
+    })
+
+    // Registro de uso (tokens + costo) — best-effort, nunca bloquea. El PDF
+    // adjunto es lo que dispara los requests caros (~14-20 ¢) — queda en metadata.
+    await recordAiUsage({
+      tenantId: tenantId,
+      userId:   ctx.user_id,
+      feature:  'sequence_bootstrap',
+      model:    MODEL,
+      usage:    message.usage,
+      metadata: { kind, has_pdf: !!pdfBytes, sequence_id: sequenceId },
     })
 
     const block = message.content.find(b => b.type === 'tool_use')

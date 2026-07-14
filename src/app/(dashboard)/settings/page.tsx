@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
+import { getAiUsageSummary } from '@/lib/data/ai-usage'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
@@ -17,7 +18,7 @@ export default async function SettingsPage() {
   const tenantId = ctx.tenant_id
   if (!tenantId) redirect('/admin')
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsage] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
     // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
     supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     authClient.auth.getUser(),
+    getAiUsageSummary(tenantId),
   ])
 
   const tenant = tenantRow
@@ -67,6 +69,7 @@ export default async function SettingsPage() {
         canLinkSelf={canLinkSelf}
         userEmail={userRes.data.user?.email ?? ''}
         userRole={ctx.role}
+        aiUsage={aiUsage}
       />
     </>
   )

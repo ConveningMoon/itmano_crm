@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { resolveTargetTenant } from '@/lib/auth/guards'
+import { recordAiUsage } from '@/lib/services/ai-usage'
 import type { PropertyInput } from './actions'
 
 // ── "Crear con IA" — prefill the property form from a listing PDF ────────────
@@ -135,6 +136,16 @@ export async function generatePropertyFromPdf(
           ],
         },
       ],
+    })
+
+    // Registro de uso (tokens + costo) — best-effort, nunca bloquea.
+    await recordAiUsage({
+      tenantId: typeof resolved === 'string' ? resolved : ctx.tenant_id,
+      userId:   ctx.user_id,
+      feature:  'property_intake',
+      model:    MODEL,
+      usage:    message.usage,
+      metadata: { pdf_bytes: file.size },
     })
 
     const block = message.content.find((b) => b.type === 'tool_use')
