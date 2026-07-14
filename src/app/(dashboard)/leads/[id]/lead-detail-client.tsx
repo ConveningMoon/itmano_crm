@@ -293,10 +293,10 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.25)',
                 cursor: 'pointer', color: 'var(--accent-gold)', fontSize: '12px', fontWeight: 500,
               }}
-              title="Enviar correo al lead"
+              title="Redactar y enviar un correo corporativo (con IA opcional) desde el CRM"
             >
               <Mail size={14} />
-              <span>Enviar correo</span>
+              <span>Enviar Correo Corporativo</span>
             </button>
             <button
               onClick={() => setShowEditModal(true)}
@@ -601,7 +601,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 className="action-btn"
                 style={{ ...ACTION_BTN_STYLE, textDecoration: 'none', minHeight: '40px' }}
               >
-                <Mail size={14} /> Enviar email
+                <Mail size={14} /> Enviar Correo Personal
               </a>
               {/* Copy email — always visible */}
               <button

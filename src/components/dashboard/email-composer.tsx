@@ -101,9 +101,12 @@ interface Props {
   locale?:  'es' | 'en' | 'pt'
   // Contexto para "Generar con IA"; sin él, el botón no se muestra.
   ai?: ComposerAiContext
+  // Contexto para que la vista previa muestre la FIRMA REAL del agente que
+  // firmaría el envío (por lead en one-off, o por secuencia en steps).
+  previewContext?: { leadId?: string; sequenceId?: string }
 }
 
-export function EmailComposer({ value, onChange, locale = 'es', ai }: Props) {
+export function EmailComposer({ value, onChange, locale = 'es', ai, previewContext }: Props) {
   const [previewHtml, setPreviewHtml]   = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, startPreview]      = useTransition()
@@ -145,7 +148,13 @@ export function EmailComposer({ value, onChange, locale = 'es', ai }: Props) {
     const input = composerValueToInput(value)
     if (!input.ok) { setPreviewError(input.error); return }
     startPreview(async () => {
-      const res = await previewEmailHtml({ subject: input.subject, content: input.content, locale })
+      const res = await previewEmailHtml({
+        subject:    input.subject,
+        content:    input.content,
+        locale,
+        leadId:     previewContext?.leadId,
+        sequenceId: previewContext?.sequenceId,
+      })
       if (!res.ok) { setPreviewError(res.error); return }
       setPreviewHtml(res.html)
     })

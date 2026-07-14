@@ -478,9 +478,10 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
 
   function handleSubmit() {
     setError(null)
+    if (!eventDate) { setError('La fecha del evento es obligatoria'); return }
     startTransition(async () => {
       const res = await createEvent({
-        name, slug: slug || undefined, eventDate: eventDate || undefined, location: location || undefined,
+        name, slug: slug || undefined, eventDate, location: location || undefined,
         agentId: agentId || null,
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
@@ -540,7 +541,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
               <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
+                  <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
                   <input value={eventDate} onChange={e => setEventDate(e.target.value)} style={INPUT} type="date" />
                 </div>
                 <div>
@@ -558,7 +559,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
                 <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+                <button onClick={handleSubmit} disabled={!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
                   {pending ? 'Creando…' : 'Crear Evento'}
                 </button>
               </div>

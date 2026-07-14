@@ -58,7 +58,7 @@ export function SendEmailModal({
     <ModalShell open={open} onClose={handleClose} maxWidth={680}>
       <div style={{ padding: '24px', maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Enviar correo al lead</span>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Enviar correo corporativo</span>
           <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
         </div>
 
@@ -82,6 +82,7 @@ export function SendEmailModal({
               onChange={setComposer}
               locale={language}
               ai={{ purpose: 'one_off', language, agentName, tenantName, leadFirstName }}
+              previewContext={{ leadId }}
             />
             {error && (
               <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px', padding: '8px 12px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>
