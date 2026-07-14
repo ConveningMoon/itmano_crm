@@ -1,0 +1,385 @@
+import {
+  Gauge,
+  LayoutDashboard,
+  Mail,
+  Home,
+  BarChart3,
+  Bell,
+  PenLine,
+  ListPlus,
+  FileText,
+} from 'lucide-react'
+import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { HeroPipeline } from '@/components/marketing/hero-pipeline'
+import { Reveal } from '@/components/marketing/reveal'
+import { ContactForm } from '@/components/marketing/contact-form'
+
+// ─── Contenido ────────────────────────────────────────────────────────────────
+// Todo el copy y los datos viven aquí arriba, no esparcidos por el JSX.
+
+const STATS = [
+  { value: '0–100', label: 'puntaje por comportamiento real, con decaimiento por inactividad' },
+  { value: '4', label: 'estados automáticos: el pipeline se ordena solo, sin mover tarjetas' },
+  { value: '3', label: 'idiomas con asignación automática de leads al agente correcto' },
+  { value: '24/7', label: 'secuencias de nurturing en marcha mientras tu equipo vende' },
+]
+
+const FEATURES = [
+  {
+    icon: Gauge,
+    title: 'Scoring automático',
+    body: 'Cada lead acumula puntos por señales reales: respuestas, clics, formularios, consultas agendadas. El tiempo sin actividad los reduce solo — nadie persigue leads fríos.',
+  },
+  {
+    icon: LayoutDashboard,
+    title: 'Pipeline en tiempo real',
+    body: 'Nuevo, nurturing, tibio, caliente: la banda de cada lead se deriva de su puntaje y cambia en vivo en el dashboard. Tu equipo abre la página y sabe a quién llamar primero.',
+  },
+  {
+    icon: Mail,
+    title: 'Secuencias de email',
+    body: 'Nurturing automático por canal y por agente, medido por clics y respuestas — no por aperturas infladas. Bajas, rebotes y quejas se bloquean solos.',
+  },
+  {
+    icon: Home,
+    title: 'Propiedades sincronizadas',
+    body: 'El inventario del CRM publica directo a tu sitio web: una sola carga, fotos optimizadas, control de qué se muestra al público.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Analytics por agente y canal',
+    body: 'Qué canal trae leads que avanzan, qué agente convierte, cómo rinde cada secuencia. Decisiones sobre datos de tu operación, no intuición.',
+  },
+  {
+    icon: Bell,
+    title: 'Notificaciones al instante',
+    body: 'Cuando un lead cruza los 80 puntos o llega una pregunta del formulario web, tu equipo lo sabe en segundos — campana en la app y aviso directo por Telegram.',
+  },
+]
+
+const AI_FEATURES = [
+  {
+    icon: PenLine,
+    title: 'Emails redactados por IA',
+    body: 'El composer escribe correos con la voz y la firma de cada agente: cartas personales, no plantillas de marketing. Tú revisas y envías.',
+  },
+  {
+    icon: ListPlus,
+    title: 'Secuencias en un clic',
+    body: 'Una secuencia de nurturing de 3 pasos generada desde cero para cada canal de adquisición, alineada al tono de tu equipo, lista para editar.',
+  },
+  {
+    icon: FileText,
+    title: 'Propiedades desde un PDF',
+    body: 'Sube la ficha del listing y el formulario se completa solo: descripción bilingüe, características, datos del inmueble. Tu equipo solo revisa y publica.',
+  },
+]
+
+const STEPS = [
+  {
+    n: '1',
+    title: 'Contáctanos',
+    body: 'Cuéntanos cómo opera tu equipo hoy: cuántos agentes, de dónde llegan los leads, qué se pierde en el camino.',
+  },
+  {
+    n: '2',
+    title: 'Configuramos tu infraestructura',
+    body: 'Canales de adquisición, agentes, scoring, secuencias y tu inventario de propiedades — todo queda operando sin trabajo de tu lado.',
+  },
+  {
+    n: '3',
+    title: 'Opera desde tu dashboard',
+    body: 'Tu pipeline vivo, tus métricas por agente y las notificaciones de leads calientes. Tu equipo se enfoca en cerrar.',
+  },
+]
+
+const PLANS = [
+  {
+    name: 'Esencial',
+    price: '$149',
+    period: '/ mes',
+    tagline: 'Para equipos que empiezan a ordenar su operación.',
+    features: [
+      'CRM completo con pipeline y scoring automático',
+      'Hasta 2 agentes con asignación por idioma',
+      'Importación de leads (CSV / Excel)',
+      'Notificaciones en la app y por Telegram',
+      'Soporte por email',
+    ],
+    highlighted: false,
+  },
+  {
+    name: 'Growth',
+    price: '$299',
+    period: '/ mes',
+    tagline: 'La operación completa: adquisición, nurturing y conversión.',
+    features: [
+      'Todo lo de Esencial',
+      'Agentes ilimitados',
+      'Secuencias de email con redacción por IA',
+      'Propiedades sincronizadas con tu sitio web',
+      'Analytics completo por agente y canal',
+      'Alta de propiedades desde PDF con IA',
+    ],
+    highlighted: true,
+  },
+  {
+    name: 'Partner',
+    price: 'Personalizada',
+    period: '',
+    tagline: 'Infraestructura de crecimiento a la medida de tu operación.',
+    features: [
+      'Todo lo de Growth',
+      'Onboarding dedicado y migración de datos (HubSpot y otros)',
+      'Infraestructura de adquisición completa',
+      'Formularios y landing pages conectados al CRM',
+      'Soporte prioritario',
+    ],
+    highlighted: false,
+  },
+]
+
+// ─── Página ───────────────────────────────────────────────────────────────────
+
+export default function LandingPage() {
+  return (
+    <>
+      {/* HERO */}
+      <section className="mk-container mk-hero">
+        <div>
+          <FadeIn y={10}>
+            <span className="mk-eyebrow">Growth Partner Platform</span>
+          </FadeIn>
+          <FadeIn y={14} delay={0.08}>
+            <h1 className="mk-h1" style={{ marginTop: '18px' }}>
+              La infraestructura de crecimiento para <strong>equipos inmobiliarios</strong>
+            </h1>
+          </FadeIn>
+          <FadeIn y={14} delay={0.16}>
+            <p className="mk-lead" style={{ marginTop: '22px', maxWidth: '480px' }}>
+              ITMANO captura, califica y madura a cada lead automáticamente — y tu
+              equipo lo ve todo en un dashboard en tiempo real. Sin hojas de cálculo,
+              sin leads olvidados.
+            </p>
+          </FadeIn>
+          <FadeIn y={14} delay={0.24}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
+              <a href="#contacto" className="mk-btn-gold btn-cta">Contáctanos</a>
+              <a href="#producto" className="mk-btn-ghost">Ver el producto</a>
+            </div>
+          </FadeIn>
+        </div>
+        <FadeIn y={20} delay={0.2}>
+          <HeroPipeline />
+        </FadeIn>
+      </section>
+
+      {/* MÉTRICAS */}
+      <section className="mk-container mk-section-tight">
+        <Reveal>
+          <div className="mk-stats">
+            {STATS.map(s => (
+              <div key={s.value} className="mk-stat">
+                <div
+                  className="mk-num"
+                  style={{ fontSize: '30px', fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}
+                >
+                  {s.value}
+                </div>
+                <p style={{ fontSize: '12px', lineHeight: 1.55, color: 'var(--text-muted)', marginTop: '8px' }}>
+                  {s.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+      </section>
+
+      {/* PRODUCTO */}
+      <section id="producto" className="mk-container mk-section">
+        <Reveal>
+          <span className="mk-eyebrow">Producto</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
+            Un CRM que prioriza por ti
+          </h2>
+          <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
+            La mayoría de los CRM son una lista de contactos que alguien tiene que
+            mantener. ITMANO es un sistema operativo: los leads entran por tus
+            canales, se califican por su comportamiento y llegan a tu equipo ya
+            priorizados.
+          </p>
+        </Reveal>
+        <div style={{ marginTop: '40px' }}>
+          <StaggerGroup className="mk-grid-3" stagger={0.06}>
+            {FEATURES.map(f => (
+              <StaggerItem key={f.title}>
+                <div className="mk-card card-interactive" style={{ height: '100%' }}>
+                  <f.icon size={20} strokeWidth={1.5} style={{ color: 'var(--accent-gold)' }} aria-hidden />
+                  <h3 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '14px' }}>
+                    {f.title}
+                  </h3>
+                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px' }}>{f.body}</p>
+                </div>
+              </StaggerItem>
+            ))}
+          </StaggerGroup>
+        </div>
+      </section>
+
+      {/* IA */}
+      <section id="ia" style={{ backgroundColor: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)', scrollMarginTop: '72px' }}>
+        <div className="mk-container mk-section">
+          <Reveal>
+            <span className="mk-eyebrow">Inteligencia artificial</span>
+            <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
+              IA integrada donde ahorra horas, no donde estorba
+            </h2>
+            <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
+              Nada de chatbots genéricos. La IA de ITMANO trabaja dentro del flujo de
+              tu equipo — redacta, genera y captura — y una persona siempre revisa
+              antes de que algo salga al mundo.
+            </p>
+          </Reveal>
+          <div style={{ marginTop: '40px' }}>
+            <StaggerGroup className="mk-grid-3" stagger={0.08}>
+              {AI_FEATURES.map(f => (
+                <StaggerItem key={f.title}>
+                  <div
+                    className="mk-card card-interactive"
+                    style={{ height: '100%', backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border-accent)' }}
+                  >
+                    <f.icon size={20} strokeWidth={1.5} style={{ color: 'var(--accent-gold)' }} aria-hidden />
+                    <h3 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '14px' }}>
+                      {f.title}
+                    </h3>
+                    <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px' }}>{f.body}</p>
+                  </div>
+                </StaggerItem>
+              ))}
+            </StaggerGroup>
+          </div>
+        </div>
+      </section>
+
+      {/* CÓMO FUNCIONA */}
+      <section id="como-funciona" className="mk-container mk-section">
+        <Reveal>
+          <span className="mk-eyebrow">Cómo funciona</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
+            De la primera llamada a operar, en días
+          </h2>
+        </Reveal>
+        <div style={{ marginTop: '40px' }}>
+          <StaggerGroup className="mk-steps" stagger={0.08}>
+            {STEPS.map(s => (
+              <StaggerItem key={s.n}>
+                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '20px', height: '100%' }}>
+                  <span className="mk-num" style={{ fontSize: '13px', color: 'var(--accent-gold)', fontWeight: 600 }}>
+                    {s.n}
+                  </span>
+                  <h3 style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '10px' }}>
+                    {s.title}
+                  </h3>
+                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px', maxWidth: '320px' }}>{s.body}</p>
+                </div>
+              </StaggerItem>
+            ))}
+          </StaggerGroup>
+        </div>
+      </section>
+
+      {/* INVERSIÓN */}
+      <section id="inversion" className="mk-container mk-section" style={{ paddingTop: '48px' }}>
+        <Reveal>
+          <span className="mk-eyebrow">Inversión</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
+            Una inversión, toda la infraestructura
+          </h2>
+          <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
+            Las cuentas se crean con nuestro equipo — así tu operación queda
+            configurada y funcionando desde el primer día, no un software vacío.
+          </p>
+        </Reveal>
+        <div style={{ marginTop: '40px' }}>
+          <StaggerGroup className="mk-pricing" stagger={0.08}>
+            {PLANS.map(p => (
+              <StaggerItem key={p.name}>
+                <div
+                  className="mk-card"
+                  style={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: '28px',
+                    ...(p.highlighted
+                      ? {
+                          border: '1px solid var(--border-gold-hover)',
+                          backgroundColor: 'var(--bg-elevated)',
+                          boxShadow: 'var(--highlight-top), var(--shadow-lg)',
+                        }
+                      : {}),
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: p.highlighted ? 'var(--accent-gold)' : 'var(--text-secondary)' }}>
+                      {p.name}
+                    </span>
+                    {p.highlighted && (
+                      <span style={{ fontSize: '10px', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-gold)', border: '1px solid var(--border-accent)', borderRadius: '4px', padding: '3px 8px' }}>
+                        Más elegido
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ marginTop: '18px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                    <span className="mk-num" style={{ fontSize: p.period ? '38px' : '24px', fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+                      {p.price}
+                    </span>
+                    {p.period && <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{p.period}</span>}
+                  </div>
+                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '10px' }}>{p.tagline}</p>
+                  <ul style={{ listStyle: 'none', marginTop: '22px', display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1 }}>
+                    {p.features.map(f => (
+                      <li key={f} style={{ display: 'flex', gap: '10px', fontSize: '13px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                        <span aria-hidden style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: '1px' }}>·</span>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <a
+                    href="#contacto"
+                    className={p.highlighted ? 'mk-btn-gold btn-cta' : 'mk-btn-ghost'}
+                    style={{ marginTop: '26px', width: '100%' }}
+                  >
+                    Contáctanos
+                  </a>
+                </div>
+              </StaggerItem>
+            ))}
+          </StaggerGroup>
+        </div>
+      </section>
+
+      {/* CONTACTO */}
+      <section id="contacto" style={{ backgroundColor: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', scrollMarginTop: '72px' }}>
+        <div className="mk-container mk-section">
+          <div className="mk-contact">
+            <Reveal>
+              <span className="mk-eyebrow">Contacto</span>
+              <h2 className="mk-h2" style={{ marginTop: '14px' }}>
+                Hablemos de tu operación
+              </h2>
+              <p className="mk-body" style={{ marginTop: '14px', maxWidth: '400px' }}>
+                Cuéntanos cómo trabaja tu equipo y te mostraremos, con una
+                demostración en vivo, cómo se vería operando sobre ITMANO.
+                Respondemos en menos de 24 horas hábiles.
+              </p>
+            </Reveal>
+            <Reveal delay={0.1}>
+              <ContactForm />
+            </Reveal>
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}

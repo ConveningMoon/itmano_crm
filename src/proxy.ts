@@ -10,9 +10,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 //
 // The matcher (below) excludes ALL /api routes — each has its own auth (cron/
 // webhook secrets, Resend signature, or self-guard via getCurrentTenantContext) —
-// plus /login, /auth/*, /unsubscribe and static assets. So every path that reaches
-// this function is a protected page (a denylist: every new dashboard page is
-// protected automatically, including /admin, /notifications and /activity).
+// plus the public marketing routes (`/` landing, /terminos, /privacidad,
+// /reembolsos), /login, /auth/*, /unsubscribe and static assets. So every path
+// that reaches this function is a protected page (a denylist: every new
+// dashboard page is protected automatically, including /admin, /notifications
+// and /activity).
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -49,9 +51,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on every page EXCEPT: all /api routes (own auth), /login, /auth/*,
-  // /unsubscribe, and static assets. Mirrored by tests/auth/middleware-matcher.test.ts.
+  // Run on every page EXCEPT: the root landing (`.+` instead of `.*` leaves `/`
+  // unmatched), all /api routes (own auth), /login, /auth/*, /unsubscribe, the
+  // legal pages, and static assets. Mirrored by tests/auth/middleware-matcher.test.ts.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|terminos|privacidad|reembolsos|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).+)',
   ],
 }
