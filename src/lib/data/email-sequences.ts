@@ -3,9 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SequenceChannel {
-  id:   string
-  name: string
-  slug: string
+  id:          string
+  name:        string
+  slug:        string
+  // lead_magnet | event | contact_form | manychat_flow | manual
+  channelType: string
 }
 
 export interface SequenceStep {
@@ -88,7 +90,7 @@ export async function listSequences(
 
   let channelQ = supabase
     .from('acquisition_channels')
-    .select('id, name, slug, email_sequence_id')
+    .select('id, name, slug, channel_type, email_sequence_id')
     .not('email_sequence_id', 'is', null)
   if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
 
@@ -148,7 +150,7 @@ export async function listSequences(
     const row = c as any
     const sid = row.email_sequence_id as string
     if (!channelsBySeq.has(sid)) channelsBySeq.set(sid, [])
-    channelsBySeq.get(sid)!.push({ id: row.id, name: row.name, slug: row.slug })
+    channelsBySeq.get(sid)!.push({ id: row.id, name: row.name, slug: row.slug, channelType: row.channel_type })
   }
 
   // Resolve sequence agent names in one batch.
@@ -234,7 +236,7 @@ export async function getSequenceWithRuns(
 
     supabase
       .from('acquisition_channels')
-      .select('id, name, slug')
+      .select('id, name, slug, channel_type')
       .eq('email_sequence_id', sequenceId),
   ])
 
@@ -317,7 +319,7 @@ export async function getSequenceWithRuns(
     channels:          (channelRows ?? []).map(c => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cr = c as any
-      return { id: cr.id, name: cr.name, slug: cr.slug }
+      return { id: cr.id, name: cr.name, slug: cr.slug, channelType: cr.channel_type }
     }),
     steps,
     stepCount:         steps.length,

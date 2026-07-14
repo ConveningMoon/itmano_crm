@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, X, AlertTriangle, Mail } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, AlertTriangle, Mail, Sparkles } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import type { SequenceStep } from '@/lib/data/email-sequences'
 import type { StepMetric } from '@/lib/services/email-metrics'
 import { addStep, updateStep, deleteStep, type StepInput } from '../actions'
+import { SequenceBootstrapModal } from './sequence-bootstrap-modal'
 import {
   EmailComposer,
   emptyComposerValue,
@@ -60,11 +61,15 @@ interface Props {
   language?:    'es' | 'en' | 'pt'
   tenantName?:  string
   agentName?:   string
+  // Canal asociado — condiciona el bootstrap con IA de secuencias vacías.
+  channelType?: string | null
+  channelName?: string | null
 }
 
 export function StepManager({
   sequenceId, steps: initialSteps, stepMetrics,
   language = 'es', tenantName, agentName,
+  channelType = null, channelName = null,
 }: Props) {
   const router   = useRouter()
   const [mode,    setMode]    = useState<'idle' | 'add' | 'edit' | 'confirm_delete'>('idle')
@@ -74,6 +79,7 @@ export function StepManager({
   })
   const [error,   setError]   = useState<string | null>(null)
   const [pending, start]      = useTransition()
+  const [bootstrapOpen, setBootstrapOpen] = useState(false)
 
   // Sort by step_order for display
   const steps = [...initialSteps].sort((a, b) => a.stepOrder - b.stepOrder)
@@ -194,8 +200,20 @@ export function StepManager({
             <Mail size={20} style={{ marginBottom: '8px', opacity: 0.4 }} color="var(--text-muted)" />
             <div>Sin pasos configurados todavía.</div>
             <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              Agrega el primer paso para comenzar a definir la secuencia.
+              Genera los 3 correos de la secuencia con IA, o agrega los pasos uno por uno.
             </div>
+            <button
+              onClick={() => setBootstrapOpen(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '14px',
+                padding: '8px 18px', fontSize: '13px', fontWeight: 500,
+                background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                border: 'none', borderRadius: '8px', cursor: 'pointer',
+              }}
+            >
+              <Sparkles size={13} />
+              Crear los 3 correos con IA
+            </button>
           </div>
         ) : (
           steps.map((step, idx) => (
@@ -424,6 +442,17 @@ export function StepManager({
             </div>
           </div>
       </ModalShell>
+
+      {/* Bootstrap con IA — solo secuencias vacías */}
+      {steps.length === 0 && (
+        <SequenceBootstrapModal
+          open={bootstrapOpen}
+          onClose={() => setBootstrapOpen(false)}
+          sequenceId={sequenceId}
+          channelType={channelType}
+          channelName={channelName}
+        />
+      )}
 
       {/* Delete step confirmation */}
       <ModalShell open={mode === 'confirm_delete'} onClose={closeModal} maxWidth={380}>

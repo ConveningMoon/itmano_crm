@@ -54,15 +54,28 @@ function resolveMergeTags(text: string, vars: MergeVars, escaped: boolean): stri
   })
 }
 
+// Convierte URLs pegadas como texto en enlaces clickeables (como haría un
+// cliente de correo con un mensaje normal). Opera sobre texto YA escapado, así
+// que no hay `<` dentro del match; el `&amp;` dentro del href es HTML válido.
+function linkifyUrls(escapedText: string): string {
+  return escapedText.replace(/https?:\/\/[^\s<]+/g, match => {
+    // No arrastrar puntuación de cierre al enlace.
+    const trailing = match.match(/[.,;:!?)]+$/)?.[0] ?? ''
+    const url = trailing ? match.slice(0, -trailing.length) : match
+    return `<a href="${url}" style="color:${TEXT_COLOR};">${url}</a>${trailing}`
+  })
+}
+
 // Texto libre → párrafos. Bloques separados por línea en blanco se vuelven <p>;
-// saltos simples dentro de un bloque se vuelven <br/>. Escapa + resuelve tags.
+// saltos simples dentro de un bloque se vuelven <br/>. Escapa + resuelve tags
+// + linkifica URLs.
 function textToParagraphs(text: string, vars: MergeVars): string {
   return text
     .split(/\n{2,}/)
     .map(block => block.trim())
     .filter(Boolean)
     .map(block => {
-      const body = resolveMergeTags(escapeHtml(block), vars, true).replace(/\r?\n/g, '<br/>')
+      const body = linkifyUrls(resolveMergeTags(escapeHtml(block), vars, true)).replace(/\r?\n/g, '<br/>')
       return `<p style="margin:0 0 16px;${FONT};font-size:15px;line-height:1.6;color:${TEXT_COLOR};">${body}</p>`
     })
     .join('\n')

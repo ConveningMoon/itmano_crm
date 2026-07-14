@@ -1,7 +1,10 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import Anthropic from '@anthropic-ai/sdk'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireWriteAccess } from '@/lib/auth/guards'
 import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
 
@@ -177,4 +180,270 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
   }
 
   return { ok: true, draft: { subject: subject.slice(0, 200), body: parsed.data.body } }
+}
+
+// ─── Bootstrap: crear los 3 correos de una secuencia vacía con IA ─────────────
+// Solo disponible cuando la secuencia NO tiene pasos. Genera los 3 correos en
+// una sola llamada (con el PDF del lead magnet como contexto si se sube) y los
+// inserta como pasos 0/1/2 con los delays según el tipo de canal:
+//   - lead_magnet / formulario / otros: 0h · +3 días · +10 días
+//   - event: 0h · hasta 1 día antes del evento · +2 días (= 1 día después)
+// Los correos quedan editables como cualquier paso del composer.
+
+const MAX_BOOTSTRAP_PDF_BYTES = 10 * 1024 * 1024 // 10 MB
+
+const SEQUENCE_TOOL: Anthropic.Tool = {
+  name: 'compose_sequence',
+  description: 'Return exactly three personal emails for an automated follow-up sequence.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      emails: {
+        type: 'array',
+        minItems: 3,
+        maxItems: 3,
+        items: {
+          type: 'object',
+          properties: {
+            subject: {
+              type: 'string',
+              description: 'A short, personal subject line — like something a friend would write. May include {{customer_name}}.',
+            },
+            body: {
+              type: 'string',
+              description: 'The full email body as plain text. Blank lines separate paragraphs. No HTML, no markdown, no bullet lists. Do NOT include a signature or sign-off name. Do NOT mention unsubscribing.',
+            },
+          },
+          required: ['subject', 'body'],
+        },
+        description: 'Exactly 3 emails, in send order.',
+      },
+    },
+    required: ['emails'],
+  },
+}
+
+// Arco narrativo de los 3 correos según el tipo de canal.
+const SEQUENCE_ARC: Record<'lead_magnet' | 'event' | 'generic', string[]> = {
+  lead_magnet: [
+    'EMAIL 1 (sent immediately after the person requests the material): warmly hand over the resource as if you were sharing it with a friend. If a download link appears in the context, include it as a plain URL on its own line. Mention one genuinely intriguing thing they will find inside — specific, not generic.',
+    'EMAIL 2 (sent 3 days later): follow up naturally. Reference something concrete and interesting from the material, add one fresh thought or question it raises, and invite a reply in a low-key way. It must feel like a person who keeps thinking about the topic, not a scheduled blast.',
+    'EMAIL 3 (sent 10 days after the second): a warm, unhurried check-in. Bring a new angle or curiosity related to the topic — something that makes them think — and leave the door open to talk, without asking for anything.',
+  ],
+  event: [
+    'EMAIL 1 (sent immediately after registering): a warm, personal confirmation. Show genuine anticipation for meeting them, mention practical details if provided, and one specific reason the event will be worth their time.',
+    'EMAIL 2 (sent 1 day before the event): a friendly "see you tomorrow" note. Build real anticipation with one concrete, curiosity-sparking detail of what will happen — never a formal reminder template.',
+    'EMAIL 3 (sent 1 day after the event): warm thanks for coming (written so it also reads naturally if they could not make it), share one highlight or reflection, and keep the relationship open.',
+  ],
+  generic: [
+    'EMAIL 1 (sent immediately after they reach out): a warm personal welcome that acknowledges why they got in touch and makes them feel heard by a real person.',
+    'EMAIL 2 (sent 3 days later): share one genuinely interesting thought, story or insight related to their interest — something with substance that sparks curiosity.',
+    'EMAIL 3 (sent 10 days after the second): a relaxed check-in with a fresh angle on the topic. Keep the connection alive without asking for anything.',
+  ],
+}
+
+function bootstrapPrompt(params: {
+  kind:        'lead_magnet' | 'event' | 'generic'
+  language:    'es' | 'en' | 'pt'
+  channelName: string | null
+  description: string
+  hasPdf:      boolean
+  agentName:   string | null
+}): string {
+  const context: string[] = []
+  if (params.agentName)   context.push(`You are writing as: ${params.agentName} (a real-estate agent)`)
+  if (params.channelName) context.push(`This sequence belongs to: "${params.channelName}"`)
+  if (params.hasPdf)      context.push('The attached PDF is the exact material the person requested — read it and use its real content to make the emails specific.')
+  if (params.description) context.push(`Description from the author:\n${params.description}`)
+
+  return [
+    'Write THREE personal emails for an automated follow-up sequence. Each email goes to one person who recently interacted with a real-estate agent.',
+    '',
+    `Context:\n${context.map(c => `- ${c}`).join('\n')}`,
+    '',
+    'The three emails and their timing:',
+    ...SEQUENCE_ARC[params.kind].map(a => `- ${a}`),
+    '',
+    'CRITICAL — these must NOT look like sales, marketing or promotional emails in any way:',
+    '- Write exactly like a real person writing to someone they know — warm, natural, human, as if typed by hand in a normal email client.',
+    '- NO marketing language, NO hype, NO salesy phrasing, NO "click here", NO urgency tricks.',
+    '- NO bullet lists, NO headings, NO ALL-CAPS, NO emojis. Just flowing prose in short paragraphs separated by blank lines.',
+    '- At the same time: NOT generic or bland. Each email must contain at least one specific, concrete detail or idea that creates real curiosity and makes the person want to keep reading. Avoid filler like "espero que estés bien" as the whole substance.',
+    '- The three emails must feel like a continuing conversation from the same person, not three isolated templates.',
+    `- ${LANGUAGE_RULES[params.language]}`,
+    '- Each email: 2 to 4 short paragraphs. Greet naturally using {{customer_name}}.',
+    '- Do NOT write a signature or sign-off name at the end of any email — it is appended automatically.',
+    '- Do NOT mention unsubscribing.',
+    '',
+    'Call the compose_sequence tool with the three emails in send order.',
+  ].join('\n')
+}
+
+export type SequenceBootstrapResult =
+  | { ok: true; created: number }
+  | { ok: false; error: string }
+
+export async function generateSequenceSteps(formData: FormData): Promise<SequenceBootstrapResult> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
+  }
+
+  const sequenceId  = (formData.get('sequenceId') as string) || ''
+  const description = ((formData.get('description') as string) || '').trim()
+  const eventDate   = ((formData.get('eventDate') as string) || '').trim()
+  const file        = formData.get('file')
+  if (!sequenceId) return { ok: false, error: 'Secuencia inválida.' }
+  if (description.length > 3000) return { ok: false, error: 'La descripción es demasiado larga (máx. 3000 caracteres).' }
+
+  const supabase = createAdminClient()
+
+  // Secuencia scoped al tenant del caller.
+  let seqQ = supabase.from('email_sequences').select('id, tenant_id, language, agent_id').eq('id', sequenceId)
+  if (ctx.tenant_id) seqQ = seqQ.eq('tenant_id', ctx.tenant_id)
+  const { data: seq } = await seqQ.maybeSingle()
+  if (!seq) return { ok: false, error: 'Secuencia no encontrada' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = seq as any
+  const tenantId = s.tenant_id as string
+  const language = (['es', 'en', 'pt'].includes(s.language as string) ? s.language : 'es') as 'es' | 'en' | 'pt'
+
+  // Solo para secuencias vacías — este flujo crea los pasos 0/1/2 desde cero.
+  const { count } = await supabase
+    .from('email_sequence_steps')
+    .select('id', { count: 'exact', head: true })
+    .eq('sequence_id', sequenceId)
+  if ((count ?? 0) > 0) return { ok: false, error: 'La secuencia ya tiene pasos. Este flujo solo aplica a secuencias vacías.' }
+
+  // Canal asociado → tipo de flujo.
+  const { data: channel } = await supabase
+    .from('acquisition_channels')
+    .select('name, channel_type')
+    .eq('email_sequence_id', sequenceId)
+    .limit(1)
+    .maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ch = channel as any
+  const channelType = (ch?.channel_type as string | undefined) ?? null
+  const kind: 'lead_magnet' | 'event' | 'generic' =
+    channelType === 'lead_magnet' ? 'lead_magnet'
+    : channelType === 'event'     ? 'event'
+    : 'generic'
+
+  // Validación de inputs + delays por tipo.
+  let pdfBytes: Buffer | null = null
+  if (kind === 'lead_magnet' && file instanceof File && file.size > 0) {
+    if (file.type !== 'application/pdf') return { ok: false, error: 'El material debe ser un PDF.' }
+    if (file.size > MAX_BOOTSTRAP_PDF_BYTES) return { ok: false, error: 'El PDF supera el límite de 10 MB.' }
+    pdfBytes = Buffer.from(await file.arrayBuffer())
+  }
+  if (kind === 'lead_magnet' && !pdfBytes && !description) {
+    return { ok: false, error: 'Sube el PDF del lead magnet o describe su contenido.' }
+  }
+  if (kind !== 'lead_magnet' && !description) {
+    return { ok: false, error: 'Describe de qué trata para que la IA escriba los correos.' }
+  }
+
+  let delays: [number, number, number]
+  if (kind === 'event') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+      return { ok: false, error: 'Indica la fecha del evento.' }
+    }
+    // Correo 2: 1 día antes del evento. delay_hours es relativo al correo
+    // anterior (enviado al suscribirse), así que se calcula desde hoy — si un
+    // lead se suscribe más tarde, el delay se puede ajustar editando el paso.
+    const eventMs  = new Date(`${eventDate}T09:00:00`).getTime()
+    const targetMs = eventMs - 24 * 3600 * 1000
+    const hours    = Math.round((targetMs - Date.now()) / 3600 / 1000)
+    if (hours < 1) return { ok: false, error: 'La fecha del evento debe ser al menos 2 días en el futuro.' }
+    delays = [0, hours, 48]
+  } else {
+    delays = [0, 72, 240] // inmediato · +3 días · +10 días
+  }
+
+  // Nombre del agente (contexto para la IA).
+  let agentName: string | null = null
+  if (s.agent_id) {
+    const { data: ag } = await supabase.from('agents').select('name').eq('id', s.agent_id).maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agentName = ((ag as any)?.name as string | undefined) ?? null
+  }
+
+  // ── Generación ───────────────────────────────────────────────────────────────
+  const prompt = bootstrapPrompt({
+    kind, language,
+    channelName: (ch?.name as string | undefined) ?? null,
+    description,
+    hasPdf: !!pdfBytes,
+    agentName,
+  })
+
+  let emailsRaw: unknown
+  try {
+    const anthropic = new Anthropic()
+    const userContent: Anthropic.ContentBlockParam[] = []
+    if (pdfBytes) {
+      userContent.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: pdfBytes.toString('base64') },
+      })
+    }
+    userContent.push({ type: 'text', text: prompt })
+
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 8000,
+      thinking: { type: 'disabled' },
+      tools: [SEQUENCE_TOOL],
+      tool_choice: { type: 'tool', name: 'compose_sequence' },
+      messages: [{ role: 'user', content: userContent }],
+    })
+
+    const block = message.content.find(b => b.type === 'tool_use')
+    if (!block || block.type !== 'tool_use') {
+      return { ok: false, error: 'La IA no devolvió los correos. Intenta de nuevo.' }
+    }
+    emailsRaw = (block.input as Record<string, unknown>).emails
+  } catch (e) {
+    console.error(JSON.stringify({ service: 'ai-sequence-bootstrap', error: e instanceof Error ? e.message : 'unknown' }))
+    return { ok: false, error: 'No se pudieron generar los correos con IA. Intenta más tarde.' }
+  }
+
+  // ── Coerción + validación de los 3 correos ───────────────────────────────────
+  if (!Array.isArray(emailsRaw) || emailsRaw.length < 3) {
+    return { ok: false, error: 'La IA devolvió un resultado incompleto. Intenta de nuevo.' }
+  }
+  const drafts: Array<{ subject: string; content: EmailContent }> = []
+  for (const raw of emailsRaw.slice(0, 3)) {
+    const r = raw as Record<string, unknown>
+    const subject = typeof r.subject === 'string' ? r.subject.trim().slice(0, 200) : ''
+    const body    = typeof r.body === 'string' ? r.body.trim().slice(0, 8000) : ''
+    const parsed  = EmailContentSchema.safeParse({ v: EMAIL_CONTENT_VERSION, body })
+    if (!subject || !parsed.success) {
+      return { ok: false, error: 'Uno de los correos generados está incompleto. Intenta de nuevo.' }
+    }
+    drafts.push({ subject, content: parsed.data })
+  }
+
+  // ── Insertar los 3 pasos ─────────────────────────────────────────────────────
+  const rows = drafts.map((d, i) => ({
+    sequence_id:        sequenceId,
+    tenant_id:          tenantId,
+    step_order:         i,
+    delay_hours:        delays[i],
+    subject:            d.subject,
+    body_json:          d.content,
+    resend_template_id: null,
+    active:             true,
+  }))
+
+  const { error: insertErr } = await supabase.from('email_sequence_steps').insert(rows)
+  if (insertErr) return { ok: false, error: insertErr.message }
+
+  revalidatePath('/emails')
+  revalidatePath('/emails/[id]', 'page')
+  return { ok: true, created: rows.length }
 }
