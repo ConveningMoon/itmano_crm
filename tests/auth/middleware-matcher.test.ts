@@ -5,13 +5,17 @@ import { describe, it, expect } from 'vitest'
 // can't import it here without pulling in next/server — this copy is the contract,
 // asserted below. If you change the proxy matcher, change this string too (and the
 // cases will tell you if a public route accidentally became protected).
-const MATCHER = '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'
+const MATCHER = '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|terminos|privacidad|reembolsos|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).+)'
 
 const matcherRe = new RegExp(`^${MATCHER}$`)
 const isProtected = (path: string) => matcherRe.test(path)
 
 describe('middleware matcher — public/system routes are NOT protected', () => {
   const publicPaths = [
+    '/', // marketing landing
+    '/terminos',
+    '/privacidad',
+    '/reembolsos',
     '/login',
     '/auth/callback',
     '/unsubscribe',
@@ -40,7 +44,6 @@ describe('middleware matcher — public/system routes are NOT protected', () => 
 
 describe('middleware matcher — dashboard pages ARE protected', () => {
   const protectedPaths = [
-    '/',
     '/dashboard',
     '/leads',
     '/leads/new',
