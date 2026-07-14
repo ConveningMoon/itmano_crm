@@ -6,6 +6,8 @@ import { Building2 } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
+import type { AiUsageSummary } from '@/lib/data/ai-usage'
+import { AiUsagePanel } from '@/components/dashboard/ai-usage-panel'
 import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature } from './actions'
 import { ScoringSection } from './scoring-section'
 import { Tabs } from '@/components/ui/tabs'
@@ -733,13 +735,14 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'cuenta'
+type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'ia' | 'cuenta'
 
 const TABS: Array<{ value: Tab; label: string }> = [
   { value: 'perfil',  label: 'Perfil del equipo' },
   { value: 'agentes', label: 'Agentes' },
   { value: 'email',   label: 'Email' },
   { value: 'scoring', label: 'Scoring' },
+  { value: 'ia',      label: 'Uso de IA' },
   { value: 'cuenta',  label: 'Cuenta y acceso' },
 ]
 
@@ -754,11 +757,13 @@ interface Props {
   canLinkSelf: boolean
   userEmail: string
   userRole: TenantRole
+  aiUsage: AiUsageSummary
 }
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, scoringRules,
   canEditScoring, canManageAgents, canLinkSelf, userEmail, userRole,
+  aiUsage,
 }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
 
@@ -782,6 +787,7 @@ export function SettingsClient({
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
         scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
+        ia: <AiUsagePanel summary={aiUsage} />,
         cuenta: (
           <AccountSection
             userEmail={userEmail}
