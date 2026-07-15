@@ -13,45 +13,53 @@ import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitive
 import { HeroPipeline } from '@/components/marketing/hero-pipeline'
 import { Reveal } from '@/components/marketing/reveal'
 import { ContactForm } from '@/components/marketing/contact-form'
+import { AuroraBackground } from '@/components/marketing/aurora-background'
+import { Particles } from '@/components/marketing/particles'
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
 // Todo el copy y los datos viven aquí arriba, no esparcidos por el JSX.
 
 const STATS = [
-  { value: '0–100', label: 'puntaje por comportamiento real, con decaimiento por inactividad' },
-  { value: '4', label: 'estados automáticos: el pipeline se ordena solo, sin mover tarjetas' },
-  { value: '3', label: 'idiomas con asignación automática de leads al agente correcto' },
-  { value: '24/7', label: 'secuencias de nurturing en marcha mientras tu equipo vende' },
+  { value: '0–100', color: 'var(--accent-gold)',  label: 'puntaje por comportamiento real, con decaimiento por inactividad' },
+  { value: '4',      color: 'var(--accent-blue)',  label: 'estados automáticos: el pipeline se ordena solo, sin mover tarjetas' },
+  { value: '3',      color: 'var(--accent-coral)', label: 'idiomas con asignación automática de leads al agente correcto' },
+  { value: '24/7',   color: 'var(--accent-teal)',  label: 'secuencias de nurturing en marcha mientras tu equipo vende' },
 ]
 
 const FEATURES = [
   {
     icon: Gauge,
+    glow: 'var(--accent-gold)',
     title: 'Scoring automático',
     body: 'Cada lead acumula puntos por señales reales: respuestas, clics, formularios, consultas agendadas. El tiempo sin actividad los reduce solo — nadie persigue leads fríos.',
   },
   {
     icon: LayoutDashboard,
+    glow: 'var(--accent-blue)',
     title: 'Pipeline en tiempo real',
     body: 'Nuevo, nurturing, tibio, caliente: la banda de cada lead se deriva de su puntaje y cambia en vivo en el dashboard. Tu equipo abre la página y sabe a quién llamar primero.',
   },
   {
     icon: Mail,
+    glow: 'var(--accent-teal)',
     title: 'Secuencias de email',
     body: 'Nurturing automático por canal y por agente, medido por clics y respuestas — no por aperturas infladas. Bajas, rebotes y quejas se bloquean solos.',
   },
   {
     icon: Home,
+    glow: 'var(--accent-coral)',
     title: 'Propiedades sincronizadas',
     body: 'El inventario del CRM publica directo a tu sitio web: una sola carga, fotos optimizadas, control de qué se muestra al público.',
   },
   {
     icon: BarChart3,
+    glow: 'var(--accent-pink)',
     title: 'Analytics por agente y canal',
     body: 'Qué canal trae leads que avanzan, qué agente convierte, cómo rinde cada secuencia. Decisiones sobre datos de tu operación, no intuición.',
   },
   {
     icon: Bell,
+    glow: 'var(--accent-green)',
     title: 'Notificaciones al instante',
     body: 'Cuando un lead cruza los 80 puntos o llega una pregunta del formulario web, tu equipo lo sabe en segundos — campana en la app y aviso directo por Telegram.',
   },
@@ -60,16 +68,19 @@ const FEATURES = [
 const AI_FEATURES = [
   {
     icon: PenLine,
+    glow: 'var(--accent-gold)',
     title: 'Emails redactados por IA',
     body: 'El composer escribe correos con la voz y la firma de cada agente: cartas personales, no plantillas de marketing. Tú revisas y envías.',
   },
   {
     icon: ListPlus,
+    glow: 'var(--accent-blue)',
     title: 'Secuencias en un clic',
     body: 'Una secuencia de nurturing de 3 pasos generada desde cero para cada canal de adquisición, alineada al tono de tu equipo, lista para editar.',
   },
   {
     icon: FileText,
+    glow: 'var(--accent-coral)',
     title: 'Propiedades desde un PDF',
     body: 'Sube la ficha del listing y el formulario se completa solo: descripción bilingüe, características, datos del inmueble. Tu equipo solo revisa y publica.',
   },
@@ -145,33 +156,38 @@ export default function LandingPage() {
   return (
     <>
       {/* HERO */}
-      <section className="mk-container mk-hero">
-        <div>
-          <FadeIn y={10}>
-            <span className="mk-eyebrow">Growth Partner Platform</span>
-          </FadeIn>
-          <FadeIn y={14} delay={0.08}>
-            <h1 className="mk-h1" style={{ marginTop: '18px' }}>
-              La infraestructura de crecimiento para <strong>equipos inmobiliarios</strong>
-            </h1>
-          </FadeIn>
-          <FadeIn y={14} delay={0.16}>
-            <p className="mk-lead" style={{ marginTop: '22px', maxWidth: '480px' }}>
-              ITMANO captura, califica y madura a cada lead automáticamente — y tu
-              equipo lo ve todo en un dashboard en tiempo real. Sin hojas de cálculo,
-              sin leads olvidados.
-            </p>
-          </FadeIn>
-          <FadeIn y={14} delay={0.24}>
-            <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
-              <a href="#contacto" className="mk-btn-gold btn-cta">Contáctanos</a>
-              <a href="#producto" className="mk-btn-ghost">Ver el producto</a>
-            </div>
+      <section style={{ position: 'relative', overflow: 'hidden' }}>
+        <AuroraBackground />
+        <Particles />
+        <div className="mk-container mk-hero" style={{ position: 'relative' }}>
+          <div>
+            <FadeIn y={10}>
+              <span className="mk-eyebrow">Growth Partner Platform · con IA integrada</span>
+            </FadeIn>
+            <FadeIn y={14} delay={0.08}>
+              <h1 className="mk-h1" style={{ marginTop: '18px' }}>
+                El CRM con <span className="mk-gradient-text">IA</span> que tu
+                equipo inmobiliario necesita
+              </h1>
+            </FadeIn>
+            <FadeIn y={14} delay={0.16}>
+              <p className="mk-lead" style={{ marginTop: '22px', maxWidth: '480px' }}>
+                Scoring automático, secuencias que se redactan solas y un pipeline
+                que se ordena en tiempo real — la infraestructura que antes solo
+                tenían los equipos más grandes, ahora al alcance del tuyo.
+              </p>
+            </FadeIn>
+            <FadeIn y={14} delay={0.24}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
+                <a href="#contacto" className="mk-btn-gold btn-cta">Contáctanos</a>
+                <a href="#producto" className="mk-btn-ghost">Ver el producto</a>
+              </div>
+            </FadeIn>
+          </div>
+          <FadeIn y={20} delay={0.2}>
+            <HeroPipeline />
           </FadeIn>
         </div>
-        <FadeIn y={20} delay={0.2}>
-          <HeroPipeline />
-        </FadeIn>
       </section>
 
       {/* MÉTRICAS */}
@@ -182,7 +198,7 @@ export default function LandingPage() {
               <div key={s.value} className="mk-stat">
                 <div
                   className="mk-num"
-                  style={{ fontSize: '30px', fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}
+                  style={{ fontSize: '30px', fontWeight: 500, letterSpacing: '-0.02em', color: s.color }}
                 >
                   {s.value}
                 </div>
@@ -213,8 +229,13 @@ export default function LandingPage() {
           <StaggerGroup className="mk-grid-3" stagger={0.06}>
             {FEATURES.map(f => (
               <StaggerItem key={f.title}>
-                <div className="mk-card card-interactive" style={{ height: '100%' }}>
-                  <f.icon size={20} strokeWidth={1.5} style={{ color: 'var(--accent-gold)' }} aria-hidden />
+                <div
+                  className="mk-card mk-feature-card"
+                  style={{ height: '100%', ['--glow-color' as string]: f.glow }}
+                >
+                  <div className="mk-icon-badge">
+                    <f.icon size={19} strokeWidth={1.5} aria-hidden />
+                  </div>
                   <h3 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '14px' }}>
                     {f.title}
                   </h3>
@@ -227,12 +248,15 @@ export default function LandingPage() {
       </section>
 
       {/* IA */}
-      <section id="ia" style={{ backgroundColor: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)', scrollMarginTop: '72px' }}>
-        <div className="mk-container mk-section">
+      <section id="ia" style={{ position: 'relative', backgroundColor: 'var(--bg-surface)', overflow: 'hidden', scrollMarginTop: '72px' }}>
+        <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
+        <div className="mk-divider-gradient" style={{ position: 'absolute', bottom: 0 }} />
+        <AuroraBackground style={{ opacity: 0.6 }} />
+        <div className="mk-container mk-section" style={{ position: 'relative' }}>
           <Reveal>
             <span className="mk-eyebrow">Inteligencia artificial</span>
             <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
-              IA integrada donde ahorra horas, no donde estorba
+              <span className="mk-gradient-text">IA</span> integrada donde ahorra horas, no donde estorba
             </h2>
             <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
               Nada de chatbots genéricos. La IA de ITMANO trabaja dentro del flujo de
@@ -245,10 +269,17 @@ export default function LandingPage() {
               {AI_FEATURES.map(f => (
                 <StaggerItem key={f.title}>
                   <div
-                    className="mk-card card-interactive"
-                    style={{ height: '100%', backgroundColor: 'var(--bg-elevated)', borderTop: '1px solid var(--border-accent)' }}
+                    className="mk-card mk-feature-card"
+                    style={{
+                      height: '100%',
+                      backgroundColor: 'var(--bg-elevated)',
+                      borderTop: '1px solid var(--border-accent)',
+                      ['--glow-color' as string]: f.glow,
+                    }}
                   >
-                    <f.icon size={20} strokeWidth={1.5} style={{ color: 'var(--accent-gold)' }} aria-hidden />
+                    <div className="mk-icon-badge">
+                      <f.icon size={19} strokeWidth={1.5} aria-hidden />
+                    </div>
                     <h3 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '14px' }}>
                       {f.title}
                     </h3>
@@ -314,6 +345,8 @@ export default function LandingPage() {
                     ...(p.highlighted
                       ? {
                           border: '1px solid var(--border-gold-hover)',
+                          backgroundImage:
+                            'radial-gradient(circle at 25% -10%, color-mix(in srgb, var(--accent-gold) 14%, transparent), transparent 55%)',
                           backgroundColor: 'var(--bg-elevated)',
                           boxShadow: 'var(--highlight-top), var(--shadow-lg)',
                         }
@@ -321,7 +354,13 @@ export default function LandingPage() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: p.highlighted ? 'var(--accent-gold)' : 'var(--text-secondary)' }}>
+                    <span
+                      className={p.highlighted ? 'mk-gradient-text' : undefined}
+                      style={{
+                        fontSize: '13px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
+                        color: p.highlighted ? undefined : 'var(--text-secondary)',
+                      }}
+                    >
                       {p.name}
                     </span>
                     {p.highlighted && (
@@ -360,8 +399,10 @@ export default function LandingPage() {
       </section>
 
       {/* CONTACTO */}
-      <section id="contacto" style={{ backgroundColor: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', scrollMarginTop: '72px' }}>
-        <div className="mk-container mk-section">
+      <section id="contacto" style={{ position: 'relative', backgroundColor: 'var(--bg-surface)', overflow: 'hidden', scrollMarginTop: '72px' }}>
+        <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
+        <AuroraBackground style={{ opacity: 0.45 }} />
+        <div className="mk-container mk-section" style={{ position: 'relative' }}>
           <div className="mk-contact">
             <Reveal>
               <span className="mk-eyebrow">Contacto</span>

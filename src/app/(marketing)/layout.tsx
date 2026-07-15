@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 // reglas de app-shell en globals.css) y solo cargan en las rutas (marketing).
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ backgroundColor: 'var(--bg-base)', minHeight: '100vh' }}>
+    <div style={{ backgroundColor: 'var(--bg-base)', minHeight: '100vh', overflowX: 'hidden' }}>
       <style>{`
         @media (prefers-reduced-motion: no-preference) {
           html { scroll-behavior: smooth; }
@@ -36,17 +36,51 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           text-transform: uppercase; color: var(--accent-gold);
         }
         .mk-h1 {
-          font-size: clamp(34px, 5.2vw, 58px); font-weight: 300; line-height: 1.08;
-          letter-spacing: -0.025em; color: var(--text-primary);
+          font-size: clamp(36px, 5.6vw, 62px); font-weight: 300; line-height: 1.06;
+          letter-spacing: -0.03em; color: var(--text-primary);
         }
-        .mk-h1 strong { font-weight: 500; }
+        .mk-h1 strong { font-weight: 600; }
         .mk-h2 {
           font-size: clamp(26px, 3.4vw, 36px); font-weight: 300; line-height: 1.15;
           letter-spacing: -0.02em; color: var(--text-primary);
         }
-        .mk-lead { font-size: 16px; line-height: 1.65; color: var(--text-secondary); }
+        .mk-lead { font-size: 17px; line-height: 1.65; color: var(--text-secondary); }
         .mk-body { font-size: 14px; line-height: 1.65; color: var(--text-secondary); }
         .mk-num { font-variant-numeric: tabular-nums; }
+
+        /* Texto en degradé — se usa con extrema mesura: 1–2 palabras por página,
+           nunca un párrafo entero (deja de leerse como énfasis si todo brilla). */
+        .mk-gradient-text {
+          font-weight: 600;
+          background-image: linear-gradient(100deg, var(--accent-gold) 10%, var(--accent-coral) 55%, var(--accent-blue) 100%);
+          background-clip: text; -webkit-background-clip: text;
+          color: transparent; -webkit-text-fill-color: transparent;
+        }
+
+        /* Línea divisoria de degradé — reemplaza el border-top plano en puntos
+           donde vale la pena marcar el cambio de sección con color. */
+        .mk-divider-gradient {
+          height: 1px; width: 100%;
+          background-image: linear-gradient(90deg, transparent, var(--accent-blue) 20%, var(--accent-gold) 50%, var(--accent-coral) 80%, transparent);
+          opacity: 0.4;
+        }
+
+        /* Insignia circular del ícono de cada feature — el color se inyecta vía
+           --glow-color desde el componente (una por feature, no todas doradas). */
+        .mk-icon-badge {
+          width: 40px; height: 40px; border-radius: 10px;
+          display: flex; align-items: center; justify-content: center;
+          background-color: color-mix(in srgb, var(--glow-color, var(--accent-gold)) 14%, transparent);
+          color: var(--glow-color, var(--accent-gold));
+        }
+        .mk-feature-card {
+          transition: border-color var(--dur-base), box-shadow var(--dur-base), transform var(--dur-base);
+        }
+        .mk-feature-card:hover {
+          border-color: color-mix(in srgb, var(--glow-color, var(--accent-gold)) 45%, var(--border-subtle));
+          box-shadow: var(--highlight-top), 0 10px 28px color-mix(in srgb, var(--glow-color, var(--accent-gold)) 16%, transparent);
+          transform: translateY(-2px);
+        }
 
         /* ── Botones ─────────────────────────────────────────────── */
         .mk-btn-gold {
@@ -98,6 +132,10 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center;
           padding-top: 148px; padding-bottom: 96px;
         }
+        /* Sin esto, los grid items no encogen bajo el ancho intrínseco de su
+           contenido (min-width:auto por defecto) — el tablero del pipeline
+           empujaba la página entera a scroll horizontal en móvil. */
+        .mk-hero > * { min-width: 0; }
         @media (max-width: 980px) {
           .mk-hero { grid-template-columns: 1fr; gap: 48px; padding-top: 120px; padding-bottom: 64px; }
         }
