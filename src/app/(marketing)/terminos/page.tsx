@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { LegalPage, Placeholder } from '@/components/marketing/legal-page'
+import { LegalPage } from '@/components/marketing/legal-page'
 
 export const metadata: Metadata = {
   title: 'Términos del servicio — ITMANO',
@@ -17,10 +17,10 @@ export default function TerminosPage() {
 
       <h2>1. Quiénes somos</h2>
       <p>
-        El Servicio es operado por <Placeholder>[razón social de la entidad]</Placeholder>,
-        sociedad constituida en Dubái, Emiratos Árabes Unidos, con licencia
-        comercial <Placeholder>[número de licencia]</Placeholder> (en adelante,
-        «ITMANO»). Contacto: <a href="mailto:contacto@itmano.com">contacto@itmano.com</a>.
+        El Servicio es operado por <strong>ITMANO TECHNOLOGY SERVICES AND CONSULTING
+        - FZCO</strong>, sociedad constituida en Dubái, Emiratos Árabes Unidos, con
+        licencia comercial N.º 55524 (en adelante, «ITMANO»). Contacto:{' '}
+        <a href="mailto:customer@itmano.com">customer@itmano.com</a>.
       </p>
 
       <h2>2. Descripción del Servicio</h2>

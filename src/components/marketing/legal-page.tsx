@@ -25,10 +25,6 @@ export function LegalPage({
         .mk-legal strong { color: var(--text-primary); font-weight: 500; }
         .mk-legal a { color: var(--accent-gold); text-decoration: none; }
         .mk-legal a:hover { text-decoration: underline; }
-        .mk-legal .mk-placeholder {
-          color: var(--accent-coral);
-          border-bottom: 1px dashed var(--accent-coral);
-        }
       `}</style>
       <span className="mk-eyebrow">Legal</span>
       <h1 className="mk-h2" style={{ marginTop: '14px' }}>{title}</h1>
@@ -40,10 +36,4 @@ export function LegalPage({
       </div>
     </div>
   )
-}
-
-// Marcador visible para datos legales pendientes de confirmar (razón social,
-// número de licencia). Debe reemplazarse antes de tener clientes de pago.
-export function Placeholder({ children }: { children: React.ReactNode }) {
-  return <span className="mk-placeholder">{children}</span>
 }

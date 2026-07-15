@@ -158,6 +158,7 @@ export function HeroPipeline() {
                   borderRadius: '10px',
                   padding: '8px',
                   minHeight: '196px',
+                  minWidth: 0,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px',

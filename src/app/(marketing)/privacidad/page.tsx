@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { LegalPage, Placeholder } from '@/components/marketing/legal-page'
+import { LegalPage } from '@/components/marketing/legal-page'
 
 export const metadata: Metadata = {
   title: 'Política de privacidad — ITMANO',
@@ -10,8 +10,9 @@ export default function PrivacidadPage() {
   return (
     <LegalPage title="Política de privacidad" updated="14 de julio de 2026">
       <p>
-        Esta política describe cómo <Placeholder>[razón social de la entidad]</Placeholder>{' '}
-        («ITMANO»), con domicilio en Dubái, Emiratos Árabes Unidos, trata los
+        Esta política describe cómo <strong>ITMANO TECHNOLOGY SERVICES AND
+        CONSULTING - FZCO</strong> («ITMANO»), con licencia comercial N.º 55524 y
+        domicilio en Dubái, Emiratos Árabes Unidos, trata los
         datos personales en relación con la plataforma ITMANO CRM y este sitio
         web. Cumplimos la Ley Federal de Protección de Datos Personales de los
         EAU (Decreto-Ley Federal N.º 45 de 2021, «PDPL») y, cuando corresponde
@@ -104,7 +105,7 @@ export default function PrivacidadPage() {
         Según la ley que te aplique (PDPL, RGPD, CCPA), puedes solicitar acceso,
         rectificación, supresión, portabilidad u oposición al tratamiento de tus
         datos escribiendo a{' '}
-        <a href="mailto:contacto@itmano.com">contacto@itmano.com</a>. Si tus datos
+        <a href="mailto:customer@itmano.com">customer@itmano.com</a>. Si tus datos
         están en el CRM de uno de nuestros clientes, dirigiremos tu solicitud a
         ese cliente, que es el responsable del tratamiento. También puedes
         reclamar ante la autoridad de protección de datos de tu jurisdicción.

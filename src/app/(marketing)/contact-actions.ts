@@ -30,7 +30,7 @@ export async function submitContactForm(
   const from = process.env.CONTACT_FORM_FROM
   if (!to || !from) {
     console.error(JSON.stringify({ service: 'marketing-contact', error: 'missing_env', detail: 'CONTACT_FORM_TO / CONTACT_FORM_FROM not set' }))
-    return { ok: false, error: 'El formulario no está disponible en este momento. Escríbenos directamente a contacto@itmano.com.' }
+    return { ok: false, error: 'El formulario no está disponible en este momento. Escríbenos directamente a customer@itmano.com.' }
   }
 
   const lines = [

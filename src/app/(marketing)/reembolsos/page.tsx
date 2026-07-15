@@ -24,7 +24,7 @@ export default function ReembolsosPage() {
       <h2>2. Cancelación</h2>
       <p>
         Puedes cancelar en cualquier momento escribiendo a{' '}
-        <a href="mailto:contacto@itmano.com">contacto@itmano.com</a> desde el
+        <a href="mailto:customer@itmano.com">customer@itmano.com</a> desde el
         correo asociado a tu cuenta. La cancelación es efectiva al final del
         ciclo en curso: conservas acceso completo hasta esa fecha y no se
         generan cargos posteriores.
@@ -65,7 +65,7 @@ export default function ReembolsosPage() {
 
       <h2>6. Cómo solicitar un reembolso</h2>
       <p>
-        Escribe a <a href="mailto:contacto@itmano.com">contacto@itmano.com</a> con
+        Escribe a <a href="mailto:customer@itmano.com">customer@itmano.com</a> con
         el nombre de tu cuenta, la fecha del cargo y el motivo. Respondemos en un
         máximo de 10 días hábiles; los reembolsos aprobados se emiten por el
         mismo medio de la transacción original.
