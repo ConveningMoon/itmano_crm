@@ -9,19 +9,20 @@ import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { SwitcherTenant } from '@/lib/data/tenants'
 import type { AiLimitIndicator } from '@/lib/services/ai-limit'
 
-// Indicador del límite mensual de IA del tenant. Discreto en estado normal;
-// cambia a coral desde el 80% y muestra "límite alcanzado" al bloquearse.
-// Click → Configuración (tab "Uso de IA" con el detalle completo).
+// Indicador del límite mensual de IA del tenant. Solo muestra el PORCENTAJE
+// consumido (los montos en USD son información interna de ITMANO y nunca
+// llegan a esta UI). Discreto en estado normal; coral desde el 80%; "Límite
+// alcanzado" al bloquearse. Click → Configuración.
 function AiLimitBadge({ status, onClick }: { status: AiLimitIndicator; onClick: () => void }) {
   const pct = Math.round(status.usedRatio * 100)
   const warn = !status.unlimited && status.usedRatio >= 0.8
   const accent = status.blocked || warn ? 'var(--accent-coral)' : 'var(--accent-gold)'
 
   const title = status.unlimited
-    ? 'Uso de IA: acceso ilimitado'
+    ? 'Generación con IA: acceso ilimitado'
     : status.blocked
-      ? `Límite mensual de IA alcanzado ($${status.limitUsd.toFixed(2)}). Se reinicia el día 1.`
-      : `Uso de IA este mes: $${status.usedUsd.toFixed(2)} de $${status.limitUsd.toFixed(2)} (${pct}%)`
+      ? 'Límite mensual de generación con IA alcanzado. Se reinicia el día 1.'
+      : `Generación con IA: ${pct}% del límite mensual utilizado`
 
   return (
     <button
@@ -46,7 +47,7 @@ function AiLimitBadge({ status, onClick }: { status: AiLimitIndicator; onClick: 
             <span style={{ display: 'block', height: '100%', width: `${Math.max(4, pct)}%`, background: accent, borderRadius: '2px' }} />
           </span>
           <span className="hidden sm:inline" style={{ fontSize: '11px', color: status.blocked ? 'var(--accent-coral)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-            {status.blocked ? 'Límite alcanzado' : `$${status.usedUsd.toFixed(2)} / $${status.limitUsd.toFixed(0)}`}
+            {status.blocked ? 'Límite alcanzado' : `${pct}%`}
           </span>
         </>
       )}

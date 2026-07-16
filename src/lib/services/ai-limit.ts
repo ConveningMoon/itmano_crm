@@ -63,18 +63,18 @@ export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus>
   }
 }
 
-// Versión serializable para la UI (sin Infinity — cruza la frontera RSC/client).
+// Versión para la UI de usuarios del tenant. DELIBERADAMENTE sin montos USD:
+// el costo/límite en dólares es información interna de ITMANO (solo visible en
+// el Centro de control). El cliente solo recibe el porcentaje consumido.
 export interface AiLimitIndicator {
   unlimited: boolean
-  limitUsd:  number
-  usedUsd:   number
   usedRatio: number
   blocked:   boolean
 }
 
 export async function getAiLimitIndicator(tenantId: string): Promise<AiLimitIndicator> {
   const s = await getAiLimitStatus(tenantId)
-  return { unlimited: s.unlimited, limitUsd: s.limitUsd, usedUsd: s.usedUsd, usedRatio: s.usedRatio, blocked: s.blocked }
+  return { unlimited: s.unlimited, usedRatio: s.usedRatio, blocked: s.blocked }
 }
 
 /**
@@ -91,8 +91,9 @@ export async function assertAiWithinLimit(
   const status = await getAiLimitStatus(ctx.tenant_id)
   if (!status.blocked) return null
 
+  // Sin montos en el mensaje: el límite en USD es información interna de ITMANO.
   return {
     ok: false,
-    error: `Tu equipo alcanzó el límite mensual de IA ($${status.limitUsd.toFixed(2)}). El contador se reinicia el día 1 del próximo mes; si necesitas ampliarlo, contacta a ITMANO.`,
+    error: 'Tu equipo alcanzó el límite mensual de generación con IA. El contador se reinicia el día 1 del próximo mes; si necesitas ampliarlo, contacta a ITMANO.',
   }
 }

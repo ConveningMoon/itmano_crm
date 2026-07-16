@@ -13,7 +13,8 @@
     "test:import": "vitest run tests/import",
     "test:leads": "vitest run tests/leads",
     "test:routing": "vitest run tests/routing",
-    "test:visibility": "vitest run tests/visibility"
+    "test:visibility": "vitest run tests/visibility",
+    "test:ai-limits": "vitest run tests/ai-limits"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
