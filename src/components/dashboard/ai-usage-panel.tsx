@@ -80,27 +80,43 @@ function KpiCard({ icon, color, label, value, sub }: {
   )
 }
 
-function totalsRow(t: AiUsageTotals) {
+function totalsRow(t: AiUsageTotals, showCosts: boolean) {
   return (
     <>
       <td style={NUM}>{fmtInt(t.requests)}</td>
       <td style={NUM}>{fmtInt(t.inputTokens)}</td>
       <td style={NUM}>{fmtInt(t.outputTokens)}</td>
-      <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(t.costUsd)}</td>
+      {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(t.costUsd)}</td>}
     </>
   )
 }
 
-const NUM_HEADERS = (
-  <>
-    <th style={{ ...TH, textAlign: 'right' }}>Requests</th>
-    <th style={{ ...TH, textAlign: 'right' }}>Tokens entrada</th>
-    <th style={{ ...TH, textAlign: 'right' }}>Tokens salida</th>
-    <th style={{ ...TH, textAlign: 'right' }}>Costo</th>
-  </>
-)
+function numHeaders(showCosts: boolean) {
+  return (
+    <>
+      <th style={{ ...TH, textAlign: 'right' }}>Requests</th>
+      <th style={{ ...TH, textAlign: 'right' }}>Tokens entrada</th>
+      <th style={{ ...TH, textAlign: 'right' }}>Tokens salida</th>
+      {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
+    </>
+  )
+}
 
-export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
+// Estado del límite mensual SIN montos (misma forma que AiLimitIndicator).
+export interface AiUsageLimitView {
+  unlimited: boolean
+  usedRatio: number
+  blocked:   boolean
+}
+
+// showCosts: los montos en USD (costo por request, tarifas) son información
+// interna de ITMANO — true solo para el super_admin (Centro de control).
+// Los usuarios del tenant ven requests/tokens y su límite como porcentaje.
+export function AiUsagePanel({ summary, showCosts = true, limit = null }: {
+  summary: AiUsageSummary
+  showCosts?: boolean
+  limit?: AiUsageLimitView | null
+}) {
   const { allTime, last30d, byFeature, byTenant, recent } = summary
 
   return (
@@ -128,13 +144,49 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
           value={fmtInt(last30d.outputTokens)}
           sub={`${fmtInt(allTime.outputTokens)} en total`}
         />
-        <KpiCard
-          icon={<DollarSign size={14} />}
-          color="var(--accent-green)"
-          label="Costo · 30 días"
-          value={fmtCost(last30d.costUsd)}
-          sub={`${fmtCost(allTime.costUsd)} en total`}
-        />
+        {showCosts ? (
+          <KpiCard
+            icon={<DollarSign size={14} />}
+            color="var(--accent-green)"
+            label="Costo · 30 días"
+            value={fmtCost(last30d.costUsd)}
+            sub={`${fmtCost(allTime.costUsd)} en total`}
+          />
+        ) : limit ? (
+          <div style={{ ...CARD, padding: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+              <div style={{
+                width: '28px', height: '28px', borderRadius: '8px',
+                background: 'color-mix(in srgb, var(--accent-green) 12%, transparent)', color: 'var(--accent-green)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Sparkles size={14} />
+              </div>
+              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 500 }}>
+                Límite mensual
+              </span>
+            </div>
+            {limit.unlimited ? (
+              <div style={{ fontSize: '24px', fontWeight: 500, color: 'var(--accent-teal)', lineHeight: 1.1 }}>Ilimitado</div>
+            ) : (
+              <>
+                <div style={{ fontSize: '24px', fontWeight: 500, color: limit.blocked ? 'var(--accent-coral)' : 'var(--text-primary)', lineHeight: 1.1 }}>
+                  {Math.round(limit.usedRatio * 100)}%
+                </div>
+                <div style={{ marginTop: '8px', height: '5px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '3px',
+                    width: `${Math.max(3, Math.round(limit.usedRatio * 100))}%`,
+                    background: limit.blocked || limit.usedRatio >= 0.8 ? 'var(--accent-coral)' : 'var(--accent-gold)',
+                  }} />
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  {limit.blocked ? 'Límite alcanzado — se reinicia el día 1' : 'del límite del mes utilizado'}
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* Desglose por tenant — solo vista global (super_admin) */}
@@ -145,12 +197,12 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><th style={TH}>Tenant</th>{NUM_HEADERS}</tr></thead>
+              <thead><tr><th style={TH}>Tenant</th>{numHeaders(showCosts)}</tr></thead>
               <tbody>
                 {byTenant.map(t => (
                   <tr key={t.tenantId ?? 'none'}>
                     <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500 }}>{t.tenantName}</td>
-                    {totalsRow(t)}
+                    {totalsRow(t, showCosts)}
                   </tr>
                 ))}
               </tbody>
@@ -171,12 +223,12 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><th style={TH}>Función</th>{NUM_HEADERS}</tr></thead>
+              <thead><tr><th style={TH}>Función</th>{numHeaders(showCosts)}</tr></thead>
               <tbody>
                 {byFeature.map(f => (
                   <tr key={f.feature}>
                     <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500 }}>{featureLabel(f.feature)}</td>
-                    {totalsRow(f)}
+                    {totalsRow(f, showCosts)}
                   </tr>
                 ))}
               </tbody>
@@ -205,7 +257,7 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
                   <th style={TH}>Modelo</th>
                   <th style={{ ...TH, textAlign: 'right' }}>Entrada</th>
                   <th style={{ ...TH, textAlign: 'right' }}>Salida</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Costo</th>
+                  {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
                 </tr>
               </thead>
               <tbody>
@@ -217,7 +269,7 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
                     <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px' }}>{r.model}</td>
                     <td style={NUM}>{fmtInt(r.inputTokens)}</td>
                     <td style={NUM}>{fmtInt(r.outputTokens)}</td>
-                    <td style={{ ...NUM, color: 'var(--accent-gold)' }}>{fmtCost(r.costUsd)}</td>
+                    {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)' }}>{fmtCost(r.costUsd)}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -226,12 +278,20 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
         )}
       </div>
 
-      <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-        El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo
-        (claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón de salida). Los adjuntos
-        (p. ej. el PDF de un lead magnet) aumentan los tokens de entrada — por eso esas generaciones
-        cuestan más.
-      </p>
+      {showCosts ? (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo
+          (claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón de salida). Los adjuntos
+          (p. ej. el PDF de un lead magnet) aumentan los tokens de entrada — por eso esas generaciones
+          cuestan más.
+        </p>
+      ) : (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          Cada generación con IA (propiedades, correos, secuencias) consume parte del límite mensual del
+          equipo. Los documentos adjuntos consumen más. El contador se reinicia el día 1 de cada mes; si
+          necesitas ampliar el límite, contacta a ITMANO.
+        </p>
+      )}
     </div>
   )
 }

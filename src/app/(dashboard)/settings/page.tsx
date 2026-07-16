@@ -3,7 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
-import { getAiUsageSummary } from '@/lib/data/ai-usage'
+import { getAiUsageSummary, type AiUsageSummary } from '@/lib/data/ai-usage'
+import { getAiLimitIndicator } from '@/lib/services/ai-limit'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
@@ -18,7 +19,7 @@ export default async function SettingsPage() {
   const tenantId = ctx.tenant_id
   if (!tenantId) redirect('/admin')
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsage] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
@@ -27,6 +28,7 @@ export default async function SettingsPage() {
     supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     authClient.auth.getUser(),
     getAiUsageSummary(tenantId),
+    getAiLimitIndicator(tenantId),
   ])
 
   const tenant = tenantRow
@@ -46,6 +48,19 @@ export default async function SettingsPage() {
   }
   // The owner may link their own login to one unlinked agent (once).
   const canLinkSelf = ctx.role === 'agent_owner' && !ownerLinked
+
+  // Los montos en USD del uso de IA son información interna de ITMANO. Para
+  // usuarios del tenant se ceroan ANTES de cruzar al cliente (no basta con
+  // ocultarlos en la UI — no deben viajar en el payload RSC).
+  const showAiCosts = ctx.role === 'super_admin'
+  const zeroCost = <T extends { costUsd: number }>(x: T): T => ({ ...x, costUsd: 0 })
+  const aiUsage: AiUsageSummary = showAiCosts ? aiUsageRaw : {
+    allTime:   zeroCost(aiUsageRaw.allTime),
+    last30d:   zeroCost(aiUsageRaw.last30d),
+    byFeature: aiUsageRaw.byFeature.map(zeroCost),
+    byTenant:  null,
+    recent:    aiUsageRaw.recent.map(zeroCost),
+  }
 
   return (
     <>
@@ -70,6 +85,8 @@ export default async function SettingsPage() {
         userEmail={userRes.data.user?.email ?? ''}
         userRole={ctx.role}
         aiUsage={aiUsage}
+        aiShowCosts={showAiCosts}
+        aiLimit={aiLimit}
       />
     </>
   )
