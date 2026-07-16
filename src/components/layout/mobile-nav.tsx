@@ -12,12 +12,13 @@ import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 // Mobile navigation: a hamburger trigger (phones only) + a left-sliding drawer that
 // mirrors the desktop sidebar (logo · nav · user/sign-out). Closes on overlay tap and
 // on navigation. Entirely additive — the trigger is `md:hidden`, so ≥768px is unaffected.
-export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null }: {
+export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
   role: TenantRole
   userEmail: string
   hubMode?: boolean
   logoUrl?: string | null
   tenantName?: string | null
+  planLabel?: string | null
 }) {
   const [open, setOpen] = useState(false)
   const items = navItemsForRole(role, { hubMode })
@@ -155,6 +156,11 @@ export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, te
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   {ROLE_LABELS[role]}
                 </div>
+                {planLabel && (
+                  <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
+                    {planLabel}
+                  </div>
+                )}
               </div>
             </div>
             <form action={signOut} style={{ padding: '0 12px 14px' }}>

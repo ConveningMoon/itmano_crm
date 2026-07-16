@@ -5,6 +5,7 @@ import { mapAgent, type AgentRow } from '@/lib/db'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getAiUsageSummary, type AiUsageSummary } from '@/lib/data/ai-usage'
 import { getAiLimitIndicator } from '@/lib/services/ai-limit'
+import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
 
@@ -19,7 +20,7 @@ export default async function SettingsPage() {
   const tenantId = ctx.tenant_id
   if (!tenantId) redirect('/admin')
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
     authClient.auth.getUser(),
     getAiUsageSummary(tenantId),
     getAiLimitIndicator(tenantId),
+    getSubscription(tenantId),
   ])
 
   const tenant = tenantRow
@@ -87,6 +89,7 @@ export default async function SettingsPage() {
         aiUsage={aiUsage}
         aiShowCosts={showAiCosts}
         aiLimit={aiLimit}
+        subscription={subscription}
       />
     </>
   )

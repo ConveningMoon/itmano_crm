@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
 import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
 import { getAiLimitIndicator } from '@/lib/services/ai-limit'
+import { getSubscription } from '@/lib/data/subscriptions'
+import { planBadgeLabel } from '@/lib/subscriptions'
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +31,10 @@ export default async function DashboardLayout({
   // Indicador del límite mensual de IA (topbar) — solo con tenant activo.
   const aiLimit = ctx.tenant_id ? await getAiLimitIndicator(ctx.tenant_id) : null
 
+  // Suscripción del tenant → label bajo el nombre del usuario en el sidebar.
+  const subscription = ctx.tenant_id ? await getSubscription(ctx.tenant_id) : null
+  const planLabel = planBadgeLabel(subscription)
+
   // The auth email isn't on the tenant context; read it from the session for the
   // sidebar footer (the session is already established — ctx redirected otherwise).
   const supabase = await createClient()
@@ -43,6 +49,7 @@ export default async function DashboardLayout({
         hubMode={hubMode}
         logoUrl={branding?.logoUrl ?? null}
         tenantName={branding?.name ?? null}
+        planLabel={planLabel}
       />
       {/* Sidebar offset + content gutter come from the authoritative .app-shell-*
           rules in globals.css (a layered utility would lose to the unlayered
@@ -67,6 +74,7 @@ export default async function DashboardLayout({
           logoUrl={branding?.logoUrl ?? null}
           tenantName={branding?.name ?? null}
           aiLimit={aiLimit}
+          planLabel={planLabel}
         />
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}

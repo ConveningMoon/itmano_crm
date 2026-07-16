@@ -4,8 +4,9 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import type { TenantWithOwner } from '@/lib/data/tenants'
-import { createTenant, updateTenant, deleteTenant, provisionOwner } from './actions'
+import { createTenant, updateTenant, deleteTenant, provisionOwner, updateTenantSubscription } from './actions'
 import { updateTenantLogo, removeTenantLogo } from '../settings/actions'
+import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type SubscriptionPlan, type SubscriptionStatus } from '@/lib/subscriptions'
 
 // ─── Style constants (consistent with Settings) ──────────────────────────────
 
@@ -75,6 +76,7 @@ function CreateTenantCard() {
   const [slug, setSlug]   = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [color, setColor] = useState('#1E3A5F')
+  const [plan, setPlan]   = useState<SubscriptionPlan>('esencial')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
@@ -86,7 +88,7 @@ function CreateTenantCard() {
   function handleCreate() {
     setError(null); setOk(null)
     startTransition(async () => {
-      const res = await createTenant({ name, slug: effectiveSlug, primaryColor: color })
+      const res = await createTenant({ name, slug: effectiveSlug, primaryColor: color, plan })
       if (!res.ok) { setError(res.error); return }
 
       // El logo se sube después de crear la fila (la carpeta de Storage se
@@ -102,7 +104,7 @@ function CreateTenantCard() {
       }
 
       setOk(`Tenant creado: ${res.id}${logoNote}`)
-      setName(''); setSlug(''); setSlugTouched(false); setColor('#1E3A5F')
+      setName(''); setSlug(''); setSlugTouched(false); setColor('#1E3A5F'); setPlan('esencial')
       setLogoFile(null)
       if (logoInputRef.current) logoInputRef.current.value = ''
       router.refresh()
@@ -136,6 +138,14 @@ function CreateTenantCard() {
               style={{ width: '40px', height: '36px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer' }} />
             <input style={{ ...INPUT, width: '120px' }} value={color} onChange={e => setColor(e.target.value)} />
           </div>
+        </div>
+        <div>
+          <label style={LABEL}>Plan de suscripción</label>
+          <select value={plan} onChange={e => setPlan(e.target.value as SubscriptionPlan)} style={{ ...INPUT, cursor: 'pointer' }}>
+            {PLAN_ORDER.map(p => (
+              <option key={p} value={p}>{PLAN_CONFIG[p].label} · {PLAN_CONFIG[p].inversion}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label style={LABEL}>Logo (opcional)</label>
@@ -215,6 +225,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [color, setColor] = useState(tenant.primaryColor)
   const [aiLimit, setAiLimit]         = useState(tenant.aiMonthlyLimitUsd.toFixed(2))
   const [aiUnlimited, setAiUnlimited] = useState(tenant.aiUnlimited)
+  const [subPlan, setSubPlan]     = useState<SubscriptionPlan>((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
+  const [subActive, setSubActive] = useState(tenant.subscriptionStatus !== 'cancelled')
   const [confirmSlug, setConfirmSlug] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -224,6 +236,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
     setMode('view'); setError(null)
     setName(tenant.name); setColor(tenant.primaryColor); setConfirmSlug('')
     setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
+    setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
+    setSubActive(tenant.subscriptionStatus !== 'cancelled')
   }
 
   function handleSave() {
@@ -240,6 +254,15 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
         aiUnlimited,
       })
       if (!res.ok) { setError(res.error); return }
+
+      // Suscripción: aplicar plan/estado (resuelve cualquier solicitud pendiente).
+      const subRes = await updateTenantSubscription({
+        tenantId: tenant.id,
+        plan:     subPlan,
+        status:   subActive ? 'active' : 'cancelled',
+      })
+      if (!subRes.ok) { setError(subRes.error); return }
+
       setMode('view')
       router.refresh()
     })
@@ -299,6 +322,25 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               {tenant.aiUnlimited ? ' · ilimitado' : ` / $${tenant.aiMonthlyLimitUsd.toFixed(2)}`}
             </span>
           </div>
+          <div style={{ fontSize: '11px', marginTop: '2px', color: 'var(--text-muted)' }}>
+            Suscripción:{' '}
+            <span style={{ color: tenant.subscriptionStatus === 'cancelled' ? 'var(--accent-coral)' : 'var(--text-secondary)', fontWeight: 500 }}>
+              {tenant.subscriptionPlan ? PLAN_CONFIG[tenant.subscriptionPlan as SubscriptionPlan]?.label ?? tenant.subscriptionPlan : 'Sin plan'}
+              {tenant.subscriptionStatus && tenant.subscriptionStatus !== 'active'
+                ? ` · ${SUBSCRIPTION_STATUS_LABELS[tenant.subscriptionStatus as SubscriptionStatus] ?? tenant.subscriptionStatus}`
+                : ''}
+            </span>
+            {(tenant.subscriptionStatus === 'change_requested' || tenant.subscriptionStatus === 'cancel_requested') && (
+              <span style={{
+                marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
+                color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.12)',
+              }}>
+                {tenant.subscriptionStatus === 'change_requested' && tenant.subscriptionRequestedPlan
+                  ? `Solicita: ${PLAN_CONFIG[tenant.subscriptionRequestedPlan as SubscriptionPlan]?.label ?? tenant.subscriptionRequestedPlan}`
+                  : 'Solicita cancelar'}
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {tenant.ownerEmail ? (
@@ -314,6 +356,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               onClick={() => {
                 setName(tenant.name); setColor(tenant.primaryColor)
                 setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
+                setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
+                setSubActive(tenant.subscriptionStatus !== 'cancelled')
                 setMode('edit')
               }}
             >
@@ -394,6 +438,35 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
               Uso del mes en curso: <strong style={{ color: 'var(--text-secondary)' }}>${tenant.aiUsedThisMonthUsd.toFixed(2)}</strong>.
               El contador se reinicia el día 1 de cada mes; al alcanzar el límite, las generaciones con IA se bloquean para el tenant.
+            </div>
+          </div>
+          <div>
+            <label style={LABEL}>Suscripción</label>
+            {(tenant.subscriptionStatus === 'change_requested' || tenant.subscriptionStatus === 'cancel_requested') && (
+              <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px' }}>
+                {tenant.subscriptionStatus === 'change_requested' && tenant.subscriptionRequestedPlan
+                  ? <>El tenant solicitó cambiar a <strong>{PLAN_CONFIG[tenant.subscriptionRequestedPlan as SubscriptionPlan]?.label}</strong>. Selecciona el plan y guarda para aplicarlo (o deja el actual para rechazar).</>
+                  : <>El tenant solicitó <strong>cancelar</strong> su suscripción. Desmarca &quot;Activa&quot; y guarda para confirmarla (o guarda sin cambios para rechazarla).</>}
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <select value={subPlan} onChange={e => setSubPlan(e.target.value as SubscriptionPlan)} style={{ ...INPUT, width: '240px', cursor: 'pointer' }}>
+                {PLAN_ORDER.map(p => (
+                  <option key={p} value={p}>{PLAN_CONFIG[p].label} · {PLAN_CONFIG[p].inversion}</option>
+                ))}
+              </select>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={subActive}
+                  onChange={e => setSubActive(e.target.checked)}
+                  style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+                />
+                Activa
+              </label>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Guardar aplica el plan/estado y resuelve cualquier solicitud pendiente del tenant.
             </div>
           </div>
           {error && <div style={ERROR}>{error}</div>}

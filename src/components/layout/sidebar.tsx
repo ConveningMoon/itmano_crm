@@ -5,12 +5,14 @@ import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null }: {
+export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
   role: TenantRole
   userEmail: string
   hubMode?: boolean
   logoUrl?: string | null
   tenantName?: string | null
+  // Nombre de la suscripción del tenant (p. ej. "Plan Growth"); null en hub.
+  planLabel?: string | null
 }) {
   // Admin console is super_admin-only — hidden from the nav for everyone else.
   const items = navItemsForRole(role, { hubMode })
@@ -125,6 +127,11 @@ export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tena
             >
               {ROLE_LABELS[role]}
             </div>
+            {planLabel && (
+              <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
+                {planLabel}
+              </div>
+            )}
           </div>
         </div>
 
