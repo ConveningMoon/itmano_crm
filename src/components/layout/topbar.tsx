@@ -2,11 +2,57 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { m } from 'motion/react'
-import { Plus, Bell } from 'lucide-react'
+import { Plus, Bell, Sparkles, Infinity as InfinityIcon } from 'lucide-react'
 import { MobileNav } from './mobile-nav'
 import { TenantSwitcher } from './tenant-switcher'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { SwitcherTenant } from '@/lib/data/tenants'
+import type { AiLimitIndicator } from '@/lib/services/ai-limit'
+
+// Indicador del límite mensual de IA del tenant. Discreto en estado normal;
+// cambia a coral desde el 80% y muestra "límite alcanzado" al bloquearse.
+// Click → Configuración (tab "Uso de IA" con el detalle completo).
+function AiLimitBadge({ status, onClick }: { status: AiLimitIndicator; onClick: () => void }) {
+  const pct = Math.round(status.usedRatio * 100)
+  const warn = !status.unlimited && status.usedRatio >= 0.8
+  const accent = status.blocked || warn ? 'var(--accent-coral)' : 'var(--accent-gold)'
+
+  const title = status.unlimited
+    ? 'Uso de IA: acceso ilimitado'
+    : status.blocked
+      ? `Límite mensual de IA alcanzado ($${status.limitUsd.toFixed(2)}). Se reinicia el día 1.`
+      : `Uso de IA este mes: $${status.usedUsd.toFixed(2)} de $${status.limitUsd.toFixed(2)} (${pct}%)`
+
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="btn-icon"
+      style={{
+        display: 'flex', alignItems: 'center', gap: '7px',
+        height: '34px', padding: '0 10px', borderRadius: '8px',
+        border: `1px solid ${status.blocked ? 'rgba(201,123,107,0.4)' : 'var(--border-subtle)'}`,
+        cursor: 'pointer', flexShrink: 0,
+      }}
+    >
+      <Sparkles size={13} color={accent} />
+      {status.unlimited ? (
+        <InfinityIcon size={13} color="var(--accent-teal)" />
+      ) : (
+        <>
+          {/* Barra de progreso — siempre visible, incluso en móvil */}
+          <span style={{ width: '44px', height: '4px', borderRadius: '2px', background: 'var(--bg-elevated)', overflow: 'hidden', display: 'inline-block' }}>
+            <span style={{ display: 'block', height: '100%', width: `${Math.max(4, pct)}%`, background: accent, borderRadius: '2px' }} />
+          </span>
+          <span className="hidden sm:inline" style={{ fontSize: '11px', color: status.blocked ? 'var(--accent-coral)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {status.blocked ? 'Límite alcanzado' : `$${status.usedUsd.toFixed(2)} / $${status.limitUsd.toFixed(0)}`}
+          </span>
+        </>
+      )}
+    </button>
+  )
+}
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
@@ -28,6 +74,7 @@ export function Topbar({
   activeTenantId = null,
   logoUrl = null,
   tenantName = null,
+  aiLimit = null,
 }: {
   role?: TenantRole
   unreadCount?: number
@@ -39,6 +86,8 @@ export function Topbar({
   // Branding del tenant activo — solo lo consume el drawer móvil.
   logoUrl?: string | null
   tenantName?: string | null
+  // Límite mensual de IA del tenant activo (null en modo hub).
+  aiLimit?: AiLimitIndicator | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -75,6 +124,9 @@ export function Topbar({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Uso de IA del mes — visible dentro del CRM de un tenant */}
+        {aiLimit && <AiLimitBadge status={aiLimit} onClick={() => router.push('/settings')} />}
+
         {/* Switcher de tenant — solo super_admin */}
         {tenants && <TenantSwitcher tenants={tenants} activeTenantId={activeTenantId} />}
 

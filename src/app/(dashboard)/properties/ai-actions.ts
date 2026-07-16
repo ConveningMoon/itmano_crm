@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { resolveTargetTenant } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
+import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import type { PropertyInput } from './actions'
 
 // ── "Crear con IA" — prefill the property form from a listing PDF ────────────
@@ -89,6 +90,10 @@ export async function generatePropertyFromPdf(
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
   }
+
+  // Límite mensual de IA del tenant (super_admin pasa siempre).
+  const overLimit = await assertAiWithinLimit(ctx)
+  if (overLimit) return overLimit
 
   const file = formData.get('file')
   if (!(file instanceof File)) return { ok: false, error: 'Archivo no válido' }

@@ -115,10 +115,16 @@ const UpdateTenantSchema = z.object({
   tenantId:     z.string().trim().min(1),
   name:         z.string().trim().min(1, 'El nombre es obligatorio').max(100),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)'),
+  // Límite mensual de IA (USD). aiUnlimited = true ignora el monto.
+  aiMonthlyLimitUsd: z.number().min(0, 'El límite no puede ser negativo').max(9999.99, 'Límite demasiado alto'),
+  aiUnlimited:       z.boolean(),
 })
 
 export async function updateTenant(
-  input: { tenantId: string; name: string; primaryColor: string },
+  input: {
+    tenantId: string; name: string; primaryColor: string
+    aiMonthlyLimitUsd: number; aiUnlimited: boolean
+  },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') {
@@ -133,7 +139,12 @@ export async function updateTenant(
   const supabase = createAdminClient()
   const { error } = await supabase
     .from('tenants')
-    .update({ name: parsed.data.name, primary_color: parsed.data.primaryColor })
+    .update({
+      name:                 parsed.data.name,
+      primary_color:        parsed.data.primaryColor,
+      ai_monthly_limit_usd: Math.round(parsed.data.aiMonthlyLimitUsd * 100) / 100,
+      ai_unlimited:         parsed.data.aiUnlimited,
+    })
     .eq('id', parsed.data.tenantId)
   if (error) return { ok: false, error: error.message }
 

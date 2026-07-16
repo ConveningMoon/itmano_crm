@@ -4,6 +4,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
 import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
+import { getAiLimitIndicator } from '@/lib/services/ai-limit'
 
 export default async function DashboardLayout({
   children,
@@ -24,6 +25,9 @@ export default async function DashboardLayout({
   // Branding del tenant activo (logo del sidebar). En modo hub no hay tenant —
   // el shell muestra el wordmark de ITMANO.
   const branding = ctx.tenant_id ? await getTenantBranding(ctx.tenant_id) : null
+
+  // Indicador del límite mensual de IA (topbar) — solo con tenant activo.
+  const aiLimit = ctx.tenant_id ? await getAiLimitIndicator(ctx.tenant_id) : null
 
   // The auth email isn't on the tenant context; read it from the session for the
   // sidebar footer (the session is already established — ctx redirected otherwise).
@@ -62,6 +66,7 @@ export default async function DashboardLayout({
           activeTenantId={ctx.acting_as_tenant ? ctx.tenant_id : null}
           logoUrl={branding?.logoUrl ?? null}
           tenantName={branding?.name ?? null}
+          aiLimit={aiLimit}
         />
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
