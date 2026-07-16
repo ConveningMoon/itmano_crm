@@ -76,6 +76,7 @@ export function Topbar({
   logoUrl = null,
   tenantName = null,
   aiLimit = null,
+  planLabel = null,
 }: {
   role?: TenantRole
   unreadCount?: number
@@ -89,6 +90,8 @@ export function Topbar({
   tenantName?: string | null
   // Límite mensual de IA del tenant activo (null en modo hub).
   aiLimit?: AiLimitIndicator | null
+  // Suscripción del tenant — la consume el drawer móvil.
+  planLabel?: string | null
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -109,7 +112,7 @@ export function Topbar({
     >
       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {/* Drawer trigger — phones only (md:hidden inside MobileNav). */}
-        <MobileNav role={role} userEmail={userEmail} hubMode={hubMode} logoUrl={logoUrl} tenantName={tenantName} />
+        <MobileNav role={role} userEmail={userEmail} hubMode={hubMode} logoUrl={logoUrl} tenantName={tenantName} planLabel={planLabel} />
         <h1
           style={{
             fontSize: '15px',

@@ -65,10 +65,11 @@ const CreateTenantSchema = z.object({
   slug:         z.string().trim().min(1).max(60)
                   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'El slug debe ser kebab-case (minúsculas, números y guiones)'),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)').optional(),
+  plan:         z.enum(['esencial', 'growth', 'partner']).default('esencial'),
 })
 
 export async function createTenant(
-  input: { name: string; slug: string; primaryColor?: string },
+  input: { name: string; slug: string; primaryColor?: string; plan?: string },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') {
@@ -104,6 +105,16 @@ export async function createTenant(
     primary_color: parsed.data.primaryColor ?? '#1E3A5F',
   })
   if (error) return { ok: false, error: error.message }
+
+  // Suscripción inicial (sales-led). Best-effort: si falla, el tenant existe y
+  // el plan se puede fijar luego desde la gestión (upsert).
+  const { error: subErr } = await supabase.from('subscriptions').insert({
+    tenant_id: id,
+    plan:      parsed.data.plan,
+  })
+  if (subErr) {
+    console.error(JSON.stringify({ service: 'create-tenant-subscription', tenant_id: id, error: subErr.message }))
+  }
 
   revalidatePath('/admin')
   return { ok: true, id }
@@ -150,6 +161,47 @@ export async function updateTenant(
 
   // El nombre/branding se lee en el layout (sidebar, switcher) — revalidar todo.
   revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
+// ─── Subscription management (super_admin) ───────────────────────────────────
+// Aplica el plan/estado definitivo de un tenant y limpia cualquier solicitud
+// pendiente (el flujo del owner solo SOLICITA; aquí se resuelve).
+
+const UpdateSubscriptionSchema = z.object({
+  tenantId: z.string().trim().min(1),
+  plan:     z.enum(['esencial', 'growth', 'partner']),
+  status:   z.enum(['active', 'cancelled']),
+})
+
+export async function updateTenantSubscription(
+  input: { tenantId: string; plan: string; status: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede gestionar suscripciones.' }
+  }
+
+  const parsed = UpdateSubscriptionSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const supabase = createAdminClient()
+  // Upsert: tenants creados antes de la migración 054 podrían no tener fila.
+  const { error } = await supabase
+    .from('subscriptions')
+    .upsert({
+      tenant_id:      parsed.data.tenantId,
+      plan:           parsed.data.plan,
+      status:         parsed.data.status,
+      requested_plan: null,
+      updated_at:     new Date().toISOString(),
+    }, { onConflict: 'tenant_id' })
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/admin')
+  revalidatePath('/settings')
   return { ok: true }
 }
 

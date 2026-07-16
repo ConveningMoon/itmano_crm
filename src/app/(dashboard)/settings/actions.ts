@@ -249,6 +249,121 @@ export async function removeTenantLogo(
   return { ok: true }
 }
 
+// ─── Suscripción (sales-led, pre-billing) ─────────────────────────────────────
+// El owner no cambia su plan directamente (no hay procesador de pagos aún):
+// SOLICITA el cambio/cancelación, la fila queda marcada y se notifica a ITMANO
+// (bell del hub + Telegram vía subscription_request). El super_admin aplica el
+// cambio desde el Centro de control.
+
+const PLAN_VALUES = ['esencial', 'growth', 'partner'] as const
+const PLAN_LABELS: Record<string, string> = { esencial: 'Esencial', growth: 'Growth', partner: 'Partner' }
+
+async function notifySubscriptionRequest(
+  supabase: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  message: string,
+): Promise<void> {
+  // Best-effort: la solicitud ya quedó registrada en subscriptions aunque la
+  // notificación falle.
+  const { error } = await supabase.from('notifications').insert({
+    tenant_id: tenantId,
+    type:      'subscription_request',
+    message,
+    read:      false,
+    agent_id:  null,
+  })
+  if (error) {
+    console.error(JSON.stringify({ service: 'subscription-request-notify', tenant_id: tenantId, error: error.message }))
+  }
+}
+
+export async function requestSubscriptionChange(
+  newPlan: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+  if (!PLAN_VALUES.includes(newPlan as typeof PLAN_VALUES[number])) {
+    return { ok: false, error: 'Plan inválido.' }
+  }
+
+  const supabase = createAdminClient()
+  const { data: sub } = await supabase
+    .from('subscriptions').select('plan, status').eq('tenant_id', tenantId).maybeSingle()
+  if (!sub) return { ok: false, error: 'Este equipo no tiene una suscripción registrada. Contacta a ITMANO.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((sub as any).plan === newPlan) return { ok: false, error: 'Ese ya es tu plan actual.' }
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ status: 'change_requested', requested_plan: newPlan, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  const { data: tenant } = await supabase.from('tenants').select('name').eq('id', tenantId).maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await notifySubscriptionRequest(supabase, tenantId, `${((tenant as any)?.name as string) ?? tenantId} solicitó cambiar su plan a ${PLAN_LABELS[newPlan]}.`)
+
+  revalidatePath('/settings')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+export async function requestSubscriptionCancel(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const supabase = createAdminClient()
+  const { data: sub } = await supabase
+    .from('subscriptions').select('status').eq('tenant_id', tenantId).maybeSingle()
+  if (!sub) return { ok: false, error: 'Este equipo no tiene una suscripción registrada. Contacta a ITMANO.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((sub as any).status === 'cancelled') return { ok: false, error: 'La suscripción ya está cancelada.' }
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ status: 'cancel_requested', requested_plan: null, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  const { data: tenant } = await supabase.from('tenants').select('name').eq('id', tenantId).maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await notifySubscriptionRequest(supabase, tenantId, `${((tenant as any)?.name as string) ?? tenantId} solicitó cancelar su suscripción.`)
+
+  revalidatePath('/settings')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+// El owner se arrepiente antes de que ITMANO procese la solicitud.
+export async function withdrawSubscriptionRequest(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ status: 'active', requested_plan: null, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+    .in('status', ['change_requested', 'cancel_requested'])
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
 // ─── Firma de correo por agente ───────────────────────────────────────────────
 // Se muestra al final de todos los correos (secuencias, compra, one-off) del
 // agente asignado al lead. Texto libre multilínea; vacío = sin firma.

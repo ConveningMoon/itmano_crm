@@ -51,6 +51,10 @@ export interface TenantWithOwner {
   aiMonthlyLimitUsd: number
   aiUnlimited:       boolean
   aiUsedThisMonthUsd: number
+  // Suscripción (null si el tenant no tiene fila — pre-054).
+  subscriptionPlan:          string | null
+  subscriptionStatus:        string | null
+  subscriptionRequestedPlan: string | null
 }
 
 /**
@@ -67,11 +71,17 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
 
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
-  const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }] = await Promise.all([
+  const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }, { data: subRows }] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited').order('created_at'),
     supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
+    supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan'),
   ])
+
+  const subByTenant = new Map<string, { plan: string; status: string; requested_plan: string | null }>()
+  for (const s of (subRows ?? []) as { tenant_id: string; plan: string; status: string; requested_plan: string | null }[]) {
+    subByTenant.set(s.tenant_id, s)
+  }
 
   // Gasto de IA del mes en curso por tenant.
   const usedByTenant = new Map<string, number>()
@@ -107,6 +117,9 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       aiMonthlyLimitUsd:  Number(t.ai_monthly_limit_usd ?? 10),
       aiUnlimited:        t.ai_unlimited ?? false,
       aiUsedThisMonthUsd: Math.round((usedByTenant.get(t.id) ?? 0) * 1_000_000) / 1_000_000,
+      subscriptionPlan:          subByTenant.get(t.id)?.plan ?? null,
+      subscriptionStatus:        subByTenant.get(t.id)?.status ?? null,
+      subscriptionRequestedPlan: subByTenant.get(t.id)?.requested_plan ?? null,
     })
   }
 
