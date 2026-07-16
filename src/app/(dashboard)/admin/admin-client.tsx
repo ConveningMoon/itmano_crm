@@ -213,6 +213,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [mode, setMode] = useState<'view' | 'edit' | 'confirmDelete'>('view')
   const [name, setName]   = useState(tenant.name)
   const [color, setColor] = useState(tenant.primaryColor)
+  const [aiLimit, setAiLimit]         = useState(tenant.aiMonthlyLimitUsd.toFixed(2))
+  const [aiUnlimited, setAiUnlimited] = useState(tenant.aiUnlimited)
   const [confirmSlug, setConfirmSlug] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -221,12 +223,22 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   function resetToView() {
     setMode('view'); setError(null)
     setName(tenant.name); setColor(tenant.primaryColor); setConfirmSlug('')
+    setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
   }
 
   function handleSave() {
     setError(null)
+    const limitNum = Number(aiLimit)
+    if (!aiUnlimited && (!Number.isFinite(limitNum) || limitNum < 0)) {
+      setError('El límite de IA debe ser un monto válido en USD.')
+      return
+    }
     startTransition(async () => {
-      const res = await updateTenant({ tenantId: tenant.id, name, primaryColor: color })
+      const res = await updateTenant({
+        tenantId: tenant.id, name, primaryColor: color,
+        aiMonthlyLimitUsd: aiUnlimited ? tenant.aiMonthlyLimitUsd : limitNum,
+        aiUnlimited,
+      })
       if (!res.ok) { setError(res.error); return }
       setMode('view')
       router.refresh()
@@ -273,6 +285,20 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{tenant.name}</div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{tenant.slug} · {tenant.id}</div>
+          <div style={{ fontSize: '11px', marginTop: '2px', color: 'var(--text-muted)' }}>
+            IA este mes:{' '}
+            <span style={{
+              color: tenant.aiUnlimited
+                ? 'var(--accent-teal)'
+                : tenant.aiUsedThisMonthUsd >= tenant.aiMonthlyLimitUsd
+                  ? 'var(--accent-coral)'
+                  : 'var(--text-secondary)',
+              fontWeight: 500,
+            }}>
+              ${tenant.aiUsedThisMonthUsd.toFixed(2)}
+              {tenant.aiUnlimited ? ' · ilimitado' : ` / $${tenant.aiMonthlyLimitUsd.toFixed(2)}`}
+            </span>
+          </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {tenant.ownerEmail ? (
@@ -285,7 +311,11 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
           <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
             <button
               style={BTN_GHOST}
-              onClick={() => { setName(tenant.name); setColor(tenant.primaryColor); setMode('edit') }}
+              onClick={() => {
+                setName(tenant.name); setColor(tenant.primaryColor)
+                setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
+                setMode('edit')
+              }}
             >
               Editar
             </button>
@@ -333,6 +363,37 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
               PNG, JPG, WebP o SVG · máx. 2 MB. El cambio de logo se aplica al instante.
+            </div>
+          </div>
+          <div>
+            <label style={LABEL}>Límite mensual de IA</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>$</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.50"
+                  value={aiLimit}
+                  onChange={e => setAiLimit(e.target.value)}
+                  disabled={aiUnlimited}
+                  style={{ ...INPUT, width: '110px', opacity: aiUnlimited ? 0.5 : 1 }}
+                />
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>USD / mes</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={aiUnlimited}
+                  onChange={e => setAiUnlimited(e.target.checked)}
+                  style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+                />
+                Acceso ilimitado
+              </label>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Uso del mes en curso: <strong style={{ color: 'var(--text-secondary)' }}>${tenant.aiUsedThisMonthUsd.toFixed(2)}</strong>.
+              El contador se reinicia el día 1 de cada mes; al alcanzar el límite, las generaciones con IA se bloquean para el tenant.
             </div>
           </div>
           {error && <div style={ERROR}>{error}</div>}

@@ -47,6 +47,10 @@ export interface TenantWithOwner {
   logoUrl:      string | null
   // The auth email of the tenant's agent_owner, or null if not provisioned yet.
   ownerEmail:   string | null
+  // Límite mensual de IA (USD) + flag ilimitado + gasto del mes en curso.
+  aiMonthlyLimitUsd: number
+  aiUnlimited:       boolean
+  aiUsedThisMonthUsd: number
 }
 
 /**
@@ -61,10 +65,20 @@ export interface TenantWithOwner {
 export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   const supabase = createAdminClient()
 
-  const [{ data: tenantRows }, { data: ownerRows }] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url').order('created_at'),
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
+
+  const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }] = await Promise.all([
+    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited').order('created_at'),
     supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
+    supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
   ])
+
+  // Gasto de IA del mes en curso por tenant.
+  const usedByTenant = new Map<string, number>()
+  for (const u of (usageRows ?? []) as { tenant_id: string | null; cost_usd: number | string }[]) {
+    if (!u.tenant_id) continue
+    usedByTenant.set(u.tenant_id, (usedByTenant.get(u.tenant_id) ?? 0) + Number(u.cost_usd))
+  }
 
   // tenant_id → owner auth user id (one owner per tenant by current rule)
   const ownerByTenant = new Map<string, string>()
@@ -75,6 +89,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   const result: TenantWithOwner[] = []
   for (const t of (tenantRows ?? []) as {
     id: string; name: string; slug: string; primary_color: string | null; logo_url: string | null
+    ai_monthly_limit_usd: number | string | null; ai_unlimited: boolean | null
   }[]) {
     let ownerEmail: string | null = null
     const ownerId = ownerByTenant.get(t.id)
@@ -89,6 +104,9 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       primaryColor: t.primary_color ?? '#1E3A5F',
       logoUrl:      t.logo_url ?? null,
       ownerEmail,
+      aiMonthlyLimitUsd:  Number(t.ai_monthly_limit_usd ?? 10),
+      aiUnlimited:        t.ai_unlimited ?? false,
+      aiUsedThisMonthUsd: Math.round((usedByTenant.get(t.id) ?? 0) * 1_000_000) / 1_000_000,
     })
   }
 

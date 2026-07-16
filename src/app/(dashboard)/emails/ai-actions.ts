@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
+import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
 
@@ -132,6 +133,10 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
   }
+
+  // Límite mensual de IA del tenant (super_admin pasa siempre).
+  const overLimit = await assertAiWithinLimit(ctx)
+  if (overLimit) return overLimit
 
   const objective = input.objective?.trim()
   const idea      = input.idea?.trim()
@@ -321,6 +326,10 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
   }
+
+  // Límite mensual de IA del tenant (super_admin pasa siempre).
+  const overLimit = await assertAiWithinLimit(ctx)
+  if (overLimit) return overLimit
 
   const sequenceId  = (formData.get('sequenceId') as string) || ''
   const description = ((formData.get('description') as string) || '').trim()
