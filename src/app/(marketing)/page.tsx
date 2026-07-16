@@ -9,12 +9,14 @@ import {
   ListPlus,
   FileText,
 } from 'lucide-react'
+import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { HeroPipeline } from '@/components/marketing/hero-pipeline'
 import { Reveal } from '@/components/marketing/reveal'
 import { ContactForm } from '@/components/marketing/contact-form'
 import { AuroraBackground } from '@/components/marketing/aurora-background'
 import { Particles } from '@/components/marketing/particles'
+import { PLANS, TRIAL } from '@/lib/plans'
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
 // Todo el copy y los datos viven aquí arriba, no esparcidos por el JSX.
@@ -104,49 +106,61 @@ const STEPS = [
   },
 ]
 
-const PLANS = [
+// Precios/labels desde la fuente única (src/lib/plans.ts); los bullets son el
+// copy de marketing de cada plan y viven aquí. El detalle completo va en /planes.
+const PLAN_CARDS: {
+  name: string
+  price: string
+  pricePrefix?: string
+  period: string
+  tagline: string
+  features: string[]
+  highlighted: boolean
+}[] = [
   {
-    name: 'Esencial',
-    price: '$149',
+    name: PLANS.esencial.label,
+    price: '$59',
     period: '/ mes',
-    tagline: 'Para equipos que empiezan a ordenar su operación.',
+    tagline: 'Para el agente independiente que empieza a ordenar su operación.',
     features: [
       'CRM completo con pipeline y scoring automático',
-      'Hasta 2 agentes con asignación por idioma',
-      'Importación de leads (CSV / Excel)',
-      'Notificaciones en la app y por Telegram',
+      'Secuencias de email con redacción por IA',
+      'Hasta 2,500 leads y 3,000 emails al mes',
+      'Canales de adquisición y notificaciones (app + Telegram)',
       'Soporte por email',
     ],
-    highlighted: false,
+    highlighted: PLANS.esencial.highlighted,
   },
   {
-    name: 'Growth',
-    price: '$299',
+    name: PLANS.growth.label,
+    price: '$129',
     period: '/ mes',
-    tagline: 'La operación completa: adquisición, nurturing y conversión.',
+    tagline: 'El independiente pro: toda la IA y tu web alimentada por el CRM.',
     features: [
-      'Todo lo de Esencial',
-      'Agentes ilimitados',
-      'Secuencias de email con redacción por IA',
+      'Todo lo de Esencial, con más capacidad',
+      'IA completa: emails, secuencias y alta de propiedades desde PDF',
       'Propiedades sincronizadas con tu sitio web',
-      'Analytics completo por agente y canal',
-      'Alta de propiedades desde PDF con IA',
+      'Analytics completo por agente, canal y email',
+      'Hasta 10,000 leads y 15,000 emails al mes',
+      'Onboarding asistido',
     ],
-    highlighted: true,
+    highlighted: PLANS.growth.highlighted,
   },
   {
-    name: 'Partner',
-    price: 'Personalizada',
-    period: '',
-    tagline: 'Infraestructura de crecimiento a la medida de tu operación.',
+    name: PLANS.partner.label,
+    price: '$249',
+    pricePrefix: 'desde',
+    period: '/ mes',
+    tagline: 'Para equipos y grupos inmobiliarios: 2 o más agentes con acceso propio.',
     features: [
-      'Todo lo de Growth',
+      'Todo lo de Growth, sin límites',
+      'Acceso propio para cada agente — cada quien ve sus leads',
+      'Leads y propiedades ilimitados · 50,000 emails al mes',
+      'Analytics con vista de equipo',
       'Onboarding dedicado y migración de datos (HubSpot y otros)',
-      'Infraestructura de adquisición completa',
-      'Formularios y landing pages conectados al CRM',
-      'Soporte prioritario',
+      'Soporte prioritario con contacto directo',
     ],
-    highlighted: false,
+    highlighted: PLANS.partner.highlighted,
   },
 ]
 
@@ -179,9 +193,12 @@ export default function LandingPage() {
             </FadeIn>
             <FadeIn y={14} delay={0.24}>
               <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
-                <a href="#contacto" className="mk-btn-gold btn-cta">Contáctanos</a>
+                <a href="#contacto" className="mk-btn-gold btn-cta">Comienza tu prueba</a>
                 <a href="#producto" className="mk-btn-ghost">Ver el producto</a>
               </div>
+              <p style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                {TRIAL.days} días de prueba con la experiencia {PLANS[TRIAL.plan].label} completa · sin tarjeta
+              </p>
             </FadeIn>
           </div>
           <FadeIn y={20} delay={0.2}>
@@ -330,10 +347,35 @@ export default function LandingPage() {
             Las cuentas se crean con nuestro equipo — así tu operación queda
             configurada y funcionando desde el primer día, no un software vacío.
           </p>
+          {/* Banner del período de prueba — el gancho de adquisición */}
+          <div
+            style={{
+              marginTop: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              border: '1px solid var(--border-accent)',
+              backgroundImage:
+                'linear-gradient(100deg, color-mix(in srgb, var(--accent-gold) 10%, transparent), color-mix(in srgb, var(--accent-coral) 6%, transparent) 60%, color-mix(in srgb, var(--accent-blue) 8%, transparent))',
+            }}
+          >
+            <p style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+              <strong style={{ fontWeight: 600 }}>Prueba ITMANO {TRIAL.days} días</strong>
+              {' '}— la experiencia {PLANS[TRIAL.plan].label} completa, sin tarjeta y con
+              presupuesto de IA de cortesía incluido.
+            </p>
+            <a href="#contacto" className="mk-btn-gold btn-cta" style={{ padding: '10px 20px' }}>
+              Comienza tu prueba
+            </a>
+          </div>
         </Reveal>
         <div style={{ marginTop: '40px' }}>
           <StaggerGroup className="mk-pricing" stagger={0.08}>
-            {PLANS.map(p => (
+            {PLAN_CARDS.map(p => (
               <StaggerItem key={p.name}>
                 <div
                   className="mk-card"
@@ -370,10 +412,13 @@ export default function LandingPage() {
                     )}
                   </div>
                   <div style={{ marginTop: '18px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                    <span className="mk-num" style={{ fontSize: p.period ? '38px' : '24px', fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+                    {p.pricePrefix && (
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{p.pricePrefix}</span>
+                    )}
+                    <span className="mk-num" style={{ fontSize: '38px', fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
                       {p.price}
                     </span>
-                    {p.period && <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{p.period}</span>}
+                    <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{p.period}</span>
                   </div>
                   <p className="mk-body" style={{ fontSize: '13px', marginTop: '10px' }}>{p.tagline}</p>
                   <ul style={{ listStyle: 'none', marginTop: '22px', display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1 }}>
@@ -396,6 +441,16 @@ export default function LandingPage() {
             ))}
           </StaggerGroup>
         </div>
+        <Reveal>
+          <p style={{ marginTop: '28px', textAlign: 'center' }}>
+            <Link
+              href="/planes"
+              style={{ fontSize: '14px', color: 'var(--accent-gold)', textDecoration: 'none' }}
+            >
+              Compara los planes en detalle — y contra el resto del mercado →
+            </Link>
+          </p>
+        </Reveal>
       </section>
 
       {/* CONTACTO */}

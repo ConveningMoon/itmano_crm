@@ -10,7 +10,7 @@ const LINKS = [
   { href: '/#producto', label: 'Producto' },
   { href: '/#ia', label: 'IA' },
   { href: '/#como-funciona', label: 'Cómo funciona' },
-  { href: '/#inversion', label: 'Inversión' },
+  { href: '/planes', label: 'Planes' },
 ]
 
 export function MarketingNav() {

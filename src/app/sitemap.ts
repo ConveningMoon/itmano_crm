@@ -5,6 +5,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const base = 'https://app.itmano.com'
   return [
     { url: `${base}/`,            changeFrequency: 'weekly',  priority: 1 },
+    { url: `${base}/planes`,      changeFrequency: 'weekly',  priority: 0.8 },
     { url: `${base}/terminos`,    changeFrequency: 'monthly', priority: 0.3 },
     { url: `${base}/privacidad`,  changeFrequency: 'monthly', priority: 0.3 },
     { url: `${base}/reembolsos`,  changeFrequency: 'monthly', priority: 0.3 },

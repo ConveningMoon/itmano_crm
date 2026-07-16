@@ -8,6 +8,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
+import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as updateScoreRules. The admin client (service_role) is the correct
@@ -66,10 +67,13 @@ const CreateTenantSchema = z.object({
                   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'El slug debe ser kebab-case (minúsculas, números y guiones)'),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)').optional(),
   plan:         z.enum(['esencial', 'growth', 'partner']).default('esencial'),
+  // Período de prueba (gancho de adquisición): arranca como plan Partner en
+  // status 'trial' con vencimiento a TRIAL.days y presupuesto de IA de cortesía.
+  startTrial:   z.boolean().default(false),
 })
 
 export async function createTenant(
-  input: { name: string; slug: string; primaryColor?: string; plan?: string },
+  input: { name: string; slug: string; primaryColor?: string; plan?: string; startTrial?: boolean },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') {
@@ -98,20 +102,28 @@ export async function createTenant(
   }
 
   // email_from_address is intentionally omitted (nullable; configured later).
+  // En trial, el presupuesto de IA arranca en el monto de cortesía (plans.ts).
   const { error } = await supabase.from('tenants').insert({
     id,
     name:          parsed.data.name,
     slug:          parsed.data.slug,
     primary_color: parsed.data.primaryColor ?? '#1E3A5F',
+    ...(parsed.data.startTrial ? { ai_monthly_limit_usd: TRIAL.aiBudgetUsd } : {}),
   })
   if (error) return { ok: false, error: error.message }
 
   // Suscripción inicial (sales-led). Best-effort: si falla, el tenant existe y
   // el plan se puede fijar luego desde la gestión (upsert).
-  const { error: subErr } = await supabase.from('subscriptions').insert({
-    tenant_id: id,
-    plan:      parsed.data.plan,
-  })
+  const { error: subErr } = await supabase.from('subscriptions').insert(
+    parsed.data.startTrial
+      ? {
+          tenant_id:     id,
+          plan:          TRIAL.plan,
+          status:        'trial',
+          trial_ends_at: trialEndsAtFromNow().toISOString(),
+        }
+      : { tenant_id: id, plan: parsed.data.plan },
+  )
   if (subErr) {
     console.error(JSON.stringify({ service: 'create-tenant-subscription', tenant_id: id, error: subErr.message }))
   }
@@ -171,11 +183,14 @@ export async function updateTenant(
 const UpdateSubscriptionSchema = z.object({
   tenantId: z.string().trim().min(1),
   plan:     z.enum(['esencial', 'growth', 'partner']),
-  status:   z.enum(['active', 'cancelled']),
+  status:   z.enum(['trial', 'active', 'cancelled']),
+  // Requerido cuando status = 'trial' (constraint de coherencia en la 055).
+  // Permite fijar o EXTENDER el vencimiento de la prueba.
+  trialEndsAt: z.string().datetime({ offset: true }).nullish(),
 })
 
 export async function updateTenantSubscription(
-  input: { tenantId: string; plan: string; status: string },
+  input: { tenantId: string; plan: string; status: string; trialEndsAt?: string | null },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') {
@@ -185,6 +200,9 @@ export async function updateTenantSubscription(
   const parsed = UpdateSubscriptionSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+  if (parsed.data.status === 'trial' && !parsed.data.trialEndsAt) {
+    return { ok: false, error: 'Una prueba necesita fecha de vencimiento.' }
   }
 
   const supabase = createAdminClient()
@@ -196,6 +214,7 @@ export async function updateTenantSubscription(
       plan:           parsed.data.plan,
       status:         parsed.data.status,
       requested_plan: null,
+      trial_ends_at:  parsed.data.status === 'trial' ? parsed.data.trialEndsAt : null,
       updated_at:     new Date().toISOString(),
     }, { onConflict: 'tenant_id' })
   if (error) return { ok: false, error: error.message }

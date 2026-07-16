@@ -37,7 +37,7 @@ export function MarketingFooter() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <span className="mk-label" style={{ marginBottom: '2px' }}>Plataforma</span>
               <Link href="/#producto" className="mk-footer-link">Producto</Link>
-              <Link href="/#inversion" className="mk-footer-link">Inversión</Link>
+              <Link href="/planes" className="mk-footer-link">Planes e inversión</Link>
               <Link href="/#contacto" className="mk-footer-link">Contáctanos</Link>
               <Link href="/login" className="mk-footer-link">Iniciar sesión</Link>
             </div>

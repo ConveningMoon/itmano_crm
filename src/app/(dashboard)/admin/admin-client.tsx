@@ -7,6 +7,22 @@ import type { TenantWithOwner } from '@/lib/data/tenants'
 import { createTenant, updateTenant, deleteTenant, provisionOwner, updateTenantSubscription } from './actions'
 import { updateTenantLogo, removeTenantLogo } from '../settings/actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type SubscriptionPlan, type SubscriptionStatus } from '@/lib/subscriptions'
+import { TRIAL, trialDaysLeft, trialEndsAtFromNow } from '@/lib/plans'
+
+// Estado editable del select de suscripción: las solicitudes pendientes
+// (change/cancel_requested) se editan como 'active' — guardar las resuelve.
+function editableStatus(status: string | null): 'trial' | 'active' | 'cancelled' {
+  if (status === 'trial') return 'trial'
+  if (status === 'cancelled') return 'cancelled'
+  return 'active'
+}
+
+// Valor yyyy-mm-dd para <input type="date">; sin fecha previa, propone hoy+TRIAL.days.
+function dateInputValue(iso: string | null): string {
+  const d = iso ? new Date(iso) : trialEndsAtFromNow()
+  const pad = (v: number) => String(v).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
 
 // ─── Style constants (consistent with Settings) ──────────────────────────────
 
@@ -77,6 +93,7 @@ function CreateTenantCard() {
   const [slugTouched, setSlugTouched] = useState(false)
   const [color, setColor] = useState('#1E3A5F')
   const [plan, setPlan]   = useState<SubscriptionPlan>('esencial')
+  const [startTrial, setStartTrial] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
@@ -88,7 +105,7 @@ function CreateTenantCard() {
   function handleCreate() {
     setError(null); setOk(null)
     startTransition(async () => {
-      const res = await createTenant({ name, slug: effectiveSlug, primaryColor: color, plan })
+      const res = await createTenant({ name, slug: effectiveSlug, primaryColor: color, plan, startTrial })
       if (!res.ok) { setError(res.error); return }
 
       // El logo se sube después de crear la fila (la carpeta de Storage se
@@ -105,6 +122,7 @@ function CreateTenantCard() {
 
       setOk(`Tenant creado: ${res.id}${logoNote}`)
       setName(''); setSlug(''); setSlugTouched(false); setColor('#1E3A5F'); setPlan('esencial')
+      setStartTrial(false)
       setLogoFile(null)
       if (logoInputRef.current) logoInputRef.current.value = ''
       router.refresh()
@@ -141,11 +159,31 @@ function CreateTenantCard() {
         </div>
         <div>
           <label style={LABEL}>Plan de suscripción</label>
-          <select value={plan} onChange={e => setPlan(e.target.value as SubscriptionPlan)} style={{ ...INPUT, cursor: 'pointer' }}>
+          <select
+            value={plan}
+            onChange={e => setPlan(e.target.value as SubscriptionPlan)}
+            disabled={startTrial}
+            style={{ ...INPUT, cursor: 'pointer', opacity: startTrial ? 0.5 : 1 }}
+          >
             {PLAN_ORDER.map(p => (
               <option key={p} value={p}>{PLAN_CONFIG[p].label} · {PLAN_CONFIG[p].inversion}</option>
             ))}
           </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer', marginTop: '10px' }}>
+            <input
+              type="checkbox"
+              checked={startTrial}
+              onChange={e => setStartTrial(e.target.checked)}
+              style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+            />
+            Iniciar en período de prueba ({TRIAL.days} días · experiencia {PLAN_CONFIG[TRIAL.plan].label})
+          </label>
+          {startTrial && (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              El tenant arranca como {PLAN_CONFIG[TRIAL.plan].label} en prueba, con presupuesto de IA
+              de cortesía de ${TRIAL.aiBudgetUsd}. Al convertir, fija el plan definitivo desde la gestión.
+            </div>
+          )}
         </div>
         <div>
           <label style={LABEL}>Logo (opcional)</label>
@@ -226,7 +264,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [aiLimit, setAiLimit]         = useState(tenant.aiMonthlyLimitUsd.toFixed(2))
   const [aiUnlimited, setAiUnlimited] = useState(tenant.aiUnlimited)
   const [subPlan, setSubPlan]     = useState<SubscriptionPlan>((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
-  const [subActive, setSubActive] = useState(tenant.subscriptionStatus !== 'cancelled')
+  const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'cancelled'>(editableStatus(tenant.subscriptionStatus))
+  const [trialEnd, setTrialEnd]   = useState(dateInputValue(tenant.subscriptionTrialEndsAt))
   const [confirmSlug, setConfirmSlug] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -237,7 +276,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
     setName(tenant.name); setColor(tenant.primaryColor); setConfirmSlug('')
     setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
     setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
-    setSubActive(tenant.subscriptionStatus !== 'cancelled')
+    setSubStatus(editableStatus(tenant.subscriptionStatus))
+    setTrialEnd(dateInputValue(tenant.subscriptionTrialEndsAt))
   }
 
   function handleSave() {
@@ -256,10 +296,14 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
       if (!res.ok) { setError(res.error); return }
 
       // Suscripción: aplicar plan/estado (resuelve cualquier solicitud pendiente).
+      // Una prueba vence al final del día local elegido.
       const subRes = await updateTenantSubscription({
-        tenantId: tenant.id,
-        plan:     subPlan,
-        status:   subActive ? 'active' : 'cancelled',
+        tenantId:    tenant.id,
+        plan:        subStatus === 'trial' ? 'partner' : subPlan,
+        status:      subStatus,
+        trialEndsAt: subStatus === 'trial' && trialEnd
+          ? new Date(`${trialEnd}T23:59:59`).toISOString()
+          : null,
       })
       if (!subRes.ok) { setError(subRes.error); return }
 
@@ -330,6 +374,17 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
                 ? ` · ${SUBSCRIPTION_STATUS_LABELS[tenant.subscriptionStatus as SubscriptionStatus] ?? tenant.subscriptionStatus}`
                 : ''}
             </span>
+            {tenant.subscriptionStatus === 'trial' && tenant.subscriptionTrialEndsAt && (
+              <span style={{
+                marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
+                color: trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0 ? 'var(--accent-gold)' : 'var(--accent-coral)',
+                background: trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0 ? 'rgba(201,169,110,0.12)' : 'rgba(201,123,107,0.12)',
+              }}>
+                {trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0
+                  ? `Vence en ${trialDaysLeft(tenant.subscriptionTrialEndsAt)} día${trialDaysLeft(tenant.subscriptionTrialEndsAt) === 1 ? '' : 's'}`
+                  : 'Prueba vencida'}
+              </span>
+            )}
             {(tenant.subscriptionStatus === 'change_requested' || tenant.subscriptionStatus === 'cancel_requested') && (
               <span style={{
                 marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
@@ -357,7 +412,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
                 setName(tenant.name); setColor(tenant.primaryColor)
                 setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
                 setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
-                setSubActive(tenant.subscriptionStatus !== 'cancelled')
+                setSubStatus(editableStatus(tenant.subscriptionStatus))
+                setTrialEnd(dateInputValue(tenant.subscriptionTrialEndsAt))
                 setMode('edit')
               }}
             >
@@ -450,23 +506,40 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-              <select value={subPlan} onChange={e => setSubPlan(e.target.value as SubscriptionPlan)} style={{ ...INPUT, width: '240px', cursor: 'pointer' }}>
+              <select
+                value={subPlan}
+                onChange={e => setSubPlan(e.target.value as SubscriptionPlan)}
+                disabled={subStatus === 'trial'}
+                style={{ ...INPUT, width: '240px', cursor: 'pointer', opacity: subStatus === 'trial' ? 0.5 : 1 }}
+              >
                 {PLAN_ORDER.map(p => (
                   <option key={p} value={p}>{PLAN_CONFIG[p].label} · {PLAN_CONFIG[p].inversion}</option>
                 ))}
               </select>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={subActive}
-                  onChange={e => setSubActive(e.target.checked)}
-                  style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
-                />
-                Activa
-              </label>
+              <select
+                value={subStatus}
+                onChange={e => setSubStatus(e.target.value as 'trial' | 'active' | 'cancelled')}
+                style={{ ...INPUT, width: '170px', cursor: 'pointer' }}
+              >
+                <option value="active">Activa</option>
+                <option value="trial">Período de prueba</option>
+                <option value="cancelled">Cancelada</option>
+              </select>
+              {subStatus === 'trial' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>vence</span>
+                  <input
+                    type="date"
+                    value={trialEnd}
+                    onChange={e => setTrialEnd(e.target.value)}
+                    style={{ ...INPUT, width: '160px', cursor: 'pointer' }}
+                  />
+                </div>
+              )}
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
               Guardar aplica el plan/estado y resuelve cualquier solicitud pendiente del tenant.
+              {subStatus === 'trial' && <> En prueba, el plan efectivo es {PLAN_CONFIG[TRIAL.plan].label}; cambia la fecha para extenderla.</>}
             </div>
           </div>
           {error && <div style={ERROR}>{error}</div>}

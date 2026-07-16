@@ -7,7 +7,7 @@ export async function getSubscription(tenantId: string): Promise<TenantSubscript
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('subscriptions')
-    .select('plan, status, requested_plan')
+    .select('plan, status, requested_plan, trial_ends_at')
     .eq('tenant_id', tenantId)
     .maybeSingle()
   if (!data) return null
@@ -17,5 +17,6 @@ export async function getSubscription(tenantId: string): Promise<TenantSubscript
     plan:          s.plan as SubscriptionPlan,
     status:        s.status as SubscriptionStatus,
     requestedPlan: (s.requested_plan as SubscriptionPlan | null) ?? null,
+    trialEndsAt:   (s.trial_ends_at as string | null) ?? null,
   }
 }
