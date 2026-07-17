@@ -180,7 +180,7 @@ export async function getAgentAiBreakdown(tenantId: string): Promise<AgentAiBrea
   const supabase = createAdminClient()
 
   const [{ data: agents }, { data: events }, { data: tenant }, { data: sub }] = await Promise.all([
-    supabase.from('agents').select('id, name, color, user_id').eq('tenant_id', tenantId).order('name'),
+    supabase.from('agents').select('id, name, accent_color, user_id').eq('tenant_id', tenantId).order('name'),
     supabase
       .from('ai_usage_events')
       .select('agent_id, cost_usd, input_tokens, output_tokens')
@@ -223,7 +223,7 @@ export async function getAgentAiBreakdown(tenantId: string): Promise<AgentAiBrea
     return {
       agentId:      a.id as string,
       agentName:    a.name as string,
-      agentColor:   (a.color as string) ?? '#C9A96E',
+      agentColor:   (a.accent_color as string) ?? '#C9A96E',
       hasLogin:     !!a.user_id,
       requests:     acc.requests,
       inputTokens:  acc.input,

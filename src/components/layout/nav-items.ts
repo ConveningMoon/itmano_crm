@@ -17,6 +17,7 @@ export const navItems: NavItemDef[] = [
   { label: 'Emails',        href: '/emails',    icon: 'Mail' },
   { label: 'Analytics',     href: '/analytics', icon: 'BarChart2' },
   { label: 'Configuración', href: '/settings',  icon: 'Settings' },
+  { label: 'Soporte',       href: '/soporte',   icon: 'LifeBuoy' },
 ]
 
 // super_admin gets the control-center link appended. In hub mode (super_admin

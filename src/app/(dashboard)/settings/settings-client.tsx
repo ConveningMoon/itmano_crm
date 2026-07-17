@@ -9,6 +9,7 @@ import type { ScoreRule } from '@/lib/data/score-rules'
 import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
+import { AiCapacityRequest } from './ai-capacity-request'
 import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
 import { trialDaysLeft } from '@/lib/plans'
@@ -975,11 +976,19 @@ export function SettingsClient({
         scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
         ia: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {userRole === 'agent' && (
+            {userRole === 'agent' ? (
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
                 Estás viendo tu propia actividad de IA: tus requests y el porcentaje de tu
                 parte del límite del equipo.
               </p>
+            ) : userRole === 'agent_owner' && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, maxWidth: '460px' }}>
+                  Uso de IA de tu equipo este mes. ¿Se está quedando corto el límite?
+                  Solicita más capacidad y lo ampliamos.
+                </p>
+                <AiCapacityRequest />
+              </div>
             )}
             <AiUsagePanel
               summary={aiUsage}
