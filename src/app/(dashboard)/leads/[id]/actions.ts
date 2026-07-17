@@ -291,7 +291,7 @@ export async function applyManualAction(
 export async function startPurchaseProcess(
   leadId: string,
   data: { address: string; loanType: string; closingDate: string; notes: string }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; needsClosingEmails?: true }> {
   // closing_date is mandatory — the email system depends on it for pre_close scheduling.
   if (!data.closingDate) return { ok: false, error: 'La fecha estimada de cierre es obligatoria' }
   const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -305,6 +305,24 @@ export async function startPurchaseProcess(
 
   const guard = await loadGuardedLead(supabase, ctx, leadId)
   if ('ok' in guard) return guard
+
+  // Los 3 emails de cierre (en el idioma del lead) deben existir antes de iniciar
+  // el proceso — si no, no habría correo de inicio que enviar. Se bloquea con una
+  // señal para que la UI muestre la alerta + botón a la sección de emails.
+  const { data: leadRow } = await supabase.from('leads').select('language').eq('id', leadId).maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leadLanguage = ((leadRow as any)?.language as string | undefined) ?? 'es'
+  const { getMissingClosingEmails, CLOSING_MILESTONE_LABEL } = await import('@/lib/services/closing-emails-status')
+  const missing = await getMissingClosingEmails(supabase, guard.tenant_id, leadLanguage)
+  if (missing.length > 0) {
+    const langLabel: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
+    const faltantes = missing.map(m => CLOSING_MILESTONE_LABEL[m]).join(', ')
+    return {
+      ok: false,
+      needsClosingEmails: true,
+      error: `Antes de iniciar un proceso de compra necesitas configurar los 3 emails de cierre en ${langLabel[leadLanguage] ?? leadLanguage}. Faltan: ${faltantes}.`,
+    }
+  }
 
   const { data: process, error: insertErr } = await supabase
     .from('purchase_processes')

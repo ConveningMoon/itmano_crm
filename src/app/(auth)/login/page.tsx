@@ -62,11 +62,18 @@ function LoginForm() {
     })
 
     if (authError) {
-      // With shouldCreateUser:false, an unregistered email returns an error.
-      // Show the friendly no-access message; rate limiting gets its own note.
-      setError(authError.status === 429
-        ? 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
-        : NO_ACCESS_MSG)
+      // Distinguir tres casos por el status del error:
+      //  429 → rate limit; 5xx → el envío del correo falló (p. ej. SMTP/dominio
+      //  no verificado en Resend) — NO es un problema de acceso; 4xx → la cuenta
+      //  no existe (shouldCreateUser:false), el mensaje de "sin acceso".
+      const status = authError.status ?? 0
+      setError(
+        status === 429
+          ? 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+          : status >= 500
+            ? 'No pudimos enviar el enlace de acceso en este momento. Es un problema temporal de nuestro servicio de correo — inténtalo de nuevo en unos minutos.'
+            : NO_ACCESS_MSG
+      )
       setLoading(false)
     } else {
       setLoading(false)

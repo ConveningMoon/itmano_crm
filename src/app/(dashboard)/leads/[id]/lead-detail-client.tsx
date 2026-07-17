@@ -179,6 +179,10 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [confirmClose, setConfirmClose]     = useState(false)
   const [confirmLost, setConfirmLost]       = useState(false)
   const [actionError, setActionError]       = useState<string | null>(null)
+  // true cuando startPurchaseProcess se bloquea por faltar los emails de cierre:
+  // en ese caso el error se muestra como alerta con botón a /emails, no como
+  // texto simple de error.
+  const [needsClosingEmails, setNeedsClosingEmails] = useState(false)
   const [isPending, startTransition]        = useTransition()
 
   // Delete lead — two-step confirmation
@@ -860,7 +864,29 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
             {/* Modal actions */}
             {actionError && (
-              <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '8px' }}>{actionError}</p>
+              needsClosingEmails ? (
+                <div style={{
+                  marginBottom: '12px', padding: '12px 14px', borderRadius: '8px',
+                  background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.28)',
+                }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.55, margin: '0 0 10px' }}>
+                    {actionError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/emails#emails-de-cierre')}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px',
+                      background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    Configurar emails de cierre →
+                  </button>
+                </div>
+              ) : (
+                <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '8px' }}>{actionError}</p>
+              )
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
@@ -877,6 +903,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 onClick={() => {
                   startTransition(async () => {
                     setActionError(null)
+                    setNeedsClosingEmails(false)
                     const res = await startPurchaseProcess(lead.id, {
                       address:     modalAddress,
                       loanType:    modalLoanType,
@@ -891,6 +918,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                       setModalNotes('')
                     } else {
                       setActionError(res.error)
+                      setNeedsClosingEmails(res.needsClosingEmails === true)
                     }
                   })
                 }}
