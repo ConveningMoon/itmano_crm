@@ -43,7 +43,7 @@ These are working principles for *every* session, not preferences.
 
 ## El Producto — Qué es ITMANO CRM
 
-ITMANO CRM is a **white-labeled, multi-tenant SaaS CRM for real estate teams**, sold as the visible centerpiece of ITMANO's Growth Partner service. Each client (tenant) gets a live, branded dashboard at `app.itmano.com` instead of a monthly PDF report. It is sold **sales-led by subscription** ("Contáctanos" — no self-serve signup); public plans: Esencial $149/mes · Growth $299/mes · Partner (custom). Payment processing is not integrated yet (see Roadmap — Billing).
+ITMANO CRM is a **white-labeled, multi-tenant SaaS CRM for real estate teams**, sold as the visible centerpiece of ITMANO's Growth Partner service. Each client (tenant) gets a live, branded dashboard at `app.itmano.com` instead of a monthly PDF report. It is sold **sales-led by subscription** ("Contáctanos" — no self-serve signup). Public plans (source of truth: `src/lib/plans.ts`): **Esencial $59/mes** (independiente, 1 login) · **Growth $129/mes** (destacado — IA completa + web sync, 1 login) · **Partner desde $249/mes** (equipos 2+, multi-login; base 3 logins, +$49/login extra). New clients start with a **14-day trial** at the Partner experience (`subscriptions.status = 'trial'` + `trial_ends_at`, courtesy AI budget $25 — see `TRIAL` in plans.ts). Plan limits (leads/emails/properties) are contractual today — only the AI budget is enforced in code (`ai-limit.ts`); hard enforcement arrives with billing. `/planes` is the public comparison page (plans + market). Payment processing is not integrated yet (see Roadmap — Billing).
 
 **What the CRM includes today:**
 
@@ -367,7 +367,7 @@ Run the suite(s) that cover the area you touched. If you change `src/proxy.ts`'s
 ```
 src/
   app/
-    (marketing)/              — PUBLIC: landing page at `/`, /terminos, /privacidad, /reembolsos
+    (marketing)/              — PUBLIC: landing at `/`, /planes (comparativa), /terminos, /privacidad, /reembolsos
     (auth)/login/             — public, dark theme, Magic Link
     auth/                     — OTP callback route
     unsubscribe/              — public signed unsubscribe page
@@ -559,7 +559,7 @@ uploaded by hand, not extracted). The UI entry point is **disabled** behind
 
 | Group | Path prefix | Theme | Auth |
 |---|---|---|---|
-| `(marketing)` | `/`, `/terminos`, `/privacidad`, `/reembolsos` | Dark premium (same tokens), marketing nav + footer | Public |
+| `(marketing)` | `/`, `/planes`, `/terminos`, `/privacidad`, `/reembolsos` | Dark premium (same tokens), marketing nav + footer | Public |
 | `(auth)` | `/login` | Dark | Public |
 | `(dashboard)` | `/dashboard`, `/leads`, `/properties`, `/emails`, `/sources`, `/analytics`, `/analytics/emails`, `/lead-magnets`, `/notifications`, `/activity`, `/admin`, `/settings` | Dark premium (CSS vars) | Protected (`src/proxy.ts` + `getCurrentTenantContext`) |
 
@@ -692,6 +692,7 @@ Read these *before* writing code that touches their domain:
 |---|---|
 | Anything that uses leads, agents, sources, lead magnets | `src/lib/types.ts`, `src/lib/config.ts`, the relevant `src/lib/data/*.ts` |
 | The marketing landing or legal pages | `src/app/(marketing)/`, `src/components/marketing/`, `src/components/motion/README.md` |
+| Plans, pricing, limits, or the trial | `src/lib/plans.ts` (single source of truth), `src/lib/subscriptions.ts`, migrations `054`–`055` |
 | Anything in `properties/` | `src/lib/data/properties.ts` (types), `src/lib/auth/guards.ts` (`assertCanWriteProperty`), the "Properties — Web Listings & AI Intake" section, and migrations `042_properties.sql` + `045`–`047` |
 | Anything that touches scoring, status auto-transitions, or notifications | The "Lead Scoring Model" section above, then the scoring migration files in `supabase/migrations/` |
 | Anything in `(dashboard)` | `src/app/globals.css` (design tokens), the closest existing page |

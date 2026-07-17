@@ -10,6 +10,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
+import { trialDaysLeft } from '@/lib/plans'
 import { ScoringSection } from './scoring-section'
 import { Tabs } from '@/components/ui/tabs'
 
@@ -734,6 +735,19 @@ function SubscriptionCard({ subscription, canManage }: {
           <div style={{ fontSize: '13px', color: 'var(--accent-gold)', marginTop: '2px' }}>{cfg.inversion}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>{cfg.blurb}</div>
         </div>
+
+        {subscription.status === 'trial' && subscription.trialEndsAt && (
+          <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
+            {trialDaysLeft(subscription.trialEndsAt) > 0 ? (
+              <>Tu período de prueba termina el{' '}
+                <strong>{new Date(subscription.trialEndsAt).toLocaleDateString('es', { day: 'numeric', month: 'long' })}</strong>
+                {' '}({trialDaysLeft(subscription.trialEndsAt)} día{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'} restante{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'}).
+                El equipo ITMANO te contactará para elegir tu plan definitivo.</>
+            ) : (
+              <>Tu período de prueba terminó. El equipo ITMANO te contactará para continuar — o escríbenos a customer@itmano.com.</>
+            )}
+          </div>
+        )}
 
         {hasPendingRequest && (
           <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>

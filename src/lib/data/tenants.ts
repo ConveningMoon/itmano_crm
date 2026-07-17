@@ -55,6 +55,7 @@ export interface TenantWithOwner {
   subscriptionPlan:          string | null
   subscriptionStatus:        string | null
   subscriptionRequestedPlan: string | null
+  subscriptionTrialEndsAt:   string | null
 }
 
 /**
@@ -75,11 +76,11 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited').order('created_at'),
     supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
-    supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan'),
+    supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at'),
   ])
 
-  const subByTenant = new Map<string, { plan: string; status: string; requested_plan: string | null }>()
-  for (const s of (subRows ?? []) as { tenant_id: string; plan: string; status: string; requested_plan: string | null }[]) {
+  const subByTenant = new Map<string, { plan: string; status: string; requested_plan: string | null; trial_ends_at: string | null }>()
+  for (const s of (subRows ?? []) as { tenant_id: string; plan: string; status: string; requested_plan: string | null; trial_ends_at: string | null }[]) {
     subByTenant.set(s.tenant_id, s)
   }
 
@@ -120,6 +121,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       subscriptionPlan:          subByTenant.get(t.id)?.plan ?? null,
       subscriptionStatus:        subByTenant.get(t.id)?.status ?? null,
       subscriptionRequestedPlan: subByTenant.get(t.id)?.requested_plan ?? null,
+      subscriptionTrialEndsAt:   subByTenant.get(t.id)?.trial_ends_at ?? null,
     })
   }
 
