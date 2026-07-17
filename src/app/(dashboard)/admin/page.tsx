@@ -3,8 +3,9 @@ import { Building2, Users, Flame, TrendingUp } from 'lucide-react'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getHubData } from '@/lib/data/super-admin'
 import { getNotifications } from '@/lib/data/notifications'
-import { getAiUsageSummary } from '@/lib/data/ai-usage'
+import { getAiUsageSummary, getAiDailyUsage } from '@/lib/data/ai-usage'
 import { AiUsagePanel } from '@/components/dashboard/ai-usage-panel'
+import { AiUsageDailyChart } from './ai-usage-chart'
 import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { AnimatedNumber } from '@/components/motion/animated-number'
 import { Tabs } from '@/components/ui/tabs'
@@ -18,11 +19,12 @@ export default async function AdminPage() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
-  const [{ kpis, tenants }, feed, aiUsage] = await Promise.all([
+  const [{ kpis, tenants }, feed, aiUsage, aiDaily] = await Promise.all([
     getHubData(),
     getNotifications(null, { limit: 10 }),
     // Vista global: todos los tenants + uso ITMANO sin tenant.
     getAiUsageSummary(null),
+    getAiDailyUsage(30),
   ])
 
   const kpiCards = [
@@ -106,7 +108,13 @@ export default async function AdminPage() {
               <HubFeed notifications={feed} />
             </>
           ),
-          ia: <AiUsagePanel summary={aiUsage} />,
+          ia: (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* El diagrama diario reemplaza al listado de requests recientes */}
+              <AiUsageDailyChart series={aiDaily} />
+              <AiUsagePanel summary={aiUsage} showRecent={false} />
+            </div>
+          ),
           gestion: <AdminClient tenants={tenants} />,
         }}
       />

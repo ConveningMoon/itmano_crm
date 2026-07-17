@@ -193,11 +193,12 @@ export default function LandingPage() {
             </FadeIn>
             <FadeIn y={14} delay={0.24}>
               <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
-                <a href="#contacto" className="mk-btn-gold btn-cta">Comienza tu prueba</a>
+                <a href="#contacto" className="mk-btn-gold btn-cta">Prueba {TRIAL.days} días gratis</a>
                 <a href="#producto" className="mk-btn-ghost">Ver el producto</a>
               </div>
-              <p style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                {TRIAL.days} días de prueba con la experiencia {PLANS[TRIAL.plan].label} completa · sin tarjeta
+              <p style={{ marginTop: '14px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                <strong style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>100% gratis</strong>
+                {' '}· sin tarjeta de crédito · experiencia {PLANS[TRIAL.plan].label} completa
               </p>
             </FadeIn>
           </div>
@@ -364,12 +365,14 @@ export default function LandingPage() {
             }}
           >
             <p style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-              <strong style={{ fontWeight: 600 }}>Prueba ITMANO {TRIAL.days} días</strong>
-              {' '}— la experiencia {PLANS[TRIAL.plan].label} completa, sin tarjeta y con
-              presupuesto de IA de cortesía incluido.
+              <strong style={{ fontWeight: 600 }}>
+                Prueba ITMANO {TRIAL.days} días — <span className="mk-gradient-text">totalmente gratis</span>
+              </strong>
+              {' '}· la experiencia {PLANS[TRIAL.plan].label} completa, sin tarjeta de crédito
+              y con presupuesto de IA de cortesía incluido.
             </p>
             <a href="#contacto" className="mk-btn-gold btn-cta" style={{ padding: '10px 20px' }}>
-              Comienza tu prueba
+              Prueba {TRIAL.days} días gratis
             </a>
           </div>
         </Reveal>

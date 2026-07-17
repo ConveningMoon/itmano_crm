@@ -8,6 +8,7 @@ import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
 import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
+import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
 import { trialDaysLeft } from '@/lib/plans'
@@ -940,13 +941,15 @@ interface Props {
   aiUsage: AiUsageSummary
   aiShowCosts: boolean
   aiLimit: AiUsageLimitView | null
+  aiLimitSubtitle?: string
+  aiByAgent: AgentAiBreakdown | null
   subscription: TenantSubscription | null
 }
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, scoringRules,
   canEditScoring, canManageAgents, canLinkSelf, userEmail, userRole,
-  aiUsage, aiShowCosts, aiLimit, subscription,
+  aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
 
@@ -970,7 +973,23 @@ export function SettingsClient({
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
         scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
-        ia: <AiUsagePanel summary={aiUsage} showCosts={aiShowCosts} limit={aiLimit} />,
+        ia: (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {userRole === 'agent' && (
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                Estás viendo tu propia actividad de IA: tus requests y el porcentaje de tu
+                parte del límite del equipo.
+              </p>
+            )}
+            <AiUsagePanel
+              summary={aiUsage}
+              showCosts={aiShowCosts}
+              limit={aiLimit}
+              limitSubtitle={aiLimitSubtitle}
+              byAgent={aiByAgent}
+            />
+          </div>
+        ),
         cuenta: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <SubscriptionCard subscription={subscription} canManage={canManageAgents} />

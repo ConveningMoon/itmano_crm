@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
-import { getAiUsageSummary, type AiUsageSummary } from '@/lib/data/ai-usage'
-import { getAiLimitIndicator } from '@/lib/services/ai-limit'
+import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
+import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { SettingsClient } from './settings-client'
@@ -20,7 +20,12 @@ export default async function SettingsPage() {
   const tenantId = ctx.tenant_id
   if (!tenantId) redirect('/admin')
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription] = await Promise.all([
+  // Uso de IA según el rol: un 'agent' ve SOLO su propia actividad (requests
+  // suyos + el porcentaje de SU parte del límite en Partner); owner/super ven
+  // el resumen del equipo con desglose por agente.
+  const isAgentViewer = ctx.role === 'agent'
+
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
@@ -28,9 +33,10 @@ export default async function SettingsPage() {
     // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
     supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     authClient.auth.getUser(),
-    getAiUsageSummary(tenantId),
-    getAiLimitIndicator(tenantId),
+    getAiUsageSummary(tenantId, isAgentViewer && ctx.agent_id ? { agentId: ctx.agent_id } : undefined),
+    getAiLimitIndicatorFor(ctx),
     getSubscription(tenantId),
+    isAgentViewer ? Promise.resolve(null) : getAgentAiBreakdown(tenantId),
   ])
 
   const tenant = tenantRow
@@ -63,6 +69,9 @@ export default async function SettingsPage() {
     byTenant:  null,
     recent:    aiUsageRaw.recent.map(zeroCost),
   }
+  const aiByAgent: AgentAiBreakdown | null = aiByAgentRaw
+    ? (showAiCosts ? aiByAgentRaw : { ...aiByAgentRaw, agents: aiByAgentRaw.agents.map(zeroCost) })
+    : null
 
   return (
     <>
@@ -89,6 +98,8 @@ export default async function SettingsPage() {
         aiUsage={aiUsage}
         aiShowCosts={showAiCosts}
         aiLimit={aiLimit}
+        aiLimitSubtitle={aiLimit?.perAgent ? 'de tu parte del límite del equipo' : undefined}
+        aiByAgent={aiByAgent}
         subscription={subscription}
       />
     </>
