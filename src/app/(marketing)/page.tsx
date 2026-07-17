@@ -139,6 +139,7 @@ const PLAN_CARDS: {
     features: [
       'Todo lo de Esencial, con más capacidad',
       'IA completa: emails, secuencias y alta de propiedades desde PDF',
+      'Dominio de envío propio (mail.tudominio.com), gestionado por nosotros',
       'Propiedades sincronizadas con tu sitio web',
       'Analytics completo por agente, canal y email',
       'Hasta 10,000 leads y 15,000 emails al mes',

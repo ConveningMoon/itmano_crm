@@ -60,6 +60,17 @@ const COMPARISON: CompareGroup[] = [
       { label: 'Importación de leads (CSV / Excel)', values: [true, true, true] },
       { label: 'Notificaciones instantáneas (app + Telegram)', values: [true, true, true] },
       { label: 'Routing automático por idioma (ES / EN / PT)', values: [true, true, true] },
+      {
+        // Solución A: Esencial envía desde el dominio compartido de ITMANO con la
+        // marca del tenant en el nombre visible; Growth/Partner reciben su propio
+        // dominio de envío verificado (mail.tudominio.com), gestionado por ITMANO.
+        label: 'Identidad de envío de emails',
+        values: [
+          'Marca propia visible (dominio gestionado ITMANO)',
+          'Dominio de envío propio (mail.tudominio.com)',
+          'Dominio de envío propio (mail.tudominio.com)',
+        ],
+      },
       { label: 'Propiedades sincronizadas con tu sitio web', values: [false, true, true] },
       { label: 'Analytics', values: ['KPIs básicos', 'Completo (agente, canal, email)', 'Completo + vista de equipo'] },
     ],
@@ -127,7 +138,7 @@ const MARKET_ROWS: { label: string; values: [CellValue, CellValue, CellValue, Ce
   },
   {
     label: 'Período de prueba con acceso completo',
-    values: [`${TRIAL.days} días (nivel Partner)`, '14 días', '14 días', 'Demo', 'Demo'],
+    values: [`${TRIAL.days} días (nivel ${PLANS[TRIAL.plan].label})`, '14 días', '14 días', 'Demo', 'Demo'],
   },
 ]
 

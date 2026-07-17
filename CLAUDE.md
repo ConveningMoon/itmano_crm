@@ -43,7 +43,7 @@ These are working principles for *every* session, not preferences.
 
 ## El Producto — Qué es ITMANO CRM
 
-ITMANO CRM is a **white-labeled, multi-tenant SaaS CRM for real estate teams**, sold as the visible centerpiece of ITMANO's Growth Partner service. Each client (tenant) gets a live, branded dashboard at `app.itmano.com` instead of a monthly PDF report. It is sold **sales-led by subscription** ("Contáctanos" — no self-serve signup). Public plans (source of truth: `src/lib/plans.ts`): **Esencial $59/mes** (independiente, 1 login) · **Growth $129/mes** (destacado — IA completa + web sync, 1 login) · **Partner desde $249/mes** (equipos 2+, multi-login; base 3 logins, +$49/login extra). New clients start with a **14-day trial** at the Partner experience (`subscriptions.status = 'trial'` + `trial_ends_at`, courtesy AI budget $25 — see `TRIAL` in plans.ts). Plan limits (leads/emails/properties) are contractual today — only the AI budget is enforced in code (`ai-limit.ts`); hard enforcement arrives with billing. `/planes` is the public comparison page (plans + market). Payment processing is not integrated yet (see Roadmap — Billing).
+ITMANO CRM is a **white-labeled, multi-tenant SaaS CRM for real estate teams**, sold as the visible centerpiece of ITMANO's Growth Partner service. Each client (tenant) gets a live, branded dashboard at `app.itmano.com` instead of a monthly PDF report. It is sold **sales-led by subscription** ("Contáctanos" — no self-serve signup). Public plans (source of truth: `src/lib/plans.ts`): **Esencial $59/mes** (independiente, 1 login) · **Growth $129/mes** (destacado — IA completa + web sync, 1 login) · **Partner desde $249/mes** (equipos 2+, multi-login; base 3 logins, +$49/login extra). New clients start with a **14-day trial** at the Growth experience (`subscriptions.status = 'trial'` + `trial_ends_at`, courtesy AI budget $25 — see `TRIAL` in plans.ts; Growth and not Partner so the trial never requires provisioning a sending domain). Plan limits (leads/emails/properties) are contractual today — only the AI budget is enforced in code (`ai-limit.ts`); hard enforcement arrives with billing. `/planes` is the public comparison page (plans + market). Payment processing is not integrated yet (see Roadmap — Billing).
 
 **What the CRM includes today:**
 
@@ -381,7 +381,8 @@ src/
       lead-magnets/           — CRUD per agent (tracking only — landing pages live outside this app)
       notifications/          — full notification inbox
       activity/               — activity feed
-      soporte/                — contacto con soporte técnico + solicitud de más capacidad IA (→ support@itmano.com)
+      soporte/                — contacto con soporte técnico + solicitud de más capacidad IA (→ platform_requests)
+      solicitudes/            — super_admin inbox: platform_requests (tabs Contacto | Soporte, checkbox respondido)
       admin/                  — super_admin hub: platform KPIs, tenant management
       settings/
     api/                      — route handlers for external callers (webhooks, intake, crons)
@@ -439,6 +440,22 @@ public/                       — static assets (itmano_logo.webp, itmano_banner
 - **Subsequent emails (step 1+):** Sent by the hourly cron-job.org trigger. After each successful send, `sendSequenceEmail` sets `next_send_at = sent_at + next_step.delay_hours`; the orchestrator picks it up when due.
 - **No double-send:** after the immediate send, the run is advanced (`current_step_order++`, `next_send_at` moved to the future) or marked `completed` — so the next cron tick does not reprocess it.
 - **Fallback:** if the in-process first send throws, enrollment still succeeds (never rolled back) and the hourly cron processes the run later. Worst-case timing degrades to 1 hour; no data lost.
+
+---
+
+## Email Sending Architecture — Multi-tenant (Solución A)
+
+**One Resend platform, tiered sending identity per plan** (decided 2026-07; feature flag: `PlanFeatures.customSendingDomain` in `plans.ts`):
+
+- **Esencial (and every trial):** sends from ITMANO's **shared domain** (`mail.itmano.com`) with the tenant's brand in the display name — `"Agente · Agencia" <slug@mail.itmano.com>`. Zero DNS onboarding, zero Resend domain slots consumed. The per-tenant address slug is unique (it doubles as the inbound routing key, see below).
+- **Growth / Partner:** get their **own verified sending domain** (`mail.tudominio.com`), registered by ITMANO in ITMANO's Resend account; the tenant only adds the DNS records we send them (DKIM/SPF; MX only if inbound replies are wanted). This caps Resend domain-slot consumption to paying Growth+ tenants and makes "tu propio dominio" an upgrade reason.
+- Either way, the sending identity lives in `tenants.email_from_address` — all send services read it; nothing else changes per plan.
+
+**Inbound reply routing:** the Resend inbound webhook resolves the **tenant from the reply's `to` address** (matched against `tenants.email_from_address`), then the lead by sender email scoped to that tenant (`resolveTenantByToAddress` in `api/webhooks/resend/route.ts`). Shared-domain tenants are disambiguated by their unique slug address; custom-domain tenants by their domain. Unresolved `to` falls back to global single-match-or-skip.
+
+**Current account state (transitional, 1 client):** the CRM's `RESEND_API_KEY` is **Adriana's Resend account** (A&J domain + inbound); Supabase Auth SMTP uses **ITMANO's Resend account** (`mail.itmano.com`, verified, working). When client #2 signs (Growth/Partner), ITMANO buys the Resend $20 plan and registers the new client's domain in **ITMANO's account** — new tenants consolidate there; A&J migrates opportunistically. Auth emails always stay on `mail.itmano.com`.
+
+**Scale plan — AWS SES (future, do not start unless asked):** Resend's domain limits (10 on $20, 1000 on $90) cap the custom-domain tier at ~1000 Growth+ tenants. The escape hatch is migrating the sending engine to **AWS SES** (no per-domain pricing, ~10k identities soft limit, ~$0.10/1000 emails; domain verification via API, events via SNS/EventBridge, inbound via SES receipt rules). The CRM's own layer (`email_sends`, webhook → `lead_events`, rendering, inbound capture) already abstracts the provider — the migration swaps the transport, not the data model. Trigger: approaching Resend's domain cap or unit economics at high volume. See Roadmap.
 
 ---
 
@@ -711,10 +728,11 @@ Read these *before* writing code that touches their domain:
 | **Phase 1** | Static UI mockup (all CRM pages) | ✅ Shipped |
 | **Phase 2** | Supabase Auth (Magic Link) + DB + RLS + Realtime; scoring tables + triggers + hourly decay cron; A&J seed; HubSpot 114-contact migration | ✅ Shipped |
 | **Phase 3** | Resend end-to-end (sequences, webhooks → scoring, inbound replies); intake endpoints; Telegram notifications; plus properties module, super-admin hub, AI features, AI usage tracking | ✅ Shipped |
-| **Comercialización — landing + legal** | Public landing at `/` (route group `(marketing)`), pricing sales-led, contact form via Resend; `/terminos`, `/privacidad`, `/reembolsos` (UAE entity, drafts pending lawyer review) | 🚧 **Active** |
-| Billing / suscripciones | Payment integration (Stripe direct vs. Lemon Squeezy MoR — MoR favored for US+Spain tax); `subscriptions` keyed by `tenant_id` with RLS | ⏳ Next |
-| Tenant onboarding | Provision a new tenant (branding, agents, channels) without manual seed work | ⏳ |
+| **Comercialización — landing + legal** | Public landing at `/` (route group `(marketing)`), pricing sales-led, contact form → `platform_requests` (/solicitudes); `/terminos`, `/privacidad`, `/reembolsos` (UAE entity, drafts pending lawyer review) | 🚧 **Active** |
+| Billing / suscripciones | Payment integration (Stripe direct vs. Lemon Squeezy/Paddle MoR — MoR favored for US+Spain tax; Paddle application in progress); `subscriptions` keyed by `tenant_id` with RLS | ⏳ Next |
+| Tenant onboarding | Provision a new tenant (branding, agents, channels) without manual seed work; includes sending-identity setup per plan (shared-domain slug vs. custom domain via Resend Domains API) | ⏳ |
 | Analytics avanzado (old Phase 5) | Velocity multiplier; reactivation campaigns; per-tenant scoring overrides | ⏳ |
+| Migración a AWS SES | Swap the email transport Resend → SES when the Resend domain cap or volume economics demand it (see "Email Sending Architecture"). Domain identities via SES API, events via SNS, inbound via receipt rules | ⏳ Future |
 | WhatsApp (old Phase 4) | Meta Cloud API; notification fan-out to WhatsApp; ManyChat receiver | ⏸️ Postponed |
 
 ---

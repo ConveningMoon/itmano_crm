@@ -1,7 +1,12 @@
 'use server'
 
 import { z } from 'zod'
-import { resend } from '@/lib/resend'
+import { createPlatformRequest } from '@/lib/services/platform-requests'
+
+// El formulario de la landing es anónimo, así que no puede salir por Resend
+// con un remitente propio: se registra como platform_request (kind='contact')
+// en el CRM — el super_admin lo gestiona en /solicitudes y recibe el aviso
+// por Telegram al instante.
 
 const contactSchema = z.object({
   name:    z.string().trim().min(2, 'Ingresa tu nombre.').max(120),
@@ -9,7 +14,7 @@ const contactSchema = z.object({
   company: z.string().trim().max(160).optional().or(z.literal('')),
   message: z.string().trim().min(10, 'Cuéntanos un poco más — mínimo 10 caracteres.').max(4000),
   // Honeypot: campo oculto para humanos. Si llega con contenido, es un bot —
-  // respondemos ok sin enviar nada para no darle señal.
+  // respondemos ok sin registrar nada para no darle señal.
   website: z.string().max(0).optional().or(z.literal('')),
 })
 
@@ -26,38 +31,11 @@ export async function submitContactForm(
   const { name, email, company, message, website } = parsed.data
   if (website) return { ok: true }
 
-  const to = process.env.CONTACT_FORM_TO
-  const from = process.env.CONTACT_FORM_FROM
-  if (!to || !from) {
-    console.error(JSON.stringify({ service: 'marketing-contact', error: 'missing_env', detail: 'CONTACT_FORM_TO / CONTACT_FORM_FROM not set' }))
-    return { ok: false, error: 'El formulario no está disponible en este momento. Escríbenos directamente a customer@itmano.com.' }
-  }
-
-  const lines = [
-    `Nombre: ${name}`,
-    `Email: ${email}`,
-    company ? `Agencia / empresa: ${company}` : null,
-    '',
-    'Mensaje:',
+  return createPlatformRequest({
+    kind:            'contact',
+    requester_name:  name,
+    requester_email: email.toLowerCase(),
+    company:         company || null,
     message,
-  ].filter((l): l is string => l !== null)
-
-  try {
-    const { error } = await resend.emails.send({
-      from,
-      to,
-      replyTo: email,
-      subject: `Nuevo contacto en la landing — ${name}${company ? ` · ${company}` : ''}`,
-      text: lines.join('\n'),
-    })
-    if (error) {
-      console.error(JSON.stringify({ service: 'marketing-contact', error: 'resend_failed', detail: error.message }))
-      return { ok: false, error: 'No pudimos enviar tu mensaje. Inténtalo de nuevo en unos minutos.' }
-    }
-  } catch (err) {
-    console.error(JSON.stringify({ service: 'marketing-contact', error: 'resend_threw', detail: err instanceof Error ? err.message : 'unknown' }))
-    return { ok: false, error: 'No pudimos enviar tu mensaje. Inténtalo de nuevo en unos minutos.' }
-  }
-
-  return { ok: true }
+  })
 }
