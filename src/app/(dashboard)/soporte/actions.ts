@@ -4,14 +4,14 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { sendSupportEmail } from '@/lib/services/support-email'
+import { createPlatformRequest } from '@/lib/services/platform-requests'
 import { getAiLimitStatus } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { PLAN_CONFIG, SUBSCRIPTION_STATUS_LABELS } from '@/lib/subscriptions'
 import { ROLE_LABELS } from '@/components/layout/nav-items'
 
-// Identidad del solicitante (tenant + usuario), adjuntada a cada correo para
-// que soporte sepa quién escribe sin pedírselo en el formulario.
+// Identidad del solicitante (tenant + usuario), adjuntada a cada solicitud
+// para que soporte sepa quién escribe sin pedírselo en el formulario.
 async function requesterContext() {
   const ctx = await getCurrentTenantContext()
   const authClient = await createClient()
@@ -29,6 +29,8 @@ async function requesterContext() {
 }
 
 // ─── Soporte técnico ──────────────────────────────────────────────────────────
+// Se registra como platform_request (kind='support') — el super_admin lo
+// gestiona en /solicitudes y recibe el aviso por Telegram.
 
 const CATEGORIES = ['problema', 'pregunta', 'cambio', 'otro'] as const
 const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
@@ -60,26 +62,23 @@ export async function submitSupportRequest(
   const { ctx, email, tenantName } = await requesterContext()
   const { category, subject, message } = parsed.data
 
-  return sendSupportEmail({
-    subject: `[Soporte · ${CATEGORY_LABELS[category]}] ${subject} — ${tenantName}`,
-    replyTo: email,
-    lines: [
-      `Categoría: ${CATEGORY_LABELS[category]}`,
-      `Equipo: ${tenantName} (${ctx.tenant_id ?? '—'})`,
-      `Usuario: ${email} · ${ROLE_LABELS[ctx.role]}`,
-      '',
-      `Asunto: ${subject}`,
-      '',
-      'Mensaje:',
-      message,
-    ],
+  return createPlatformRequest({
+    kind:            'support',
+    tenant_id:       ctx.tenant_id,
+    tenant_name:     tenantName,
+    requester_email: email,
+    requester_role:  ROLE_LABELS[ctx.role],
+    category,
+    subject,
+    message,
+    metadata:        { category_label: CATEGORY_LABELS[category] },
   })
 }
 
 // ─── Solicitud de más capacidad de IA ─────────────────────────────────────────
-// Solo el owner/super_admin la envía (los agentes no gestionan el límite). El
-// correo incluye el estado interno del límite en USD — va al buzón de ITMANO,
-// nunca se muestra al cliente.
+// Solo el owner/super_admin la envía (los agentes no gestionan el límite). La
+// solicitud incluye el estado interno del límite en USD en metadata — solo lo
+// ve el super_admin en /solicitudes, nunca el cliente.
 
 const AiCapacitySchema = z.object({
   reason:   z.string().trim().min(10, 'Cuéntanos por qué necesitas más capacidad — mínimo 10 caracteres.').max(2000),
@@ -102,7 +101,7 @@ export async function requestAiCapacityIncrease(
   }
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un equipo primero.' }
 
-  // Estado interno (USD) para que soporte dimensione el aumento — solo en el correo.
+  // Estado interno (USD) para que soporte dimensione el aumento — solo en metadata.
   const [status, subscription] = await Promise.all([
     getAiLimitStatus(ctx.tenant_id),
     getSubscription(ctx.tenant_id),
@@ -113,18 +112,20 @@ export async function requestAiCapacityIncrease(
     ? 'Ilimitado'
     : `$${status.usedUsd.toFixed(2)} de $${status.limitUsd.toFixed(2)} (${Math.round(status.usedRatio * 100)}%)`
 
-  return sendSupportEmail({
-    subject: `[IA · Aumento de capacidad] ${tenantName}`,
-    replyTo: email,
-    lines: [
-      `Equipo: ${tenantName} (${ctx.tenant_id})`,
-      `Solicitante: ${email} · ${ROLE_LABELS[ctx.role]}`,
-      `Plan: ${planLabel} · ${statusLabel}`,
-      `Uso de IA del mes: ${usage}`,
-      '',
-      'Motivo:',
-      parsed.data.reason,
-      ...(parsed.data.estimate ? ['', `Estimación de uso adicional: ${parsed.data.estimate}`] : []),
-    ],
+  return createPlatformRequest({
+    kind:            'support',
+    tenant_id:       ctx.tenant_id,
+    tenant_name:     tenantName,
+    requester_email: email,
+    requester_role:  ROLE_LABELS[ctx.role],
+    category:        'ai_capacity',
+    subject:         `Aumento de capacidad de IA — ${tenantName}`,
+    message:         parsed.data.reason,
+    metadata: {
+      plan:         planLabel,
+      plan_status:  statusLabel,
+      ai_usage:     usage,
+      ...(parsed.data.estimate ? { estimate: parsed.data.estimate } : {}),
+    },
   })
 }

@@ -28,10 +28,15 @@ export function navItemsForRole(role: TenantRole, opts?: { hubMode?: boolean }):
   if (opts?.hubMode) {
     return [
       { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+      { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
       { label: 'Notificaciones', href: '/notifications', icon: 'Bell' },
     ]
   }
-  return [...navItems, { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' }]
+  return [
+    ...navItems,
+    { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+    { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
+  ]
 }
 
 export const ROLE_LABELS: Record<TenantRole, string> = {

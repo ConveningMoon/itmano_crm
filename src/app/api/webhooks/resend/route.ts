@@ -205,9 +205,35 @@ async function handleOutboundEvent(
 // email.received = someone replied to one of our sequences. Resolve the lead by
 // the sender's email address and insert an email_replied event (+30 points).
 //
-// Multi-tenant note: if two tenants have a lead with the same email address,
-// we skip rather than guess. At one active tenant this never fires. A per-tenant
-// inbound mailbox strategy is deferred to Phase 4/5.
+// Multi-tenant routing: the reply's `to` address is OUR sending address, so it
+// identifies the tenant — se compara contra tenants.email_from_address (cada
+// tenant tiene una dirección única, sea de su dominio propio Growth/Partner o
+// de un slug del dominio compartido de ITMANO en Esencial). Con tenant
+// resuelto, la búsqueda del lead queda scoped y la ambigüedad entre tenants
+// (mismo email de lead en dos equipos) desaparece: leads es único por
+// (tenant_id, email). Si el `to` no matchea ningún tenant (config vieja,
+// forward raro), cae al comportamiento global anterior: match único o skip.
+
+// Resuelve el tenant dueño de la dirección destino del inbound. tenants es una
+// tabla chica — se trae completa y se normaliza en proceso porque
+// email_from_address puede estar guardado como "Nombre <email@dominio>".
+async function resolveTenantByToAddress(
+  db: ReturnType<typeof createAdminClient>,
+  toRaw: string[] | undefined,
+): Promise<string | null> {
+  if (!toRaw || toRaw.length === 0) return null
+  const toAddresses = new Set(toRaw.map(extractEmail))
+
+  const { data: tenants, error } = await db
+    .from('tenants')
+    .select('id, email_from_address')
+  if (error) throw error
+
+  const matches = ((tenants ?? []) as { id: string; email_from_address: string | null }[])
+    .filter(t => t.email_from_address && toAddresses.has(extractEmail(t.email_from_address)))
+
+  return matches.length === 1 ? matches[0].id : null
+}
 
 async function handleInboundEvent(
   db: ReturnType<typeof createAdminClient>,
@@ -224,10 +250,15 @@ async function handleInboundEvent(
   // Normalize "Name <email>" → "email" (lowercased) so the lookup matches leads.email
   const fromAddress = extractEmail(fromRaw)
 
-  const { data: matches, error: lookupError } = await db
+  const tenantId = await resolveTenantByToAddress(db, event.data.to)
+
+  let leadQuery = db
     .from('leads')
     .select('id, tenant_id, agent_id')
     .eq('email', fromAddress)
+  if (tenantId) leadQuery = leadQuery.eq('tenant_id', tenantId)
+
+  const { data: matches, error: lookupError } = await leadQuery
 
   if (lookupError) throw lookupError
 

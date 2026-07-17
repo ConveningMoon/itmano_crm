@@ -3,8 +3,9 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SupportForm } from './support-form'
 
 // Soporte técnico dentro del CRM: cualquier usuario del tenant puede escribir a
-// ITMANO. El formulario se envía a support@itmano.com (server action) con la
-// identidad del solicitante adjuntada automáticamente.
+// ITMANO. La solicitud se registra en el CRM (platform_requests → /solicitudes
+// del super_admin, con aviso por Telegram) con la identidad del solicitante
+// adjuntada automáticamente.
 export default async function SoportePage() {
   await getCurrentTenantContext() // guard (redirige a /login sin sesión)
   const supabase = await createClient()

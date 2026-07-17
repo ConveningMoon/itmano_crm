@@ -47,6 +47,15 @@ export interface PlanFeatures {
   fullAnalytics: boolean        // analytics completo (agente/canal/email)
   teamAnalytics: boolean        // vista consolidada de equipo
   multiLogin: boolean           // logins de agente con visibilidad propia
+  /**
+   * Dominio de envío propio verificado (mail.tudominio.com) en la cuenta
+   * Resend de ITMANO. false = envío desde el dominio compartido de ITMANO
+   * con la marca del tenant en el nombre visible ("Nombre · Agencia
+   * <slug@mail.itmano.com>") — cero configuración DNS, onboarding inmediato.
+   * Esto también acota el consumo de slots de dominio del plan de Resend a
+   * los tenants Growth/Partner (ver CLAUDE.md — arquitectura de email).
+   */
+  customSendingDomain: boolean
 }
 
 export interface PlanDefinition {
@@ -91,6 +100,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       fullAnalytics: false,
       teamAnalytics: false,
       multiLogin: false,
+      customSendingDomain: false,
     },
     onboarding: 'Guiado (autoservicio con nuestro equipo a un email)',
     support: 'Email',
@@ -119,6 +129,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       fullAnalytics: true,
       teamAnalytics: false,
       multiLogin: false,
+      customSendingDomain: true,
     },
     onboarding: 'Asistido (configuramos canales y secuencias contigo)',
     support: 'Email prioritario',
@@ -148,6 +159,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       fullAnalytics: true,
       teamAnalytics: true,
       multiLogin: true,
+      customSendingDomain: true,
     },
     onboarding: 'Dedicado + migración de datos (HubSpot y otros)',
     support: 'Prioritario + contacto directo',
@@ -161,21 +173,26 @@ export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
 export const PARTNER_SEAT = { includedLogins: 3, extraLoginUsd: 49 }
 
 // ─── Período de prueba ────────────────────────────────────────────────────────
-// Gancho de adquisición sales-led: 14 días con la experiencia Partner completa,
-// sin tarjeta (no hay procesador de pagos — es literalmente cierto). La IA
-// lleva un presupuesto de cortesía (no ilimitado: el costo lo paga ITMANO y un
-// trial sin tope es abusable; $25 en 14 días se siente ilimitado en la
-// práctica). El super_admin puede extender el vencimiento desde el Centro de
-// control. Sin lockout automático al vencer: el Centro de control lo marca y
-// el equipo gestiona la conversión (modelo sales-led).
+// Gancho de adquisición sales-led: 14 días con la experiencia Growth completa,
+// sin tarjeta (no hay procesador de pagos — es literalmente cierto). Growth y
+// no Partner: el trial no debe requerir registrar/verificar un dominio de
+// envío propio (tiempo + slot de Resend desperdiciados si no convierte) — en
+// prueba se envía desde el dominio compartido de ITMANO con la marca del
+// tenant en el nombre visible; el dominio propio se configura al convertir a
+// Growth/Partner de pago. La IA lleva un presupuesto de cortesía (no
+// ilimitado: el costo lo paga ITMANO y un trial sin tope es abusable; $25 en
+// 14 días se siente ilimitado en la práctica). El super_admin puede extender
+// el vencimiento desde el Centro de control. Sin lockout automático al
+// vencer: el Centro de control lo marca y el equipo gestiona la conversión
+// (modelo sales-led).
 
 export const TRIAL = {
   days: 14,
-  /** El trial vive como plan='partner' + status='trial'. */
-  plan: 'partner' as SubscriptionPlan,
+  /** El trial vive como plan='growth' + status='trial'. */
+  plan: 'growth' as SubscriptionPlan,
   /** Presupuesto de IA de cortesía durante la prueba (USD). */
   aiBudgetUsd: 25,
-  label: 'Prueba Partner',
+  label: 'Prueba Growth',
 } as const
 
 export function trialEndsAtFromNow(): Date {
