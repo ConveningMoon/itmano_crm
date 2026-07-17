@@ -381,6 +381,7 @@ src/
       lead-magnets/           — CRUD per agent (tracking only — landing pages live outside this app)
       notifications/          — full notification inbox
       activity/               — activity feed
+      soporte/                — contacto con soporte técnico + solicitud de más capacidad IA (→ support@itmano.com)
       admin/                  — super_admin hub: platform KPIs, tenant management
       settings/
     api/                      — route handlers for external callers (webhooks, intake, crons)
