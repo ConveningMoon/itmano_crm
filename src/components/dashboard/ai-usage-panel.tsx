@@ -1,4 +1,4 @@
-import type { AiUsageSummary, AiUsageTotals } from '@/lib/data/ai-usage'
+import type { AiUsageSummary, AiUsageTotals, AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { Sparkles, ArrowDownToLine, ArrowUpFromLine, DollarSign } from 'lucide-react'
 
 // Panel de uso de IA (tokens + costo). Componente presentacional puro, sin
@@ -112,10 +112,15 @@ export interface AiUsageLimitView {
 // showCosts: los montos en USD (costo por request, tarifas) son información
 // interna de ITMANO — true solo para el super_admin (Centro de control).
 // Los usuarios del tenant ven requests/tokens y su límite como porcentaje.
-export function AiUsagePanel({ summary, showCosts = true, limit = null }: {
+// byAgent: desglose por agente del mes en curso (vista del owner). showRecent:
+// el Centro de control lo apaga y muestra el diagrama diario en su lugar.
+export function AiUsagePanel({ summary, showCosts = true, limit = null, limitSubtitle, byAgent = null, showRecent = true }: {
   summary: AiUsageSummary
   showCosts?: boolean
   limit?: AiUsageLimitView | null
+  limitSubtitle?: string
+  byAgent?: AgentAiBreakdown | null
+  showRecent?: boolean
 }) {
   const { allTime, last30d, byFeature, byTenant, recent } = summary
 
@@ -181,7 +186,9 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null }: {
                   }} />
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                  {limit.blocked ? 'Límite alcanzado — se reinicia el día 1' : 'del límite del mes utilizado'}
+                  {limit.blocked
+                    ? 'Límite alcanzado — se reinicia el día 1'
+                    : (limitSubtitle ?? 'del límite del mes utilizado')}
                 </div>
               </>
             )}
@@ -205,6 +212,77 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null }: {
                     {totalsRow(t, showCosts)}
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Desglose por agente — vista del owner (mes en curso) */}
+      {byAgent && byAgent.agents.length > 0 && (
+        <div style={CARD}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Uso por agente · mes en curso
+            {byAgent.splitApplies && (
+              <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)' }}>
+                (el límite del equipo se reparte en partes iguales entre {byAgent.agentCount} agentes)
+              </span>
+            )}
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={TH}>Agente</th>
+                  <th style={{ ...TH, textAlign: 'right' }}>Requests</th>
+                  <th style={{ ...TH, textAlign: 'right' }}>Tokens entrada</th>
+                  <th style={{ ...TH, textAlign: 'right' }}>Tokens salida</th>
+                  {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
+                  <th style={{ ...TH, width: '190px' }}>
+                    {byAgent.splitApplies ? 'De su parte del límite' : 'Del uso del equipo'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {byAgent.agents.map(a => {
+                  const ratio = byAgent.splitApplies ? (a.shareRatio ?? 0) : a.ofTeamRatio
+                  const pct = Math.round(ratio * 100)
+                  const barColor = byAgent.splitApplies && ratio >= 0.8 ? 'var(--accent-coral)' : a.agentColor
+                  return (
+                    <tr key={a.agentId}>
+                      <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        <span style={{
+                          display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                          background: a.agentColor, marginRight: '8px',
+                        }} />
+                        {a.agentName}
+                        {!a.hasLogin && (
+                          <span style={{ marginLeft: '6px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                            sin acceso
+                          </span>
+                        )}
+                      </td>
+                      <td style={NUM}>{fmtInt(a.requests)}</td>
+                      <td style={NUM}>{fmtInt(a.inputTokens)}</td>
+                      <td style={NUM}>{fmtInt(a.outputTokens)}</td>
+                      {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(a.costUsd)}</td>}
+                      <td style={TD}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%', borderRadius: '3px',
+                              width: `${Math.min(100, Math.max(a.requests > 0 ? 3 : 0, pct))}%`,
+                              background: barColor,
+                            }} />
+                          </div>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', width: '38px', textAlign: 'right' }}>
+                            {pct}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -238,6 +316,7 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null }: {
       </div>
 
       {/* Requests recientes */}
+      {showRecent && (
       <div style={CARD}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           Requests recientes
@@ -277,6 +356,7 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null }: {
           </div>
         )}
       </div>
+      )}
 
       {showCosts ? (
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>

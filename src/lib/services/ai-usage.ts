@@ -74,9 +74,25 @@ export async function recordAiUsage(params: {
 }): Promise<void> {
   try {
     const supabase = createAdminClient()
+
+    // Atribución por agente: el agente del equipo vinculado al login que generó
+    // (agents.user_id). Sostiene el reparto del presupuesto en el plan Partner.
+    let agentId: string | null = null
+    if (params.userId && params.tenantId) {
+      const { data: agent } = await supabase
+        .from('agents')
+        .select('id')
+        .eq('user_id', params.userId)
+        .eq('tenant_id', params.tenantId)
+        .maybeSingle()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      agentId = ((agent as any)?.id as string | undefined) ?? null
+    }
+
     const { error } = await supabase.from('ai_usage_events').insert({
       tenant_id:             params.tenantId,
       user_id:               params.userId ?? null,
+      agent_id:              agentId,
       feature:               params.feature,
       model:                 params.model,
       input_tokens:          params.usage.input_tokens ?? 0,

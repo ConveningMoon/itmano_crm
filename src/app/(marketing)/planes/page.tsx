@@ -44,8 +44,9 @@ const COMPARISON: CompareGroup[] = [
       },
       { label: 'Propiedades publicadas en tu web', values: [false, String(PLANS.growth.limits.webProperties), 'Ilimitadas'] },
       {
-        label: 'Presupuesto de IA mensual',
-        values: [`$${PLANS.esencial.limits.aiBudgetUsd}`, `$${PLANS.growth.limits.aiBudgetUsd}`, `$${PLANS.partner.limits.aiBudgetUsd} · ampliable`],
+        // Público en tokens — el presupuesto en USD es referencia interna de ITMANO.
+        label: 'Tokens de IA al mes',
+        values: [`≈ ${PLANS.esencial.limits.aiTokensLabel}`, `≈ ${PLANS.growth.limits.aiTokensLabel}`, `≈ ${PLANS.partner.limits.aiTokensLabel} · ampliable`],
       },
     ],
   },
@@ -83,9 +84,17 @@ const COMPARISON: CompareGroup[] = [
 
 // ─── ITMANO vs. el mercado ────────────────────────────────────────────────────
 // Precios públicos aproximados (julio 2026) según los sitios y comparativas
-// públicas de cada proveedor. El disclaimer visible acompaña la tabla.
+// públicas de cada proveedor. El disclaimer visible acompaña la tabla. Los
+// logos son favicons públicos de cada marca (public/competitors/) usados como
+// referencia nominativa en la comparación.
 
-const MARKET_COLUMNS = ['ITMANO', 'Follow Up Boss', 'Wise Agent', 'Lofty', 'BoldTrail'] as const
+const MARKET_COLUMNS: { name: string; logo: string | null }[] = [
+  { name: 'ITMANO',         logo: null }, // usa el logo propio con tinte dorado
+  { name: 'Follow Up Boss', logo: '/competitors/followupboss.png' },
+  { name: 'Wise Agent',     logo: '/competitors/wiseagent.png' },
+  { name: 'Lofty',          logo: '/competitors/lofty.png' },
+  { name: 'BoldTrail',      logo: '/competitors/boldtrail.png' },
+]
 
 const MARKET_ROWS: { label: string; values: [CellValue, CellValue, CellValue, CellValue, CellValue] }[] = [
   {
@@ -175,9 +184,10 @@ export default function PlanesPage() {
               incluyen el mismo motor: scoring automático, secuencias y IA.
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '28px', flexWrap: 'wrap' }}>
-              <Link href="/#contacto" className="mk-btn-gold btn-cta">Comienza tu prueba</Link>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                {TRIAL.days} días con la experiencia {PLANS[TRIAL.plan].label} completa · sin tarjeta
+              <Link href="/#contacto" className="mk-btn-gold btn-cta">Prueba {TRIAL.days} días gratis</Link>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                <strong style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>100% gratis</strong>
+                {' '}· sin tarjeta de crédito · experiencia {PLANS[TRIAL.plan].label} completa
               </span>
             </div>
           </Reveal>
@@ -277,9 +287,25 @@ export default function PlanesPage() {
                   <tr>
                     <th />
                     {MARKET_COLUMNS.map((c, i) => (
-                      <th key={c} className={i === 0 ? 'pl-col-growth' : undefined}>
-                        <div className="pl-plan-name" style={{ color: i === 0 ? 'var(--accent-gold)' : 'var(--text-primary)' }}>
-                          {c}
+                      <th key={c.name} className={i === 0 ? 'pl-col-growth' : undefined}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          {i === 0 ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src="/itmano_logo.webp" alt="" aria-hidden width={28} height={28} className="img-tint-gold" style={{ display: 'block' }} />
+                          ) : c.logo ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={c.logo}
+                              alt=""
+                              aria-hidden
+                              width={28}
+                              height={28}
+                              style={{ display: 'block', borderRadius: '6px', background: 'var(--bg-elevated)', padding: '2px', boxSizing: 'content-box' }}
+                            />
+                          ) : null}
+                          <div className="pl-plan-name" style={{ color: i === 0 ? 'var(--accent-gold)' : 'var(--text-primary)' }}>
+                            {c.name}
+                          </div>
                         </div>
                       </th>
                     ))}
@@ -311,13 +337,14 @@ export default function PlanesPage() {
           <Reveal>
             <div style={{ marginTop: '56px', textAlign: 'center' }}>
               <h2 className="mk-h2" style={{ fontSize: 'clamp(22px, 2.6vw, 30px)' }}>
-                Pruébalo con tus propios leads
+                Pruébalo <span className="mk-gradient-text">gratis</span> con tus propios leads
               </h2>
               <p className="mk-body" style={{ marginTop: '12px' }}>
-                {TRIAL.days} días con todo el sistema al nivel {PLANS[TRIAL.plan].label}. Sin tarjeta.
+                {TRIAL.days} días con todo el sistema al nivel {PLANS[TRIAL.plan].label} —
+                totalmente gratis, sin tarjeta de crédito.
               </p>
               <div style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Link href="/#contacto" className="mk-btn-gold btn-cta">Comienza tu prueba</Link>
+                <Link href="/#contacto" className="mk-btn-gold btn-cta">Prueba {TRIAL.days} días gratis</Link>
                 <Link href="/#producto" className="mk-btn-ghost">Ver el producto</Link>
               </div>
             </div>

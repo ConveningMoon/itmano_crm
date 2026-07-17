@@ -4,7 +4,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
 import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
-import { getAiLimitIndicator } from '@/lib/services/ai-limit'
+import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { planBadgeLabel } from '@/lib/subscriptions'
 
@@ -28,8 +28,9 @@ export default async function DashboardLayout({
   // el shell muestra el wordmark de ITMANO.
   const branding = ctx.tenant_id ? await getTenantBranding(ctx.tenant_id) : null
 
-  // Indicador del límite mensual de IA (topbar) — solo con tenant activo.
-  const aiLimit = ctx.tenant_id ? await getAiLimitIndicator(ctx.tenant_id) : null
+  // Indicador del límite mensual de IA (topbar) — solo con tenant activo. Para
+  // un rol 'agent' en plan Partner el porcentaje es el de SU parte del límite.
+  const aiLimit = await getAiLimitIndicatorFor(ctx)
 
   // Suscripción del tenant → label bajo el nombre del usuario en el sidebar.
   const subscription = ctx.tenant_id ? await getSubscription(ctx.tenant_id) : null

@@ -26,8 +26,18 @@ export interface PlanLimits {
   emailsPerMonth: number
   /** Propiedades publicadas a la web del cliente. null = feature no incluida. */
   webProperties: number | 'unlimited' | null
-  /** Presupuesto de IA por mes calendario (USD) — default de ai_monthly_limit_usd. */
+  /**
+   * Presupuesto de IA por mes calendario (USD) — default de ai_monthly_limit_usd.
+   * SOLO referencia interna de ITMANO: las superficies públicas y del tenant
+   * muestran `aiTokensLabel`, nunca dólares.
+   */
   aiBudgetUsd: number
+  /**
+   * Equivalente público del presupuesto de IA en tokens, a tarifa combinada
+   * (~$5 por millón de tokens con la mezcla real entrada/salida de sonnet).
+   * Números redondeados hacia abajo para nunca prometer de más.
+   */
+  aiTokensLabel: string
 }
 
 export interface PlanFeatures {
@@ -72,6 +82,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       emailsPerMonth: 3000,
       webProperties: null,
       aiBudgetUsd: 8,
+      aiTokensLabel: '1.5M tokens',
     },
     features: {
       aiEmailDrafting: true,
@@ -99,6 +110,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       emailsPerMonth: 15000,
       webProperties: 50,
       aiBudgetUsd: 30,
+      aiTokensLabel: '6M tokens',
     },
     features: {
       aiEmailDrafting: true,
@@ -127,6 +139,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       emailsPerMonth: 50000,
       webProperties: 'unlimited',
       aiBudgetUsd: 75,
+      aiTokensLabel: '15M tokens',
     },
     features: {
       aiEmailDrafting: true,
