@@ -83,8 +83,10 @@ export async function updatePurchaseTemplate(
   id: string,
   resendTemplateId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Editable por cualquier usuario del tenant: el scoping por tenant (abajo)
+  // impide tocar plantillas de otro equipo. super_admin sin tenant activo edita
+  // cualquiera. Antes era super_admin-only; ahora los equipos las gestionan.
   const ctx = await getCurrentTenantContext()
-  if (ctx.role !== 'super_admin') return { ok: false, error: 'Sin permiso' }
 
   const db = createAdminClient()
 
@@ -126,7 +128,6 @@ export async function updatePurchaseTemplateContent(
   fields: z.infer<typeof PurchaseContentSchema>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  if (ctx.role !== 'super_admin') return { ok: false, error: 'Sin permiso' }
 
   const parsed = PurchaseContentSchema.safeParse(fields)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
@@ -165,9 +166,21 @@ export async function clearPurchaseTemplateContent(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  if (ctx.role !== 'super_admin') return { ok: false, error: 'Sin permiso' }
-
   const db = createAdminClient()
+
+  // Scoping por tenant, igual que las otras acciones.
+  if (ctx.tenant_id) {
+    const { data: row } = await db
+      .from('purchase_email_templates')
+      .select('tenant_id')
+      .eq('id', id)
+      .maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!row || (row as any).tenant_id !== ctx.tenant_id) {
+      return { ok: false, error: 'Template no encontrado' }
+    }
+  }
+
   const { error } = await db
     .from('purchase_email_templates')
     .update({ subject: null, body_json: null, updated_at: new Date().toISOString() })
