@@ -10,7 +10,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
 import { trialDaysLeft } from '@/lib/plans'
 import { ScoringSection } from './scoring-section'
@@ -251,7 +251,7 @@ function TenantSection({ tenant, canManage }: { tenant: { id: string; name: stri
 
 // ─── Agent edit row ───────────────────────────────────────────────────────────
 
-function AgentRow({ agent, hasAccess, canManage, canLinkSelf }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean }) {
+function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditLanguages: boolean }) {
   const [editing, setEditing]   = useState(false)
   const [name, setName]         = useState(agent.name)
   const [email, setEmail]       = useState(agent.email ?? '')
@@ -267,6 +267,31 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf }: { agent: Agent; 
   const [accessMsg, setAccessMsg]     = useState<string | null>(null)
   const [accessErr, setAccessErr]     = useState<string | null>(null)
   const [accessPending, startAccess]  = useTransition()
+
+  // Idiomas registrados (definen los emails de cierre del agente — 058).
+  const [editingLangs, setEditingLangs] = useState(false)
+  const [langs, setLangs]               = useState<string[]>(agent.languages)
+  const [langsSaved, setLangsSaved]     = useState<string[]>(agent.languages)
+  const [langErr, setLangErr]           = useState<string | null>(null)
+  const [langOk, setLangOk]             = useState(false)
+  const [langPending, startLangs]       = useTransition()
+
+  function toggleLang(l: string) {
+    if (l === agent.language) return // el principal (ruteo) no se desmarca
+    setLangs(prev => prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l])
+  }
+
+  function handleSaveLangs() {
+    setLangErr(null); setLangOk(false)
+    startLangs(async () => {
+      const res = await updateAgentLanguages(agent.id, langs)
+      if (!res.ok) { setLangErr(res.error); return }
+      setLangsSaved(langs)
+      setEditingLangs(false)
+      setLangOk(true)
+      setTimeout(() => setLangOk(false), 2500)
+    })
+  }
 
   const SPECIALTY_LABELS: Record<string, string> = {
     hispanic:    'Mercado Hispano',
@@ -345,7 +370,9 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf }: { agent: Agent; 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '2px' }}>{agent.name}</div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {SPECIALTY_LABELS[agent.specialty] ?? agent.specialty} · {LANGUAGE_LABELS[agent.language] ?? agent.language}
+              {SPECIALTY_LABELS[agent.specialty] ?? agent.specialty}
+              {' · '}
+              {langsSaved.map(l => LANGUAGE_LABELS[l] ?? l).join(', ')}
             </div>
           </div>
 
@@ -359,22 +386,69 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf }: { agent: Agent; 
             {hasAccess ? 'Con acceso' : 'Sin acceso'}
           </span>
 
-          {canManage && (
-            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-              {hasAccess ? (
-                <button onClick={() => { setAccessMode('confirmRevoke'); setAccessErr(null) }} style={BTN_GHOST}>Revocar acceso</button>
-              ) : (
-                <>
-                  {canLinkSelf && (
-                    <button onClick={handleLinkSelf} disabled={accessPending} style={BTN_GHOST}>Vincular a mi cuenta</button>
-                  )}
-                  <button onClick={() => { setInviteEmail(agent.email ?? ''); setAccessMode('inviting'); setAccessErr(null); setAccessMsg(null) }} style={BTN_GHOST}>Invitar acceso</button>
-                </>
-              )}
-              <button onClick={() => setEditing(true)} style={BTN_GHOST}>Editar</button>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+            {canEditLanguages && (
+              <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
+            )}
+            {canManage && (
+              <>
+                {hasAccess ? (
+                  <button onClick={() => { setAccessMode('confirmRevoke'); setAccessErr(null) }} style={BTN_GHOST}>Revocar acceso</button>
+                ) : (
+                  <>
+                    {canLinkSelf && (
+                      <button onClick={handleLinkSelf} disabled={accessPending} style={BTN_GHOST}>Vincular a mi cuenta</button>
+                    )}
+                    <button onClick={() => { setInviteEmail(agent.email ?? ''); setAccessMode('inviting'); setAccessErr(null); setAccessMsg(null) }} style={BTN_GHOST}>Invitar acceso</button>
+                  </>
+                )}
+                <button onClick={() => setEditing(true)} style={BTN_GHOST}>Editar</button>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Panel de idiomas registrados */}
+        {editingLangs && (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ ...LABEL, marginBottom: 0 }}>Idiomas que atiende</label>
+            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+              {LANGUAGE_OPTIONS.map(o => {
+                const isPrimary = o.value === agent.language
+                const checked = langs.includes(o.value)
+                return (
+                  <label key={o.value} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-primary)', cursor: isPrimary ? 'default' : 'pointer', opacity: isPrimary ? 0.8 : 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={isPrimary}
+                      onChange={() => toggleLang(o.value)}
+                      style={{ accentColor: 'var(--accent-gold)' }}
+                    />
+                    {o.label}
+                    {isPrimary && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>(principal)</span>}
+                  </label>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Cada idioma registrado agrega los 3 emails de cierre del agente en ese idioma
+              (sección Emails de cierre). El idioma principal define el ruteo de leads y no puede quitarse.
+            </div>
+            {langErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{langErr}</div>}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={handleSaveLangs} disabled={langPending} style={{ ...BTN_PRIMARY, opacity: langPending ? 0.6 : 1 }}>
+                {langPending ? 'Guardando…' : 'Guardar idiomas'}
+              </button>
+              <button onClick={() => { setEditingLangs(false); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Cancelar</button>
+            </div>
+          </div>
+        )}
+        {langOk && (
+          <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+            Idiomas guardados. Sus emails de cierre ya están disponibles en la sección Emails.
+          </div>
+        )}
 
         {/* Invite panel */}
         {accessMode === 'inviting' && (
@@ -554,7 +628,7 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
 // ─── Agents section ───────────────────────────────────────────────────────────
 
 function AgentsSection({
-  agents, agentAccess, accessCount, canManage, canLinkSelf, tenantId, isSuper,
+  agents, agentAccess, accessCount, canManage, canLinkSelf, tenantId, isSuper, myAgentId,
 }: {
   agents: Agent[]
   agentAccess: Record<string, boolean>
@@ -563,6 +637,7 @@ function AgentsSection({
   canLinkSelf: boolean
   tenantId: string
   isSuper: boolean
+  myAgentId: string | null
 }) {
   const [creating, setCreating] = useState(false)
 
@@ -583,7 +658,15 @@ function AgentsSection({
       {creating && <CreateAgentForm tenantId={isSuper ? tenantId : undefined} onDone={() => setCreating(false)} />}
 
       {agents.map(agent => (
-        <AgentRow key={agent.id} agent={agent} hasAccess={!!agentAccess[agent.id]} canManage={canManage} canLinkSelf={canLinkSelf} />
+        <AgentRow
+          key={agent.id}
+          agent={agent}
+          hasAccess={!!agentAccess[agent.id]}
+          canManage={canManage}
+          canLinkSelf={canLinkSelf}
+          // Owner/super editan los idiomas de todos; un 'agent' solo los suyos.
+          canEditLanguages={canManage || agent.id === myAgentId}
+        />
       ))}
     </div>
   )
@@ -937,6 +1020,7 @@ interface Props {
   canEditScoring: boolean
   canManageAgents: boolean
   canLinkSelf: boolean
+  myAgentId: string | null
   userEmail: string
   userRole: TenantRole
   aiUsage: AiUsageSummary
@@ -949,7 +1033,7 @@ interface Props {
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, scoringRules,
-  canEditScoring, canManageAgents, canLinkSelf, userEmail, userRole,
+  canEditScoring, canManageAgents, canLinkSelf, myAgentId, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
@@ -970,6 +1054,7 @@ export function SettingsClient({
             canLinkSelf={canLinkSelf}
             tenantId={tenant.id}
             isSuper={userRole === 'super_admin'}
+            myAgentId={myAgentId}
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,

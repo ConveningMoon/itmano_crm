@@ -306,21 +306,37 @@ export async function startPurchaseProcess(
   const guard = await loadGuardedLead(supabase, ctx, leadId)
   if ('ok' in guard) return guard
 
-  // Los 3 emails de cierre (en el idioma del lead) deben existir antes de iniciar
-  // el proceso — si no, no habría correo de inicio que enviar. Se bloquea con una
-  // señal para que la UI muestre la alerta + botón a la sección de emails.
-  const { data: leadRow } = await supabase.from('leads').select('language').eq('id', leadId).maybeSingle()
+  // Los 3 emails de cierre DEL AGENTE del lead (en el idioma efectivo) deben
+  // existir antes de iniciar el proceso — si no, no habría correo de inicio que
+  // enviar. Se bloquea con una señal para que la UI muestre la alerta + botón a
+  // la sección de emails. (Migración 058: emails de cierre por agente.)
+  const { data: leadRow } = await supabase
+    .from('leads')
+    .select('language, agent_id, agents (name, language, languages)')
+    .eq('id', leadId)
+    .maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leadLanguage = ((leadRow as any)?.language as string | undefined) ?? 'es'
-  const { getMissingClosingEmails, CLOSING_MILESTONE_LABEL } = await import('@/lib/services/closing-emails-status')
-  const missing = await getMissingClosingEmails(supabase, guard.tenant_id, leadLanguage)
+  const lr = leadRow as any
+  const leadAgent = Array.isArray(lr?.agents) ? lr.agents[0] : lr?.agents
+  const leadAgentId = (lr?.agent_id as string | undefined) ?? null
+  if (!leadAgentId) return { ok: false, error: 'El lead no tiene un agente asignado.' }
+
+  const { getMissingClosingEmails, CLOSING_MILESTONE_LABEL, resolveClosingLanguage } =
+    await import('@/lib/services/closing-emails-status')
+  const effLanguage = resolveClosingLanguage(
+    leadAgent?.languages as string[] | null,
+    (leadAgent?.language as string | undefined) ?? 'es',
+    lr?.language as string | null,
+  )
+  const missing = await getMissingClosingEmails(supabase, guard.tenant_id, leadAgentId, effLanguage)
   if (missing.length > 0) {
     const langLabel: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
     const faltantes = missing.map(m => CLOSING_MILESTONE_LABEL[m]).join(', ')
+    const agentName = (leadAgent?.name as string | undefined) ?? 'el agente asignado'
     return {
       ok: false,
       needsClosingEmails: true,
-      error: `Antes de iniciar un proceso de compra necesitas configurar los 3 emails de cierre en ${langLabel[leadLanguage] ?? leadLanguage}. Faltan: ${faltantes}.`,
+      error: `Antes de iniciar un proceso de compra, ${agentName} necesita sus 3 emails de cierre en ${langLabel[effLanguage] ?? effLanguage}. Faltan: ${faltantes}.`,
     }
   }
 

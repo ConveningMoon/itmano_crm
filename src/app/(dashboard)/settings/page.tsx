@@ -93,6 +93,7 @@ export default async function SettingsPage() {
         canEditScoring={ctx.role === 'super_admin'}
         canManageAgents={ctx.role !== 'agent'}
         canLinkSelf={canLinkSelf}
+        myAgentId={ctx.agent_id}
         userEmail={userRes.data.user?.email ?? ''}
         userRole={ctx.role}
         aiUsage={aiUsage}

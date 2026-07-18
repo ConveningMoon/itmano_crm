@@ -70,7 +70,7 @@ export async function sendPurchaseEmail(
         language,
         email_blocked,
         email_blocked_reason,
-        agents (name, email, email_signature)
+        agents (id, name, email, email_signature, language, languages)
       )
     `)
     .eq('id', processId)
@@ -106,14 +106,28 @@ export async function sendPurchaseEmail(
   }
 
   const tenantId   = p.tenant_id as string
-  const language   = (['es', 'en', 'pt'].includes(lead.language as string) ? lead.language : 'es') as EmailLocale
   const firstName  = lead.first_name as string
   const leadEmail  = lead.email as string
   const leadId     = lead.id as string
   const agent      = Array.isArray(lead.agents) ? lead.agents[0] : lead.agents
+  const agentId    = (agent?.id as string | undefined) ?? null
   const agentName  = (agent?.name as string | undefined) ?? ''
   const agentEmail = (agent?.email as string | undefined) ?? ''
   const agentSignature = (agent?.email_signature as string | null | undefined) ?? null
+
+  if (!agentId) {
+    console.error(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, error: 'agent_not_found' }))
+    return
+  }
+
+  // Idioma efectivo: el del lead si el agente lo tiene registrado; si no, el
+  // principal del agente (migración 058 — emails de cierre por agente).
+  const { resolveClosingLanguage } = await import('@/lib/services/closing-emails-status')
+  const language = resolveClosingLanguage(
+    agent?.languages as string[] | null,
+    (agent?.language as string | undefined) ?? 'es',
+    lead.language as string | null,
+  ) as EmailLocale
 
   // Block purchase emails only for hard_bounce (the address doesn't exist).
   // unsubscribed: these are transactional confirmations for a process the lead
@@ -131,13 +145,14 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Look up the template for this (tenant, milestone, language). Contenido CRM
-  // (subject + body_json del composer) tiene precedencia; el template de Resend
-  // queda como modo legacy/avanzado.
+  // Look up the template for this (tenant, agent, milestone, language).
+  // Contenido CRM (subject + body_json del composer) tiene precedencia; el
+  // template de Resend queda como modo legacy/avanzado.
   const { data: tmpl } = await db
     .from('purchase_email_templates')
     .select('resend_template_id, subject, body_json')
     .eq('tenant_id', tenantId)
+    .eq('agent_id', agentId)
     .eq('milestone', milestone)
     .eq('language', language)
     .maybeSingle()

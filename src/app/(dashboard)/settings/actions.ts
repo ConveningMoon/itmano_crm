@@ -364,6 +364,61 @@ export async function withdrawSubscriptionRequest(): Promise<{ ok: true } | { ok
   return { ok: true }
 }
 
+// ─── Idiomas registrados por agente ───────────────────────────────────────────
+// Definen los emails de cierre del agente (3 hitos × idioma, migración 058).
+// Permisos: owner/super_admin editan cualquier agente de su tenant; el rol
+// 'agent' SOLO los suyos (ctx.agent_id). El idioma principal (ruteo) no puede
+// desmarcarse. Al agregar un idioma se provisionan al instante sus 3 correos
+// vacíos (ensurePurchaseTemplateRows) para que aparezcan en /emails.
+
+export async function updateAgentLanguages(
+  agentId: string,
+  languages: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+
+  const isSelf = ctx.role === 'agent' && ctx.agent_id === agentId
+  if (ctx.role === 'agent' && !isSelf) {
+    return { ok: false, error: 'Solo puedes editar tus propios idiomas.' }
+  }
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const VALID = ['es', 'en', 'pt']
+  const clean = [...new Set(languages)].filter(l => VALID.includes(l))
+  if (clean.length === 0) return { ok: false, error: 'El agente debe atender al menos un idioma.' }
+
+  const supabase = createAdminClient()
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('id, language')
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (!agent) return { ok: false, error: 'Agente no encontrado' }
+
+  const primary = (agent as { language: string }).language
+  if (!clean.includes(primary)) {
+    return { ok: false, error: 'El idioma principal del agente (usado para el ruteo de leads) no puede quitarse.' }
+  }
+
+  const { error } = await supabase
+    .from('agents')
+    .update({ languages: clean })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  // Provisiona las filas de emails de cierre del/los idiomas nuevos.
+  const { ensurePurchaseTemplateRows } = await import('@/lib/services/closing-emails-status')
+  await ensurePurchaseTemplateRows(supabase, tenantId)
+
+  revalidatePath('/settings')
+  revalidatePath('/emails')
+  return { ok: true }
+}
+
 // ─── Firma de correo por agente ───────────────────────────────────────────────
 // Se muestra al final de todos los correos (secuencias, compra, one-off) del
 // agente asignado al lead. Texto libre multilínea; vacío = sin firma.
@@ -471,6 +526,7 @@ export async function createAgent(
     email:           normalizeEmail(parsed.data.email),
     phone:           parsed.data.phone?.trim() || null,
     language:        parsed.data.language,
+    languages:       [parsed.data.language],
     specialty:       parsed.data.specialty,
     avatar_initials: parsed.data.avatarInitials.toUpperCase().slice(0, 2),
     accent_color:    parsed.data.accentColor,
