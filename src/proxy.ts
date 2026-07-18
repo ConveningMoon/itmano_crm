@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { HOSTED_SUBDOMAIN_REWRITE } from '@/lib/hosted-page'
 
 // Next 16 renamed `middleware` → `proxy`. This is the EDGE auth guard for
 // (dashboard) pages: refresh the Supabase session and redirect unauthenticated
@@ -17,6 +18,18 @@ import { NextResponse, type NextRequest } from 'next/server'
 // dashboard page is protected automatically, including /admin, /notifications
 // and /activity).
 export async function proxy(request: NextRequest) {
+  // ── Páginas alojadas por subdominio (migración 060) ─────────────────────────
+  // lm|events|forms.itmano.com/<tenant>/<canal> → /hp/... y
+  // properties.itmano.com/<tenant>[/<prop>] → /web/... — públicas, sin auth.
+  // Debe ir ANTES del guard: en esos hosts el path entrante ("/aj/guia") matchea
+  // el denylist y sin este rewrite redirigiría a /login.
+  const host = (request.headers.get('host') ?? '').toLowerCase()
+  const subdomain = host.split('.')[0]
+  const hostedPrefix = HOSTED_SUBDOMAIN_REWRITE[subdomain]
+  if (hostedPrefix && host !== 'app.itmano.com') {
+    return NextResponse.rewrite(new URL(hostedPrefix + request.nextUrl.pathname, request.url))
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -56,6 +69,6 @@ export const config = {
   // unmatched), all /api routes (own auth), /login, /auth/*, /unsubscribe, the
   // legal pages, and static assets. Mirrored by tests/auth/middleware-matcher.test.ts.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).+)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).+)',
   ],
 }
