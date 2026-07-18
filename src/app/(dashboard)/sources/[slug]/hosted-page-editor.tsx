@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Copy, Download, ExternalLink, Globe, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
+import { Check, Copy, Download, ExternalLink, Globe, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { hostedChannelUrl, HostedPageConfigSchema, type HostedPageConfig, type HostedQuestion } from '@/lib/hosted-page'
 import { generateHostedPageCopy, updateHostedPage, uploadHostedImage } from '../actions'
 
@@ -63,6 +63,8 @@ export function HostedPageEditor({
   // IA + JSON + imágenes
   const [aiDesc, setAiDesc]     = useState('')
   const [aiBusy, setAiBusy]     = useState(false)
+  const [aiDoc, setAiDoc]       = useState<File | null>(null)
+  const aiDocInputRef           = useRef<HTMLInputElement>(null)
   const jsonInputRef            = useRef<HTMLInputElement>(null)
   const coverInputRef           = useRef<HTMLInputElement>(null)
   const photoInputRef           = useRef<HTMLInputElement>(null)
@@ -117,16 +119,18 @@ export function HostedPageEditor({
     }).catch(() => {})
   }
 
-  // ── IA: rellenar textos desde una descripción ───────────────────────────────
+  // ── IA: rellenar textos desde una descripción (+ documento opcional) ─────────
   function handleAiFill() {
     setError(null)
+    if (!aiDesc.trim()) { setError('La descripción es obligatoria para generar con IA.'); return }
     setAiBusy(true)
-    generateHostedPageCopy({
+    const run = (documentBase64?: string) => generateHostedPageCopy({
       channelType,
       language: cfg.language,
       description: aiDesc,
       tenantName,
       agentName: agentName ?? undefined,
+      documentBase64,
     }).then(res => {
       setAiBusy(false)
       if (!res.ok) { setError(res.error); return }
@@ -140,6 +144,20 @@ export function HostedPageEditor({
         benefits:        res.copy.benefits.length ? res.copy.benefits : prev.benefits,
       }))
     }).catch(() => { setAiBusy(false); setError('No se pudo generar el copy.') })
+
+    if (aiDoc) {
+      // PDF → base64 (sin el prefijo data:) para el bloque document de la IA.
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = String(reader.result)
+        const base64 = result.includes(',') ? result.slice(result.indexOf(',') + 1) : result
+        run(base64)
+      }
+      reader.onerror = () => { setAiBusy(false); setError('No se pudo leer el documento.') }
+      reader.readAsDataURL(aiDoc)
+    } else {
+      run()
+    }
   }
 
   // ── JSON: descargar template / subir template completado ────────────────────
@@ -275,9 +293,22 @@ export function HostedPageEditor({
               </button>
               <input ref={jsonInputRef} type="file" accept="application/json,.json" hidden onChange={e => { handleUploadJson(e.target.files?.[0] ?? null); e.target.value = '' }} />
             </div>
+            {/* Documento opcional para la IA (PDF) */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => aiDocInputRef.current?.click()} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <Upload size={12} /> {aiDoc ? 'Cambiar documento' : 'Adjuntar documento (PDF)'}
+              </button>
+              {aiDoc && (
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  {aiDoc.name}
+                  <button onClick={() => setAiDoc(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex' }} title="Quitar"><X size={12} /></button>
+                </span>
+              )}
+              <input ref={aiDocInputRef} type="file" accept="application/pdf" hidden onChange={e => { const f = e.target.files?.[0]; if (f && f.size > 10 * 1024 * 1024) { setError('El documento supera 10 MB.'); } else { setAiDoc(f ?? null) } e.target.value = '' }} />
+            </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              También puedes descargar el JSON, completarlo con tu modelo de IA de confianza y subirlo — el sistema
-              valida la estructura y rellena el formulario. Las imágenes siempre se suben manualmente.
+              La descripción es obligatoria. Opcional: adjunta un PDF (folleto, ficha, guía) y la IA lo usa como
+              fuente. También puedes descargar el JSON, completarlo con tu modelo de confianza y subirlo. Las imágenes se suben a mano.
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px' }}>
@@ -394,12 +425,17 @@ export function HostedPageEditor({
             />
           </div>
 
-          {!isContact && (
+          {/* Preguntas personalizadas — disponibles para todos los tipos: los
+              formularios y eventos pueden tener preguntas propias; el lead magnet
+              las usa como calificación para el scoring. */}
+          {(
             <>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={cfg.ask_phone} onChange={e => set('ask_phone', e.target.checked)} style={{ accentColor: 'var(--accent-gold)' }} />
-                Pedir teléfono
-              </label>
+              {!isContact && (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={cfg.ask_phone} onChange={e => set('ask_phone', e.target.checked)} style={{ accentColor: 'var(--accent-gold)' }} />
+                  Pedir teléfono
+                </label>
+              )}
 
               {/* Preguntas */}
               <div>

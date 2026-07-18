@@ -595,7 +595,6 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
 }) {
   const [name,          setName]          = useState('')
   const [slug,          setSlug]          = useState('')
-  const [webflowSecret, setWebflowSecret] = useState('')
   const [tenantId,      setTenantId]      = useState(tenants[0]?.id ?? '')
   const [agentId,       setAgentId]       = useState('')
   const [error,         setError]         = useState<string | null>(null)
@@ -613,7 +612,6 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
       const res = await createContactForm({
         name, slug: slug || undefined,
         agentId: agentId || null,
-        webflowSecret: webflowSecret || undefined,
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
@@ -672,15 +670,8 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
               </div>
               </FormSection>
 
-              <FormSection title="Integración">
+              <FormSection title="Agente">
               <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
-              <div>
-                <label style={LABEL}>Secret de Webflow <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
-                <input value={webflowSecret} onChange={e => setWebflowSecret(e.target.value)} style={INPUT} placeholder="Secret del webhook de Webflow (HMAC)" />
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
-                  Solo si conectas con Webflow y quieres un secret propio para este formulario. Si lo dejas vacío, se usa el secret global del servidor.
-                </div>
-              </div>
               </FormSection>
 
               {error && (

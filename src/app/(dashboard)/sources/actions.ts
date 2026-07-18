@@ -196,6 +196,9 @@ export async function generateHostedPageCopy(input: {
   description: string
   tenantName?: string
   agentName?: string
+  // Documento opcional (PDF en base64) que la IA usa como fuente adicional.
+  // La descripción sigue siendo obligatoria.
+  documentBase64?: string
 }): Promise<PageCopyResult> {
   const ctx = await getCurrentTenantContext()
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -207,6 +210,10 @@ export async function generateHostedPageCopy(input: {
   const description = input.description?.trim()
   if (!description) return { ok: false, error: 'Describe el material o el objetivo de la página.' }
   if (description.length > 6000) return { ok: false, error: 'La descripción es demasiado larga.' }
+  // Límite defensivo del documento (base64 ~1.37× el binario → ~10MB de PDF).
+  if (input.documentBase64 && input.documentBase64.length > 14_000_000) {
+    return { ok: false, error: 'El documento supera el límite de 10 MB.' }
+  }
 
   const typeLabel = { lead_magnet: 'lead magnet (material descargable gratuito)', event: 'evento presencial', contact_form: 'formulario de contacto' }[input.channelType] ?? 'página de captación'
   const langLabel = { es: 'español neutro latino', en: 'inglés', pt: 'portugués brasileño' }[input.language]
@@ -216,10 +223,18 @@ export async function generateHostedPageCopy(input: {
     `Idioma: ${langLabel}. Tono: cercano, específico, honesto — sin hype, sin emojis, sin promesas exageradas.`,
     input.tenantName ? `Agencia: ${input.tenantName}.` : null,
     input.agentName ? `Agente responsable: ${input.agentName}.` : null,
+    input.documentBase64 ? 'Se adjunta un documento con material de referencia — úsalo como fuente principal de los hechos, complementado por la descripción.' : null,
     '',
     'Descripción del material / objetivo (base de todo el copy):',
     description,
   ].filter((l): l is string => l !== null).join('\n')
+
+  // Contenido del mensaje: documento (si hay) + prompt.
+  const userContent: Anthropic.ContentBlockParam[] = []
+  if (input.documentBase64) {
+    userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.documentBase64 } })
+  }
+  userContent.push({ type: 'text', text: prompt })
 
   try {
     const anthropic = new Anthropic()
@@ -229,7 +244,7 @@ export async function generateHostedPageCopy(input: {
       thinking: { type: 'disabled' },
       tools: [PAGE_COPY_TOOL],
       tool_choice: { type: 'tool', name: 'compose_landing_copy' },
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: userContent }],
     })
 
     await recordAiUsage({

@@ -82,11 +82,20 @@ export function HostedForm({
 
     if (!firstName.trim() || !email.trim()) { setError(copy.requiredHint); return }
     for (const q of config.questions) {
-      if (channelType !== 'contact_form' && q.required && !(answers[q.key] ?? '').trim()) {
+      if (q.required && !(answers[q.key] ?? '').trim()) {
         setError(copy.requiredHint)
         return
       }
     }
+
+    // Respuestas a las preguntas personalizadas (todos los tipos).
+    const form_answers = config.questions
+      .map(q => {
+        const value = (answers[q.key] ?? '').trim()
+        if (!value) return null
+        return { key: q.key, question: q.label, value, label: value }
+      })
+      .filter((a): a is NonNullable<typeof a> => a !== null)
 
     start(async () => {
       try {
@@ -95,20 +104,12 @@ export function HostedForm({
             tenantSlug, channelSlug,
             first_name: firstName, last_name: lastName, email, phone,
             message, language: config.language, website,
+            form_answers,
           })
           if (!res.ok) { setError(res.error); return }
           setDone(config.success_message || copy.successDefault)
           return
         }
-
-        const form_answers = config.questions
-          .map(q => {
-            const value = (answers[q.key] ?? '').trim()
-            if (!value) return null
-            const label = q.type === 'select' ? value : value
-            return { key: q.key, question: q.label, value, label }
-          })
-          .filter((a): a is NonNullable<typeof a> => a !== null)
 
         const res = await fetch(`/api/intake/${publicId}/submit`, {
           method: 'POST',
@@ -175,8 +176,8 @@ export function HostedForm({
         </div>
       )}
 
-      {/* Preguntas del constructor (lead_magnet / event) */}
-      {channelType !== 'contact_form' && config.questions.map(q => (
+      {/* Preguntas del constructor (todos los tipos) */}
+      {config.questions.map(q => (
         <div key={q.key}>
           <label style={LABEL}>{q.label}{q.required ? ' *' : ''}</label>
           {q.type === 'select' ? (

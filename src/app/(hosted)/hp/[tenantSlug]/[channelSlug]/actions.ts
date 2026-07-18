@@ -21,6 +21,13 @@ const HostedContactSchema = z.object({
   message:     z.string().trim().max(2000).optional().default(''),
   language:    z.enum(['es', 'en', 'pt']).default('es'),
   website:     z.string().max(0).optional().or(z.literal('')), // honeypot
+  // Preguntas personalizadas del formulario (mismo contrato que el intake).
+  form_answers: z.array(z.object({
+    key:      z.string().min(1).max(200),
+    question: z.string().max(2000).optional(),
+    value:    z.string().max(4000),
+    label:    z.string().max(4000).optional(),
+  })).max(50).optional(),
 })
 
 export type HostedContactInput = z.input<typeof HostedContactSchema>
@@ -70,6 +77,7 @@ export async function submitHostedContact(
       phone:      parsed.data.phone || undefined,
       message:    parsed.data.message || undefined,
       language:   parsed.data.language,
+      form_answers: parsed.data.form_answers,
     })
   } catch (err) {
     console.error(JSON.stringify({ service: 'hosted-contact', channel_id: c.id, error: String(err) }))

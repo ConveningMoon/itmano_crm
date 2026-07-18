@@ -37,6 +37,8 @@ export interface ContactSubmissionParams {
   reason?:     ContactReason
   message?:    string
   language?:   'es' | 'en' | 'pt'
+  // Preguntas personalizadas del formulario (se agregan al snapshot Q&A).
+  form_answers?: Array<{ key: string; question?: string; value: string; label?: string }>
 }
 
 
@@ -169,6 +171,10 @@ export async function handleContactSubmission(
   }
   if (message) {
     answers.push({ key: 'message', question: 'Mensaje', value: message, label: message })
+  }
+  // Preguntas personalizadas del formulario (constructor de la página alojada).
+  for (const a of params.form_answers ?? []) {
+    answers.push({ key: a.key, question: a.question ?? a.key, value: a.value, label: a.label ?? a.value })
   }
   const { error: submissionError } = await db.from('form_submissions').insert({
     tenant_id:  tenantId,
