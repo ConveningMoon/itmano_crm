@@ -4,6 +4,50 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
+import { HostedPageConfigSchema } from '@/lib/hosted-page'
+
+// ─── Página alojada del canal (constructor — migración 060) ───────────────────
+// Guarda acquisition_channels.hosted_page. Escriben owner/super_admin
+// (requireWriteAccess bloquea rol 'agent', igual que el resto de mutaciones de
+// canales). El slug de la URL es (tenants.slug, channels.slug) — único por
+// construcción.
+
+export async function updateHostedPage(
+  channelId: string,
+  rawConfig: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const parsed = HostedPageConfigSchema.safeParse(rawConfig)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Revisa los campos de la página.' }
+  }
+
+  const supabase = createAdminClient()
+  let q = supabase
+    .from('acquisition_channels')
+    .select('id, channel_type')
+    .eq('id', channelId)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+  const { data: channel } = await q.maybeSingle()
+  if (!channel) return { ok: false, error: 'Canal no encontrado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!['lead_magnet', 'event', 'contact_form'].includes((channel as any).channel_type)) {
+    return { ok: false, error: 'Este tipo de canal no tiene página alojada.' }
+  }
+
+  const { error } = await supabase
+    .from('acquisition_channels')
+    .update({ hosted_page: parsed.data })
+    .eq('id', channelId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/sources')
+  return { ok: true }
+}
 
 // ─── Toggle a submission's responded flag (event / contact_form only) ─────────
 

@@ -9,6 +9,8 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { ChannelActions } from './channel-actions'
 import { SubmissionsList } from './submissions-list'
+import { HostedPageEditor } from './hosted-page-editor'
+import { parseHostedPage } from '@/lib/hosted-page'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -33,11 +35,17 @@ export default async function ChannelDetailPage({
   if (!channel) notFound()
 
   const supabase = createAdminClient()
-  const [submissions, sequences, { data: agentRows }] = await Promise.all([
+  const [submissions, sequences, { data: agentRows }, { data: hostedRow }, { data: tenantRow }] = await Promise.all([
     getSubmissionsForChannel(channel.id, tenant_id),
     listSequences(tenant_id, scope.agentId),
     supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
+    supabase.from('acquisition_channels').select('hosted_page').eq('id', channel.id).maybeSingle(),
+    supabase.from('tenants').select('slug').eq('id', channel.tenantId).maybeSingle(),
   ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hostedConfig = parseHostedPage((hostedRow as any)?.hosted_page)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
 
@@ -155,6 +163,18 @@ export default async function ChannelDetailPage({
       </div>
 
       <style>{`.metric-link:hover { border-color: var(--accent-gold) !important; }`}</style>
+
+      {/* Página alojada (constructor) — solo tipos con landing propia */}
+      {['lead_magnet', 'event', 'contact_form'].includes(channel.channelType) && tenantSlug && (
+        <HostedPageEditor
+          channelId={channel.id}
+          channelType={channel.channelType}
+          tenantSlug={tenantSlug}
+          channelSlug={channel.slug}
+          initial={hostedConfig}
+          canEdit={ctx.role !== 'agent'}
+        />
+      )}
 
       {/* Submissions — expandable Q&A list */}
       <SubmissionsList submissions={submissions} channelType={channel.channelType} />
