@@ -779,9 +779,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         open={showEmailModal}
         onClose={() => setShowEmailModal(false)}
         leadId={lead.id}
-        // El sistema de emails (render + IA) soporta es/en/pt; otros idiomas
-        // caen a español hasta localizar esa capa (ver nota al usuario).
-        language={(['es', 'en', 'pt'].includes(lead.language) ? lead.language : 'es') as 'es' | 'en' | 'pt'}
+        language={lead.language}
         leadFirstName={lead.firstName}
         agentName={agent?.name}
       />

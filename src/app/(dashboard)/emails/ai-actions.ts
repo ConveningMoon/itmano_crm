@@ -9,6 +9,8 @@ import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
+import type { Language } from '@/lib/types'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // ── "Generar con IA" — borrador de correo para el composer ───────────────────
 // Genera el contenido (asunto + cuerpo) que prellena el composer. NUNCA envía
@@ -32,7 +34,7 @@ export type EmailAiPurpose =
 
 export interface EmailAiInput {
   purpose:   EmailAiPurpose
-  language:  'es' | 'en' | 'pt'
+  language:  Language
   // Campos que aporta el usuario para guiar a la IA.
   objective: string           // objetivo del correo
   tone:      string           // tono del mensaje
@@ -82,10 +84,15 @@ const PURPOSE_LABEL: Record<EmailAiPurpose, string> = {
   one_off:              'A personal one-off email to a specific person',
 }
 
-const LANGUAGE_RULES: Record<'es' | 'en' | 'pt', string> = {
+// Regla de idioma para la IA. Cualquier idioma soportado es válido; el idioma es
+// la etiqueta de contexto del lead/agente y define en qué idioma se escribe.
+const LANGUAGE_RULES_OVERRIDE: Partial<Record<Language, string>> = {
   es: 'Write in NEUTRAL LATIN AMERICAN SPANISH — no regional idioms, no "vosotros". For money always use "inversión", never "precio", "costo", "pago" or "cargo".',
   en: 'Write in natural US English.',
   pt: 'Write in BRAZILIAN PORTUGUESE.',
+}
+function languageRule(lang: Language): string {
+  return LANGUAGE_RULES_OVERRIDE[lang] ?? `Write in ${LANGUAGE_CONFIG[lang]?.label ?? lang}.`
 }
 
 const LENGTH_RULES: Record<'short' | 'medium', string> = {
@@ -115,7 +122,7 @@ function buildPrompt(input: EmailAiInput): string {
     '- Write exactly like a real person writing to someone they know — warm, natural, conversational, as if typed by hand.',
     '- NO marketing language, NO hype, NO salesy phrasing, NO calls-to-action like "click here" or "don\'t miss out".',
     '- NO bullet lists, NO headings, NO ALL-CAPS, NO emojis, NO exclamation stacking. Just flowing prose in short paragraphs.',
-    `- ${LANGUAGE_RULES[input.language]}`,
+    `- ${languageRule(input.language)}`,
     `- ${LENGTH_RULES[input.length]}`,
     '- Greet the person naturally using {{customer_name}}. You may use {{agent_name}} if it reads naturally, but usually not needed.',
     '- Do NOT write a signature or sign-off name at the end — it is appended automatically.',
@@ -260,7 +267,7 @@ const SEQUENCE_ARC: Record<'lead_magnet' | 'event' | 'generic', string[]> = {
 
 function bootstrapPrompt(params: {
   kind:        'lead_magnet' | 'event' | 'generic'
-  language:    'es' | 'en' | 'pt'
+  language:    Language
   channelName: string | null
   description: string
   hasPdf:      boolean
@@ -286,7 +293,7 @@ function bootstrapPrompt(params: {
     '- NO bullet lists, NO headings, NO ALL-CAPS, NO emojis. Just flowing prose in short paragraphs separated by blank lines.',
     '- At the same time: NOT generic or bland. Each email must contain at least one specific, concrete detail or idea that creates real curiosity and makes the person want to keep reading. Avoid filler like "espero que estés bien" as the whole substance.',
     '- The three emails must feel like a continuing conversation from the same person, not three isolated templates.',
-    `- ${LANGUAGE_RULES[params.language]}`,
+    `- ${languageRule(params.language)}`,
     '- Each email: 2 to 4 short paragraphs. Greet naturally using {{customer_name}}.',
     '- Do NOT write a signature or sign-off name at the end of any email — it is appended automatically.',
     '- Do NOT mention unsubscribing.',
@@ -348,7 +355,7 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = seq as any
   const tenantId = s.tenant_id as string
-  const language = (['es', 'en', 'pt'].includes(s.language as string) ? s.language : 'es') as 'es' | 'en' | 'pt'
+  const language = ((SUPPORTED_LANGUAGE_CODES as string[]).includes(s.language as string) ? s.language : 'en') as Language
 
   // Solo para secuencias vacías — este flujo crea los pasos 0/1/2 desde cero.
   const { count } = await supabase

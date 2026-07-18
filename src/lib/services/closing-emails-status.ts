@@ -1,6 +1,7 @@
 import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { parseEmailContent } from '@/lib/email-content'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // Estado de los 3 emails de cierre (hitos del proceso de compra) POR AGENTE
 // (migración 058: purchase_email_templates.agent_id). Cada agente tiene sus
@@ -12,7 +13,7 @@ import { parseEmailContent } from '@/lib/email-content'
 export type ClosingMilestone = 'start' | 'pre_close' | 'completed'
 
 const MILESTONES: ClosingMilestone[] = ['start', 'pre_close', 'completed']
-const VALID_LANGS = ['es', 'en', 'pt'] as const
+const VALID_LANGS = SUPPORTED_LANGUAGE_CODES as readonly string[]
 
 export const CLOSING_MILESTONE_LABEL: Record<ClosingMilestone, string> = {
   start:     'inicio de proceso',
@@ -25,18 +26,23 @@ function isPlaceholder(id: string | null | undefined): boolean {
 }
 
 // Idioma efectivo del email de cierre para un lead: el idioma del lead si el
-// agente lo tiene registrado; si no, el idioma principal del agente. La misma
-// regla se aplica en el gate (startPurchaseProcess) y en el envío real.
+// agente lo tiene registrado; si no, el idioma principal del agente. Si el lead
+// habla un idioma que el agente NO domina, el default es INGLÉS (no español).
+// La misma regla aplica en el gate (startPurchaseProcess) y en el envío real.
 export function resolveClosingLanguage(
   agentLanguages: string[] | null | undefined,
   agentPrimary: string,
   leadLanguage: string | null | undefined,
-): 'es' | 'en' | 'pt' {
-  const langs = (agentLanguages ?? []).filter(l => (VALID_LANGS as readonly string[]).includes(l))
-  const lead  = leadLanguage && (VALID_LANGS as readonly string[]).includes(leadLanguage) ? leadLanguage : null
-  if (lead && langs.includes(lead)) return lead as 'es' | 'en' | 'pt'
-  if ((VALID_LANGS as readonly string[]).includes(agentPrimary)) return agentPrimary as 'es' | 'en' | 'pt'
-  return (langs[0] as 'es' | 'en' | 'pt' | undefined) ?? 'es'
+): string {
+  const langs = (agentLanguages ?? []).filter(l => VALID_LANGS.includes(l))
+  const lead  = leadLanguage && VALID_LANGS.includes(leadLanguage) ? leadLanguage : null
+  // 1. El lead recibe su idioma si el agente lo tiene configurado.
+  if (lead && langs.includes(lead)) return lead
+  // 2. El agente domina inglés → default inglés para leads fuera de su set.
+  if (langs.includes('en')) return 'en'
+  // 3. Idioma principal del agente como último recurso.
+  if (VALID_LANGS.includes(agentPrimary)) return agentPrimary
+  return langs[0] ?? 'en'
 }
 
 // Devuelve los hitos cuyos emails NO están configurados para (agente, idioma).
@@ -47,7 +53,7 @@ export async function getMissingClosingEmails(
   agentId: string,
   language: string,
 ): Promise<ClosingMilestone[]> {
-  const lang = (VALID_LANGS as readonly string[]).includes(language) ? language : 'es'
+  const lang = VALID_LANGS.includes(language) ? language : 'en'
 
   const { data } = await db
     .from('purchase_email_templates')

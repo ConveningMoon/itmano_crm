@@ -8,6 +8,7 @@ import { requireWriteAccess } from '@/lib/auth/guards'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 import { EmailContentSchema } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -403,7 +404,7 @@ export async function moveStep(
 const PreviewSchema = z.object({
   subject: z.string().trim().min(1).max(200),
   content: EmailContentSchema,
-  locale:  z.enum(['es', 'en', 'pt']).default('es'),
+  locale:  z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]).default('en'),
   // Contexto opcional para mostrar la FIRMA REAL del agente que firmaría el
   // envío: por lead (one-off) o por secuencia (steps). Sin contexto → muestra.
   leadId:     z.string().optional(),
@@ -462,7 +463,7 @@ export async function previewEmailHtml(
       agent_name:    agentName,
       agent_email:   'agente@ejemplo.com',
     },
-    signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.es,
+    signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.en,
     unsubscribeUrl: '#',
     locale:         parsed.data.locale as EmailLocale,
   })
