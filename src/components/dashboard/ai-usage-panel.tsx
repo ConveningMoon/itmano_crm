@@ -11,6 +11,7 @@ const FEATURE_LABELS: Record<string, string> = {
   property_intake:    'Propiedades · Crear con IA',
   email_draft:        'Correos · Borrador con IA',
   sequence_bootstrap: 'Secuencias · 3 correos con IA',
+  hosted_page_copy:   'Páginas · Textos con IA',
 }
 
 function featureLabel(f: string): string {

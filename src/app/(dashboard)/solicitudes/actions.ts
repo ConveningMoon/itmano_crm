@@ -8,7 +8,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 
 export type PlatformRequestRow = {
   id:              string
-  kind:            'contact' | 'support'
+  kind:            'contact' | 'support' | 'page'
   tenant_name:     string | null
   requester_name:  string | null
   requester_email: string

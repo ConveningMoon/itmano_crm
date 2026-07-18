@@ -8,7 +8,13 @@ import { setRequestResponded, type PlatformRequestRow } from './actions'
 // Server Component; el toggle es una server action con actualización optimista
 // local (revalidatePath refresca el resto).
 
-type Tab = 'contact' | 'support'
+type Tab = 'contact' | 'support' | 'page'
+
+const TAB_LABEL: Record<Tab, string> = {
+  contact: 'Contacto (landing)',
+  support: 'Soporte (equipos)',
+  page:    'Páginas',
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   problema:    'Problema técnico',
@@ -33,6 +39,7 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
   const byTab = useMemo(() => ({
     contact: requests.filter(r => r.kind === 'contact'),
     support: requests.filter(r => r.kind === 'support'),
+    page:    requests.filter(r => r.kind === 'page'),
   }), [requests])
 
   const pendingCount = (kind: Tab) =>
@@ -59,7 +66,7 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        {(['contact', 'support'] as Tab[]).map(t => {
+        {(['contact', 'support', 'page'] as Tab[]).map(t => {
           const active = tab === t
           const pending = pendingCount(t)
           return (
@@ -75,7 +82,7 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
                 border: `1px solid ${active ? 'var(--border-accent)' : 'var(--border-subtle)'}`,
               }}
             >
-              {t === 'contact' ? 'Contacto (landing)' : 'Soporte (equipos)'}
+              {TAB_LABEL[t]}
               {pending > 0 && (
                 <span style={{
                   fontSize: '11px', fontWeight: 500, color: 'var(--accent-gold)',
@@ -102,7 +109,7 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
             <Inbox size={18} color="var(--accent-gold)" />
           </div>
           <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-            No hay solicitudes de {tab === 'contact' ? 'contacto' : 'soporte'} todavía.
+            No hay solicitudes de {tab === 'contact' ? 'contacto' : tab === 'page' ? 'páginas' : 'soporte'} todavía.
           </div>
         </div>
       ) : (

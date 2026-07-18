@@ -9,7 +9,8 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { ChannelActions } from './channel-actions'
 import { SubmissionsList } from './submissions-list'
-import { HostedPageEditor } from './hosted-page-editor'
+import { SourceTabs } from './source-tabs'
+import { PageOptions } from './page-options'
 import { parseHostedPage } from '@/lib/hosted-page'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
@@ -39,13 +40,17 @@ export default async function ChannelDetailPage({
     getSubmissionsForChannel(channel.id, tenant_id),
     listSequences(tenant_id, scope.agentId),
     supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
-    supabase.from('acquisition_channels').select('hosted_page').eq('id', channel.id).maybeSingle(),
-    supabase.from('tenants').select('slug').eq('id', channel.tenantId).maybeSingle(),
+    supabase.from('acquisition_channels').select('hosted_page, page_managed_by_itmano').eq('id', channel.id).maybeSingle(),
+    supabase.from('tenants').select('slug, name').eq('id', channel.tenantId).maybeSingle(),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hostedConfig = parseHostedPage((hostedRow as any)?.hosted_page)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pageManaged = !!((hostedRow as any)?.page_managed_by_itmano)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantName = ((tenantRow as any)?.name as string | undefined) ?? undefined
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
 
@@ -124,6 +129,8 @@ export default async function ChannelDetailPage({
         />
       </div>
 
+      <SourceTabs
+        general={<>
       {/* Metrics row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4" style={{ marginBottom: '24px' }}>
         {/* Leads totales — links to /leads pre-filtered by this channel */}
@@ -164,20 +171,32 @@ export default async function ChannelDetailPage({
 
       <style>{`.metric-link:hover { border-color: var(--accent-gold) !important; }`}</style>
 
-      {/* Página alojada (constructor) — solo tipos con landing propia */}
-      {['lead_magnet', 'event', 'contact_form'].includes(channel.channelType) && tenantSlug && (
-        <HostedPageEditor
-          channelId={channel.id}
-          channelType={channel.channelType}
-          tenantSlug={tenantSlug}
-          channelSlug={channel.slug}
-          initial={hostedConfig}
-          canEdit={ctx.role !== 'agent'}
-        />
-      )}
-
       {/* Submissions — expandable Q&A list */}
       <SubmissionsList submissions={submissions} channelType={channel.channelType} />
+        </>}
+        pagina={
+          ['lead_magnet', 'event', 'contact_form'].includes(channel.channelType) && tenantSlug ? (
+            <PageOptions
+              channelId={channel.id}
+              channelType={channel.channelType}
+              channelName={channel.name}
+              publicId={channel.publicId}
+              tenantSlug={tenantSlug}
+              channelSlug={channel.slug}
+              initial={hostedConfig}
+              managedByItmano={pageManaged}
+              isSuperAdmin={ctx.role === 'super_admin'}
+              canEdit={ctx.role !== 'agent'}
+              tenantName={tenantName}
+              agentName={channel.agentName}
+            />
+          ) : (
+            <div style={{ background: 'var(--bg-surface)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', padding: '40px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+              Este tipo de canal no usa una página propia.
+            </div>
+          )
+        }
+      />
     </>
   )
 }
