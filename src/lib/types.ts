@@ -2,10 +2,11 @@ export type LeadStatus =
   | 'new' | 'nurturing' | 'warm' | 'hot'
   | 'process_started' | 'process_completed' | 'closed' | 'lost'
 
-export type AgentSpecialty =
-  | 'hispanic' | 'military' | 'first_buyer' | 'brazilian'
-
-export type Language = 'es' | 'en' | 'pt'
+// Idiomas soportados (migración 062). Fuente única: LANGUAGE_CONFIG en
+// src/lib/config.ts refleja exactamente este set y el CHECK de la base.
+export type Language =
+  | 'es' | 'en' | 'pt' | 'fr' | 'de' | 'it' | 'zh' | 'ja' | 'ko'
+  | 'ru' | 'ar' | 'hi' | 'vi' | 'tl' | 'ht' | 'pl' | 'uk' | 'tr' | 'nl'
 
 export interface Tenant {
   id: string
@@ -31,7 +32,6 @@ export interface Agent {
   language: Language
   /** Idiomas registrados que atiende — definen sus emails de cierre (058). */
   languages: Language[]
-  specialty: AgentSpecialty
   avatarInitials: string
   accentColor: string
   active: boolean

@@ -1,13 +1,14 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Pencil } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PropertyPageOptions } from './property-page-options'
+import { PropertyDetailTabs } from './property-detail-tabs'
 
-// Detalle de una propiedad (como en fuentes): los datos que ya se ven en la
-// tarjeta + las opciones de página (catálogo alojado / embebible / solicitar
-// a ITMANO / marca de conectada por ITMANO para super_admin).
+// Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
+// del formulario, con botón Editar que abre el formulario completo) + tab
+// Página (catálogo alojado / embebible / solicitar / marca super_admin).
 
 const TYPE_LABEL: Record<string, string> = {
   residential: 'Residencial', condo: 'Condominio', townhouse: 'Townhouse',
@@ -45,6 +46,129 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     { label: 'Superficie', value: p.sqft !== null ? `${Number(p.sqft).toLocaleString('en-US')} ft²` : '—' },
     { label: 'Año', value: p.year_built !== null ? String(p.year_built) : '—' },
   ]
+
+  const canEdit = ctx.role !== 'agent' || p.created_by_user_id === ctx.user_id
+  const descriptionEs = (p.description_es as string | null)?.trim()
+  const descriptionEn = (p.description_en as string | null)?.trim()
+  const featuresEs = (p.features_es as string[] | null) ?? []
+  const featuresEn = (p.features_en as string[] | null) ?? []
+  const gallery = [(p.image_url as string | null), ...((p.gallery as string[] | null) ?? [])].filter((u): u is string => !!u)
+
+  // ── Tab Descripción: datos completos + botón que abre el formulario de edición ──
+  const descripcionTab = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {canEdit && (
+        <div>
+          <Link
+            href={`/properties?edit=${p.id}`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--accent-gold)', color: 'var(--bg-base)',
+              borderRadius: '8px', textDecoration: 'none',
+            }}
+          >
+            <Pencil size={13} /> Editar propiedad
+          </Link>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+            Abre el formulario completo (datos, descripciones, características, fotos, PDF y publicación).
+          </p>
+        </div>
+      )}
+
+      {/* Facts */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        {facts.map(f => (
+          <div key={f.label} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 16px' }}>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{f.label}</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{f.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* MLS / enlace externo */}
+      {(p.mls_number || p.external_url) && (
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          {p.mls_number && <span>MLS #{p.mls_number}</span>}
+          {p.external_url && <a href={p.external_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>Ver listado externo</a>}
+        </div>
+      )}
+
+      {/* Descripciones */}
+      {(descriptionEs || descriptionEn) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          {descriptionEs && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Descripción (ES)</div>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{descriptionEs}</p>
+            </div>
+          )}
+          {descriptionEn && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Descripción (EN)</div>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{descriptionEn}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Características */}
+      {(featuresEs.length > 0 || featuresEn.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          {featuresEs.length > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Características (ES)</div>
+              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                {featuresEs.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            </div>
+          )}
+          {featuresEn.length > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Características (EN)</div>
+              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                {featuresEn.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Galería */}
+      {gallery.length > 0 && (
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Fotos</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+            {gallery.map(url => (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img key={url} src={url} alt="" style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {p.notes && (
+        <div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Notas internas</div>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{p.notes}</p>
+        </div>
+      )}
+    </div>
+  )
+
+  const paginaTab = tenantSlug ? (
+    <PropertyPageOptions
+      propertyId={p.id}
+      propertyName={p.name ?? p.address}
+      tenantSlug={tenantSlug}
+      propertySlug={p.slug ?? null}
+      published={!!p.published_to_web}
+      managedByItmano={!!p.page_managed_by_itmano}
+      isSuperAdmin={ctx.role === 'super_admin'}
+    />
+  ) : (
+    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>El tenant no tiene slug configurado.</div>
+  )
 
   return (
     <>
@@ -88,33 +212,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      {/* Facts */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4" style={{ marginBottom: '28px' }}>
-        {facts.map(f => (
-          <div key={f.label} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 16px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{f.label}</div>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{f.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Opciones de página */}
-      <h2 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 12px' }}>
-        Página de la propiedad
-      </h2>
-      {tenantSlug ? (
-        <PropertyPageOptions
-          propertyId={p.id}
-          propertyName={p.name ?? p.address}
-          tenantSlug={tenantSlug}
-          propertySlug={p.slug ?? null}
-          published={!!p.published_to_web}
-          managedByItmano={!!p.page_managed_by_itmano}
-          isSuperAdmin={ctx.role === 'super_admin'}
-        />
-      ) : (
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>El tenant no tiene slug configurado.</div>
-      )}
+      <PropertyDetailTabs descripcion={descripcionTab} pagina={paginaTab} />
     </>
   )
 }

@@ -4,13 +4,14 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import type { Agent } from '@/lib/types'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
 import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
 import { trialDaysLeft } from '@/lib/plans'
 import { ScoringSection } from './scoring-section'
@@ -22,18 +23,14 @@ const ROLE_LABELS: Record<TenantRole, string> = {
   agent:       'Agente',
 }
 
-const SPECIALTY_OPTIONS = [
-  { value: 'hispanic',    label: 'Mercado Hispano' },
-  { value: 'military',    label: 'Compradores Militares' },
-  { value: 'first_buyer', label: 'Primer Comprador' },
-  { value: 'brazilian',   label: 'Mercado Brasileño' },
-]
-
-const LANGUAGE_OPTIONS = [
-  { value: 'es', label: 'Español' },
-  { value: 'en', label: 'English' },
-  { value: 'pt', label: 'Português' },
-]
+// Idiomas desde la fuente única (config). Reemplaza a la lista fija es/en/pt.
+const LANGUAGE_OPTIONS = SUPPORTED_LANGUAGE_CODES.map(code => ({
+  value: code,
+  label: LANGUAGE_CONFIG[code].label,
+}))
+const LANGUAGE_LABELS: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map(code => [code, LANGUAGE_CONFIG[code].label])
+)
 
 // ─── Style constants ──────────────────────────────────────────────────────────
 
@@ -251,7 +248,8 @@ function TenantSection({ tenant, canManage }: { tenant: { id: string; name: stri
 
 // ─── Agent edit row ───────────────────────────────────────────────────────────
 
-function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditLanguages: boolean }) {
+function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages, isOwner, canManageOwner, canDeleteAgents }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditLanguages: boolean; isOwner: boolean; canManageOwner: boolean; canDeleteAgents: boolean }) {
+  const router = useRouter()
   const [editing, setEditing]   = useState(false)
   const [name, setName]         = useState(agent.name)
   const [email, setEmail]       = useState(agent.email ?? '')
@@ -276,6 +274,32 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }
   const [langOk, setLangOk]             = useState(false)
   const [langPending, startLangs]       = useTransition()
 
+  // Owner / eliminación (Partner). deleteStep: doble verificación.
+  const [ownerBusy, startOwner]   = useTransition()
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm1' | 'confirm2'>('idle')
+  const [confirmText, setConfirmText] = useState('')
+  const [dangerErr, setDangerErr] = useState<string | null>(null)
+  const [dangerBusy, startDanger] = useTransition()
+
+  function handleMakeOwner() {
+    setDangerErr(null)
+    startOwner(async () => {
+      const res = await setAgentAsOwner(agent.id)
+      if (!res.ok) { setDangerErr(res.error); return }
+      router.refresh()
+    })
+  }
+
+  function handleDelete() {
+    setDangerErr(null)
+    startDanger(async () => {
+      const res = await deleteAgent(agent.id)
+      if (!res.ok) { setDangerErr(res.error); return }
+      setDeleteStep('idle')
+      router.refresh()
+    })
+  }
+
   function toggleLang(l: string) {
     if (l === agent.language) return // el principal (ruteo) no se desmarca
     setLangs(prev => prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l])
@@ -291,19 +315,6 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }
       setLangOk(true)
       setTimeout(() => setLangOk(false), 2500)
     })
-  }
-
-  const SPECIALTY_LABELS: Record<string, string> = {
-    hispanic:    'Mercado Hispano',
-    military:    'Compradores Militares',
-    first_buyer: 'Primer Comprador',
-    brazilian:   'Mercado Brasileño',
-  }
-
-  const LANGUAGE_LABELS: Record<string, string> = {
-    es: 'Español',
-    en: 'English',
-    pt: 'Português',
   }
 
   function handleSave() {
@@ -368,10 +379,19 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }
 
           {/* Info */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '2px' }}>{agent.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</span>
+              {isOwner && (
+                <span style={{
+                  fontSize: '9px', fontWeight: 600, padding: '2px 7px', borderRadius: '10px',
+                  letterSpacing: '0.06em', textTransform: 'uppercase',
+                  color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.14)',
+                }}>
+                  Propietario
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {SPECIALTY_LABELS[agent.specialty] ?? agent.specialty}
-              {' · '}
               {langsSaved.map(l => LANGUAGE_LABELS[l] ?? l).join(', ')}
             </div>
           </div>
@@ -390,6 +410,11 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }
             {canEditLanguages && (
               <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
             )}
+            {canManageOwner && hasAccess && !isOwner && (
+              <button onClick={handleMakeOwner} disabled={ownerBusy} style={BTN_GHOST}>
+                {ownerBusy ? 'Transfiriendo…' : 'Hacer propietario'}
+              </button>
+            )}
             {canManage && (
               <>
                 {hasAccess ? (
@@ -405,8 +430,57 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages }
                 <button onClick={() => setEditing(true)} style={BTN_GHOST}>Editar</button>
               </>
             )}
+            {canDeleteAgents && !isOwner && (
+              <button onClick={() => { setDeleteStep('confirm1'); setDangerErr(null); setConfirmText('') }} style={{ ...BTN_GHOST, color: 'var(--accent-coral)', borderColor: 'rgba(201,123,107,0.3)' }}>Eliminar</button>
+            )}
           </div>
         </div>
+
+        {dangerErr && (
+          <div style={{ fontSize: '12px', color: '#E04040', background: 'rgba(224,64,64,0.08)', borderRadius: '8px', padding: '8px 12px' }}>
+            {dangerErr}
+          </div>
+        )}
+
+        {/* Eliminar agente — doble verificación */}
+        {deleteStep !== 'idle' && (
+          <div style={{ background: 'rgba(224,64,64,0.06)', border: '1px solid rgba(224,64,64,0.25)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {deleteStep === 'confirm1' ? (
+              <>
+                <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                  Vas a eliminar a <strong>{agent.name}</strong>. Sus leads, fuentes, secuencias y propiedades se
+                  <strong> reasignan al propietario</strong> del equipo (no se pierde nada). Su acceso de login se elimina.
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => setDeleteStep('confirm2')} style={{ ...BTN_PRIMARY, background: '#E04040' }}>Continuar</button>
+                  <button onClick={() => setDeleteStep('idle')} style={BTN_GHOST}>Cancelar</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                  Confirmación final. Escribe <strong>{agent.name}</strong> para eliminar al agente y reasignar su trabajo.
+                </div>
+                <input
+                  value={confirmText}
+                  onChange={e => setConfirmText(e.target.value)}
+                  placeholder={agent.name}
+                  style={INPUT}
+                />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleDelete}
+                    disabled={dangerBusy || confirmText.trim() !== agent.name.trim()}
+                    style={{ ...BTN_PRIMARY, background: '#E04040', opacity: (dangerBusy || confirmText.trim() !== agent.name.trim()) ? 0.5 : 1, cursor: (dangerBusy || confirmText.trim() !== agent.name.trim()) ? 'default' : 'pointer' }}
+                  >
+                    {dangerBusy ? 'Eliminando…' : 'Eliminar definitivamente'}
+                  </button>
+                  <button onClick={() => setDeleteStep('idle')} style={BTN_GHOST}>Cancelar</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Panel de idiomas registrados */}
         {editingLangs && (
@@ -549,7 +623,6 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
   const [email, setEmail]       = useState('')
   const [phone, setPhone]       = useState('')
   const [language, setLanguage] = useState('es')
-  const [specialty, setSpecialty] = useState('hispanic')
   const [initials, setInitials] = useState('')
   const [color, setColor]       = useState('#5B8EC9')
   const [error, setError]       = useState<string | null>(null)
@@ -559,7 +632,7 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
     setError(null)
     startTransition(async () => {
       const res = await createAgent({
-        name, email, phone, language, specialty,
+        name, email, phone, language,
         avatarInitials: initials || name.trim().slice(0, 2).toUpperCase(),
         accentColor: color, tenantId,
       })
@@ -588,15 +661,9 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
           <input value={phone} onChange={e => setPhone(e.target.value)} style={INPUT} />
         </div>
         <div>
-          <label style={LABEL}>Idioma</label>
+          <label style={LABEL}>Idioma principal</label>
           <select value={language} onChange={e => setLanguage(e.target.value)} style={{ ...INPUT, cursor: 'pointer' }}>
             {LANGUAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={LABEL}>Especialidad</label>
-          <select value={specialty} onChange={e => setSpecialty(e.target.value)} style={{ ...INPUT, cursor: 'pointer' }}>
-            {SPECIALTY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div>
@@ -610,7 +677,7 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
       </div>
 
       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' }}>
-        Idioma y especialidad definen el ruteo automático de leads. El acceso de login se otorga después con &quot;Invitar acceso&quot;.
+        El idioma principal es el idioma base del agente (puedes agregar más desde &quot;Idiomas&quot;). El acceso de login se otorga después con &quot;Invitar acceso&quot;.
       </div>
 
       {error && <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px', marginTop: '10px' }}>{error}</div>}
@@ -629,6 +696,7 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
 
 function AgentsSection({
   agents, agentAccess, accessCount, canManage, canLinkSelf, tenantId, isSuper, myAgentId,
+  ownerAgentId, canManageOwner, canDeleteAgents,
 }: {
   agents: Agent[]
   agentAccess: Record<string, boolean>
@@ -638,6 +706,9 @@ function AgentsSection({
   tenantId: string
   isSuper: boolean
   myAgentId: string | null
+  ownerAgentId: string | null
+  canManageOwner: boolean
+  canDeleteAgents: boolean
 }) {
   const [creating, setCreating] = useState(false)
 
@@ -666,6 +737,9 @@ function AgentsSection({
           canLinkSelf={canLinkSelf}
           // Owner/super editan los idiomas de todos; un 'agent' solo los suyos.
           canEditLanguages={canManage || agent.id === myAgentId}
+          isOwner={agent.id === ownerAgentId}
+          canManageOwner={canManageOwner}
+          canDeleteAgents={canDeleteAgents}
         />
       ))}
     </div>
@@ -1021,6 +1095,8 @@ interface Props {
   canManageAgents: boolean
   canLinkSelf: boolean
   myAgentId: string | null
+  ownerAgentId: string | null
+  canDeleteAgents: boolean
   userEmail: string
   userRole: TenantRole
   aiUsage: AiUsageSummary
@@ -1033,7 +1109,7 @@ interface Props {
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, scoringRules,
-  canEditScoring, canManageAgents, canLinkSelf, myAgentId, userEmail, userRole,
+  canEditScoring, canManageAgents, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
@@ -1055,6 +1131,9 @@ export function SettingsClient({
             tenantId={tenant.id}
             isSuper={userRole === 'super_admin'}
             myAgentId={myAgentId}
+            ownerAgentId={ownerAgentId}
+            canManageOwner={userRole === 'agent_owner' || userRole === 'super_admin'}
+            canDeleteAgents={canDeleteAgents}
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,

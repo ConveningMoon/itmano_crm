@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { unstable_rethrow } from 'next/navigation'
-import { Building2, Plus, ExternalLink, Pencil, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
+import { useEffect, useState, useTransition } from 'react'
+import { unstable_rethrow, useRouter, useSearchParams } from 'next/navigation'
+import { Building2, Plus, ExternalLink, Trash2, X, Upload, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { createProperty, updateProperty, deleteProperty, deletePropertyMediaByUrls, deletePropertyFolder } from './actions'
@@ -10,6 +10,7 @@ import type { PropertyInput } from './actions'
 import { generatePropertyFromPdf } from './ai-actions'
 import type { AiPropertyDraft } from './ai-actions'
 import { FormSection } from '@/components/ui/form-section'
+import { Switch } from '@/components/ui/switch'
 
 // Kebab-case slug from a free-text name (matches the server-side SLUG_RE).
 function slugify(input: string): string {
@@ -142,6 +143,8 @@ const AI_ENABLED = true
 
 export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId }: Props) {
   const isSuperAdmin = viewerRole === 'super_admin'
+  const router       = useRouter()
+  const searchParams = useSearchParams()
 
   const [tab, setTab]               = useState<FilterTab>('all')
   const [showForm, setShowForm]     = useState(false)
@@ -226,6 +229,20 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     setDirty(false)
     setConfirmingClose(false)
   }
+
+  // Deep-link desde el detalle de propiedad: /properties?edit=<id> abre el modal
+  // de edición con todo el formulario (media + IA) ya cargado. Se limpia la URL
+  // al abrir para que un refresh no lo reabra.
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId) return
+    const prop = properties.find(p => p.id === editId)
+    if (!prop) return
+    // Defer fuera del cuerpo del efecto (evita cascadas de render).
+    queueMicrotask(() => openEdit(prop))
+    router.replace('/properties')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Fire-and-forget Storage cleanup; never blocks the UI.
   function fireDeleteMedia(urls: string[], tenantId?: string) {
@@ -666,11 +683,14 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
           {filtered.map(prop => {
             const status = STATUS_CONFIG[prop.status]
-            const editable = canWrite(prop, viewerRole, viewerUserId)
             return (
               <div
                 key={prop.id}
                 className="prop-card"
+                role="link"
+                tabIndex={0}
+                onClick={() => router.push(`/properties/${prop.id}`)}
+                onKeyDown={e => { if (e.key === 'Enter') router.push(`/properties/${prop.id}`) }}
                 style={{
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border-subtle)',
@@ -679,6 +699,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '12px',
+                  cursor: 'pointer',
                 }}
               >
                 {/* Cover preview — bleeds over the card padding to the rounded top edge */}
@@ -721,13 +742,10 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: '14px', fontWeight: 500,
+                      fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>
-                      {/* Detalle + constructor de página de la propiedad */}
-                      <a href={`/properties/${prop.id}`} style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>
-                        {prop.address}
-                      </a>
+                      {prop.address}
                     </div>
                     {prop.city && (
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -804,7 +822,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   )}
                 </div>
 
-                {/* Footer: external link + actions */}
+                {/* Footer: external link + abrir detalle */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                   <div>
                     {prop.externalUrl && (
@@ -812,6 +830,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                         href={prop.externalUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
                           fontSize: '11px', color: 'var(--accent-blue)', textDecoration: 'none',
@@ -822,32 +841,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                       </a>
                     )}
                   </div>
-                  {editable && (
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        onClick={() => openEdit(prop)}
-                        title="Editar"
-                        style={{
-                          padding: '5px', borderRadius: '6px', border: 'none', cursor: 'pointer',
-                          background: 'var(--bg-elevated)', color: 'var(--text-muted)',
-                          display: 'flex', alignItems: 'center',
-                        }}
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => setDeletingId(prop.id)}
-                        title="Eliminar"
-                        style={{
-                          padding: '5px', borderRadius: '6px', border: 'none', cursor: 'pointer',
-                          background: 'var(--bg-elevated)', color: 'var(--accent-coral)',
-                          display: 'flex', alignItems: 'center',
-                        }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  )}
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Abrir detalle →</span>
                 </div>
               </div>
             )
@@ -1301,12 +1295,11 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
               </FormSection>
 
               <FormSection title="Publicación">
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <Switch
                   checked={form.published_to_web ?? false}
-                  onChange={e => setField('published_to_web', e.target.checked)}
-                  style={{ marginTop: '2px', width: '16px', height: '16px', accentColor: 'var(--accent-gold)', cursor: 'pointer' }}
+                  onChange={next => setField('published_to_web', next)}
+                  aria-label="Publicar en la web"
                 />
                 <span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
@@ -1317,7 +1310,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                     vecindario, estado, ambas descripciones y una imagen de portada.
                   </span>
                 </span>
-              </label>
+              </div>
               </FormSection>
 
               <FormSection title="Enlaces y notas">
@@ -1358,6 +1351,21 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                {/* Eliminar disponible al editar (antes estaba en la tarjeta) */}
+                {editingId && canWrite(properties.find(p => p.id === editingId)!, viewerRole, viewerUserId) && (
+                  <button
+                    type="button"
+                    onClick={() => setDeletingId(editingId)}
+                    style={{
+                      marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+                      background: 'transparent', color: 'var(--accent-coral)',
+                      borderRadius: '8px', border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
+                    }}
+                  >
+                    <Trash2 size={13} /> Eliminar
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={discardAndClose}
