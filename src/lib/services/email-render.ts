@@ -1,5 +1,6 @@
 import 'server-only'
 import type { EmailContent } from '@/lib/email-content'
+import type { Language } from '@/lib/types'
 
 // Compilador único de contenido CRM → HTML de email. Lo usan los tres send
 // paths (secuencia, compra, one-off) Y la vista previa del composer — nunca
@@ -22,12 +23,35 @@ export interface MergeVars {
   [key: string]: string
 }
 
-export type EmailLocale = 'es' | 'en' | 'pt'
+// El idioma es una etiqueta de contexto: el CONTENIDO lo escribe el tenant/IA en
+// ese idioma; el render solo localiza el pie de "cancelar suscripción". Cualquier
+// idioma soportado es válido; los que no tengan etiqueta caen a inglés.
+export type EmailLocale = Language
 
-const UNSUBSCRIBE_LABEL: Record<EmailLocale, string> = {
+const UNSUBSCRIBE_LABEL: Partial<Record<Language, string>> = {
   es: 'cancelar suscripción',
   en: 'unsubscribe',
   pt: 'cancelar inscrição',
+  fr: 'se désabonner',
+  de: 'abmelden',
+  it: 'annulla iscrizione',
+  zh: '取消订阅',
+  ja: '配信停止',
+  ko: '구독 취소',
+  ru: 'отписаться',
+  ar: 'إلغاء الاشتراك',
+  hi: 'सदस्यता समाप्त करें',
+  vi: 'hủy đăng ký',
+  tl: 'mag-unsubscribe',
+  ht: 'dezabòne',
+  pl: 'zrezygnuj z subskrypcji',
+  uk: 'відписатися',
+  tr: 'abonelikten çık',
+  nl: 'afmelden',
+}
+
+function unsubscribeLabel(locale: Language): string {
+  return UNSUBSCRIBE_LABEL[locale] ?? UNSUBSCRIBE_LABEL.en!
 }
 
 // Stack de fuentes de sistema — lo que usaría un cliente de correo normal.
@@ -92,7 +116,7 @@ export function renderEmail(params: {
   locale?:        EmailLocale
 }): { subject: string; html: string } {
   const { content, vars, unsubscribeUrl } = params
-  const locale = params.locale ?? 'es'
+  const locale = params.locale ?? 'en'
 
   // Asunto: texto plano — merge sin escape HTML.
   const subject = resolveMergeTags(params.subject, vars, false)
@@ -119,7 +143,7 @@ export function renderEmail(params: {
 ${bodyHtml}
 ${signatureHtml}
     <div style="margin-top:36px;${FONT};font-size:11px;line-height:1.5;color:#c2c2c2;">
-      <a href="${escapeHtml(unsubscribeUrl)}" style="color:#c2c2c2;text-decoration:underline;">${UNSUBSCRIBE_LABEL[locale]}</a>
+      <a href="${escapeHtml(unsubscribeUrl)}" style="color:#c2c2c2;text-decoration:underline;">${unsubscribeLabel(locale)}</a>
     </div>
   </div>
 </body>

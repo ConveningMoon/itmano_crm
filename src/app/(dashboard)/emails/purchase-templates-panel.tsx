@@ -13,6 +13,7 @@ import {
   type ComposerValue,
 } from '@/components/dashboard/email-composer'
 import { parseEmailContent } from '@/lib/email-content'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import type { EmailAiPurpose } from './ai-actions'
 
 const MILESTONE_LABEL: Record<string, string> = {
@@ -27,12 +28,14 @@ const MILESTONE_PURPOSE: Record<string, EmailAiPurpose> = {
   completed: 'purchase_completed',
 }
 
-const LANG_LABEL: Record<string, string>  = { es: 'Español', en: 'English', pt: 'Português' }
-const LANG_COLOR: Record<string, string>  = {
-  es: 'var(--accent-gold)',
-  en: 'var(--accent-blue)',
-  pt: 'var(--accent-teal)',
-}
+const LANG_LABEL: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map(c => [c, LANGUAGE_CONFIG[c].label])
+)
+// Colores rotan sobre la paleta de acentos para cualquier idioma.
+const ACCENT_CYCLE = ['var(--accent-gold)', 'var(--accent-blue)', 'var(--accent-teal)', 'var(--accent-coral)', 'var(--accent-pink)', 'var(--accent-green)']
+const LANG_COLOR: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map((c, i) => [c, ACCENT_CYCLE[i % ACCENT_CYCLE.length]])
+)
 
 const MILESTONES = ['start', 'pre_close', 'completed'] as const
 
@@ -235,7 +238,8 @@ export function PurchaseTemplatesPanel({
   readOnly?: boolean
 }) {
   const byKey = Object.fromEntries(templates.map(t => [`${t.milestone}_${t.language}`, t]))
-  const langs = (['es', 'en', 'pt'] as const).filter(l => languages.includes(l))
+  // Columnas = idiomas registrados del agente (orden estable por el catálogo).
+  const langs = SUPPORTED_LANGUAGE_CODES.filter(l => languages.includes(l))
   const color = accentColor ?? 'var(--accent-gold)'
 
   const shown = templates.filter(t => languages.includes(t.language))

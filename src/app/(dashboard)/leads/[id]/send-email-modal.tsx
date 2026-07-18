@@ -11,6 +11,7 @@ import {
   type ComposerValue,
 } from '@/components/dashboard/email-composer'
 import { sendLeadEmail } from './actions'
+import type { Language } from '@/lib/types'
 
 // Envío de un correo puntual a un lead desde su página de detalle. Reusa el
 // composer (mismo preview + generación con IA) y delega en sendLeadEmail.
@@ -20,7 +21,7 @@ export function SendEmailModal({
   open:           boolean
   onClose:        () => void
   leadId:         string
-  language:       'es' | 'en' | 'pt'
+  language:       Language
   leadFirstName?: string
   agentName?:     string
   tenantName?:    string

@@ -6,6 +6,7 @@ import type { EmailContent } from '@/lib/email-content'
 import { EmailContentSchema, MERGE_TAGS, EMAIL_CONTENT_VERSION } from '@/lib/email-content'
 import { previewEmailHtml } from '@/app/(dashboard)/emails/actions'
 import { generateEmailDraft, type EmailAiPurpose } from '@/app/(dashboard)/emails/ai-actions'
+import type { Language } from '@/lib/types'
 
 // Composer de correos del CRM. Lo comparten tres superficies: pasos de secuencia
 // (step-manager), correos de hitos de compra (purchase-templates-panel) y envío
@@ -88,7 +89,7 @@ const TONE_OPTIONS = [
 
 export interface ComposerAiContext {
   purpose:        EmailAiPurpose
-  language:       'es' | 'en' | 'pt'
+  language:       Language
   agentName?:     string
   tenantName?:    string
   leadFirstName?: string
@@ -98,7 +99,7 @@ interface Props {
   value:    ComposerValue
   onChange: (v: ComposerValue) => void
   // Idioma del footer/preview (idioma de la secuencia / del template / del lead).
-  locale?:  'es' | 'en' | 'pt'
+  locale?:  Language
   // Contexto para "Generar con IA"; sin él, el botón no se muestra.
   ai?: ComposerAiContext
   // Contexto para que la vista previa muestre la FIRMA REAL del agente que

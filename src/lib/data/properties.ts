@@ -43,6 +43,11 @@ export interface Property {
   descriptionEs:       string | null
   featuresEn:          string[]
   featuresEs:          string[]
+  // Contenido multi-idioma (máx 3, migración 063). descriptions/featuresI18n
+  // keyed por código de idioma; es/en arriba son el mirror para la web externa.
+  contentLanguages:    string[]
+  descriptions:        Record<string, string>
+  featuresI18n:        Record<string, string[]>
   imageUrl:            string | null
   gallery:             string[]
   floorPlans:          string[]
@@ -126,6 +131,9 @@ export async function getProperties(
     descriptionEs:      r.description_es ?? null,
     featuresEn:         Array.isArray(r.features_en) ? (r.features_en as string[]) : [],
     featuresEs:         Array.isArray(r.features_es) ? (r.features_es as string[]) : [],
+    contentLanguages:   Array.isArray(r.content_languages) ? (r.content_languages as string[]) : [],
+    descriptions:       (r.descriptions && typeof r.descriptions === 'object') ? (r.descriptions as Record<string, string>) : {},
+    featuresI18n:       (r.features_i18n && typeof r.features_i18n === 'object') ? (r.features_i18n as Record<string, string[]>) : {},
     imageUrl:           r.image_url ?? null,
     gallery:            Array.isArray(r.gallery) ? (r.gallery as string[]) : [],
     floorPlans:         Array.isArray(r.floor_plans) ? (r.floor_plans as string[]) : [],
