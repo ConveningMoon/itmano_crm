@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 import { MEDIA_BUCKET, sanitizeSlugFolder, objectPathFromPublicUrl } from '@/lib/services/property-media'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // http(s)-only URL, empty string tolerated (normalized to null before insert).
 const httpUrl = z
@@ -51,10 +52,13 @@ const PropertySchema = z
     bathrooms_half: z.number().int().nonnegative().max(10).optional().nullable(),
     garage_spaces:  z.number().int().nonnegative().max(50).optional().nullable(),
     lot_sqft:       z.number().int().nonnegative().max(100000000).optional().nullable(),
-    description_en: z.string().trim().max(5000).optional().nullable(),
-    description_es: z.string().trim().max(5000).optional().nullable(),
-    features_en:    z.array(z.string().trim().min(1).max(300)).max(30).optional().default([]),
-    features_es:    z.array(z.string().trim().min(1).max(300)).max(30).optional().default([]),
+    // ── Contenido multi-idioma (máx 3, migración 063) ───────────────────────────
+    // content_languages: idiomas elegidos; descriptions/features_i18n keyed por
+    // código de idioma. description_es/en y features_es/en se derivan de aquí
+    // (se mantienen para compat con la web externa).
+    content_languages: z.array(z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]])).max(3).optional().default([]),
+    descriptions:      z.record(z.string(), z.string().trim().max(5000)).optional().default({}),
+    features_i18n:     z.record(z.string(), z.array(z.string().trim().min(1).max(300)).max(30)).optional().default({}),
     image_url:      httpUrl.optional().nullable(),
     gallery:        z.array(httpUrl.min(1)).max(60).optional().default([]),
     floor_plans:    z.array(httpUrl.min(1)).max(30).optional().default([]),
@@ -73,9 +77,16 @@ const PropertySchema = z
     requireField('slug', data.slug, 'El slug es obligatorio para publicar en la web')
     requireField('neighborhood', data.neighborhood, 'El vecindario es obligatorio para publicar en la web')
     requireField('state', data.state, 'El estado es obligatorio para publicar en la web')
-    requireField('description_en', data.description_en, 'La descripción en inglés es obligatoria para publicar')
-    requireField('description_es', data.description_es, 'La descripción en español es obligatoria para publicar')
     requireField('image_url', data.image_url, 'La imagen de portada es obligatoria para publicar')
+    // Al menos un idioma de contenido, y cada idioma elegido con descripción.
+    if ((data.content_languages ?? []).length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Elige al menos un idioma para la descripción', path: ['content_languages'] })
+    }
+    for (const lang of data.content_languages ?? []) {
+      if (!(data.descriptions?.[lang] ?? '').trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Falta la descripción en ${lang.toUpperCase()} para publicar`, path: ['descriptions'] })
+      }
+    }
   })
 
 export type PropertyInput = z.infer<typeof PropertySchema>
@@ -94,6 +105,17 @@ function toColumns(data: ParsedProperty) {
   const half = data.bathrooms_half ?? null
   const bathrooms =
     full === null && half === null ? null : (full ?? 0) + 0.5 * (half ?? 0)
+
+  // Contenido i18n: se guarda solo para los idiomas elegidos y no vacíos.
+  const langs = [...new Set(data.content_languages ?? [])].slice(0, 3)
+  const descriptions: Record<string, string> = {}
+  const featuresI18n: Record<string, string[]> = {}
+  for (const l of langs) {
+    const d = (data.descriptions?.[l] ?? '').trim()
+    if (d) descriptions[l] = d
+    const f = (data.features_i18n?.[l] ?? []).map(x => x.trim()).filter(Boolean)
+    if (f.length) featuresI18n[l] = f
+  }
 
   return {
     address:          data.address,
@@ -117,10 +139,14 @@ function toColumns(data: ParsedProperty) {
     bathrooms_half:   half,
     garage_spaces:    data.garage_spaces ?? null,
     lot_sqft:         data.lot_sqft ?? null,
-    description_en:   nz(data.description_en),
-    description_es:   nz(data.description_es),
-    features_en:      data.features_en ?? [],
-    features_es:      data.features_es ?? [],
+    // i18n (fuente de verdad) + mirror es/en para la web externa.
+    content_languages: langs,
+    descriptions:      descriptions,
+    features_i18n:     featuresI18n,
+    description_en:    descriptions['en'] ?? null,
+    description_es:    descriptions['es'] ?? null,
+    features_en:       featuresI18n['en'] ?? [],
+    features_es:       featuresI18n['es'] ?? [],
     image_url:        nz(data.image_url),
     gallery:          data.gallery ?? [],
     floor_plans:      data.floor_plans ?? [],

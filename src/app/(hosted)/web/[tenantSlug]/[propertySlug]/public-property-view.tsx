@@ -5,6 +5,14 @@ import Link from 'next/link'
 import { ArrowLeft, BedDouble, Bath, Maximize, Car, Ruler, CalendarDays, ChevronLeft, ChevronRight, X, FileText, MapPin } from 'lucide-react'
 import type { PublicProperty, PublicTenant } from '../shared'
 import { PROPERTY_STATUS_LABEL, formatPrice, bathroomsLabel } from '../web-format'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+
+// Prioridad de idioma para mostrar por defecto en la web pública.
+function pickDefaultLang(langs: string[]): string {
+  if (langs.includes('es')) return 'es'
+  if (langs.includes('en')) return 'en'
+  return langs[0] ?? 'en'
+}
 
 // Detalle público de una propiedad, con galería tipo lightbox (abrir foto por
 // foto, teclado + flechas) y sección aparte de planos.
@@ -42,8 +50,18 @@ export function PublicPropertyView({
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
   }, [box, close, move])
 
-  const description = property.description_es ?? property.description_en
-  const features = (property.features_es?.length ? property.features_es : property.features_en) ?? []
+  // Idiomas disponibles del contenido (i18n) con fallback a los mirror es/en.
+  const descriptions = property.descriptions ?? {}
+  const featuresMap  = property.features_i18n ?? {}
+  const contentLangs = (property.content_languages && property.content_languages.length
+    ? property.content_languages
+    : Object.keys(descriptions)
+  ).filter(l => descriptions[l] || (featuresMap[l]?.length))
+
+  const [lang, setLang] = useState(() => pickDefaultLang(contentLangs))
+
+  const description = descriptions[lang] ?? property.description_es ?? property.description_en
+  const features = (featuresMap[lang]?.length ? featuresMap[lang] : (property.features_es?.length ? property.features_es : property.features_en)) ?? []
 
   type Spec = { icon: React.ReactNode; label: string; value: string }
   const specs: Spec[] = ([
@@ -149,9 +167,32 @@ export function PublicPropertyView({
           </div>
         )}
 
+        {/* Selector de idioma del contenido */}
+        {contentLangs.length > 1 && (
+          <div style={{ display: 'flex', gap: '6px', marginTop: '36px', flexWrap: 'wrap' }}>
+            {contentLangs.map(l => {
+              const on = l === lang
+              return (
+                <button
+                  key={l}
+                  onClick={() => setLang(l)}
+                  style={{
+                    padding: '5px 12px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', borderRadius: '999px',
+                    background: on ? `${accent}1a` : 'transparent',
+                    border: `1px solid ${on ? accent : 'var(--border-subtle)'}`,
+                    color: on ? accent : 'var(--text-muted)',
+                  }}
+                >
+                  {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.flag} {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l.toUpperCase()}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {/* Descripción */}
         {description && (
-          <section style={{ marginTop: '40px' }}>
+          <section style={{ marginTop: contentLangs.length > 1 ? '20px' : '40px' }}>
             <SectionTitle accent={accent}>Sobre la propiedad</SectionTitle>
             <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: 1.75, whiteSpace: 'pre-wrap', margin: 0 }}>{description}</p>
           </section>

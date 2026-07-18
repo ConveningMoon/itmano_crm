@@ -11,6 +11,7 @@ import { generatePropertyFromPdf } from './ai-actions'
 import type { AiPropertyDraft } from './ai-actions'
 import { FormSection } from '@/components/ui/form-section'
 import { Switch } from '@/components/ui/switch'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // Kebab-case slug from a free-text name (matches the server-side SLUG_RE).
 function slugify(input: string): string {
@@ -95,8 +96,7 @@ const EMPTY_FORM: PropertyInput = {
   name: null, slug: null, neighborhood: null, state: null,
   bathrooms_full: null, bathrooms_half: null,
   garage_spaces: null, lot_sqft: null,
-  description_en: null, description_es: null,
-  features_en: [], features_es: [],
+  content_languages: ['en'], descriptions: {}, features_i18n: {},
   image_url: null, gallery: [], floor_plans: [],
   detail_pdf_url: null, published_to_web: false,
 }
@@ -123,10 +123,9 @@ function formFromProperty(p: Property): PropertyInput {
     bathrooms_half:  p.bathroomsHalf,
     garage_spaces:   p.garageSpaces,
     lot_sqft:        p.lotSqft,
-    description_en:  p.descriptionEn,
-    description_es:  p.descriptionEs,
-    features_en:     p.featuresEn,
-    features_es:     p.featuresEs,
+    content_languages: p.contentLanguages.length ? p.contentLanguages.slice(0, 3) : (Object.keys(p.descriptions).length ? Object.keys(p.descriptions).slice(0, 3) : ['en']),
+    descriptions:      p.descriptions,
+    features_i18n:     p.featuresI18n,
     image_url:       p.imageUrl,
     gallery:         p.gallery,
     floor_plans:     p.floorPlans,
@@ -153,8 +152,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   const [formError, setFormError]   = useState<string | null>(null)
   const [form, setForm]             = useState<PropertyInput>(EMPTY_FORM)
   // Free-text mirrors of the features arrays (one item per line) for smooth typing.
-  const [featuresEnText, setFeaturesEnText] = useState('')
-  const [featuresEsText, setFeaturesEsText] = useState('')
+  // Texto libre de características por idioma (una por línea) para escritura fluida.
+  const [featuresText, setFeaturesText] = useState<Record<string, string>>({})
   // Media model: files upload to Storage immediately on selection and their URL
   // goes straight into the form. Storage is reconciled at save/discard so files
   // that were removed (or uploaded then abandoned) don't linger.
@@ -173,6 +172,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   // Fields prefilled by "Crear con IA" — flagged for review until the user edits them.
   const [aiFields, setAiFields] = useState<Set<string>>(new Set())
   const [aiBusy, setAiBusy] = useState(false)
+  // Idiomas que "Crear con IA" generará (máx 3). El usuario puede ajustarlos.
+  const [aiLangs, setAiLangs] = useState<string[]>(['es', 'en'])
   // Unsaved-changes tracking → confirm before an accidental outside-click close.
   const [dirty, setDirty] = useState(false)
   const [confirmingClose, setConfirmingClose] = useState(false)
@@ -192,8 +193,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
 
   function openCreate() {
     setForm({ ...EMPTY_FORM, tenant_id: isSuperAdmin ? (tenants[0]?.id ?? undefined) : undefined })
-    setFeaturesEnText('')
-    setFeaturesEsText('')
+    setFeaturesText({})
     setSlugTouched(false)
     setAiFields(new Set())
     resetMediaState()
@@ -207,8 +207,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   function openEdit(prop: Property) {
     const initialForm = formFromProperty(prop)
     setForm(initialForm)
-    setFeaturesEnText(prop.featuresEn.join('\n'))
-    setFeaturesEsText(prop.featuresEs.join('\n'))
+    setFeaturesText(Object.fromEntries(Object.entries(prop.featuresI18n).map(([l, arr]) => [l, (arr ?? []).join('\n')])))
     setSlugTouched(true) // an existing property keeps its slug
     setAiFields(new Set())
     resetMediaState()
@@ -311,6 +310,8 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     startTransition(async () => {
       const fd = new FormData()
       fd.set('file', file)
+      // Idiomas del contenido a generar (elegidos por el usuario; default es+en).
+      fd.set('languages', (aiLangs.length ? aiLangs : ['es', 'en']).join(','))
       if (isSuperAdmin && tenants[0]?.id) fd.set('tenant_id', tenants[0].id)
       const res = await generatePropertyFromPdf(fd)
       setAiBusy(false)
@@ -325,18 +326,18 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
     })
   }
 
-  function applyAiDraft(draft: AiPropertyDraft, fields: Array<keyof AiPropertyDraft>) {
-    const { features_en, features_es, ...scalar } = draft
+  function applyAiDraft(draft: AiPropertyDraft, fields: string[]) {
+    const { descriptions, features_i18n, content_languages, ...scalar } = draft
     setForm({
       ...EMPTY_FORM,
       ...scalar,
-      features_en,
-      features_es,
+      content_languages: content_languages.length ? content_languages : ['es', 'en'],
+      descriptions,
+      features_i18n,
       tenant_id: isSuperAdmin ? (tenants[0]?.id ?? undefined) : undefined,
       published_to_web: false, // never auto-publish AI drafts
     })
-    setFeaturesEnText(features_en.join('\n'))
-    setFeaturesEsText(features_es.join('\n'))
+    setFeaturesText(Object.fromEntries(Object.entries(features_i18n).map(([l, arr]) => [l, (arr ?? []).join('\n')])))
     setSlugTouched(true) // AI filled the slug; don't clobber it from the name
     setAiFields(new Set(fields as string[]))
     resetMediaState()
@@ -504,10 +505,17 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   function submitForm() {
     setFormError(null)
     startTransition(async () => {
+      // Características por idioma desde el texto libre (solo idiomas elegidos).
+      const langs = form.content_languages ?? []
+      const features_i18n: Record<string, string[]> = {}
+      for (const l of langs) {
+        const lines = splitLines(featuresText[l] ?? '')
+        if (lines.length) features_i18n[l] = lines
+      }
       const payload: PropertyInput = {
         ...form,
-        features_en: splitLines(featuresEnText),
-        features_es: splitLines(featuresEsText),
+        content_languages: langs,
+        features_i18n,
       }
       try {
         const result = editingId
@@ -567,6 +575,28 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {/* Idiomas que generará la IA (máx 3) — se aplican también al abrir el form. */}
+          {AI_ENABLED && (
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }} title="Idiomas que generará la IA (máx 3)">
+              {(['es', 'en', 'pt', 'fr', 'zh'] as const).map(l => {
+                const on = aiLangs.includes(l)
+                return (
+                  <button
+                    key={l}
+                    onClick={() => setAiLangs(prev => on ? prev.filter(x => x !== l) : (prev.length >= 3 ? prev : [...prev, l]))}
+                    style={{
+                      padding: '4px 8px', fontSize: '11px', fontWeight: 600, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: '6px',
+                      background: on ? 'rgba(201,169,110,0.15)' : 'transparent',
+                      border: `1px solid ${on ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                      color: on ? 'var(--accent-gold)' : 'var(--text-muted)',
+                    }}
+                  >
+                    {l.toUpperCase()}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {/* Crear con IA — upload a listing PDF, prefill the form.
               Gated off until the Claude API is provisioned (see AI_ENABLED). */}
           <label
@@ -1153,49 +1183,65 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 </label>
               </div>
 
-              {/* Descriptions EN / ES */}
-              <label style={labelStyle}>
-                <span style={labelTextStyle}>Descripción (inglés)</span>
-                <textarea
-                  value={form.description_en ?? ''}
-                  onChange={e => setField('description_en', e.target.value || null)}
-                  rows={4}
-                  placeholder="Welcome to…"
-                  style={{ ...fieldStyle('description_en'), resize: 'vertical', minHeight: '88px' }}
-                />
-              </label>
-              <label style={labelStyle}>
-                <span style={labelTextStyle}>Descripción (español)</span>
-                <textarea
-                  value={form.description_es ?? ''}
-                  onChange={e => setField('description_es', e.target.value || null)}
-                  rows={4}
-                  placeholder="Bienvenido a…"
-                  style={{ ...fieldStyle('description_es'), resize: 'vertical', minHeight: '88px' }}
-                />
-              </label>
+              {/* Idiomas del contenido (máx 3) + descripción y características por idioma */}
+              <div style={labelStyle}>
+                <span style={labelTextStyle}>Idiomas de la descripción (máx 3)</span>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                  {SUPPORTED_LANGUAGE_CODES.map(l => {
+                    const on = (form.content_languages ?? []).includes(l)
+                    const atMax = (form.content_languages ?? []).length >= 3
+                    return (
+                      <button
+                        key={l}
+                        type="button"
+                        disabled={!on && atMax}
+                        onClick={() => {
+                          const cur = form.content_languages ?? []
+                          const next = on ? cur.filter(x => x !== l) : [...cur, l]
+                          setField('content_languages', next)
+                        }}
+                        style={{
+                          padding: '5px 10px', fontSize: '12px', fontWeight: 500, cursor: (!on && atMax) ? 'default' : 'pointer', borderRadius: '999px',
+                          background: on ? 'rgba(201,169,110,0.15)' : 'transparent',
+                          border: `1px solid ${on ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                          color: on ? 'var(--accent-gold)' : 'var(--text-muted)',
+                          opacity: (!on && atMax) ? 0.4 : 1,
+                        }}
+                      >
+                        {LANGUAGE_CONFIG[l].flag} {LANGUAGE_CONFIG[l].label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
 
-              {/* Features EN / ES — one per line */}
-              <label style={labelStyle}>
-                <span style={labelTextStyle}>Características (inglés) — una por línea</span>
-                <textarea
-                  value={featuresEnText}
-                  onChange={e => { setFeaturesEnText(e.target.value); clearAiFlag('features_en') }}
-                  rows={4}
-                  placeholder={'Updated kitchen\nTwo-car garage\nHardwood floors'}
-                  style={{ ...fieldStyle('features_en'), resize: 'vertical', minHeight: '88px' }}
-                />
-              </label>
-              <label style={labelStyle}>
-                <span style={labelTextStyle}>Características (español) — una por línea</span>
-                <textarea
-                  value={featuresEsText}
-                  onChange={e => { setFeaturesEsText(e.target.value); clearAiFlag('features_es') }}
-                  rows={4}
-                  placeholder={'Cocina renovada\nGaraje para dos autos\nPisos de madera'}
-                  style={{ ...fieldStyle('features_es'), resize: 'vertical', minHeight: '88px' }}
-                />
-              </label>
+              {(form.content_languages ?? []).map(l => (
+                <div key={l} style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-elevated)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-gold)', letterSpacing: '0.04em' }}>
+                    {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.flag} {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l}
+                  </div>
+                  <label style={labelStyle}>
+                    <span style={labelTextStyle}>Descripción</span>
+                    <textarea
+                      value={form.descriptions?.[l] ?? ''}
+                      onChange={e => { setField('descriptions', { ...(form.descriptions ?? {}), [l]: e.target.value }); clearAiFlag('descriptions') }}
+                      rows={4}
+                      placeholder="Bienvenido a…"
+                      style={{ ...fieldStyle('descriptions'), resize: 'vertical', minHeight: '88px' }}
+                    />
+                  </label>
+                  <label style={labelStyle}>
+                    <span style={labelTextStyle}>Características — una por línea</span>
+                    <textarea
+                      value={featuresText[l] ?? ''}
+                      onChange={e => { setFeaturesText(prev => ({ ...prev, [l]: e.target.value })); clearAiFlag('features_i18n'); setDirty(true) }}
+                      rows={4}
+                      placeholder={'Cocina renovada\nGaraje para dos autos\nPisos de madera'}
+                      style={{ ...fieldStyle('features_i18n'), resize: 'vertical', minHeight: '88px' }}
+                    />
+                  </label>
+                </div>
+              ))}
               </FormSection>
 
               <FormSection title="Multimedia" description="Cada archivo se sube al seleccionarlo. Acepta JPG, PNG, WebP, GIF, AVIF, BMP, TIFF (máx 10 MB) y PDF — las imágenes se optimizan y convierten a WebP automáticamente.">

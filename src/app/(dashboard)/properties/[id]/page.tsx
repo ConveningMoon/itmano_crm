@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PropertyPageOptions } from './property-page-options'
 import { PropertyDetailTabs } from './property-detail-tabs'
+import { LANGUAGE_CONFIG } from '@/lib/config'
 
 // Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
 // del formulario, con botón Editar que abre el formulario completo) + tab
@@ -48,10 +49,10 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   ]
 
   const canEdit = ctx.role !== 'agent' || p.created_by_user_id === ctx.user_id
-  const descriptionEs = (p.description_es as string | null)?.trim()
-  const descriptionEn = (p.description_en as string | null)?.trim()
-  const featuresEs = (p.features_es as string[] | null) ?? []
-  const featuresEn = (p.features_en as string[] | null) ?? []
+  const descriptions = (p.descriptions && typeof p.descriptions === 'object') ? p.descriptions as Record<string, string> : {}
+  const featuresI18n = (p.features_i18n && typeof p.features_i18n === 'object') ? p.features_i18n as Record<string, string[]> : {}
+  const contentLangs = ((p.content_languages as string[] | null) ?? Object.keys(descriptions))
+    .filter(l => (descriptions[l]?.trim()) || (featuresI18n[l]?.length))
   const gallery = [(p.image_url as string | null), ...((p.gallery as string[] | null) ?? [])].filter((u): u is string => !!u)
 
   // ── Tab Descripción: datos completos + botón que abre el formulario de edición ──
@@ -94,43 +95,24 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
-      {/* Descripciones */}
-      {(descriptionEs || descriptionEn) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          {descriptionEs && (
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Descripción (ES)</div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{descriptionEs}</p>
+      {/* Descripciones y características por idioma */}
+      {contentLangs.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+          {contentLangs.map(l => (
+            <div key={l} style={{ border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l.toUpperCase()}
+              </div>
+              {descriptions[l]?.trim() && (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{descriptions[l]}</p>
+              )}
+              {(featuresI18n[l]?.length ?? 0) > 0 && (
+                <ul style={{ margin: '12px 0 0', paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                  {featuresI18n[l].map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              )}
             </div>
-          )}
-          {descriptionEn && (
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Descripción (EN)</div>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{descriptionEn}</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Características */}
-      {(featuresEs.length > 0 || featuresEn.length > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          {featuresEs.length > 0 && (
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Características (ES)</div>
-              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                {featuresEs.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </div>
-          )}
-          {featuresEn.length > 0 && (
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Características (EN)</div>
-              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                {featuresEn.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </div>
-          )}
+          ))}
         </div>
       )}
 

@@ -32,6 +32,10 @@ export type PublicProperty = {
   description_en: string | null
   features_es: string[] | null
   features_en: string[] | null
+  // Contenido multi-idioma (máx 3, migración 063).
+  content_languages: string[] | null
+  descriptions: Record<string, string> | null
+  features_i18n: Record<string, string[]> | null
   image_url: string | null
   gallery: string[] | null
   floor_plans: string[] | null
@@ -42,7 +46,8 @@ export const PUBLIC_PROPERTY_COLS = [
   'id', 'name', 'slug', 'address', 'city', 'neighborhood', 'state', 'property_type',
   'list_price', 'bedrooms', 'bathrooms_full', 'bathrooms_half', 'garage_spaces',
   'sqft', 'lot_sqft', 'year_built', 'status', 'description_es', 'description_en',
-  'features_es', 'features_en', 'image_url', 'gallery', 'floor_plans', 'detail_pdf_url',
+  'features_es', 'features_en', 'content_languages', 'descriptions', 'features_i18n',
+  'image_url', 'gallery', 'floor_plans', 'detail_pdf_url',
 ].join(', ')
 
 export async function getPublicTenant(tenantSlug: string): Promise<PublicTenant | null> {
