@@ -56,10 +56,11 @@ const STATE_META: Record<'crm' | 'template' | 'empty', { label: string; color: s
 // ─── Editor modal ──────────────────────────────────────────────────────────────
 
 function EditModal({
-  row, tenantName, onClose,
+  row, tenantName, agentName, onClose,
 }: {
   row: PurchaseTemplateRow
   tenantName?: string
+  agentName?: string
   onClose: () => void
 }) {
   const router = useRouter()
@@ -104,8 +105,10 @@ function EditModal({
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
         </div>
-        {tenantName && (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '18px' }}>{tenantName}</div>
+        {(agentName || tenantName) && (
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '18px' }}>
+            {[agentName, tenantName].filter(Boolean).join(' · ')}
+          </div>
         )}
 
         {!advanced ? (
@@ -169,10 +172,11 @@ function EditModal({
 // ─── Cell (status chip + edit button) ────────────────────────────────────────────
 
 function TemplateCell({
-  row, tenantName, readOnly,
+  row, tenantName, agentName, readOnly,
 }: {
   row: PurchaseTemplateRow
   tenantName?: string
+  agentName?: string
   readOnly: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -205,38 +209,55 @@ function TemplateCell({
           </button>
         )}
       </div>
-      {open && <EditModal row={row} tenantName={tenantName} onClose={() => setOpen(false)} />}
+      {open && <EditModal row={row} tenantName={tenantName} agentName={agentName} onClose={() => setOpen(false)} />}
     </>
   )
 }
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
+// Un panel por agente: columnas = idiomas registrados del agente
+// (agents.languages). El título/subtítulo general lo pone la página; aquí va
+// la cabecera del agente.
 
 export function PurchaseTemplatesPanel({
   templates,
+  agentName,
+  accentColor,
+  languages,
   tenantName,
   readOnly = false,
 }: {
   templates: PurchaseTemplateRow[]
+  agentName: string
+  accentColor?: string
+  languages: string[]
   tenantName?: string
   readOnly?: boolean
 }) {
   const byKey = Object.fromEntries(templates.map(t => [`${t.milestone}_${t.language}`, t]))
-  const langs = ['es', 'en', 'pt'] as const
+  const langs = (['es', 'en', 'pt'] as const).filter(l => languages.includes(l))
+  const color = accentColor ?? 'var(--accent-gold)'
 
-  const pendingCount = templates.filter(t => cellState(t) === 'empty').length
+  const shown = templates.filter(t => languages.includes(t.language))
+  const pendingCount = shown.filter(t => cellState(t) === 'empty').length
 
   return (
-    <div style={{ marginTop: '32px' }}>
-      {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+    <div style={{ marginTop: '24px' }}>
+      {/* Agent header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+        <div style={{
+          width: '28px', height: '28px', borderRadius: '50%',
+          background: `${color}22`, border: `1px solid ${color}44`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '10px', fontWeight: 700, color, flexShrink: 0,
+        }}>
+          {agentName.trim().slice(0, 2).toUpperCase()}
+        </div>
         <div>
-          <h2 style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-            Emails de cierre
-          </h2>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Contenido de los correos de los hitos del proceso de compra (inicio, pre-cierre, completado).
-          </p>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{agentName}</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+            {langs.map(l => LANG_LABEL[l]).join(' · ')}
+          </span>
         </div>
         {pendingCount > 0 && (
           <span style={{
@@ -257,7 +278,7 @@ export function PurchaseTemplatesPanel({
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
         {/* Header row */}
         <div style={{
-          display: 'grid', gridTemplateColumns: '180px repeat(3, 1fr)',
+          display: 'grid', gridTemplateColumns: `180px repeat(${langs.length}, 1fr)`,
           padding: '10px 16px', background: 'var(--bg-elevated)',
           borderBottom: '1px solid var(--border-subtle)',
         }}>
@@ -278,7 +299,7 @@ export function PurchaseTemplatesPanel({
           <div
             key={milestone}
             style={{
-              display: 'grid', gridTemplateColumns: '180px repeat(3, 1fr)',
+              display: 'grid', gridTemplateColumns: `180px repeat(${langs.length}, 1fr)`,
               padding: '14px 16px',
               borderTop: idx > 0 ? '1px solid var(--border-subtle)' : undefined,
               alignItems: 'center', gap: '12px',
@@ -290,19 +311,12 @@ export function PurchaseTemplatesPanel({
             {langs.map(lang => {
               const row = byKey[`${milestone}_${lang}`]
               if (!row) return <span key={lang} style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
-              return <TemplateCell key={lang} row={row} tenantName={tenantName} readOnly={readOnly} />
+              return <TemplateCell key={lang} row={row} tenantName={tenantName} agentName={agentName} readOnly={readOnly} />
             })}
           </div>
         ))}
       </div>
 
-      {!readOnly && (
-        <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-          Haz clic en el lápiz para crear el contenido de cada correo dentro del CRM (con IA opcional). Los correos
-          {' '}<AlertTriangle size={11} color="var(--accent-coral)" style={{ verticalAlign: 'middle' }} />{' '}
-          sin configurar no se envían hasta tener contenido.
-        </p>
-      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ export interface AgentRow {
   email: string
   phone: string | null
   language: string
+  languages?: string[] | null
   specialty: string
   avatar_initials: string
   accent_color: string
@@ -89,6 +90,7 @@ export function mapAgent(r: AgentRow): Agent {
     email: r.email,
     phone: r.phone ?? undefined,
     language: r.language as Agent['language'],
+    languages: (r.languages && r.languages.length > 0 ? r.languages : [r.language]) as Agent['languages'],
     specialty: r.specialty as Agent['specialty'],
     avatarInitials: r.avatar_initials,
     accentColor: r.accent_color,

@@ -27,7 +27,10 @@ export interface Agent {
   name: string
   email: string
   phone?: string
+  /** Idioma principal (ruteo automático de leads). Siempre ∈ languages. */
   language: Language
+  /** Idiomas registrados que atiende — definen sus emails de cierre (058). */
+  languages: Language[]
   specialty: AgentSpecialty
   avatarInitials: string
   accentColor: string

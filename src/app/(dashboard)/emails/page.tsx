@@ -3,7 +3,7 @@ import { listSequences } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceListActions } from './sequence-list-actions'
-import { getAllPurchaseTemplatesByTenant, getPurchaseTemplates } from './purchase-templates-actions'
+import { getAllPurchaseTemplatesByTenant, getPurchaseTemplatesByAgent } from './purchase-templates-actions'
 import { PurchaseTemplatesPanel } from './purchase-templates-panel'
 import { Plus, Mail } from 'lucide-react'
 
@@ -19,11 +19,14 @@ export default async function EmailsPage() {
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const [sequences, purchaseByTenant, ownTemplates] = await Promise.all([
+  const [sequences, purchaseByTenant, ownAgentTemplates] = await Promise.all([
     listSequences(tenant_id, scope.agentId),
     isSuperAdmin ? getAllPurchaseTemplatesByTenant() : Promise.resolve([]),
-    // Usuarios del tenant editan sus propios 3 emails de cierre (× idioma).
-    !isSuperAdmin && tenant_id ? getPurchaseTemplates(tenant_id) : Promise.resolve([]),
+    // Emails de cierre por agente (058): owner ve todos los agentes del tenant;
+    // rol 'agent' solo los suyos (el filtro lo refuerza la propia action).
+    !isSuperAdmin && tenant_id
+      ? getPurchaseTemplatesByAgent(tenant_id, { agentId: scope.agentId })
+      : Promise.resolve([]),
   ])
 
   return (
@@ -214,24 +217,53 @@ export default async function EmailsPage() {
         </div>
       )}
 
-      {/* Emails de cierre — super_admin: por tenant; usuarios del tenant: los propios.
-          El id ancla el botón "Configurar emails de cierre" del detalle de lead. */}
+      {/* Emails de cierre POR AGENTE (058) — super_admin: por tenant → agente;
+          owner: todos los agentes del tenant; agent: solo los suyos. El id ancla
+          el botón "Configurar emails de cierre" del detalle de lead. */}
       <div id="emails-de-cierre" style={{ scrollMarginTop: '80px' }}>
+        {(isSuperAdmin ? purchaseByTenant.length > 0 : ownAgentTemplates.length > 0) && (
+          <div style={{ marginTop: '40px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
+              Emails de cierre
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Cada agente tiene sus 3 correos de hitos del proceso de compra (inicio, pre-cierre,
+              completado) por cada idioma que atiende. Los idiomas se gestionan en Configuración → Agentes.
+            </p>
+          </div>
+        )}
         {isSuperAdmin
-          ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, templates }) => (
+          ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, agents }) => (
               <div key={tid} style={{ marginTop: '32px' }}>
                 <div style={{
-                  display: 'inline-block', marginBottom: '12px',
+                  display: 'inline-block', marginBottom: '4px',
                   fontSize: '11px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
                   color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)',
                   border: '1px solid rgba(201,169,110,0.2)', borderRadius: '6px', padding: '3px 10px',
                 }}>
                   {tenant_name}
                 </div>
-                <PurchaseTemplatesPanel templates={templates} tenantName={tenant_name} />
+                {agents.map(a => (
+                  <PurchaseTemplatesPanel
+                    key={a.agent_id}
+                    templates={a.templates}
+                    agentName={a.agent_name}
+                    accentColor={a.accent_color}
+                    languages={a.languages}
+                    tenantName={tenant_name}
+                  />
+                ))}
               </div>
             ))
-          : ownTemplates.length > 0 && <PurchaseTemplatesPanel templates={ownTemplates} />}
+          : ownAgentTemplates.map(a => (
+              <PurchaseTemplatesPanel
+                key={a.agent_id}
+                templates={a.templates}
+                agentName={a.agent_name}
+                accentColor={a.accent_color}
+                languages={a.languages}
+              />
+            ))}
       </div>
     </>
   )
