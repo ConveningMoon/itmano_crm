@@ -10,10 +10,11 @@ import { HostedForm } from './hosted-form'
 // acquisition_channels.hosted_page (constructor en /sources/<canal>).
 
 type Params = Promise<{ tenantSlug: string; channelSlug: string }>
+type SearchParams = Promise<{ draft?: string }>
 
 const HOSTED_TYPES = ['lead_magnet', 'event', 'contact_form']
 
-async function loadPage(tenantSlug: string, channelSlug: string) {
+async function loadPage(tenantSlug: string, channelSlug: string, allowDraft = false) {
   const db = createAdminClient()
 
   const { data: tenant } = await db
@@ -42,7 +43,9 @@ async function loadPage(tenantSlug: string, channelSlug: string) {
   if (!HOSTED_TYPES.includes(c.channel_type)) return null
 
   const config = parseHostedPage(c.hosted_page)
-  if (!config?.enabled) return null
+  // Borrador: el editor guarda enabled=false y previsualiza con ?draft=1 (la
+  // URL solo la conoce quien edita — riesgo aceptable para un borrador).
+  if (!config || (!config.enabled && !allowDraft)) return null
 
   return { tenant: t, channel: c, config }
 }
@@ -57,9 +60,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   }
 }
 
-export default async function HostedChannelPage({ params }: { params: Params }) {
+export default async function HostedChannelPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { tenantSlug, channelSlug } = await params
-  const page = await loadPage(tenantSlug, channelSlug)
+  const { draft } = await searchParams
+  const page = await loadPage(tenantSlug, channelSlug, draft === '1')
   if (!page) notFound()
 
   const { tenant, channel, config } = page
@@ -106,6 +110,28 @@ export default async function HostedChannelPage({ params }: { params: Params }) 
         </ul>
       )}
 
+      {/* Portada del material */}
+      {config.cover_image_url && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={config.cover_image_url}
+          alt={config.headline}
+          style={{ width: '100%', borderRadius: '12px', marginTop: '28px', display: 'block', border: '1px solid var(--border-subtle)' }}
+        />
+      )}
+
+      {/* Beneficios (tarjetas "qué contiene") */}
+      {config.benefits.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px', marginTop: '28px' }}>
+          {config.benefits.map((b, i) => (
+            <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{b.title}</div>
+              {b.desc && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: '6px' }}>{b.desc}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Formulario */}
       <div style={{
         marginTop: '32px', background: 'var(--bg-surface)',
@@ -120,6 +146,35 @@ export default async function HostedChannelPage({ params }: { params: Params }) 
           accent={accent}
         />
       </div>
+
+      {/* Quién lo preparó (agent intro) */}
+      {config.agent_intro?.name && (
+        <div style={{
+          marginTop: '32px', display: 'flex', gap: '16px', alignItems: 'flex-start',
+          background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+          borderRadius: '12px', padding: '20px',
+        }}>
+          {config.agent_intro.photo_url && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={config.agent_intro.photo_url}
+              alt={config.agent_intro.name}
+              style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: `2px solid ${accent}55` }}
+            />
+          )}
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>{config.agent_intro.name}</div>
+            {config.agent_intro.title && (
+              <div style={{ fontSize: '12px', color: accent, marginTop: '2px' }}>{config.agent_intro.title}</div>
+            )}
+            {config.agent_intro.paragraph && (
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '10px 0 0' }}>
+                {config.agent_intro.paragraph}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '28px', textAlign: 'center' }}>
         {tenant.name} · Impulsado por ITMANO

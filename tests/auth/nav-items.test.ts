@@ -9,14 +9,17 @@ describe('navItemsForRole', () => {
     expect(navItemsForRole('agent_owner', { hubMode: true })).toEqual(navItems)
   })
 
-  it('super_admin with a selected tenant gets the standard nav plus the control center', () => {
+  it('super_admin with a selected tenant gets the standard nav plus control center + solicitudes', () => {
     const items = navItemsForRole('super_admin')
     expect(items.slice(0, navItems.length)).toEqual(navItems)
-    expect(items.at(-1)).toEqual({ label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' })
+    expect(items.slice(navItems.length)).toEqual([
+      { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+      { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
+    ])
   })
 
-  it('super_admin in hub mode collapses to control center + notifications', () => {
+  it('super_admin in hub mode collapses to control center + solicitudes + notifications', () => {
     const items = navItemsForRole('super_admin', { hubMode: true })
-    expect(items.map(i => i.href)).toEqual(['/admin', '/notifications'])
+    expect(items.map(i => i.href)).toEqual(['/admin', '/solicitudes', '/notifications'])
   })
 })

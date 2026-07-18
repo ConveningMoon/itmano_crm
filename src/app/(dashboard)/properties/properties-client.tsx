@@ -721,10 +721,13 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)',
+                      fontSize: '14px', fontWeight: 500,
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>
-                      {prop.address}
+                      {/* Detalle + constructor de página de la propiedad */}
+                      <a href={`/properties/${prop.id}`} style={{ color: 'var(--text-primary)', textDecoration: 'none' }}>
+                        {prop.address}
+                      </a>
                     </div>
                     {prop.city && (
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>

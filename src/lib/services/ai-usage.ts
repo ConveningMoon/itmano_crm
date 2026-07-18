@@ -7,7 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // calculado con la tabla de precios por modelo. El registro es best-effort:
 // NUNCA hace fallar la acción que generó el contenido.
 
-export type AiFeature = 'property_intake' | 'email_draft' | 'sequence_bootstrap'
+export type AiFeature = 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy'
 
 export const AI_FEATURE_LABELS: Record<string, string> = {
   property_intake:    'Propiedades · Crear con IA',

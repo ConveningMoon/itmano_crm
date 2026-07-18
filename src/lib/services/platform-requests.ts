@@ -8,7 +8,7 @@ import { sendTelegramMessage } from '@/lib/services/telegram'
 // inmediato va por Telegram al chat del super_admin (user_profiles con
 // role='super_admin' y telegram_chat_id configurado).
 
-export type PlatformRequestKind = 'contact' | 'support'
+export type PlatformRequestKind = 'contact' | 'support' | 'page'
 
 export interface NewPlatformRequest {
   kind:            PlatformRequestKind
@@ -49,6 +49,10 @@ function buildTelegramText(req: NewPlatformRequest): string {
   if (req.kind === 'contact') {
     lines.push('📥 <b>Nuevo contacto en la landing</b>')
     lines.push(esc([req.requester_name, req.company].filter(Boolean).join(' · ') || req.requester_email))
+    lines.push(esc(req.requester_email))
+  } else if (req.kind === 'page') {
+    lines.push('🎨 <b>Solicitud de creación de página</b>')
+    if (req.tenant_name) lines.push(esc(req.tenant_name))
     lines.push(esc(req.requester_email))
   } else {
     lines.push(req.category === 'ai_capacity'
