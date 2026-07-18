@@ -46,7 +46,7 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
 
 // ─── Channel Card ─────────────────────────────────────────────────────────────
 
-function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
+function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number }) {
   const router = useRouter()
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
@@ -64,6 +64,7 @@ function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
         borderRadius: '16px',
         overflow: 'hidden',
         cursor: 'pointer',
+        animationDelay: `${Math.min(index * 45, 360)}ms`,
         borderTop: `3px solid ${typeColor}`,
         display: 'flex',
         flexDirection: 'column',
@@ -981,6 +982,10 @@ export function SourcesClient({ channels, archivedChannels, windowDays, isSuperA
     <div>
       <style>{`
         .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
+        @keyframes src-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        .source-card { animation: src-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
+        .source-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--shadow-md); transform: translateY(-3px); }
+        @media (prefers-reduced-motion: reduce) { .source-card { animation: none !important; transition: none !important; } }
       `}</style>
       {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
       {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
@@ -1081,7 +1086,7 @@ export function SourcesClient({ channels, archivedChannels, windowDays, isSuperA
                   tenantName={tenantName(ch.tenantId)}
                 />
               ))
-            : display.map(ch => <ChannelCard key={ch.id} ch={ch} />)}
+            : display.map((ch, i) => <ChannelCard key={ch.id} ch={ch} index={i} />)}
         </div>
       )}
     </div>

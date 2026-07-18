@@ -559,8 +559,12 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
   return (
     <>
       <style>{`
-        .prop-card { transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
-        .prop-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-md); }
+        @keyframes prop-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        .prop-card { animation: prop-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
+        .prop-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-md); transform: translateY(-3px); }
+        .prop-card:hover .prop-cover { transform: scale(1.04); }
+        .prop-cover { transition: transform 0.5s cubic-bezier(0.22,1,0.36,1); }
+        @media (prefers-reduced-motion: reduce) { .prop-card, .prop-cover { animation: none !important; transition: none !important; } }
         .tab-btn { transition: background var(--dur-fast), color var(--dur-fast); }
       `}</style>
 
@@ -711,7 +715,7 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
       {/* Property grid */}
       {filtered.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
-          {filtered.map(prop => {
+          {filtered.map((prop, i) => {
             const status = STATUS_CONFIG[prop.status]
             return (
               <div
@@ -730,12 +734,15 @@ export function PropertiesClient({ properties, tenants, viewerRole, viewerUserId
                   flexDirection: 'column',
                   gap: '12px',
                   cursor: 'pointer',
+                  overflow: 'hidden',
+                  animationDelay: `${Math.min(i * 45, 360)}ms`,
                 }}
               >
                 {/* Cover preview — bleeds over the card padding to the rounded top edge */}
                 {prop.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
+                    className="prop-cover"
                     src={prop.imageUrl}
                     alt={`Portada de ${prop.address}`}
                     loading="lazy"
