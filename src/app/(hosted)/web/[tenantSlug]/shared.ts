@@ -34,6 +34,7 @@ export type PublicProperty = {
   features_en: string[] | null
   image_url: string | null
   gallery: string[] | null
+  floor_plans: string[] | null
   detail_pdf_url: string | null
 }
 
@@ -41,7 +42,7 @@ export const PUBLIC_PROPERTY_COLS = [
   'id', 'name', 'slug', 'address', 'city', 'neighborhood', 'state', 'property_type',
   'list_price', 'bedrooms', 'bathrooms_full', 'bathrooms_half', 'garage_spaces',
   'sqft', 'lot_sqft', 'year_built', 'status', 'description_es', 'description_en',
-  'features_es', 'features_en', 'image_url', 'gallery', 'detail_pdf_url',
+  'features_es', 'features_en', 'image_url', 'gallery', 'floor_plans', 'detail_pdf_url',
 ].join(', ')
 
 export async function getPublicTenant(tenantSlug: string): Promise<PublicTenant | null> {
