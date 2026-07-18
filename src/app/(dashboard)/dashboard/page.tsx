@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
-import { STATUS_CONFIG } from '@/lib/config'
+import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
@@ -104,13 +104,6 @@ export default async function DashboardPage() {
     ).length
     return { agent, total, hot, percentage, closed }
   })
-
-  const specialtyLabel: Record<string, string> = {
-    hispanic:    'Familias Hispanas',
-    military:    'Familias Militares',
-    first_buyer: 'Primeros Compradores',
-    brazilian:   'Comunidad Brasileña',
-  }
 
   const statCards = [
     {
@@ -407,11 +400,11 @@ export default async function DashboardPage() {
                 {agent.avatarInitials}
               </div>
 
-              {/* Name + role */}
+              {/* Name + idiomas */}
               <div style={{ minWidth: '160px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {agent.specialty === 'hispanic' ? 'agent_owner' : 'agent'}
+                  {agent.languages.map(l => LANGUAGE_CONFIG[l]?.flag ?? l).join(' ')}
                 </div>
               </div>
 
@@ -428,9 +421,11 @@ export default async function DashboardPage() {
                 {total}/{leads.length}
               </div>
 
-              {/* Specialty + hot */}
+              {/* Idiomas + hot */}
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{specialtyLabel[agent.specialty]}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
+                </div>
                 <div style={{ fontSize: '11px', color: 'var(--status-hot)' }}>{hot} calientes</div>
               </div>
             </div>

@@ -23,7 +23,6 @@ const DEFAULT_AGENT_ID = 'agent-adriana'
 export interface RoutingAgent {
   id:        string
   active:    boolean
-  specialty: string | null
 }
 
 // Pure selection rule — unit-tested in isolation. Returns the chosen agent id, or
@@ -57,7 +56,7 @@ export async function resolveChannelAgent(
 ): Promise<string | null> {
   const { data: agentRows } = await db
     .from('agents')
-    .select('id, active, specialty')
+    .select('id, active')
     .eq('tenant_id', tenantId)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,9 +64,8 @@ export async function resolveChannelAgent(
   if (rows.length === 0) return null
 
   const agents: RoutingAgent[] = rows.map(a => ({
-    id:        a.id as string,
-    active:    a.active as boolean,
-    specialty: (a.specialty ?? null) as string | null,
+    id:     a.id as string,
+    active: a.active as boolean,
   }))
 
   // Warn when an explicit link is being skipped for inactivity.

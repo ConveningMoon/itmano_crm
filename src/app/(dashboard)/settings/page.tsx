@@ -54,6 +54,20 @@ export default async function SettingsPage() {
     agentAccess[row.id] = !!row.user_id
     if (myUserId && row.user_id === myUserId) ownerLinked = true
   }
+
+  // Qué agente es el owner del tenant (agents.user_id ↔ user_profiles agent_owner).
+  const { data: ownerProfiles } = await supabase
+    .from('user_profiles').select('id').eq('tenant_id', tenantId).eq('role', 'agent_owner')
+  const ownerUserIds = new Set(((ownerProfiles ?? []) as { id: string }[]).map(p => p.id))
+  let ownerAgentId: string | null = null
+  for (const r of rawAgents ?? []) {
+    const row = r as AgentRow & { user_id: string | null }
+    if (row.user_id && ownerUserIds.has(row.user_id)) { ownerAgentId = row.id; break }
+  }
+  // Eliminar agentes: plan Partner (multiLogin) o super_admin.
+  const canDeleteAgents =
+    ctx.role === 'super_admin' ||
+    (ctx.role === 'agent_owner' && subscription?.plan === 'partner')
   // The owner may link their own login to one unlinked agent (once).
   const canLinkSelf = ctx.role === 'agent_owner' && !ownerLinked
 
@@ -94,6 +108,8 @@ export default async function SettingsPage() {
         canManageAgents={ctx.role !== 'agent'}
         canLinkSelf={canLinkSelf}
         myAgentId={ctx.agent_id}
+        ownerAgentId={ownerAgentId}
+        canDeleteAgents={canDeleteAgents}
         userEmail={userRes.data.user?.email ?? ''}
         userRole={ctx.role}
         aiUsage={aiUsage}

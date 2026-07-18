@@ -54,13 +54,6 @@ const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', '
 
 const LOAN_TYPES = ['VA Loan', 'FHA', 'Convencional', 'USDA', 'Jumbo', 'Cash']
 
-const SPECIALTY_LABEL: Record<string, string> = {
-  hispanic:    'Familias Hispanas',
-  military:    'Familias Militares',
-  first_buyer: 'Primeros Compradores',
-  brazilian:   'Comunidad Brasileña',
-}
-
 const CARD: React.CSSProperties = {
   background:   'var(--bg-surface)',
   border:       '1px solid var(--border-subtle)',
@@ -559,7 +552,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   </div>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{SPECIALTY_LABEL[agent.specialty]}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
+                    </div>
                   </div>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>{agent.email}</div>
@@ -784,7 +779,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         open={showEmailModal}
         onClose={() => setShowEmailModal(false)}
         leadId={lead.id}
-        language={lead.language}
+        // El sistema de emails (render + IA) soporta es/en/pt; otros idiomas
+        // caen a español hasta localizar esa capa (ver nota al usuario).
+        language={(['es', 'en', 'pt'].includes(lead.language) ? lead.language : 'es') as 'es' | 'en' | 'pt'}
         leadFirstName={lead.firstName}
         agentName={agent?.name}
       />

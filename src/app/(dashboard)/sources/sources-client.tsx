@@ -47,17 +47,23 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
 // ─── Channel Card ─────────────────────────────────────────────────────────────
 
 function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
+  const router = useRouter()
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
 
   return (
     <div
       className="source-card"
+      role="link"
+      tabIndex={0}
+      onClick={() => router.push(`/sources/${ch.slug}`)}
+      onKeyDown={e => { if (e.key === 'Enter') router.push(`/sources/${ch.slug}`) }}
       style={{
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-subtle)',
         borderRadius: '16px',
         overflow: 'hidden',
+        cursor: 'pointer',
         borderTop: `3px solid ${typeColor}`,
         display: 'flex',
         flexDirection: 'column',
@@ -168,28 +174,12 @@ function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
       }}>
         <Link
           href={`/leads?channel=${ch.id}`}
+          onClick={e => e.stopPropagation()}
           style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}
         >
           Ver leads →
         </Link>
-        <Link
-          href={`/sources/${ch.slug}`}
-          className="detail-link"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            textDecoration: 'none',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '6px',
-            padding: '5px 10px',
-            transition: 'border-color 0.15s, color 0.15s',
-          }}
-        >
-          Ver detalle
-        </Link>
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Abrir detalle →</span>
       </div>
     </div>
   )

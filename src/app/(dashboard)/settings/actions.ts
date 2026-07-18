@@ -6,6 +6,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { PLANS } from '@/lib/plans'
+
+const LANGUAGE_ENUM = SUPPORTED_LANGUAGE_CODES as [string, ...string[]]
 
 // ─── Update tenant name ───────────────────────────────────────────────────────
 
@@ -385,8 +389,7 @@ export async function updateAgentLanguages(
   const tenantId = ctx.tenant_id
   if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
 
-  const VALID = ['es', 'en', 'pt']
-  const clean = [...new Set(languages)].filter(l => VALID.includes(l))
+  const clean = [...new Set(languages)].filter(l => (SUPPORTED_LANGUAGE_CODES as string[]).includes(l))
   if (clean.length === 0) return { ok: false, error: 'El agente debe atender al menos un idioma.' }
 
   const supabase = createAdminClient()
@@ -400,7 +403,7 @@ export async function updateAgentLanguages(
 
   const primary = (agent as { language: string }).language
   if (!clean.includes(primary)) {
-    return { ok: false, error: 'El idioma principal del agente (usado para el ruteo de leads) no puede quitarse.' }
+    return { ok: false, error: 'El idioma principal del agente no puede quitarse.' }
   }
 
   const { error } = await supabase
@@ -490,8 +493,7 @@ const CreateAgentSchema = z.object({
   name:           z.string().trim().min(1, 'El nombre es obligatorio').max(80),
   email:          z.string().trim().email('Email inválido'),
   phone:          z.string().trim().max(40).optional(),
-  language:       z.enum(['es', 'en', 'pt']),
-  specialty:      z.enum(['hispanic', 'military', 'first_buyer', 'brazilian']),
+  language:       z.enum(LANGUAGE_ENUM),
   avatarInitials: z.string().trim().min(1).max(2),
   accentColor:    z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)'),
   tenantId:       z.string().optional(), // required for super_admin
@@ -500,7 +502,7 @@ const CreateAgentSchema = z.object({
 export async function createAgent(
   input: {
     name: string; email: string; phone?: string; language: string
-    specialty: string; avatarInitials: string; accentColor: string; tenantId?: string
+    avatarInitials: string; accentColor: string; tenantId?: string
   },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const ctx    = await getCurrentTenantContext()
@@ -527,7 +529,6 @@ export async function createAgent(
     phone:           parsed.data.phone?.trim() || null,
     language:        parsed.data.language,
     languages:       [parsed.data.language],
-    specialty:       parsed.data.specialty,
     avatar_initials: parsed.data.avatarInitials.toUpperCase().slice(0, 2),
     accent_color:    parsed.data.accentColor,
     active:          true,
@@ -604,11 +605,20 @@ export async function inviteAgentAccess(
     created = true
   }
 
-  // Profile (role 'agent') → link agents.user_id → record the invitation.
+  // Si el tenant todavía no tiene owner, este primer login se vuelve el
+  // agent_owner automáticamente (el resto entran como 'agent').
+  const { count: ownerCount } = await supabase
+    .from('user_profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', a.tenant_id)
+    .eq('role', 'agent_owner')
+  const roleForNew = (ownerCount ?? 0) === 0 ? 'agent_owner' : 'agent'
+
+  // Profile → link agents.user_id → record the invitation.
   const { error: profileErr } = await supabase.from('user_profiles').insert({
     id:        userId,
     tenant_id: a.tenant_id,
-    role:      'agent',
+    role:      roleForNew,
   })
   if (profileErr) return { ok: false, error: profileErr.message }
 
@@ -618,7 +628,7 @@ export async function inviteAgentAccess(
   const { error: inviteErr } = await supabase.from('invitations').insert({
     tenant_id:  a.tenant_id,
     email:      normalized,
-    role:       'agent',
+    role:       roleForNew,
     agent_id:   a.id,
     invited_by: ctx.user_id,
     status:     'pending',
@@ -703,4 +713,159 @@ export async function linkAgentToMyAccount(
   revalidatePath('/leads')
   revalidatePath('/dashboard')
   return { ok: true }
+}
+
+// ─── Transferir el rol de owner del tenant ────────────────────────────────────
+// El owner actual (o super_admin) marca a otro agente CON login como nuevo
+// agent_owner; el anterior pasa a 'agent'. Ambos deben estar vinculados a un
+// registro de agente (invariante de tenant-context: rol 'agent' ⇒ agents.user_id).
+export async function setAgentAsOwner(
+  agentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'agent_owner' && ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo el propietario o un administrador de ITMANO puede transferir el rol.' }
+  }
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const supabase = createAdminClient()
+
+  const { data: target } = await supabase
+    .from('agents').select('id, user_id').eq('id', agentId).eq('tenant_id', tenantId).maybeSingle()
+  if (!target) return { ok: false, error: 'Agente no encontrado' }
+  const t = target as { id: string; user_id: string | null }
+  if (!t.user_id) return { ok: false, error: 'El agente necesita un acceso de login para ser propietario. Invítalo primero.' }
+
+  // Owners actuales del tenant.
+  const { data: owners } = await supabase
+    .from('user_profiles').select('id').eq('tenant_id', tenantId).eq('role', 'agent_owner')
+  const ownerIds = ((owners ?? []) as { id: string }[]).map(o => o.id)
+
+  if (ownerIds.length === 1 && ownerIds[0] === t.user_id) {
+    return { ok: false, error: 'Ese agente ya es el propietario.' }
+  }
+
+  // Cada owner actual (distinto del target) debe estar vinculado a un agente para
+  // poder degradarlo a 'agent' sin romper su sesión.
+  for (const oid of ownerIds) {
+    if (oid === t.user_id) continue
+    const { data: oa } = await supabase
+      .from('agents').select('id').eq('user_id', oid).eq('tenant_id', tenantId).maybeSingle()
+    if (!oa) {
+      return { ok: false, error: 'El propietario actual no está vinculado a un agente; vincúlalo primero (botón "Vincular a mi cuenta") para transferir.' }
+    }
+  }
+
+  // Promover el nuevo owner.
+  const { error: upErr } = await supabase
+    .from('user_profiles').update({ role: 'agent_owner' }).eq('id', t.user_id)
+  if (upErr) return { ok: false, error: upErr.message }
+
+  // Degradar a los owners anteriores.
+  for (const oid of ownerIds) {
+    if (oid === t.user_id) continue
+    await supabase.from('user_profiles').update({ role: 'agent' }).eq('id', oid)
+  }
+
+  revalidatePath('/settings')
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+// ─── Eliminar un agente reasignando su trabajo al owner (plan Partner) ─────────
+// Destructivo pero sin pérdida: reasigna leads/fuentes/secuencias/propiedades del
+// agente al agente-owner, borra su login y su registro. leads.agent_id es
+// RESTRICT, así que la reasignación DEBE ocurrir antes del delete. Doble
+// verificación en la UI. Gate: owner/super_admin + plan Partner (multiLogin).
+export async function deleteAgent(
+  agentId: string,
+): Promise<{ ok: true; reassignedTo: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'agent_owner' && ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo el propietario o un administrador de ITMANO puede eliminar agentes.' }
+  }
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const supabase = createAdminClient()
+
+  // Gate por plan: eliminar agentes es de Partner (multi-login). super_admin pasa.
+  if (ctx.role !== 'super_admin') {
+    const { data: sub } = await supabase
+      .from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle()
+    const plan = (sub as { plan?: string } | null)?.plan
+    if (!plan || !PLANS[plan as keyof typeof PLANS]?.features.multiLogin) {
+      return { ok: false, error: 'Eliminar agentes está disponible en el plan Partner.' }
+    }
+  }
+
+  const { data: agent } = await supabase
+    .from('agents').select('id, user_id, active').eq('id', agentId).eq('tenant_id', tenantId).maybeSingle()
+  if (!agent) return { ok: false, error: 'Agente no encontrado' }
+  const a = agent as { id: string; user_id: string | null; active: boolean }
+
+  // No eliminar al propietario.
+  if (a.user_id) {
+    const { data: prof } = await supabase
+      .from('user_profiles').select('role').eq('id', a.user_id).maybeSingle()
+    if ((prof as { role?: string } | null)?.role === 'agent_owner') {
+      return { ok: false, error: 'No puedes eliminar al propietario. Transfiere el rol a otro agente primero.' }
+    }
+  }
+
+  // Agente-owner destino de la reasignación.
+  const { data: ownerProfile } = await supabase
+    .from('user_profiles').select('id').eq('tenant_id', tenantId).eq('role', 'agent_owner').maybeSingle()
+  let targetAgentId: string | null = null
+  if (ownerProfile) {
+    const { data: oa } = await supabase
+      .from('agents').select('id').eq('user_id', (ownerProfile as { id: string }).id).eq('tenant_id', tenantId).maybeSingle()
+    targetAgentId = (oa as { id: string } | null)?.id ?? null
+  }
+  if (!targetAgentId) {
+    // Fallback: primer otro agente activo del tenant.
+    const { data: other } = await supabase
+      .from('agents').select('id').eq('tenant_id', tenantId).eq('active', true).neq('id', agentId).order('id').limit(1)
+    targetAgentId = ((other ?? []) as { id: string }[])[0]?.id ?? null
+  }
+  if (!targetAgentId) return { ok: false, error: 'No hay otro agente al que reasignar. No se puede eliminar el último agente.' }
+  if (targetAgentId === agentId) return { ok: false, error: 'No puedes reasignar al mismo agente.' }
+
+  // Reasignar todo lo del agente al destino (leads es RESTRICT → obligatorio).
+  const reassign = async (table: string, column: string) => {
+    const { error } = await supabase.from(table).update({ [column]: targetAgentId }).eq(column, agentId).eq('tenant_id', tenantId)
+    if (error) throw new Error(`${table}: ${error.message}`)
+  }
+  try {
+    await reassign('leads', 'agent_id')
+    await reassign('acquisition_channels', 'agent_id')
+    await reassign('email_sequences', 'agent_id')
+    await reassign('notifications', 'agent_id')
+    await reassign('properties', 'created_by_agent_id')
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo reasignar el trabajo del agente.' }
+  }
+
+  // Invitaciones del agente → eliminarlas (su FK es SET NULL, pero limpiamos).
+  await supabase.from('invitations').delete().eq('agent_id', agentId)
+
+  // Borrar el login (cascade user_profiles). Si no tiene, se omite.
+  if (a.user_id) {
+    const { error: delUserErr } = await supabase.auth.admin.deleteUser(a.user_id)
+    if (delUserErr) return { ok: false, error: `No se pudo eliminar el login: ${delUserErr.message}` }
+  }
+
+  // Borrar el agente. purchase_email_templates: CASCADE (sus correos de cierre);
+  // ai_usage_events: SET NULL (histórico anónimo).
+  const { error: delAgentErr } = await supabase.from('agents').delete().eq('id', agentId).eq('tenant_id', tenantId)
+  if (delAgentErr) return { ok: false, error: delAgentErr.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  revalidatePath('/properties')
+  revalidatePath('/sources')
+  return { ok: true, reassignedTo: targetAgentId }
 }

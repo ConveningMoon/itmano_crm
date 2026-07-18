@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { resolveRoutedAgent, type RoutingAgent } from '@/lib/services/route-channel-agent'
 
-// A&J-like roster: Adriana (login), Dylan, John, Viviane, Melanie (first_buyer).
+// A&J-like roster: Adriana (login), Dylan, John, Viviane, Melanie.
 function roster(overrides: Partial<Record<string, Partial<RoutingAgent>>> = {}): RoutingAgent[] {
   const base: Record<string, RoutingAgent> = {
-    'agent-adriana': { id: 'agent-adriana', active: true, specialty: 'hispanic'    },
-    'agent-dylan':   { id: 'agent-dylan',   active: true, specialty: 'hispanic'    },
-    'agent-john':    { id: 'agent-john',    active: true, specialty: 'military'    },
-    'agent-viviane': { id: 'agent-viviane', active: true, specialty: 'brazilian'   },
-    'agent-melanie': { id: 'agent-melanie', active: true, specialty: 'first_buyer' },
+    'agent-adriana': { id: 'agent-adriana', active: true },
+    'agent-dylan':   { id: 'agent-dylan',   active: true },
+    'agent-john':    { id: 'agent-john',    active: true },
+    'agent-viviane': { id: 'agent-viviane', active: true },
+    'agent-melanie': { id: 'agent-melanie', active: true },
   }
   for (const [id, o] of Object.entries(overrides)) base[id] = { ...base[id], ...o }
   return Object.values(base)
@@ -19,7 +19,7 @@ describe('resolveRoutedAgent — explicit channel agent', () => {
     expect(resolveRoutedAgent('agent-john', roster())).toBe('agent-john')
   })
 
-  it('a first_buyer agent can be explicitly linked', () => {
+  it('any agent can be explicitly linked', () => {
     expect(resolveRoutedAgent('agent-melanie', roster())).toBe('agent-melanie')
   })
 
@@ -51,9 +51,9 @@ describe('resolveRoutedAgent — "Toda la agencia" (null channelAgentId)', () =>
 
   it('falls back to first active agent when adriana is absent from the roster', () => {
     const agents: RoutingAgent[] = [
-      { id: 'agent-john',    active: true, specialty: 'military'  },
-      { id: 'agent-viviane', active: true, specialty: 'brazilian' },
-      { id: 'agent-dylan',   active: true, specialty: 'hispanic'  },
+      { id: 'agent-john',    active: true },
+      { id: 'agent-viviane', active: true },
+      { id: 'agent-dylan',   active: true },
     ]
     // Alphabetical: agent-dylan < agent-john < agent-viviane.
     expect(resolveRoutedAgent(null, agents)).toBe('agent-dylan')
@@ -61,9 +61,9 @@ describe('resolveRoutedAgent — "Toda la agencia" (null channelAgentId)', () =>
 })
 
 describe('resolveRoutedAgent — degenerate', () => {
-  it('falls back to the only active agent even if first_buyer specialty', () => {
+  it('falls back to the only active agent', () => {
     const onlyMelanie: RoutingAgent[] = [
-      { id: 'agent-melanie', active: true, specialty: 'first_buyer' },
+      { id: 'agent-melanie', active: true },
     ]
     // No adriana, one active agent → last-resort fallback returns her.
     expect(resolveRoutedAgent(null, onlyMelanie)).toBe('agent-melanie')
