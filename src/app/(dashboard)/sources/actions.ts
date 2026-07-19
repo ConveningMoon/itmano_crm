@@ -161,18 +161,27 @@ export async function uploadHostedImage(
 
 const AI_MODEL = 'claude-sonnet-5'
 
-const PAGE_COPY_TOOL = {
-  name: 'compose_landing_copy',
-  description: 'Devuelve el copy completo de una landing page de captación inmobiliaria.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      headline:        { type: 'string', description: 'Título principal, directo y específico (máx 120 caracteres)' },
-      subheadline:     { type: 'string', description: 'Subtítulo de 1–2 frases' },
-      bullets:         { type: 'array', items: { type: 'string' }, description: '3–4 beneficios concretos, uno por línea' },
-      cta_label:       { type: 'string', description: 'Texto del botón (máx 40 caracteres)' },
-      success_message: { type: 'string', description: 'Mensaje tras enviar el formulario' },
-      benefits:        {
+// Tool de extracción por tipo de canal. Campos comunes + los específicos del
+// template (lead magnet completo, evento con datos logísticos). Los testimonios
+// NUNCA los genera la IA — son citas reales de clientes que escribe el agente.
+function buildPageCopyTool(channelType: string) {
+  const properties: Record<string, unknown> = {
+    language:        { type: 'string', enum: ['es', 'en', 'pt'], description: 'Idioma detectado de la descripción (el copy se escribe en ese idioma)' },
+    headline:        { type: 'string', description: 'Título principal, directo y específico (máx 120 caracteres)' },
+    subheadline:     { type: 'string', description: 'Subtítulo de 1–2 frases' },
+    bullets:         { type: 'array', items: { type: 'string' }, description: '3–4 beneficios concretos, uno por línea' },
+    cta_label:       { type: 'string', description: 'Texto del botón (máx 40 caracteres)' },
+    success_message: { type: 'string', description: 'Mensaje tras enviar el formulario' },
+  }
+  const required = ['language', 'headline', 'subheadline', 'bullets', 'cta_label', 'success_message']
+
+  if (channelType === 'lead_magnet') {
+    Object.assign(properties, {
+      badge:             { type: 'string', description: 'Eyebrow corto del hero (ej.: "Guía gratuita · Hampton Roads, Virginia")' },
+      microcopy:         { type: 'string', description: 'Microcopy bajo el botón (ej.: "100% gratis · Sin compromiso")' },
+      benefits_title:    { type: 'string', description: 'Título de la sección "qué contiene"' },
+      benefits_subtitle: { type: 'string', description: 'Subtítulo de 1–2 frases de esa sección' },
+      benefits: {
         type: 'array',
         items: {
           type: 'object',
@@ -181,18 +190,67 @@ const PAGE_COPY_TOOL = {
         },
         description: '4–6 tarjetas de "qué contiene / qué obtienes"',
       },
-    },
-    required: ['headline', 'subheadline', 'bullets', 'cta_label', 'success_message', 'benefits'],
-  },
+      form_title:          { type: 'string', description: 'Encabezado de la sección del formulario (ej.: "Cuéntanos un poco sobre ti y recibe la guía")' },
+      form_subtitle:       { type: 'string', description: 'Frase de apoyo del formulario' },
+      final_cta_title:     { type: 'string', description: 'Título del CTA final de la página' },
+      final_cta_paragraph: { type: 'string', description: 'Párrafo breve del CTA final' },
+    })
+    required.push('badge', 'microcopy', 'benefits_title', 'benefits', 'form_title', 'final_cta_title', 'final_cta_paragraph')
+  } else if (channelType === 'event') {
+    Object.assign(properties, {
+      event_short_description: { type: 'string', description: 'Descripción corta del evento (2–3 frases)' },
+      event_date:     { type: 'string', description: 'Fecha del evento SI aparece en la descripción (texto humano, ej. "Sábado 12 de octubre"); vacío si no' },
+      event_time:     { type: 'string', description: 'Hora del evento SI aparece en la descripción; vacío si no' },
+      event_location: { type: 'string', description: 'Lugar del evento SI aparece en la descripción; vacío si no' },
+    })
+    required.push('event_short_description')
+  } else {
+    // contact_form: solo el copy base + tarjetas opcionales.
+    Object.assign(properties, {
+      benefits: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { title: { type: 'string' }, desc: { type: 'string' } },
+          required: ['title', 'desc'],
+        },
+        description: '3–4 tarjetas de "por qué escribirnos" (opcional)',
+      },
+    })
+  }
+
+  return {
+    name: 'compose_landing_copy',
+    description: 'Devuelve el copy completo de una landing page de captación inmobiliaria.',
+    input_schema: { type: 'object' as const, properties, required },
+  }
+}
+
+export interface HostedPageCopy {
+  language:        'es' | 'en' | 'pt' | ''
+  headline:        string
+  subheadline:     string
+  bullets:         string[]
+  cta_label:       string
+  success_message: string
+  benefits:        { title: string; desc: string }[]
+  badge:               string
+  microcopy:           string
+  benefits_title:      string
+  benefits_subtitle:   string
+  form_title:          string
+  form_subtitle:       string
+  final_cta_title:     string
+  final_cta_paragraph: string
+  event: { date: string; time: string; location: string; short_description: string }
 }
 
 export type PageCopyResult =
-  | { ok: true; copy: { headline: string; subheadline: string; bullets: string[]; cta_label: string; success_message: string; benefits: { title: string; desc: string }[] } }
+  | { ok: true; copy: HostedPageCopy }
   | { ok: false; error: string }
 
 export async function generateHostedPageCopy(input: {
   channelType: string
-  language: 'es' | 'en' | 'pt'
   description: string
   tenantName?: string
   agentName?: string
@@ -216,14 +274,15 @@ export async function generateHostedPageCopy(input: {
   }
 
   const typeLabel = { lead_magnet: 'lead magnet (material descargable gratuito)', event: 'evento presencial', contact_form: 'formulario de contacto' }[input.channelType] ?? 'página de captación'
-  const langLabel = { es: 'español neutro latino', en: 'inglés', pt: 'portugués brasileño' }[input.language]
 
   const prompt = [
     `Escribe el copy de una landing page inmobiliaria de captación para un ${typeLabel}.`,
-    `Idioma: ${langLabel}. Tono: cercano, específico, honesto — sin hype, sin emojis, sin promesas exageradas.`,
+    'Idioma: detecta el idioma de la descripción y escribe TODO el copy en ese mismo idioma (si es español, español neutro latino). Devuélvelo en el campo `language`.',
+    'Tono: cercano, específico, honesto — sin hype, sin emojis, sin promesas exageradas.',
     input.tenantName ? `Agencia: ${input.tenantName}.` : null,
     input.agentName ? `Agente responsable: ${input.agentName}.` : null,
     input.documentBase64 ? 'Se adjunta un documento con material de referencia — úsalo como fuente principal de los hechos, complementado por la descripción.' : null,
+    input.channelType === 'event' ? 'Extrae fecha, hora y lugar SOLO si aparecen en la descripción — nunca los inventes.' : null,
     '',
     'Descripción del material / objetivo (base de todo el copy):',
     description,
@@ -240,9 +299,9 @@ export async function generateHostedPageCopy(input: {
     const anthropic = new Anthropic()
     const message = await anthropic.messages.create({
       model: AI_MODEL,
-      max_tokens: 2500,
+      max_tokens: 3500,
       thinking: { type: 'disabled' },
-      tools: [PAGE_COPY_TOOL],
+      tools: [buildPageCopyTool(input.channelType)],
       tool_choice: { type: 'tool', name: 'compose_landing_copy' },
       messages: [{ role: 'user', content: userContent }],
     })
@@ -253,7 +312,7 @@ export async function generateHostedPageCopy(input: {
       feature:  'hosted_page_copy',
       model:    AI_MODEL,
       usage:    message.usage,
-      metadata: { channel_type: input.channelType, language: input.language },
+      metadata: { channel_type: input.channelType },
     })
 
     const block = message.content.find(b => b.type === 'tool_use')
@@ -261,7 +320,8 @@ export async function generateHostedPageCopy(input: {
     const t = block.input as Record<string, unknown>
 
     const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
-    const copy = {
+    const copy: HostedPageCopy = {
+      language:        (['es', 'en', 'pt'] as const).find(l => l === t.language) ?? '',
       headline:        str(t.headline, 140),
       subheadline:     str(t.subheadline, 300),
       bullets:         Array.isArray(t.bullets) ? t.bullets.filter((b): b is string => typeof b === 'string').map(b => b.trim().slice(0, 160)).filter(Boolean).slice(0, 6) : [],
@@ -274,6 +334,20 @@ export async function generateHostedPageCopy(input: {
             .filter(b => b.title)
             .slice(0, 6)
         : [],
+      badge:               str(t.badge, 90),
+      microcopy:           str(t.microcopy, 140),
+      benefits_title:      str(t.benefits_title, 140),
+      benefits_subtitle:   str(t.benefits_subtitle, 400),
+      form_title:          str(t.form_title, 140),
+      form_subtitle:       str(t.form_subtitle, 300),
+      final_cta_title:     str(t.final_cta_title, 140),
+      final_cta_paragraph: str(t.final_cta_paragraph, 400),
+      event: {
+        date:              str(t.event_date, 60),
+        time:              str(t.event_time, 60),
+        location:          str(t.event_location, 200),
+        short_description: str(t.event_short_description, 600),
+      },
     }
     if (!copy.headline) return { ok: false, error: 'El copy generado está incompleto. Intenta con más detalle.' }
     return { ok: true, copy }
