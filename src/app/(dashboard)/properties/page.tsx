@@ -5,7 +5,7 @@ import { PropertiesClient } from './properties-client'
 
 export default async function PropertiesPage() {
   const ctx = await requireTenantContext()
-  const { tenant_id, role, user_id } = ctx
+  const { tenant_id, role } = ctx
   // Picker de tenant en el modal: solo super_admin SIN selección (hoy
   // inalcanzable aquí por requireTenantContext; actuando como tenant, la action
   // resuelve el tenant desde el contexto).
@@ -30,7 +30,6 @@ export default async function PropertiesPage() {
       properties={properties}
       tenants={tenants}
       viewerRole={role}
-      viewerUserId={user_id}
     />
   )
 }
