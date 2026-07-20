@@ -1,17 +1,19 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AnimatePresence, m } from 'motion/react'
 import {
   Search, List, LayoutGrid, ChevronDown, X, Users, SlidersHorizontal,
   Camera, ThumbsUp, MessageCircle, PenLine, FileDown, Calendar, Globe,
+  Trash2, Download, CheckSquare, Square,
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadStatus } from '@/lib/types'
 import type { ChannelOption } from './new/page'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
+import { deleteLeads } from './[id]/actions'
 
 // Source kind → icon (reuses the leads/new source icons; brand icons unavailable in
 // lucide v1 so representative generics are used).
@@ -225,6 +227,23 @@ export function LeadsClient({
   const [page, setPage] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
 
+  // Selección múltiple (solo vista tabla): eliminar en lote (doble verificación)
+  // y exportar CSV.
+  const [selected, setSelected]   = useState<Set<string>>(new Set())
+  const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0)
+  const [deleteInput, setDeleteInput] = useState('')
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [bulkPending, startBulk]  = useTransition()
+
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  function clearSelection() { setSelected(new Set()) }
+
   // Dropdowns activos (los 5) — alimenta el contador del botón "Filtros".
   const activeFilterCount = [filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage]
     .filter(v => v !== 'all').length
@@ -275,9 +294,10 @@ export function LeadsClient({
   }, [leads, channels, search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
 
   useEffect(() => {
-    // reason: reset pagination on filter change — updating derived state in effect is intentional
+    // reason: reset pagination + selección on filter change — updating derived state in effect is intentional
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
+    setSelected(new Set())
   }, [search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
 
   const hotCount    = filteredLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
@@ -298,6 +318,58 @@ export function LeadsClient({
     setFilterSource('all')
     setFilterChannelId('all')
     setFilterLanguage('all')
+  }
+
+  // ── Selección múltiple ────────────────────────────────────────────────────
+  const pagedIds = pagedLeads.map(l => l.id)
+  const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => selected.has(id))
+  function toggleAllPaged() {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (allPagedSelected) pagedIds.forEach(id => next.delete(id))
+      else pagedIds.forEach(id => next.add(id))
+      return next
+    })
+  }
+
+  const selectedLeads = leads.filter(l => selected.has(l.id))
+
+  function exportCsv() {
+    if (selectedLeads.length === 0) return
+    const cols = ['Nombre', 'Apellido', 'Email', 'Teléfono', 'Estado', 'Agente', 'Fuente', 'Temperatura', 'Idioma', 'Fecha']
+    const esc = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const lines = [cols.join(',')]
+    for (const l of selectedLeads) {
+      const agent   = agents.find(a => a.id === l.agentId)
+      const channel = channels.find(c => c.id === l.acquisitionChannelId)
+      const src     = getLeadSource(channel?.channelType ?? null, l.trafficSource ?? null)
+      lines.push([
+        esc(l.firstName), esc(l.lastName), esc(l.email), esc(l.phone ?? ''),
+        esc(STATUS_CONFIG[l.status]?.label ?? l.status), esc(agent?.name ?? ''),
+        esc(channel?.name ?? src.label), esc(String(l.temperatureScore ?? '')),
+        esc(l.language.toUpperCase()), esc(new Date(l.createdAt).toISOString().slice(0, 10)),
+      ].join(','))
+    }
+    // BOM para que Excel respete los acentos.
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  function handleBulkDelete() {
+    setBulkError(null)
+    const ids = [...selected]
+    startBulk(async () => {
+      const res = await deleteLeads(ids)
+      if (!res.ok) { setBulkError(res.error); return }
+      setDeleteStep(0)
+      setDeleteInput('')
+      clearSelection()
+      router.refresh()
+    })
   }
 
   const agentOptions = [
@@ -552,6 +624,48 @@ export function LeadsClient({
         </div>
       </ModalShell>
 
+      {/* ── Barra de selección múltiple (solo tabla) ── */}
+      {view === 'table' && selected.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border-accent)',
+          borderRadius: '10px', padding: '10px 14px', marginBottom: '12px',
+        }}>
+          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {selected.size} {selected.size === 1 ? 'lead seleccionado' : 'leads seleccionados'}
+          </span>
+          <button
+            onClick={clearSelection}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '12px', textDecoration: 'underline' }}
+          >
+            Deseleccionar
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={exportCsv}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', fontSize: '13px', borderRadius: '8px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)', cursor: 'pointer',
+            }}
+          >
+            <Download size={14} /> Descargar CSV
+          </button>
+          <button
+            onClick={() => { setDeleteStep(1); setDeleteInput(''); setBulkError(null) }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+              background: 'rgba(201,123,107,0.12)', border: '1px solid rgba(201,123,107,0.3)',
+              color: 'var(--accent-coral)', cursor: 'pointer',
+            }}
+          >
+            <Trash2 size={14} /> Eliminar ({selected.size})
+          </button>
+        </div>
+      )}
+
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
           Defensive horizontal scroll on phones so columns stay readable.)
           AnimatePresence mode="wait": crossfade de 150ms al alternar tabla↔kanban. */}
@@ -569,6 +683,15 @@ export function LeadsClient({
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
+                <th style={{ padding: '10px 0 10px 16px', width: '36px' }}>
+                  <button
+                    onClick={toggleAllPaged}
+                    aria-label={allPagedSelected ? 'Deseleccionar página' : 'Seleccionar página'}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: allPagedSelected ? 'var(--accent-gold)' : 'var(--text-muted)', display: 'flex', padding: 0 }}
+                  >
+                    {allPagedSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                  </button>
+                </th>
                 {['Lead', 'Agente', 'Estado', 'Fuente', 'Temperatura', 'Idioma', 'Fecha'].map(h => (
                   <th
                     key={h}
@@ -587,7 +710,7 @@ export function LeadsClient({
             <tbody>
               {pagedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center',
                       justifyContent: 'center', padding: '60px 20px', gap: '12px',
@@ -609,6 +732,7 @@ export function LeadsClient({
                   const langCfg    = LANGUAGE_CONFIG[lead.language]
                   const isLast     = idx === pagedLeads.length - 1
 
+                  const isSelected = selected.has(lead.id)
                   return (
                     <tr
                       key={lead.id}
@@ -616,9 +740,20 @@ export function LeadsClient({
                       style={{
                         borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
                         cursor: 'pointer',
+                        background: isSelected ? 'rgba(201,169,110,0.06)' : undefined,
                       }}
                       onClick={() => router.push(`/leads/${lead.id}`)}
                     >
+                      {/* Checkbox de selección */}
+                      <td style={{ padding: '12px 0 12px 16px', width: '36px' }} onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => toggleSelect(lead.id)}
+                          aria-label={isSelected ? 'Deseleccionar lead' : 'Seleccionar lead'}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? 'var(--accent-gold)' : 'var(--text-muted)', display: 'flex', padding: 0 }}
+                        >
+                          {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                        </button>
+                      </td>
                       {/* Lead */}
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -840,6 +975,74 @@ export function LeadsClient({
         </m.div>
       )}
       </AnimatePresence>
+
+      {/* ── Eliminar en lote — Paso 1: primera confirmación ── */}
+      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={460}>
+        <div style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar {selected.size} {selected.size === 1 ? 'lead' : 'leads'}</span>
+            <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
+            Vas a eliminar <strong style={{ color: 'var(--text-primary)' }}>{selected.size}</strong> {selected.size === 1 ? 'lead' : 'leads'}.
+            Se eliminan también sus eventos, runs de secuencia y notificaciones.{' '}
+            <strong style={{ color: 'var(--accent-coral)' }}>No se puede deshacer.</strong>
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={() => { setDeleteStep(2); setDeleteInput('') }} style={{
+              padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+              background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
+              border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
+            }}>Continuar →</button>
+          </div>
+        </div>
+      </ModalShell>
+
+      {/* ── Eliminar en lote — Paso 2: confirmación por texto ── */}
+      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
+        <div style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--accent-coral)' }}>Confirmar eliminación</span>
+            <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+            Para confirmar la eliminación de <strong style={{ color: 'var(--text-primary)' }}>{selected.size}</strong> {selected.size === 1 ? 'lead' : 'leads'}, escribe <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>ELIMINAR</strong>:
+          </p>
+          <input
+            value={deleteInput}
+            onChange={e => setDeleteInput(e.target.value)}
+            placeholder="ELIMINAR"
+            autoFocus
+            style={{
+              width: '100%', background: 'var(--bg-overlay)',
+              border: '1px solid rgba(201,123,107,0.3)', borderRadius: '8px',
+              padding: '9px 12px', color: 'var(--text-primary)', fontSize: '14px',
+              outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace', marginBottom: '16px',
+            }}
+          />
+          {bulkError && (
+            <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px' }}>{bulkError}</div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={deleteInput !== 'ELIMINAR' || bulkPending}
+              style={{
+                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+                background: deleteInput === 'ELIMINAR' ? 'rgba(201,123,107,0.2)' : 'var(--bg-elevated)',
+                color: deleteInput === 'ELIMINAR' ? 'var(--accent-coral)' : 'var(--text-muted)',
+                border: deleteInput === 'ELIMINAR' ? '1px solid rgba(201,123,107,0.4)' : '1px solid var(--border-subtle)',
+                cursor: (deleteInput !== 'ELIMINAR' || bulkPending) ? 'not-allowed' : 'pointer',
+                opacity: bulkPending ? 0.7 : 1,
+              }}
+            >
+              {bulkPending ? 'Eliminando…' : 'Eliminar definitivamente'}
+            </button>
+          </div>
+        </div>
+      </ModalShell>
     </div>
   )
 }

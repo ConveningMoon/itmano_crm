@@ -154,8 +154,11 @@ export async function updateScoreRules(
   updates: { id: string; points: number; isActive: boolean }[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  if (ctx.role !== 'super_admin') {
-    return { ok: false, error: 'Solo un administrador de ITMANO puede ajustar el scoring.' }
+  // super_admin edita las reglas GLOBALES (afectan a todos los tenants);
+  // agent_owner edita OVERRIDES de SU tenant (nunca toca las globales ni otros
+  // tenants). recompute_lead_score prefiere la regla del tenant (migración 029).
+  if (ctx.role !== 'super_admin' && ctx.role !== 'agent_owner') {
+    return { ok: false, error: 'No tienes permiso para ajustar el scoring.' }
   }
 
   const parsed = ScoreRuleUpdateSchema.safeParse(updates)
@@ -164,13 +167,69 @@ export async function updateScoreRules(
   }
 
   const supabase = createAdminClient()
+
+  if (ctx.role === 'super_admin') {
+    for (const u of parsed.data) {
+      const { error } = await supabase
+        .from('lead_score_rules')
+        .update({ points: u.points, is_active: u.isActive })
+        .eq('id', u.id)
+        .is('tenant_id', null) // global rules only — never touch a per-tenant override
+      if (error) return { ok: false, error: error.message }
+    }
+    revalidatePath('/settings')
+    return { ok: true }
+  }
+
+  // ── agent_owner → override por tenant ──────────────────────────────────────
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant.' }
+
+  // Identidad de cada regla editada (siempre por su id GLOBAL).
+  const ids = parsed.data.map(u => u.id)
+  const { data: globals } = await supabase
+    .from('lead_score_rules')
+    .select('id, category, dimension, match_value, event_type, decays, side_effect, label')
+    .in('id', ids)
+    .is('tenant_id', null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byId = new Map<string, any>(((globals ?? []) as any[]).map(r => [r.id as string, r]))
+
   for (const u of parsed.data) {
-    const { error } = await supabase
+    const g = byId.get(u.id)
+    if (!g) continue // solo se pueden overridear reglas globales existentes
+
+    // ¿Ya existe un override de este tenant para la misma regla?
+    let q = supabase
       .from('lead_score_rules')
-      .update({ points: u.points, is_active: u.isActive })
-      .eq('id', u.id)
-      .is('tenant_id', null) // global rules only — never touch a per-tenant override
-    if (error) return { ok: false, error: error.message }
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('category', g.category)
+      .eq('dimension', g.dimension)
+    q = g.match_value === null ? q.is('match_value', null) : q.eq('match_value', g.match_value)
+    const { data: existing } = await q.maybeSingle()
+
+    if (existing) {
+      const { error } = await supabase
+        .from('lead_score_rules')
+        .update({ points: u.points, is_active: u.isActive })
+        .eq('id', (existing as { id: string }).id)
+      if (error) return { ok: false, error: error.message }
+    } else {
+      const { error } = await supabase.from('lead_score_rules').insert({
+        tenant_id:   tenantId,
+        category:    g.category,
+        dimension:   g.dimension,
+        match_value: g.match_value,
+        event_type:  g.event_type,
+        points:      u.points,
+        decays:      g.decays,
+        is_active:   u.isActive,
+        side_effect: g.side_effect,
+        label:       g.label,
+      })
+      if (error) return { ok: false, error: error.message }
+    }
   }
 
   revalidatePath('/settings')
@@ -569,6 +628,18 @@ export async function createAgent(
   const tenantId = tenant
 
   const supabase = createAdminClient()
+
+  // Planes de un solo agente (Esencial/Growth): no se pueden crear más agentes.
+  // super_admin (opera cualquier tenant) siempre puede. Defensa server-side del
+  // gate de UI (#9).
+  if (ctx.role !== 'super_admin') {
+    const { data: sub } = await supabase.from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle()
+    const plan = ((sub as { plan?: string } | null)?.plan ?? 'esencial') as 'esencial' | 'growth' | 'partner'
+    if (!PLANS[plan].features.multiLogin) {
+      return { ok: false, error: 'Tu plan incluye un solo agente. Adquiere el plan Partner para agregar más.' }
+    }
+  }
+
   const id       = await generateAgentId(supabase, tenantId, parsed.data.name)
 
   const { error } = await supabase.from('agents').insert({

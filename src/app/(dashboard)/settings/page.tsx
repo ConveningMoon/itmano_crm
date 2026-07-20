@@ -2,11 +2,12 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
-import { getGlobalScoreRules } from '@/lib/data/score-rules'
+import { getEffectiveScoreRules } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { PLANS } from '@/lib/plans'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
@@ -28,7 +29,7 @@ export default async function SettingsPage() {
   const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
-    getGlobalScoreRules(),
+    getEffectiveScoreRules(tenantId),
     // Honest "active accesses" = every login profile in this tenant (owner + any
     // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
     supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
@@ -64,6 +65,10 @@ export default async function SettingsPage() {
     const row = r as AgentRow & { user_id: string | null }
     if (row.user_id && ownerUserIds.has(row.user_id)) { ownerAgentId = row.id; break }
   }
+  // Plan con multi-agente (logins de equipo): solo Partner. Esencial/Growth son
+  // de un solo agente → se deshabilita crear/gestionar otros agentes y se ofrece
+  // el upsell a Partner. super_admin siempre puede (opera cualquier tenant).
+  const multiAgent = ctx.role === 'super_admin' || (subscription ? PLANS[subscription.plan].features.multiLogin : false)
   // Eliminar agentes: plan Partner (multiLogin) o super_admin.
   const canDeleteAgents =
     ctx.role === 'super_admin' ||
@@ -104,8 +109,9 @@ export default async function SettingsPage() {
         agentAccess={agentAccess}
         accessCount={accessCountRes.count ?? 0}
         scoringRules={scoringRules}
-        canEditScoring={ctx.role === 'super_admin'}
+        canEditScoring={ctx.role === 'super_admin' || ctx.role === 'agent_owner'}
         canManageAgents={ctx.role !== 'agent'}
+        multiAgent={multiAgent}
         canLinkSelf={canLinkSelf}
         myAgentId={ctx.agent_id}
         ownerAgentId={ownerAgentId}

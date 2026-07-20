@@ -432,3 +432,55 @@ export async function deleteLead(
   revalidatePath('/dashboard')
   return { ok: true }
 }
+
+// ─── Borrado en lote (selección múltiple en /leads) ───────────────────────────
+// Elimina varios leads con la misma lógica y gate que deleteLead (por-agente).
+// Tolera fallos parciales: devuelve cuántos se eliminaron y cuántos fallaron.
+export async function deleteLeads(
+  leadIds: string[],
+): Promise<{ ok: true; deleted: number; failed: number } | { ok: false; error: string }> {
+  const ctx      = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  const ids = [...new Set(leadIds)].filter(id => typeof id === 'string' && id.length > 0).slice(0, 500)
+  if (ids.length === 0) return { ok: false, error: 'No hay leads seleccionados.' }
+
+  let leadQ = supabase
+    .from('leads')
+    .select('id, tenant_id, agent_id, first_name, last_name, email')
+    .in('id', ids)
+  if (ctx.tenant_id) leadQ = leadQ.eq('tenant_id', ctx.tenant_id)
+  const { data: rows } = await leadQ
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leads = (rows ?? []) as any[]
+
+  let deleted = 0
+  let failed  = 0
+  for (const l of leads) {
+    const denied = assertCanWriteLead(ctx, { tenant_id: l.tenant_id, agent_id: l.agent_id })
+    if (denied) { failed += 1; continue }
+
+    const fullName = `${l.first_name} ${l.last_name ?? ''}`.trim() || 'Lead'
+    await supabase.from('notifications').insert({
+      tenant_id: l.tenant_id as string,
+      type:      'lead_deleted',
+      lead_id:   l.id as string,
+      agent_id:  l.agent_id as string | null,
+      message:   `${fullName} (${l.email}) fue eliminado`,
+    })
+
+    const { error } = await supabase.from('leads').delete().eq('id', l.id as string)
+    if (error) {
+      console.error(JSON.stringify({ service: 'deleteLeads', lead_id: l.id, error: error.message }))
+      failed += 1
+    } else {
+      deleted += 1
+    }
+  }
+
+  failed += ids.length - leads.length
+
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  return { ok: true, deleted, failed }
+}
