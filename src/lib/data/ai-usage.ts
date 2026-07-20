@@ -237,6 +237,84 @@ export async function getAgentAiBreakdown(tenantId: string): Promise<AgentAiBrea
   return { agents: result, splitApplies, agentCount: agentRows.length }
 }
 
+// ── Consumo del análisis de fit con IA (feature 'lead_fit') ───────────────────
+// Un análisis por fila, con el lead y el costo — para que el super_admin sepa
+// cuánto cuesta cada análisis por lead. tenantId = null → todos los tenants.
+
+export interface LeadFitUsageRow {
+  id:           string
+  leadName:     string
+  tenantName:   string | null
+  model:        string
+  inputTokens:  number
+  outputTokens: number
+  costUsd:      number
+  createdAt:    string
+}
+
+export interface LeadFitUsageSummary {
+  count:        number
+  totalCostUsd: number
+  avgCostUsd:   number
+  last30dCount: number
+  last30dCostUsd: number
+  rows:         LeadFitUsageRow[]
+}
+
+export async function getLeadFitUsage(tenantId: string | null): Promise<LeadFitUsageSummary> {
+  const supabase = createAdminClient()
+
+  let q = supabase
+    .from('ai_usage_events')
+    .select('id, tenant_id, model, input_tokens, output_tokens, cost_usd, metadata, created_at')
+    .eq('feature', 'lead_fit')
+    .order('created_at', { ascending: false })
+  if (tenantId) q = q.eq('tenant_id', tenantId)
+  const { data } = await q
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (data ?? []) as any[]
+
+  const tenantName = new Map<string, string>()
+  if (!tenantId) {
+    const { data: tenants } = await supabase.from('tenants').select('id, name')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const t of (tenants ?? []) as any[]) tenantName.set(t.id as string, t.name as string)
+  }
+
+  const cutoff30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  let totalCost = 0
+  let count = 0
+  let d30Count = 0
+  let d30Cost = 0
+
+  const out: LeadFitUsageRow[] = rows.map(r => {
+    const cost = Number(r.cost_usd)
+    totalCost += cost
+    count += 1
+    if ((r.created_at as string) >= cutoff30d) { d30Count += 1; d30Cost += cost }
+    const leadName = (r.metadata?.lead_name as string | undefined)?.trim() || 'Lead'
+    return {
+      id:           r.id as string,
+      leadName,
+      tenantName:   tenantId ? null : (r.tenant_id ? (tenantName.get(r.tenant_id as string) ?? (r.tenant_id as string)) : 'ITMANO'),
+      model:        r.model as string,
+      inputTokens:  r.input_tokens as number,
+      outputTokens: r.output_tokens as number,
+      costUsd:      cost,
+      createdAt:    r.created_at as string,
+    }
+  }).slice(0, 200)
+
+  return {
+    count,
+    totalCostUsd: Math.round(totalCost * 1_000_000) / 1_000_000,
+    avgCostUsd:   count > 0 ? Math.round((totalCost / count) * 1_000_000) / 1_000_000 : 0,
+    last30dCount: d30Count,
+    last30dCostUsd: Math.round(d30Cost * 1_000_000) / 1_000_000,
+    rows: out,
+  }
+}
+
 // ── Serie diaria (Centro de control) ──────────────────────────────────────────
 // Costo por día de los últimos N días, apilado por tenant — el "diagrama" del
 // hub reemplaza al listado plano de requests recientes.

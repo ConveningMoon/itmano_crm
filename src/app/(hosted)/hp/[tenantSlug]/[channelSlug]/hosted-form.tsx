@@ -1,22 +1,22 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useId, useMemo, useState, useTransition } from 'react'
 import { HOSTED_UI_COPY, type HostedPageConfig } from '@/lib/hosted-page'
 import { submitHostedContact } from './actions'
 
 // Formulario de la página alojada. lead_magnet/event postean al intake público
 // (/api/intake/<publicId>/submit — dedup + scoring + secuencia); contact_form
 // usa la server action (misma lógica que el webhook de Webflow).
+//
+// `surface` adapta la paleta: 'dark' → inputs blancos sobre tarjeta oscura
+// (evento / formulario), 'light' → inputs claros sobre tarjeta blanca (lead magnet).
 
-const INPUT: React.CSSProperties = {
-  width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-  borderRadius: '8px', padding: '10px 12px', fontSize: '14px', color: 'var(--text-primary)',
-  outline: 'none', boxSizing: 'border-box',
-}
+type Surface = 'dark' | 'light'
 
-const LABEL: React.CSSProperties = {
-  fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)',
-  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', display: 'block',
+function palette(surface: Surface) {
+  return surface === 'dark'
+    ? { inputBg: 'rgba(255,255,255,0.95)', inputBorder: 'rgba(255,255,255,0.16)', inputText: '#12212F', label: 'rgba(255,255,255,0.72)', err: '#FFC2B8', doneText: '#FFFFFF' }
+    : { inputBg: '#F3F1EC', inputBorder: 'rgba(18,33,47,0.14)', inputText: '#12212F', label: 'rgba(18,33,47,0.58)', err: '#C0392B', doneText: '#12212F' }
 }
 
 function visitorId(): string {
@@ -34,7 +34,7 @@ function visitorId(): string {
 }
 
 export function HostedForm({
-  publicId, channelType, tenantSlug, channelSlug, config, accent,
+  publicId, channelType, tenantSlug, channelSlug, config, accent, surface = 'dark',
 }: {
   publicId: string
   channelType: 'lead_magnet' | 'event' | 'contact_form'
@@ -42,8 +42,20 @@ export function HostedForm({
   channelSlug: string
   config: HostedPageConfig
   accent: string
+  surface?: Surface
 }) {
   const copy = HOSTED_UI_COPY[config.language]
+  const P = palette(surface)
+  const focusClass = useId().replace(/[:]/g, '')
+  const INPUT: React.CSSProperties = {
+    width: '100%', background: P.inputBg, border: `1px solid ${P.inputBorder}`,
+    borderRadius: '10px', padding: '11px 13px', fontSize: '14px', color: P.inputText,
+    outline: 'none', boxSizing: 'border-box',
+  }
+  const LABEL: React.CSSProperties = {
+    fontSize: '11px', fontWeight: 600, color: P.label,
+    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', display: 'block',
+  }
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName]   = useState('')
@@ -148,13 +160,14 @@ export function HostedForm({
         }}>
           ✓
         </div>
-        <p style={{ fontSize: '15px', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>{done}</p>
+        <p style={{ fontSize: '15px', color: P.doneText, lineHeight: 1.6, margin: 0 }}>{done}</p>
       </div>
     )
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <form className={focusClass} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <style>{`.${focusClass} input:focus, .${focusClass} select:focus, .${focusClass} textarea:focus { border-color: ${accent} !important; box-shadow: 0 0 0 3px ${accent}33; }`}</style>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <div>
           <label style={LABEL}>{copy.firstName} *</label>
@@ -224,16 +237,19 @@ export function HostedForm({
         aria-hidden
       />
 
-      {error && <div style={{ fontSize: '13px', color: '#E04040' }}>{error}</div>}
+      {error && <div style={{ fontSize: '13px', color: P.err }}>{error}</div>}
 
       <button
         type="submit"
         disabled={pending}
         style={{
-          padding: '12px 20px', fontSize: '14px', fontWeight: 600,
-          background: accent, color: '#0F0F10', border: 'none', borderRadius: '8px',
+          padding: '13px 20px', fontSize: '14px', fontWeight: 700, letterSpacing: '0.02em',
+          background: accent, color: '#12212F', border: 'none', borderRadius: '10px',
           cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
+          transition: 'filter 0.15s, transform 0.15s',
         }}
+        onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.06)' }}
+        onMouseLeave={e => { e.currentTarget.style.filter = 'none' }}
       >
         {pending ? '…' : (config.cta_label || copy.submitDefault)}
       </button>

@@ -15,6 +15,7 @@ export interface AgentRow {
   active: boolean
   created_at: string
   email_signature: string | null
+  description?: string | null
 }
 
 export interface LeadRow {
@@ -94,6 +95,7 @@ export function mapAgent(r: AgentRow): Agent {
     accentColor: r.accent_color,
     active: r.active,
     emailSignature: r.email_signature ?? null,
+    description: r.description ?? null,
   }
 }
 

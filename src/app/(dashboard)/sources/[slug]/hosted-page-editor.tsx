@@ -44,6 +44,22 @@ const EMPTY: HostedPageConfig = {
 
 const EMPTY_INTRO = { name: '', title: '', paragraph: '', quote: '', photo_url: '', whatsapp_url: '', instagram_url: '' }
 
+// Preguntas de calificación por defecto (lead magnet). Alimentan el análisis de
+// fit: la IA las interpreta con el contexto de mercado de la agencia. Los rangos
+// de presupuesto y las zonas son editables — ajústalos a tu mercado. Los puntos
+// de cada nivel se afinan en Ajustes → Scoring.
+const DEFAULT_LM_QUESTIONS: HostedQuestion[] = [
+  { key: '', label: '¿Cuál es tu horizonte de compra?', type: 'select', required: true,
+    options: ['Menos de 3 meses', '3 a 6 meses', '6 a 12 meses', 'Más de 12 meses / explorando'] },
+  { key: '', label: '¿Cómo planeas financiar la compra?', type: 'select', required: false,
+    options: ['Pago en efectivo', 'Pre-aprobado', 'En proceso de financiamiento', 'Aún no he empezado'] },
+  { key: '', label: '¿Cuál es tu presupuesto aproximado?', type: 'select', required: false,
+    options: ['Menos de $250k', '$250k – $400k', '$400k – $600k', 'Más de $600k'] },
+  { key: '', label: '¿Ya trabajas con un agente inmobiliario?', type: 'select', required: false,
+    options: ['No', 'Sí'] },
+  { key: '', label: '¿Qué zonas te interesan?', type: 'text', required: false },
+]
+
 function slugifyKey(label: string, fallback: string): string {
   const s = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)
@@ -547,16 +563,34 @@ export function HostedPageEditor({
 
             {/* Preguntas — disponibles para todos los tipos */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
                 <label style={{ ...LABEL, marginBottom: 0 }}>Preguntas del formulario</label>
-                <button
-                  onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
-                  style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
-                  disabled={cfg.questions.length >= 10}
-                >
-                  <Plus size={12} /> Agregar
-                </button>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {isLm && (
+                    <button
+                      onClick={() => set('questions', [...cfg.questions, ...DEFAULT_LM_QUESTIONS].slice(0, 10))}
+                      style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
+                      disabled={cfg.questions.length >= 10}
+                      title="Agrega preguntas de calificación (presupuesto, horizonte, financiamiento, zonas)"
+                    >
+                      <Sparkles size={12} /> Cargar calificación
+                    </button>
+                  )}
+                  <button
+                    onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
+                    style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
+                    disabled={cfg.questions.length >= 10}
+                  >
+                    <Plus size={12} /> Agregar
+                  </button>
+                </div>
               </div>
+              {isLm && (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: 1.5 }}>
+                  Estas preguntas califican al lead. Con el análisis de fit con IA activado, se interpretan según el
+                  mercado de tu agencia. Los puntos de cada respuesta se ajustan en Ajustes → Scoring.
+                </div>
+              )}
               {cfg.questions.length === 0 && (
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                   Sin preguntas extra — el formulario pide nombre y email{cfg.ask_phone || isContact ? ' y teléfono' : ''}.

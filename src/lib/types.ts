@@ -36,6 +36,8 @@ export interface Agent {
   accentColor: string
   active: boolean
   emailSignature?: string | null
+  /** Descripción del agente para personalizar el análisis de fit con IA (064). */
+  description?: string | null
 }
 
 export interface LeadMagnet {

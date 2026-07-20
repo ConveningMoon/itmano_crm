@@ -51,6 +51,8 @@ export interface TenantWithOwner {
   aiMonthlyLimitUsd: number
   aiUnlimited:       boolean
   aiUsedThisMonthUsd: number
+  // Análisis de fit de leads con IA (fase de prueba, apagado por defecto).
+  aiLeadScoringEnabled: boolean
   // Suscripción (null si el tenant no tiene fila — pre-054).
   subscriptionPlan:          string | null
   subscriptionStatus:        string | null
@@ -73,7 +75,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
   const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }, { data: subRows }] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited').order('created_at'),
+    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited, ai_lead_scoring_enabled').order('created_at'),
     supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
     supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at'),
@@ -101,6 +103,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   for (const t of (tenantRows ?? []) as {
     id: string; name: string; slug: string; primary_color: string | null; logo_url: string | null
     ai_monthly_limit_usd: number | string | null; ai_unlimited: boolean | null
+    ai_lead_scoring_enabled: boolean | null
   }[]) {
     let ownerEmail: string | null = null
     const ownerId = ownerByTenant.get(t.id)
@@ -118,6 +121,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       aiMonthlyLimitUsd:  Number(t.ai_monthly_limit_usd ?? 10),
       aiUnlimited:        t.ai_unlimited ?? false,
       aiUsedThisMonthUsd: Math.round((usedByTenant.get(t.id) ?? 0) * 1_000_000) / 1_000_000,
+      aiLeadScoringEnabled: t.ai_lead_scoring_enabled ?? false,
       subscriptionPlan:          subByTenant.get(t.id)?.plan ?? null,
       subscriptionStatus:        subByTenant.get(t.id)?.status ?? null,
       subscriptionRequestedPlan: subByTenant.get(t.id)?.requested_plan ?? null,

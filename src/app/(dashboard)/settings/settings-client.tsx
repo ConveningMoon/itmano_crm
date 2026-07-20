@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2 } from 'lucide-react'
+import { Building2, Sparkles } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import type { TenantRole } from '@/lib/auth/tenant-context'
@@ -11,7 +11,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
 import { trialDaysLeft } from '@/lib/plans'
 import { ScoringSection } from './scoring-section'
@@ -830,6 +830,139 @@ function EmailSettingsSection({ agents, canManage }: { agents: Agent[]; canManag
   )
 }
 
+// ─── Contexto para IA: descripción de agencia + por agente ───────────────────
+// La IA consulta estos textos para el análisis de fit de leads y para
+// personalizar el contenido (el análisis con IA se activa por ITMANO).
+
+function AgencyDescriptionCard({ initial, canManage }: { initial: string | null; canManage: boolean }) {
+  const [value, setValue] = useState(initial ?? '')
+  const [saved, setSaved] = useState(initial ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk]       = useState(false)
+  const [pending, start]  = useTransition()
+  const dirty = value !== saved
+
+  function handleSave() {
+    setError(null); setOk(false)
+    start(async () => {
+      const res = await updateTenantDescription(value)
+      if (!res.ok) { setError(res.error); return }
+      setSaved(value); setOk(true); setTimeout(() => setOk(false), 2000)
+    })
+  }
+
+  return (
+    <div style={CARD}>
+      <div style={CARD_HEADER}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={15} color="var(--accent-gold)" />
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Descripción de la agencia</span>
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
+          Mercado, ciudad, rangos de inversión típicos, perfil de comprador y tono. La IA la usa como
+          contexto para analizar el fit de tus leads (ej.: entender si un presupuesto es alto o bajo para
+          tu mercado) y para personalizar el contenido.
+        </div>
+      </div>
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <textarea
+          value={value}
+          onChange={e => { setValue(e.target.value); setError(null) }}
+          disabled={!canManage}
+          rows={6}
+          maxLength={4000}
+          placeholder={'Ej.: Agencia en Hampton Roads, Virginia. Mercado de compradores primerizos y familias militares. Rangos: entrada ~$250k, medio $350–550k, premium $600k+. Atendemos en inglés y español. Tono cercano y educativo.'}
+          style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, opacity: canManage ? 1 : 0.7 }}
+        />
+        {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+        {canManage && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
+              {pending ? 'Guardando…' : 'Guardar descripción'}
+            </button>
+            {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Guardada.</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AgentDescriptionRow({ agent, canManage }: { agent: Agent; canManage: boolean }) {
+  const [value, setValue] = useState(agent.description ?? '')
+  const [saved, setSaved] = useState(agent.description ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk]       = useState(false)
+  const [pending, start]  = useTransition()
+  const dirty = value !== saved
+
+  function handleSave() {
+    setError(null); setOk(false)
+    start(async () => {
+      const res = await updateAgentDescription(agent.id, value)
+      if (!res.ok) { setError(res.error); return }
+      setSaved(value); setOk(true); setTimeout(() => setOk(false), 2000)
+    })
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '50%',
+          background: `${agent.accentColor}22`, border: `1px solid ${agent.accentColor}44`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '11px', fontWeight: 700, color: agent.accentColor, flexShrink: 0,
+        }}>
+          {agent.avatarInitials}
+        </div>
+        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
+      </div>
+      <textarea
+        value={value}
+        onChange={e => { setValue(e.target.value); setError(null) }}
+        disabled={!canManage}
+        rows={3}
+        maxLength={3000}
+        placeholder={`Especialidad, idiomas, historia y estilo de ${agent.name} — la IA lo usa para personalizar.`}
+        style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: canManage ? 1 : 0.7 }}
+      />
+      {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+      {canManage && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
+            {pending ? 'Guardando…' : 'Guardar'}
+          </button>
+          {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Guardada.</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ContextSection({ tenantDescription, agents, canManage }: { tenantDescription: string | null; agents: Agent[]; canManage: boolean }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <AgencyDescriptionCard initial={tenantDescription} canManage={canManage} />
+      <div style={CARD}>
+        <div style={CARD_HEADER}>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Descripción por agente</span>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Contexto de cada agente para personalizar el análisis y el contenido con IA.
+          </div>
+        </div>
+        {agents.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+            No hay agentes todavía.
+          </div>
+        ) : (
+          agents.map(agent => <AgentDescriptionRow key={agent.id} agent={agent} canManage={canManage} />)
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Subscription card ────────────────────────────────────────────────────────
 // Sales-led: sin procesador de pagos todavía, el owner SOLICITA cambio o
 // cancelación y el equipo ITMANO la procesa (se le notifica al instante).
@@ -1074,19 +1207,20 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'ia' | 'cuenta'
+type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'contexto' | 'ia' | 'cuenta'
 
 const TABS: Array<{ value: Tab; label: string }> = [
-  { value: 'perfil',  label: 'Perfil del equipo' },
-  { value: 'agentes', label: 'Agentes' },
-  { value: 'email',   label: 'Email' },
-  { value: 'scoring', label: 'Scoring' },
-  { value: 'ia',      label: 'Uso de IA' },
-  { value: 'cuenta',  label: 'Cuenta y acceso' },
+  { value: 'perfil',   label: 'Perfil del equipo' },
+  { value: 'agentes',  label: 'Agentes' },
+  { value: 'email',    label: 'Email' },
+  { value: 'scoring',  label: 'Scoring' },
+  { value: 'contexto', label: 'Contexto IA' },
+  { value: 'ia',       label: 'Uso de IA' },
+  { value: 'cuenta',   label: 'Cuenta y acceso' },
 ]
 
 interface Props {
-  tenant: { id: string; name: string; slug: string; primaryColor: string; logoUrl: string | null }
+  tenant: { id: string; name: string; slug: string; primaryColor: string; logoUrl: string | null; description: string | null }
   agents: Agent[]
   agentAccess: Record<string, boolean>
   accessCount: number
@@ -1138,6 +1272,7 @@ export function SettingsClient({
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
         scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
+        contexto: <ContextSection tenantDescription={tenant.description} agents={agents} canManage={canManageAgents} />,
         ia: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {userRole === 'agent' ? (
