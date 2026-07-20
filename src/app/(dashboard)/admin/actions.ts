@@ -176,6 +176,27 @@ export async function updateTenant(
   return { ok: true }
 }
 
+// ─── Toggle: análisis de fit de leads con IA (super_admin) ───────────────────
+// Fase de prueba: se activa por tenant y arranca apagado. Con él encendido, el
+// intake reinterpreta el fit_profile del lead con IA (ai-lead-fit.ts).
+export async function setTenantLeadScoring(
+  tenantId: string,
+  enabled: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede cambiar esto.' }
+  }
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('tenants')
+    .update({ ai_lead_scoring_enabled: enabled })
+    .eq('id', tenantId)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
 // ─── Subscription management (super_admin) ───────────────────────────────────
 // Aplica el plan/estado definitivo de un tenant y limpia cualquier solicitud
 // pendiente (el flujo del owner solo SOLICITA; aquí se resuelve).

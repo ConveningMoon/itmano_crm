@@ -7,12 +7,14 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // calculado con la tabla de precios por modelo. El registro es best-effort:
 // NUNCA hace fallar la acción que generó el contenido.
 
-export type AiFeature = 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy'
+export type AiFeature = 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy' | 'lead_fit'
 
 export const AI_FEATURE_LABELS: Record<string, string> = {
   property_intake:    'Propiedades · Crear con IA',
   email_draft:        'Correos · Borrador con IA',
   sequence_bootstrap: 'Secuencias · 3 correos con IA',
+  hosted_page_copy:   'Páginas · Copy con IA',
+  lead_fit:           'Leads · Análisis de fit',
 }
 
 // Precios en USD por millón de tokens (fuente: docs de la Claude API).

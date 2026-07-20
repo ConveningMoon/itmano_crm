@@ -26,7 +26,7 @@ export default async function SettingsPage() {
   const isAgentViewer = ctx.role === 'agent'
 
   const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url').eq('id', tenantId).single(),
+    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getGlobalScoreRules(),
     // Honest "active accesses" = every login profile in this tenant (owner + any
@@ -40,8 +40,8 @@ export default async function SettingsPage() {
   ])
 
   const tenant = tenantRow
-    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null }
-    : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null }
+    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null, description: (tenantRow.description as string | null) ?? null }
+    : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 

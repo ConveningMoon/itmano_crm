@@ -3,9 +3,10 @@ import { Building2, Users, Flame, TrendingUp } from 'lucide-react'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getHubData } from '@/lib/data/super-admin'
 import { getNotifications } from '@/lib/data/notifications'
-import { getAiUsageSummary, getAiDailyUsage } from '@/lib/data/ai-usage'
+import { getAiUsageSummary, getAiDailyUsage, getLeadFitUsage } from '@/lib/data/ai-usage'
 import { AiUsagePanel } from '@/components/dashboard/ai-usage-panel'
 import { AiUsageDailyChart } from './ai-usage-chart'
+import { LeadFitPanel } from './lead-fit-panel'
 import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { AnimatedNumber } from '@/components/motion/animated-number'
 import { Tabs } from '@/components/ui/tabs'
@@ -19,12 +20,13 @@ export default async function AdminPage() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
-  const [{ kpis, tenants }, feed, aiUsage, aiDaily] = await Promise.all([
+  const [{ kpis, tenants }, feed, aiUsage, aiDaily, leadFit] = await Promise.all([
     getHubData(),
     getNotifications(null, { limit: 10 }),
     // Vista global: todos los tenants + uso ITMANO sin tenant.
     getAiUsageSummary(null),
     getAiDailyUsage(30),
+    getLeadFitUsage(null),
   ])
 
   const kpiCards = [
@@ -88,6 +90,7 @@ export default async function AdminPage() {
         items={[
           { key: 'tenants', label: 'Tenants', badge: kpis.tenants },
           { key: 'ia', label: 'Uso de IA' },
+          { key: 'fit', label: 'Fit IA', badge: leadFit.count || undefined },
           { key: 'gestion', label: 'Gestión' },
         ]}
         content={{
@@ -115,6 +118,7 @@ export default async function AdminPage() {
               <AiUsagePanel summary={aiUsage} showRecent={false} />
             </div>
           ),
+          fit: <LeadFitPanel summary={leadFit} />,
           gestion: <AdminClient tenants={tenants} />,
         }}
       />

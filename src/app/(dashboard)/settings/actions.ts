@@ -38,6 +38,56 @@ export async function updateTenantName(
   return { ok: true }
 }
 
+// ─── Contexto para IA: descripción de agencia y de agente (064) ──────────────
+// Texto libre que la IA consulta para el análisis de fit y para personalizar el
+// contenido. Owner/super pueden editarlos (misma regla de escritura).
+
+export async function updateTenantDescription(
+  description: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+  const value = description.trim().slice(0, 4000)
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('tenants')
+    .update({ description: value || null })
+    .eq('id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
+export async function updateAgentDescription(
+  agentId: string,
+  description: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+  const value = description.trim().slice(0, 3000)
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('agents')
+    .update({ description: value || null })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
 // ─── Update agent ─────────────────────────────────────────────────────────────
 
 export async function updateAgent(

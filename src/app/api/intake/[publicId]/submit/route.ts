@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
@@ -7,6 +8,7 @@ import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
+import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 
 export function OPTIONS() {
   return corsOptions()
@@ -412,6 +414,12 @@ export async function POST(
   if (recomputeErr) {
     console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'recompute_failed', detail: recomputeErr.message }))
   }
+
+  // ── FASE FIT-IA (opcional, apagado por defecto) ───────────────────────────────
+  // Si el tenant tiene el análisis con IA activado, reinterpreta el fit_profile con
+  // contexto de mercado tras responder. Fire-and-forget con after(): no bloquea la
+  // respuesta al visitante y el servicio verifica el toggle + presupuesto + clave.
+  after(() => assessLeadFit({ leadId, tenantId }))
 
   console.log(JSON.stringify({
     service:      'intake-submit',
