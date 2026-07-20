@@ -109,9 +109,17 @@ function SplitView({ tenant, channel, config, P, type }: { tenant: Tenant; chann
   const hasEventLine = isEvent && !!(ev?.date || ev?.time || ev?.location)
   const eventParts = [ev?.date, ev?.time, ev?.location].filter(Boolean) as string[]
 
+  // Fondo del encabezado a todo lo ancho (opcional), con velo claro para que el
+  // texto oscuro y la tarjeta del formulario sigan legibles.
+  const bgImage = config.background_image_url || config.cover_image_url
+  const heroBg = bgImage
+    ? `linear-gradient(rgba(251,250,248,0.90), rgba(251,250,248,0.96)), url("${bgImage}")`
+    : 'transparent'
+
   return (
     <main>
-      <section style={{ ...WRAP, paddingTop: 'clamp(44px, 7vw, 84px)', paddingBottom: 'clamp(44px, 7vw, 84px)' }}>
+      <section style={{ background: heroBg, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      <div style={{ ...WRAP, paddingTop: 'clamp(44px, 7vw, 84px)', paddingBottom: 'clamp(44px, 7vw, 84px)' }}>
         <div className="hpv-hero-grid">
           {/* Columna de texto */}
           <m.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}>
@@ -183,6 +191,7 @@ function SplitView({ tenant, channel, config, P, type }: { tenant: Tenant; chann
             </div>
           </m.div>
         </div>
+      </div>
       </section>
 
       {/* Beneficios (tarjetas) si el constructor las tiene */}
@@ -206,8 +215,11 @@ function DetailChip({ icon, accent, ink, children }: { icon: React.ReactNode; ac
 function LeadMagnetView({ tenant, channel, config, P }: { tenant: Tenant; channel: Channel; config: HostedPageConfig; P: Pal }) {
   const intro = config.agent_intro
   const hasIntro = !!intro?.name
-  const heroBg = config.cover_image_url
-    ? `linear-gradient(to bottom, rgba(12,22,33,0.82), rgba(12,22,33,0.9)), url("${config.cover_image_url}")`
+  // Fondo del hero: la imagen de fondo propia; si no hay, cae a la portada del
+  // material (compatibilidad con páginas ya publicadas).
+  const bgImage = config.background_image_url || config.cover_image_url
+  const heroBg = bgImage
+    ? `linear-gradient(to bottom, rgba(12,22,33,0.82), rgba(12,22,33,0.9)), url("${bgImage}")`
     : `radial-gradient(900px 500px at 15% -10%, ${P.accent}33, transparent 70%), ${P.inkDeep}`
 
   return (

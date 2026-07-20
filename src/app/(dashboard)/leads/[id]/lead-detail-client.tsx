@@ -16,7 +16,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { FormSection } from '@/components/ui/form-section'
 import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
-import { SendEmailModal } from './send-email-modal'
+import { SendEmailModal, type EmailSendingInfo } from './send-email-modal'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
@@ -175,11 +175,12 @@ interface LeadDetailProps {
   manualActions: ManualActionItem[]
   statusHistory: StatusChange[]
   scoreBreakdown: ScoreBreakdown
+  emailSending?: EmailSendingInfo
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, emailSending }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -309,10 +310,10 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.25)',
                 cursor: 'pointer', color: 'var(--accent-gold)', fontSize: '12px', fontWeight: 500,
               }}
-              title="Redactar y enviar un correo corporativo (con IA opcional) desde el CRM"
+              title="Redactar un correo (corporativo o personal), con IA opcional"
             >
               <Mail size={14} />
-              <span>Enviar Correo Corporativo</span>
+              <span>Enviar correo</span>
             </button>
             <button
               onClick={() => setShowEditModal(true)}
@@ -614,15 +615,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             <div style={CARD_TITLE}>Acciones</div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {/* Mailto — opens the agent's personal email client. No server send, no Resend.
-                  (Copiar email/teléfono ahora vive como icono junto al dato en el perfil.) */}
-              <a
-                href={`mailto:${lead.email}?subject=${encodeURIComponent(`${lead.firstName} ${lead.lastName}`)}`}
-                className="action-btn"
-                style={{ ...ACTION_BTN_STYLE, textDecoration: 'none', minHeight: '40px' }}
-              >
-                <Mail size={14} /> Enviar Correo Personal
-              </a>
+              {/* El envío (corporativo o personal) vive en el botón "Enviar correo"
+                  del encabezado, que abre el popup con ambas opciones. Copiar
+                  email/teléfono vive como icono junto al dato en el perfil. */}
 
               {/* Marcar como Cerrado — inline confirm */}
               {confirmClose ? (
@@ -764,9 +759,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         open={showEmailModal}
         onClose={() => setShowEmailModal(false)}
         leadId={lead.id}
+        leadEmail={lead.email}
         language={lead.language}
         leadFirstName={lead.firstName}
         agentName={agent?.name}
+        sending={emailSending}
       />
 
       {/* ── Modal: Iniciar proceso ── */}
