@@ -1,5 +1,6 @@
 import 'server-only'
-import { resend } from '@/lib/resend'
+import { resendForAccount } from '@/lib/resend'
+import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
@@ -24,8 +25,12 @@ export type PendingRun = {
   agent_id:              string
   email_blocked:         boolean
   email_blocked_reason:  string | null
-  // Tenant
+  // Tenant (identidad de envío — migración 065)
   email_from_address:   string | null
+  tenant_name:          string
+  tenant_slug:          string
+  resend_account:       string | null
+  domain_status:        string | null
   // Agent
   agent_name:         string
   agent_email:        string
@@ -77,7 +82,14 @@ export async function sendSequenceEmail(
     return { ok: false, reason: 'no_content', action: 'paused' }
   }
 
-  if (!run.email_from_address) {
+  const identity = resolveSenderIdentity({
+    name:               run.tenant_name,
+    slug:               run.tenant_slug,
+    email_from_address: run.email_from_address,
+    resend_account:     run.resend_account,
+    domain_status:      run.domain_status,
+  })
+  if (!identity) {
     if (!dryRun) await pauseRun(db, run_id, 'no_from_address')
     return { ok: false, reason: 'no_from_address', action: 'paused' }
   }
@@ -134,17 +146,17 @@ export async function sendSequenceEmail(
 
   let resendEmailId: string
   try {
-    const { data, error } = await resend.emails.send(
+    const { data, error } = await resendForAccount(identity.account).emails.send(
       compiledHtml && compiledSubject
         ? {
-            from:    run.email_from_address,
+            from:    identity.from,
             to:      run.lead_email,
             headers: listUnsubscribeHeaders,
             subject: compiledSubject,
             html:    compiledHtml,
           }
         : {
-            from:    run.email_from_address,
+            from:    identity.from,
             to:      run.lead_email,
             headers: listUnsubscribeHeaders,
             template: {

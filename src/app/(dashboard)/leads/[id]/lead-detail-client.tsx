@@ -67,6 +67,29 @@ const CARD_TITLE: React.CSSProperties = {
   color: 'var(--text-primary)', marginBottom: '16px',
 }
 
+// Icono de copiar en línea (junto al email/teléfono del perfil). Maneja su
+// propio feedback de "copiado".
+function InlineCopy({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600) }}
+      title={`Copiar ${label}`}
+      aria-label={`Copiar ${label}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        color: copied ? 'var(--accent-green)' : 'var(--text-muted)',
+        transition: 'color 0.15s',
+      }}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  )
+}
+
 // Calculated score breakdown (not events): fit dimensions + component subtotals.
 function ScoreBreakdownPanel({ breakdown }: { breakdown: ScoreBreakdown }) {
   const ptsColor = (p: number) => p > 0 ? '#6BA368' : p < 0 ? '#C97B6B' : 'var(--text-muted)'
@@ -184,10 +207,6 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isDeleting,  startDelete]    = useTransition()
 
-  // Clipboard copy feedback (auto-reset after 2 s)
-  const [copiedEmail, setCopiedEmail] = useState(false)
-  const [copiedPhone, setCopiedPhone] = useState(false)
-
   function handleDeleteConfirm() {
     setDeleteError(null)
     startDelete(async () => {
@@ -210,14 +229,14 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   // Primary: status-based freeze; null score is a DB consequence of closed/lost
   const isFrozen = lead.temperatureScore === null || FROZEN_STATUSES.includes(currentStatus)
 
-  const infoRows = [
+  const infoRows: { label: string; value: string; copy?: string }[] = [
     { label: 'Nombre',      value: `${lead.firstName} ${lead.lastName}` },
-    { label: 'Email',       value: lead.email },
-    { label: 'Teléfono',    value: lead.phone || '—' },
+    { label: 'Email',       value: lead.email, copy: lead.email },
+    { label: 'Teléfono',    value: lead.phone || '—', copy: lead.phone || undefined },
     { label: 'Idioma',      value: `${langCfg.flag} ${langCfg.label}` },
     { label: 'Registrado',  value: formatFullDate(lead.createdAt) },
     { label: 'Prestamista', value: lead.lender || '—' },
-	{ label: 'Última act.', value: formatFullDate(lead.updatedAt) },
+    { label: 'Última act.', value: formatFullDate(lead.updatedAt) },
   ]
 
   return (
@@ -348,8 +367,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 }}>
                   {row.label}
                 </span>
-                <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1, textAlign: 'right' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1, textAlign: 'right', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                   {row.value}
+                  {row.copy && <InlineCopy text={row.copy} label={row.label.toLowerCase()} />}
                 </span>
               </div>
             ))}
@@ -594,7 +614,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             <div style={CARD_TITLE}>Acciones</div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {/* Mailto — opens the agent's personal email client. No server send, no Resend. */}
+              {/* Mailto — opens the agent's personal email client. No server send, no Resend.
+                  (Copiar email/teléfono ahora vive como icono junto al dato en el perfil.) */}
               <a
                 href={`mailto:${lead.email}?subject=${encodeURIComponent(`${lead.firstName} ${lead.lastName}`)}`}
                 className="action-btn"
@@ -602,42 +623,6 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               >
                 <Mail size={14} /> Enviar Correo Personal
               </a>
-              {/* Copy email — always visible */}
-              <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(lead.email)
-                  setCopiedEmail(true)
-                  setTimeout(() => setCopiedEmail(false), 2000)
-                }}
-                className="action-btn"
-                style={{
-                  ...ACTION_BTN_STYLE,
-                  minHeight: '40px',
-                  ...(copiedEmail && { color: 'var(--accent-green)', borderColor: 'rgba(107,163,104,0.3)' }),
-                }}
-              >
-                {copiedEmail ? <Check size={14} /> : <Copy size={14} />}
-                {copiedEmail ? 'Copiado' : 'Copiar email'}
-              </button>
-              {/* Copy phone — only when the lead has a phone number */}
-              {lead.phone && (
-                <button
-                  onClick={() => {
-                    void navigator.clipboard.writeText(lead.phone!)
-                    setCopiedPhone(true)
-                    setTimeout(() => setCopiedPhone(false), 2000)
-                  }}
-                  className="action-btn"
-                  style={{
-                    ...ACTION_BTN_STYLE,
-                    minHeight: '40px',
-                    ...(copiedPhone && { color: 'var(--accent-green)', borderColor: 'rgba(107,163,104,0.3)' }),
-                  }}
-                >
-                  {copiedPhone ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedPhone ? 'Copiado' : 'Copiar teléfono'}
-                </button>
-              )}
 
               {/* Marcar como Cerrado — inline confirm */}
               {confirmClose ? (

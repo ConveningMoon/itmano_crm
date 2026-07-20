@@ -1,5 +1,6 @@
 import 'server-only'
-import { resend } from '@/lib/resend'
+import { resendForAccount } from '@/lib/resend'
+import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
@@ -44,16 +45,15 @@ export async function sendOneOffEmail(
   const agentSignature = (agent?.email_signature as string | null | undefined) ?? null
   const language   = (['es', 'en', 'pt'].includes(l.language as string) ? l.language : 'es') as EmailLocale
 
-  // Tenant: from address.
+  // Tenant: identidad de envío (cuenta Resend + from) según plan/dominio (065).
   const { data: tenant } = await db
     .from('tenants')
-    .select('email_from_address')
+    .select('name, slug, email_from_address, resend_account, domain_status')
     .eq('id', tenantId)
     .maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const t = tenant as any
-  const fromAddress = t?.email_from_address as string | null
-  if (!fromAddress) {
+  const identity = resolveSenderIdentity(tenant as any)
+  if (!identity) {
     return { ok: false, error: 'El equipo no tiene una dirección de envío configurada.' }
   }
 
@@ -78,8 +78,8 @@ export async function sendOneOffEmail(
 
   let resendEmailId: string
   try {
-    const { data, error } = await resend.emails.send({
-      from:    fromAddress,
+    const { data, error } = await resendForAccount(identity.account).emails.send({
+      from:    identity.from,
       to:      leadEmail,
       headers: listUnsubscribeHeaders,
       subject: rendered.subject,

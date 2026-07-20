@@ -695,13 +695,15 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
 // ─── Agents section ───────────────────────────────────────────────────────────
 
 function AgentsSection({
-  agents, agentAccess, accessCount, canManage, canLinkSelf, tenantId, isSuper, myAgentId,
+  agents, agentAccess, accessCount, canManage, multiAgent, canLinkSelf, tenantId, isSuper, myAgentId,
   ownerAgentId, canManageOwner, canDeleteAgents,
 }: {
   agents: Agent[]
   agentAccess: Record<string, boolean>
   accessCount: number
   canManage: boolean
+  // false en Esencial/Growth: un solo agente → sin crear/eliminar otros.
+  multiAgent: boolean
   canLinkSelf: boolean
   tenantId: string
   isSuper: boolean
@@ -711,6 +713,7 @@ function AgentsSection({
   canDeleteAgents: boolean
 }) {
   const [creating, setCreating] = useState(false)
+  const canCreate = canManage && multiAgent
 
   return (
     <div style={CARD}>
@@ -721,10 +724,24 @@ function AgentsSection({
             {agents.length} {agents.length === 1 ? 'miembro' : 'miembros'} · {accessCount} {accessCount === 1 ? 'acceso activo' : 'accesos activos'}
           </div>
         </div>
-        {canManage && !creating && (
+        {canCreate && !creating && (
           <button onClick={() => setCreating(true)} style={BTN_PRIMARY}>Crear agente</button>
         )}
       </div>
+
+      {/* Upsell: los planes de un solo agente no pueden crear/gestionar más. */}
+      {canManage && !multiAgent && (
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border-subtle)', background: 'rgba(201,169,110,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <Sparkles size={16} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+            <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              Tu plan actual incluye <strong style={{ color: 'var(--text-primary)' }}>un solo agente</strong>.
+              Para agregar y gestionar más agentes de tu equipo (cada uno con su propio acceso y sus leads),
+              adquiere el <strong style={{ color: 'var(--accent-gold)' }}>plan Partner</strong>. Escríbenos y lo activamos.
+            </div>
+          </div>
+        </div>
+      )}
 
       {creating && <CreateAgentForm tenantId={isSuper ? tenantId : undefined} onDone={() => setCreating(false)} />}
 
@@ -1227,6 +1244,7 @@ interface Props {
   scoringRules: ScoreRule[]
   canEditScoring: boolean
   canManageAgents: boolean
+  multiAgent: boolean
   canLinkSelf: boolean
   myAgentId: string | null
   ownerAgentId: string | null
@@ -1243,7 +1261,7 @@ interface Props {
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, scoringRules,
-  canEditScoring, canManageAgents, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
+  canEditScoring, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
   const [tab, setTab] = useState<Tab>('perfil')
@@ -1261,6 +1279,7 @@ export function SettingsClient({
             agentAccess={agentAccess}
             accessCount={accessCount}
             canManage={canManageAgents}
+            multiAgent={multiAgent}
             canLinkSelf={canLinkSelf}
             tenantId={tenant.id}
             isSuper={userRole === 'super_admin'}

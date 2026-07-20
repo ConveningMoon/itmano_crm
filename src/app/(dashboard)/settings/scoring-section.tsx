@@ -177,6 +177,9 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
   const [baseline, setBaseline] = useState<DraftMap>(() => buildDraft(rules))
   const [error, setError]       = useState<string | null>(null)
   const [saved, setSaved]       = useState(false)
+  // Doble confirmación antes de aplicar un cambio de scoring (afecta cómo se
+  // priorizan los leads y recalcula sus scores).
+  const [confirmStep, setConfirmStep] = useState<0 | 1 | 2>(0)
   const [pending, startTransition] = useTransition()
 
   const { fitGroups, engagement, manual } = useMemo(() => {
@@ -209,7 +212,15 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
 
   function update(id: string, next: DraftEntry) {
     setSaved(false)
+    setConfirmStep(0)
     setDraft(prev => ({ ...prev, [id]: next }))
+  }
+
+  // Inicia el flujo de doble confirmación (valida primero).
+  function requestSave() {
+    setError(null); setSaved(false)
+    if (!dirty || hasInvalid) return
+    setConfirmStep(1)
   }
 
   function handleSave() {
@@ -218,7 +229,7 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
       const d = draft[r.id]; const b = baseline[r.id]
       return d.points !== b.points || d.isActive !== b.isActive
     })
-    if (changed.length === 0) return
+    if (changed.length === 0) { setConfirmStep(0); return }
 
     const payload: { id: string; points: number; isActive: boolean }[] = []
     for (const r of changed) {
@@ -232,15 +243,21 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
 
     startTransition(async () => {
       const res = await updateScoreRules(payload)
-      if (!res.ok) { setError(res.error); return }
+      if (!res.ok) { setError(res.error); setConfirmStep(0); return }
       // Normalize the draft (trim/parse) and adopt it as the new baseline.
       const normalized: DraftMap = { ...draft }
       for (const p of payload) normalized[p.id] = { points: String(p.points), isActive: p.isActive }
       setDraft(normalized)
       setBaseline(normalized)
       setSaved(true)
+      setConfirmStep(0)
     })
   }
+
+  const changedCount = rules.filter(r => {
+    const d = draft[r.id]; const b = baseline[r.id]
+    return d && b && (d.points !== b.points || d.isActive !== b.isActive)
+  }).length
 
   return (
     <div>
@@ -301,22 +318,58 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
 
       {/* Footer */}
       {canEdit && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end' }}>
-          {error && <span style={{ fontSize: '12px', color: 'var(--accent-coral)', flex: 1 }}>{error}</span>}
-          {saved && !dirty && <span style={{ fontSize: '12px', color: 'var(--accent-green)', flex: 1 }}>Cambios guardados.</span>}
-          <button
-            onClick={handleSave}
-            disabled={!dirty || hasInvalid || pending}
-            style={{
-              ...BTN_PRIMARY,
-              background: (!dirty || hasInvalid || pending) ? 'var(--bg-overlay)' : 'var(--accent-gold)',
-              color:      (!dirty || hasInvalid || pending) ? 'var(--text-muted)' : 'var(--bg-base)',
-              cursor:     (!dirty || hasInvalid || pending) ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {pending ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-        </div>
+        <>
+          {/* Doble confirmación */}
+          {confirmStep > 0 && (
+            <div style={{
+              background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.3)',
+              borderRadius: '10px', padding: '14px 16px', marginBottom: '12px',
+              display: 'flex', flexDirection: 'column', gap: '12px',
+            }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                {confirmStep === 1 ? (
+                  <>Vas a cambiar <strong>{changedCount}</strong> {changedCount === 1 ? 'valor' : 'valores'} del scoring.
+                    Esto afecta cómo se priorizan tus leads y recalcula sus scores. ¿Continuar?</>
+                ) : (
+                  <><strong style={{ color: 'var(--accent-gold)' }}>Confirmación final.</strong> Los cambios se aplican al
+                    instante y los scores de tus leads se recalcularán. ¿Aplicar los cambios?</>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setConfirmStep(0)}
+                  style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                {confirmStep === 1 ? (
+                  <button onClick={() => setConfirmStep(2)} style={{ ...BTN_PRIMARY }}>Continuar →</button>
+                ) : (
+                  <button onClick={handleSave} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
+                    {pending ? 'Aplicando…' : 'Aplicar cambios'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end' }}>
+            {error && <span style={{ fontSize: '12px', color: 'var(--accent-coral)', flex: 1 }}>{error}</span>}
+            {saved && !dirty && <span style={{ fontSize: '12px', color: 'var(--accent-green)', flex: 1 }}>Cambios guardados.</span>}
+            <button
+              onClick={requestSave}
+              disabled={!dirty || hasInvalid || pending || confirmStep > 0}
+              style={{
+                ...BTN_PRIMARY,
+                background: (!dirty || hasInvalid || pending || confirmStep > 0) ? 'var(--bg-overlay)' : 'var(--accent-gold)',
+                color:      (!dirty || hasInvalid || pending || confirmStep > 0) ? 'var(--text-muted)' : 'var(--bg-base)',
+                cursor:     (!dirty || hasInvalid || pending || confirmStep > 0) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Guardar cambios
+            </button>
+          </div>
+        </>
       )}
     </div>
   )

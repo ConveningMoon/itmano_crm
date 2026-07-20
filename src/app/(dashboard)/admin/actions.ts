@@ -9,6 +9,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
+import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as updateScoreRules. The admin client (service_role) is the correct
@@ -193,6 +194,147 @@ export async function setTenantLeadScoring(
     .update({ ai_lead_scoring_enabled: enabled })
     .eq('id', tenantId)
   if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+// ─── Verificación de dominio de envío (super_admin, API de Resend) ────────────
+// El super_admin agrega el dominio de envío de un tenant; el CRM lo crea en la
+// cuenta de Resend del tenant (resend_account), guarda los registros DNS y
+// consulta el estado real. Growth/Partner envían desde su dominio cuando queda
+// verificado; mientras tanto salen del dominio compartido de ITMANO.
+
+const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
+
+// Extrae los campos útiles de los registros DNS que devuelve Resend.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeRecords(records: any): unknown[] {
+  if (!Array.isArray(records)) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return records.map((r: any) => ({
+    record:   r.record ?? r.type ?? '',
+    type:     r.type ?? '',
+    name:     r.name ?? '',
+    value:    r.value ?? '',
+    ttl:      r.ttl ?? 'Auto',
+    priority: r.priority ?? null,
+    status:   r.status ?? '',
+  }))
+}
+
+async function resendClientForTenant(
+  tenantId: string,
+): Promise<{ ok: true; client: ReturnType<typeof resendForAccount>; account: 'aj' | 'itmano' } | { ok: false; error: string }> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('tenants').select('resend_account').eq('id', tenantId).maybeSingle()
+  const account = resolveResendAccount((data as { resend_account?: string } | null)?.resend_account)
+  // Evita registrar el dominio en la cuenta equivocada por un fallback silencioso.
+  if (account === 'itmano' && !itmanoResendConfigured()) {
+    return { ok: false, error: 'Configura RESEND_API_KEY_ITMANO antes de gestionar dominios de este tenant.' }
+  }
+  return { ok: true, client: resendForAccount(account), account }
+}
+
+const AddDomainSchema = z.object({
+  tenantId: z.string().trim().min(1),
+  domain:   z.string().trim().toLowerCase().min(4).max(253),
+})
+
+export async function addTenantDomain(
+  input: { tenantId: string; domain: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const parsed = AddDomainSchema.safeParse(input)
+  if (!parsed.success || !DOMAIN_RE.test(parsed.data.domain)) {
+    return { ok: false, error: 'Dominio inválido. Usa algo como mail.tudominio.com.' }
+  }
+
+  const clientRes = await resendClientForTenant(parsed.data.tenantId)
+  if (!clientRes.ok) return clientRes
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (clientRes.client as any).domains.create({ name: parsed.data.domain })
+    if (error || !data?.id) {
+      return { ok: false, error: `Resend no pudo crear el dominio: ${error?.message ?? 'sin id'}` }
+    }
+    const supabase = createAdminClient()
+    const { error: updErr } = await supabase.from('tenants').update({
+      sending_domain:   parsed.data.domain,
+      resend_domain_id: data.id,
+      domain_status:    data.status ?? 'pending',
+      domain_records:   normalizeRecords(data.records),
+    }).eq('id', parsed.data.tenantId)
+    if (updErr) return { ok: false, error: updErr.message }
+  } catch (e) {
+    return { ok: false, error: `No se pudo agregar el dominio: ${e instanceof Error ? e.message : 'error'}` }
+  }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+export async function refreshTenantDomain(
+  tenantId: string,
+): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase.from('tenants').select('resend_domain_id').eq('id', tenantId).maybeSingle()
+  const domainId = (tenant as { resend_domain_id?: string } | null)?.resend_domain_id
+  if (!domainId) return { ok: false, error: 'Este tenant no tiene un dominio agregado.' }
+
+  const clientRes = await resendClientForTenant(tenantId)
+  if (!clientRes.ok) return clientRes
+
+  try {
+    // Dispara la verificación y consulta el estado real.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (clientRes.client as any).domains.verify(domainId).catch(() => {})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (clientRes.client as any).domains.get(domainId)
+    if (error || !data) return { ok: false, error: `No se pudo consultar el dominio: ${error?.message ?? 'sin datos'}` }
+
+    const status = (data.status as string) ?? 'pending'
+    const { error: updErr } = await supabase.from('tenants').update({
+      domain_status:  status,
+      domain_records: normalizeRecords(data.records),
+    }).eq('id', tenantId)
+    if (updErr) return { ok: false, error: updErr.message }
+
+    revalidatePath('/admin')
+    return { ok: true, status }
+  } catch (e) {
+    return { ok: false, error: `No se pudo verificar: ${e instanceof Error ? e.message : 'error'}` }
+  }
+}
+
+export async function removeTenantDomain(
+  tenantId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase.from('tenants').select('resend_domain_id').eq('id', tenantId).maybeSingle()
+  const domainId = (tenant as { resend_domain_id?: string } | null)?.resend_domain_id
+
+  if (domainId) {
+    const clientRes = await resendClientForTenant(tenantId)
+    if (clientRes.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (clientRes.client as any).domains.remove(domainId).catch(() => {})
+    }
+  }
+
+  const { error } = await supabase.from('tenants').update({
+    sending_domain: null, resend_domain_id: null, domain_status: 'not_configured', domain_records: null,
+  }).eq('id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
   revalidatePath('/admin')
   return { ok: true }
 }
