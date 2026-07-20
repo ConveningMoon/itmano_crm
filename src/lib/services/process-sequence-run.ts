@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendSequenceEmail, type PendingRun } from '@/lib/services/send-sequence-email'
+import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { parseEmailContent } from '@/lib/email-content'
 import type { EmailLocale } from '@/lib/services/email-render'
 
@@ -64,7 +65,7 @@ export async function processSequenceRun(params: {
       .eq('id', leadId)
       .maybeSingle(),
     db.from('tenants')
-      .select('id, email_from_address')
+      .select('id, name, slug, email_from_address, resend_account, domain_status')
       .eq('id', tenantId)
       .maybeSingle(),
     db.from('email_sequence_steps')
@@ -135,6 +136,10 @@ export async function processSequenceRun(params: {
     email_blocked:         (lead?.email_blocked as boolean) ?? false,
     email_blocked_reason:  (lead?.email_blocked_reason as string | null) ?? null,
     email_from_address:   tenant?.email_from_address ?? null,
+    tenant_name:          (tenant?.name as string | undefined) ?? '',
+    tenant_slug:          (tenant?.slug as string | undefined) ?? '',
+    resend_account:       (tenant?.resend_account as string | null | undefined) ?? null,
+    domain_status:        (tenant?.domain_status as string | null | undefined) ?? null,
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',
     agent_signature:    (agent?.email_signature as string | null) ?? null,
@@ -160,8 +165,8 @@ export async function processSequenceRun(params: {
         return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
       }
     }
-    if (!pending.email_from_address) {
-      return { action: 'paused', reason: 'no_from_address', details: 'tenant.email_from_address is null', ...diag }
+    if (!resolveSenderIdentity({ name: pending.tenant_name, slug: pending.tenant_slug, email_from_address: pending.email_from_address, resend_account: pending.resend_account, domain_status: pending.domain_status })) {
+      return { action: 'paused', reason: 'no_from_address', details: 'No se pudo resolver la identidad de envío del tenant (email_from_address y dominio)', ...diag }
     }
     if (!pending.lead_email) {
       return { action: 'paused', reason: 'no_lead_email', details: 'lead.email is null', ...diag }

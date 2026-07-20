@@ -1,5 +1,6 @@
 import 'server-only'
-import { resend } from '@/lib/resend'
+import { resendForAccount } from '@/lib/resend'
+import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
@@ -172,17 +173,16 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Load the tenant's from address.
+  // Identidad de envío del tenant (cuenta Resend + from) según plan/dominio (065).
   const { data: tenant } = await db
     .from('tenants')
-    .select('email_from_address')
+    .select('name, slug, email_from_address, resend_account, domain_status')
     .eq('id', tenantId)
     .single()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tn = tenant as any
-  const fromAddress = tn?.email_from_address as string | null
-  if (!fromAddress) {
+  const identity = resolveSenderIdentity(tenant as any)
+  if (!identity) {
     console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'no_from_address' }))
     return
   }
@@ -217,7 +217,7 @@ export async function sendPurchaseEmail(
       })
       sentSubject = rendered.subject
       payload = {
-        from:    fromAddress,
+        from:    identity.from,
         to:      leadEmail,
         headers: listUnsubscribeHeaders,
         subject: rendered.subject,
@@ -225,14 +225,14 @@ export async function sendPurchaseEmail(
       }
     } else {
       payload = {
-        from:     fromAddress,
+        from:     identity.from,
         to:       leadEmail,
         headers:  listUnsubscribeHeaders,
         template: { id: templateId as string, variables: { customer_name: firstName, unsubscribe_url: unsubscribeUrl } },
       }
     }
 
-    const { data: sendData, error: sendErr } = await resend.emails.send(payload)
+    const { data: sendData, error: sendErr } = await resendForAccount(identity.account).emails.send(payload)
 
     if (sendErr) {
       console.error(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, error: sendErr.message }))

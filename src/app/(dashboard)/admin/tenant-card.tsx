@@ -2,6 +2,7 @@ import { AlertTriangle } from 'lucide-react'
 import type { TenantOverview } from '@/lib/data/super-admin'
 import { enterTenant } from './actions'
 import { LeadScoringToggle } from './lead-scoring-toggle'
+import { TenantDomainManager } from './tenant-domain-manager'
 
 function relativeTime(iso: string): string {
   const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
@@ -87,6 +88,15 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
 
       {/* Toggle de análisis de fit con IA (fase de prueba, apagado por defecto) */}
       <LeadScoringToggle tenantId={tenant.id} initial={tenant.aiLeadScoringEnabled} />
+
+      {/* Dominio de envío (verificación vía API de Resend) */}
+      <TenantDomainManager
+        tenantId={tenant.id}
+        resendAccount={tenant.resendAccount}
+        sendingDomain={tenant.sendingDomain}
+        domainStatus={tenant.domainStatus}
+        domainRecords={tenant.domainRecords}
+      />
 
       <form action={enterTenant.bind(null, tenant.id)} style={{ marginTop: '4px' }}>
         <button
