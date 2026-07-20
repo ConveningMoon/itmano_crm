@@ -275,12 +275,28 @@ export async function generateHostedPageCopy(input: {
 
   const typeLabel = { lead_magnet: 'lead magnet (material descargable gratuito)', event: 'evento presencial', contact_form: 'formulario de contacto' }[input.channelType] ?? 'página de captación'
 
+  // Contexto de negocio (064): descripción de la agencia (mercado, perfil de
+  // comprador, tono) y del agente responsable. Da relevancia real al copy.
+  const supabaseCtx = createAdminClient()
+  let agencyDescription = ''
+  let agentDescription  = ''
+  if (ctx.tenant_id) {
+    const { data: tn } = await supabaseCtx.from('tenants').select('description').eq('id', ctx.tenant_id).maybeSingle()
+    agencyDescription = (((tn as { description?: string | null } | null)?.description) ?? '').trim().slice(0, 2000)
+    if (input.agentName) {
+      const { data: ag } = await supabaseCtx.from('agents').select('description').eq('tenant_id', ctx.tenant_id).eq('name', input.agentName).maybeSingle()
+      agentDescription = (((ag as { description?: string | null } | null)?.description) ?? '').trim().slice(0, 1500)
+    }
+  }
+
   const prompt = [
     `Escribe el copy de una landing page inmobiliaria de captación para un ${typeLabel}.`,
     'Idioma: detecta el idioma de la descripción y escribe TODO el copy en ese mismo idioma (si es español, español neutro latino). Devuélvelo en el campo `language`.',
     'Tono: cercano, específico, honesto — sin hype, sin emojis, sin promesas exageradas.',
     input.tenantName ? `Agencia: ${input.tenantName}.` : null,
+    agencyDescription ? `Contexto y mercado de la agencia (úsalo para que el copy sea relevante; NO inventes datos fuera de esto):\n${agencyDescription}` : null,
     input.agentName ? `Agente responsable: ${input.agentName}.` : null,
+    agentDescription ? `Sobre el agente (voz y especialidad): ${agentDescription}` : null,
     input.documentBase64 ? 'Se adjunta un documento con material de referencia — úsalo como fuente principal de los hechos, complementado por la descripción.' : null,
     input.channelType === 'event' ? 'Extrae fecha, hora y lugar SOLO si aparecen en la descripción — nunca los inventes.' : null,
     '',

@@ -21,6 +21,7 @@ import { getLeadEmailReplies } from '@/lib/data/lead-email-replies'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
+import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import type { ManualActionItem } from './manual-actions-panel'
 
 const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost']
@@ -97,6 +98,26 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     rules:           scoreRules,
   })
   const purchaseProcess: PurchaseProcess | null = rawProcess ? mapPurchaseProcess(rawProcess as PurchaseProcessRow) : null
+
+  // Identidad de envío del tenant (065) — el popup de correo muestra desde qué
+  // dirección sale el corporativo y avisa si el dominio propio aún no está
+  // verificado (mientras tanto sale por el dominio de ITMANO).
+  const { data: tenantRow } = await supabase
+    .from('tenants')
+    .select('name, slug, email_from_address, resend_account, domain_status, sending_domain')
+    .eq('id', leadTenantId)
+    .maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tRow = tenantRow as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const identity = tRow ? resolveSenderIdentity(tRow as any) : null
+  const emailSending = {
+    from:          identity?.from ?? null,
+    sendingDomain: (tRow?.sending_domain as string | null) ?? null,
+    domainStatus:  (tRow?.domain_status as string | null) ?? 'not_configured',
+    // true cuando el correo corporativo sale por el dominio compartido de ITMANO.
+    usingSharedDomain: !!identity?.from?.includes('@mail.itmano.com'),
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channels: ChannelOption[] = (rawChannels ?? []).map((r: any) => ({
     id:          r.id as string,
@@ -119,6 +140,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       manualActions={manualActions}
       statusHistory={statusHistory}
       scoreBreakdown={scoreBreakdown}
+      emailSending={emailSending}
     />
   )
 }

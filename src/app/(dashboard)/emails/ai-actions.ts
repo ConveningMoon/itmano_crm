@@ -45,6 +45,10 @@ export interface EmailAiInput {
   agentName?:     string
   tenantName?:    string
   leadFirstName?: string
+  // Contexto de negocio (064) — lo resuelve el server desde tenants.description
+  // y agents.description; los llamadores no lo pasan.
+  agencyDescription?: string
+  agentDescription?:  string
 }
 
 export interface EmailAiDraft {
@@ -103,7 +107,9 @@ const LENGTH_RULES: Record<'short' | 'medium', string> = {
 function buildPrompt(input: EmailAiInput): string {
   const context: string[] = []
   if (input.agentName)     context.push(`You are writing as: ${input.agentName}`)
+  if (input.agentDescription) context.push(`About you (the agent — match this voice and expertise): ${input.agentDescription}`)
   if (input.tenantName)    context.push(`Real-estate team: ${input.tenantName}`)
+  if (input.agencyDescription) context.push(`About the agency and its market (use it for relevance — never invent facts beyond it): ${input.agencyDescription}`)
   if (input.leadFirstName) context.push(`Recipient first name: ${input.leadFirstName}`)
 
   const brief: string[] = []
@@ -132,6 +138,33 @@ function buildPrompt(input: EmailAiInput): string {
   ].join('\n')
 }
 
+// Contexto de negocio para los prompts (064): descripción de la agencia
+// (mercado, perfil de comprador, tono) y del agente que firma. Best-effort — si
+// no están configuradas, el prompt sigue funcionando igual que antes.
+async function loadBusinessContext(
+  ctx: { tenant_id: string | null },
+  agentName?: string,
+): Promise<{ agencyDescription?: string; agentDescription?: string }> {
+  if (!ctx.tenant_id) return {}
+  try {
+    const db = createAdminClient()
+    const [{ data: tenant }, { data: agent }] = await Promise.all([
+      db.from('tenants').select('description').eq('id', ctx.tenant_id).maybeSingle(),
+      agentName
+        ? db.from('agents').select('description').eq('tenant_id', ctx.tenant_id).eq('name', agentName).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    const agencyDescription = ((tenant as { description?: string | null } | null)?.description ?? '').trim()
+    const agentDescription  = ((agent as { description?: string | null } | null)?.description ?? '').trim()
+    return {
+      ...(agencyDescription ? { agencyDescription: agencyDescription.slice(0, 2000) } : {}),
+      ...(agentDescription  ? { agentDescription:  agentDescription.slice(0, 1500) }  : {}),
+    }
+  } catch {
+    return {}
+  }
+}
+
 export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiResult> {
   // Cualquier usuario autenticado del CRM puede generar borradores (guardar
   // sigue gateado por las actions correspondientes).
@@ -153,6 +186,10 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
     return { ok: false, error: 'Los campos son demasiado largos.' }
   }
 
+  // Contexto de negocio (064): descripción de la agencia y del agente que firma.
+  // Da relevancia y voz al borrador sin que el llamador tenga que pasarlas.
+  const enriched: EmailAiInput = { ...input, ...(await loadBusinessContext(ctx, input.agentName)) }
+
   let toolInput: Record<string, unknown>
   try {
     const anthropic = new Anthropic()
@@ -163,7 +200,7 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
       thinking: { type: 'disabled' },
       tools: [COMPOSE_TOOL],
       tool_choice: { type: 'tool', name: 'compose_email' },
-      messages: [{ role: 'user', content: buildPrompt(input) }],
+      messages: [{ role: 'user', content: buildPrompt(enriched) }],
     })
 
     // Registro de uso (tokens + costo) — best-effort, nunca bloquea.
@@ -272,9 +309,13 @@ function bootstrapPrompt(params: {
   description: string
   hasPdf:      boolean
   agentName:   string | null
+  agencyDescription?: string
+  agentDescription?:  string
 }): string {
   const context: string[] = []
   if (params.agentName)   context.push(`You are writing as: ${params.agentName} (a real-estate agent)`)
+  if (params.agentDescription)  context.push(`About you (match this voice and expertise): ${params.agentDescription}`)
+  if (params.agencyDescription) context.push(`About the agency and its market (use it for relevance — never invent facts beyond it): ${params.agencyDescription}`)
   if (params.channelName) context.push(`This sequence belongs to: "${params.channelName}"`)
   if (params.hasPdf)      context.push('The attached PDF is the exact material the person requested — read it and use its real content to make the emails specific.')
   if (params.description) context.push(`Description from the author:\n${params.description}`)
@@ -410,12 +451,21 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
     delays = [0, 72, 240] // inmediato · +3 días · +10 días
   }
 
-  // Nombre del agente (contexto para la IA).
+  // Nombre + descripción del agente y de la agencia (contexto para la IA, 064).
   let agentName: string | null = null
+  let agentDescription = ''
   if (s.agent_id) {
-    const { data: ag } = await supabase.from('agents').select('name').eq('id', s.agent_id).maybeSingle()
+    const { data: ag } = await supabase.from('agents').select('name, description').eq('id', s.agent_id).maybeSingle()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     agentName = ((ag as any)?.name as string | undefined) ?? null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agentDescription = (((ag as any)?.description as string | null | undefined) ?? '').trim().slice(0, 1500)
+  }
+  let agencyDescription = ''
+  if (ctx.tenant_id) {
+    const { data: tn } = await supabase.from('tenants').select('description').eq('id', ctx.tenant_id).maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agencyDescription = (((tn as any)?.description as string | null | undefined) ?? '').trim().slice(0, 2000)
   }
 
   // ── Generación ───────────────────────────────────────────────────────────────
@@ -423,6 +473,8 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
     kind, language,
     channelName: (ch?.name as string | undefined) ?? null,
     description,
+    ...(agencyDescription ? { agencyDescription } : {}),
+    ...(agentDescription  ? { agentDescription }  : {}),
     hasPdf: !!pdfBytes,
     agentName,
   })

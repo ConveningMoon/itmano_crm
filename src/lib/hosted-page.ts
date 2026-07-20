@@ -83,7 +83,11 @@ export const HostedPageConfigSchema = z.object({
   // Template extendido (lead magnets sobre todo) — todo opcional.
   badge:           z.string().trim().max(90).optional().default(''),   // eyebrow del hero
   microcopy:       z.string().trim().max(140).optional().default(''),  // bajo el CTA ("100% gratis…")
-  cover_image_url: z.string().trim().max(600).optional().default(''),  // portada del material (también fondo del hero)
+  // Portada del MATERIAL (la imagen del PDF/guía que se muestra flotando).
+  cover_image_url:      z.string().trim().max(600).optional().default(''),
+  // Imagen de FONDO de la página (hero). Independiente de la portada; si está
+  // vacía, el hero cae a la portada para no romper páginas ya publicadas.
+  background_image_url: z.string().trim().max(600).optional().default(''),
   benefits_title:    z.string().trim().max(140).optional().default(''),
   benefits_subtitle: z.string().trim().max(400).optional().default(''),
   benefits:        z.array(HostedBenefitSchema).max(6).default([]),

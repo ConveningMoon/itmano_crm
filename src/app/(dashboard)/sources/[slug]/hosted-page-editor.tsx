@@ -33,7 +33,7 @@ const BTN_GHOST: React.CSSProperties = {
 const EMPTY: HostedPageConfig = {
   enabled: false, language: 'es', headline: '', subheadline: '', bullets: [],
   cta_label: '', success_message: '', ask_phone: false, questions: [],
-  badge: '', microcopy: '', cover_image_url: '',
+  badge: '', microcopy: '', cover_image_url: '', background_image_url: '',
   benefits_title: '', benefits_subtitle: '', benefits: [],
   form_title: '', form_subtitle: '',
   agent_intro: { name: '', title: '', paragraph: '', quote: '', photo_url: '', whatsapp_url: '', instagram_url: '' },
@@ -59,6 +59,9 @@ const DEFAULT_LM_QUESTIONS: HostedQuestion[] = [
     options: ['No', 'Sí'] },
   { key: '', label: '¿Qué zonas te interesan?', type: 'text', required: false },
 ]
+
+// Etiquetas de las preguntas por defecto — para marcarlas en el constructor.
+const DEFAULT_LM_LABELS = new Set(DEFAULT_LM_QUESTIONS.map(q => q.label))
 
 function slugifyKey(label: string, fallback: string): string {
   const s = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -108,10 +111,11 @@ export function HostedPageEditor({
   const aiDocInputRef           = useRef<HTMLInputElement>(null)
   const jsonInputRef            = useRef<HTMLInputElement>(null)
   const coverInputRef           = useRef<HTMLInputElement>(null)
+  const bgInputRef              = useRef<HTMLInputElement>(null)
   const photoInputRef           = useRef<HTMLInputElement>(null)
   const testiInputRef           = useRef<HTMLInputElement>(null)
   const [testiUploadIdx, setTestiUploadIdx] = useState<number | null>(null)
-  const [imgBusy, setImgBusy]   = useState<'cover' | 'photo' | 'testimonial' | null>(null)
+  const [imgBusy, setImgBusy]   = useState<'cover' | 'background' | 'photo' | 'testimonial' | null>(null)
 
   const isContact = channelType === 'contact_form'
   const isEvent   = channelType === 'event'
@@ -122,7 +126,18 @@ export function HostedPageEditor({
 
   function openEditor() {
     const base = initial ?? EMPTY
-    setCfg({ ...EMPTY, ...base, agent_intro: { ...EMPTY_INTRO, ...(base.agent_intro ?? {}) }, event: { ...EMPTY.event!, ...(base.event ?? {}) } })
+    // Lead magnet: las preguntas de calificación vienen CARGADAS por defecto la
+    // primera vez (alimentan el scoring de fit). El usuario puede editarlas,
+    // quitarlas o agregar las suyas.
+    const questions = (channelType === 'lead_magnet' && (base.questions?.length ?? 0) === 0)
+      ? DEFAULT_LM_QUESTIONS.map(q => ({ ...q }))
+      : base.questions
+    setCfg({
+      ...EMPTY, ...base,
+      questions,
+      agent_intro: { ...EMPTY_INTRO, ...(base.agent_intro ?? {}) },
+      event: { ...EMPTY.event!, ...(base.event ?? {}) },
+    })
     setBulletsText((base.bullets ?? []).join('\n'))
     setError(null)
   }
@@ -277,7 +292,7 @@ export function HostedPageEditor({
   }
 
   // ── Imágenes (portada / foto del agente / foto de testimonio) ───────────────
-  function handleImageUpload(kind: 'cover' | 'photo' | 'testimonial', file: File | null, testimonialIdx?: number) {
+  function handleImageUpload(kind: 'cover' | 'background' | 'photo' | 'testimonial', file: File | null, testimonialIdx?: number) {
     if (!file) return
     setError(null)
     setImgBusy(kind)
@@ -287,6 +302,7 @@ export function HostedPageEditor({
       setImgBusy(null)
       if (!res.ok) { setError(res.error); return }
       if (kind === 'cover') set('cover_image_url', res.url)
+      else if (kind === 'background') set('background_image_url', res.url)
       else if (kind === 'photo') setIntro({ photo_url: res.url })
       else if (typeof testimonialIdx === 'number') setTestimonial(testimonialIdx, { photo_url: res.url })
     }).catch(() => { setImgBusy(null); setError('No se pudo subir la imagen.') })
@@ -431,21 +447,47 @@ export function HostedPageEditor({
                 placeholder={'Cómo comprar aunque no tengas número de seguro social\nProgramas de ayuda para el enganche\nLas mejores zonas para tu familia'}
               />
             </div>
-            {/* Imagen de portada — todos los tipos (fondo del hero) */}
+            {/* Portada del material (solo lead magnet) — la imagen de la guía/PDF */}
+            {isLm && (
+              <div>
+                <label style={LABEL}>Portada del material</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {cfg.cover_image_url && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={cfg.cover_image_url} alt="" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+                  )}
+                  <button onClick={() => coverInputRef.current?.click()} disabled={imgBusy === 'cover'} style={BTN_GHOST}>
+                    {imgBusy === 'cover' ? 'Subiendo…' : cfg.cover_image_url ? 'Cambiar' : 'Subir portada'}
+                  </button>
+                  {cfg.cover_image_url && (
+                    <button onClick={() => set('cover_image_url', '')} style={BTN_GHOST}>Quitar</button>
+                  )}
+                  <input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { handleImageUpload('cover', e.target.files?.[0] ?? null); e.target.value = '' }} />
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                  La imagen del material (guía/PDF). Se muestra flotando junto al título.
+                </div>
+              </div>
+            )}
+
+            {/* Imagen de fondo de la página — independiente de la portada */}
             <div>
-              <label style={LABEL}>{isLm ? 'Portada del material (también fondo de la página)' : 'Imagen de fondo del encabezado'}</label>
+              <label style={LABEL}>Imagen de fondo de la página</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {cfg.cover_image_url && (
+                {cfg.background_image_url && (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={cfg.cover_image_url} alt="" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+                  <img src={cfg.background_image_url} alt="" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
                 )}
-                <button onClick={() => coverInputRef.current?.click()} disabled={imgBusy === 'cover'} style={BTN_GHOST}>
-                  {imgBusy === 'cover' ? 'Subiendo…' : cfg.cover_image_url ? 'Cambiar' : 'Subir imagen'}
+                <button onClick={() => bgInputRef.current?.click()} disabled={imgBusy === 'background'} style={BTN_GHOST}>
+                  {imgBusy === 'background' ? 'Subiendo…' : cfg.background_image_url ? 'Cambiar' : 'Subir fondo'}
                 </button>
-                {cfg.cover_image_url && (
-                  <button onClick={() => set('cover_image_url', '')} style={BTN_GHOST}>Quitar</button>
+                {cfg.background_image_url && (
+                  <button onClick={() => set('background_image_url', '')} style={BTN_GHOST}>Quitar</button>
                 )}
-                <input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { handleImageUpload('cover', e.target.files?.[0] ?? null); e.target.value = '' }} />
+                <input ref={bgInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { handleImageUpload('background', e.target.files?.[0] ?? null); e.target.value = '' }} />
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                Cubre el encabezado de la página a todo lo ancho{isLm ? ' (si no la subes, se usa la portada)' : ''}.
               </div>
             </div>
           </Section>
@@ -565,30 +607,31 @@ export function HostedPageEditor({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
                 <label style={{ ...LABEL, marginBottom: 0 }}>Preguntas del formulario</label>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {isLm && (
-                    <button
-                      onClick={() => set('questions', [...cfg.questions, ...DEFAULT_LM_QUESTIONS].slice(0, 10))}
-                      style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
-                      disabled={cfg.questions.length >= 10}
-                      title="Agrega preguntas de calificación (presupuesto, horizonte, financiamiento, zonas)"
-                    >
-                      <Sparkles size={12} /> Cargar calificación
-                    </button>
-                  )}
-                  <button
-                    onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
-                    style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
-                    disabled={cfg.questions.length >= 10}
-                  >
-                    <Plus size={12} /> Agregar
-                  </button>
-                </div>
+                <button
+                  onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
+                  style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
+                  disabled={cfg.questions.length >= 10}
+                >
+                  <Plus size={12} /> Agregar pregunta
+                </button>
               </div>
               {isLm && (
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', lineHeight: 1.5 }}>
-                  Estas preguntas califican al lead. Con el análisis de fit con IA activado, se interpretan según el
-                  mercado de tu agencia. Los puntos de cada respuesta se ajustan en Ajustes → Scoring.
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '10px',
+                  padding: '10px 12px', borderRadius: '8px',
+                  background: 'rgba(201,169,110,0.07)', border: '1px solid rgba(201,169,110,0.25)',
+                }}>
+                  <Sparkles size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    Las preguntas marcadas como <strong style={{ color: 'var(--accent-gold)' }}>por defecto</strong> vienen
+                    cargadas porque son las que <strong style={{ color: 'var(--text-primary)' }}>califican al lead</strong>:
+                    horizonte de compra, financiamiento, presupuesto, si ya trabaja con otro agente y zonas de interés.
+                    De ahí sale su <strong style={{ color: 'var(--text-primary)' }}>score de fit</strong> (qué tan buen
+                    prospecto es), y con el análisis con IA activado se interpretan según el mercado de tu agencia —
+                    por eso el mismo presupuesto puede valer distinto en dos mercados.
+                    Puedes editarlas, quitarlas o agregar las tuyas; los puntos de cada respuesta se ajustan en
+                    Ajustes → Scoring.
+                  </div>
                 </div>
               )}
               {cfg.questions.length === 0 && (
@@ -599,6 +642,15 @@ export function HostedPageEditor({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {cfg.questions.map((q, i) => (
                   <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {isLm && DEFAULT_LM_LABELS.has(q.label) && (
+                      <span style={{
+                        alignSelf: 'flex-start', fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.06em',
+                        textTransform: 'uppercase', padding: '2px 7px', borderRadius: '8px',
+                        color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.14)',
+                      }}>
+                        Por defecto · scoring
+                      </span>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 120px auto', gap: '10px', alignItems: 'center' }}>
                       <input style={INPUT} value={q.label} onChange={e => setQuestion(i, { label: e.target.value })} placeholder="¿Cuál es tu horizonte de compra?" />
                       <select

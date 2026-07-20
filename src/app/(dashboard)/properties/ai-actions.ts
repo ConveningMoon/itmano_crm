@@ -89,11 +89,13 @@ function buildExtractTool(languages: string[]): Anthropic.Tool {
   }
 }
 
-function buildPrompt(languages: string[]): string {
+function buildPrompt(languages: string[], agencyDescription?: string): string {
   const langList = languages.map(l => `${LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l} (${l})`).join(', ')
   return [
     'Extract the data for this real-estate property listing from the attached PDF.',
-    '',
+    agencyDescription
+      ? `\nThe agency that lists this property (use it for tone and market relevance — never invent facts about the property from it):\n${agencyDescription}\n`
+      : '',
     'Rules:',
     '- Extract factual fields (address, price, beds, baths, sqft, year, MLS, etc.) ONLY if they appear in the PDF. Never invent numbers or an address. Return null for anything not present.',
     '- If the document is clearly NOT a property listing, set address, list_price, sqft and bedrooms all to null.',
@@ -149,6 +151,13 @@ export async function generatePropertyFromPdf(
     console.error(JSON.stringify({ service: 'ai-property-intake', path: 'storage_upload_failed', detail: uploadErr.message }))
   }
 
+  // Contexto de la agencia (064): tono y mercado para redactar las descripciones.
+  let agencyDescription = ''
+  if (ctx.tenant_id) {
+    const { data: tn } = await db.from('tenants').select('description').eq('id', ctx.tenant_id).maybeSingle()
+    agencyDescription = (((tn as { description?: string | null } | null)?.description) ?? '').trim().slice(0, 2000)
+  }
+
   // ── Ask Claude to extract structured data from the PDF ───────────────────────
   let toolInput: Record<string, unknown>
   try {
@@ -165,7 +174,7 @@ export async function generatePropertyFromPdf(
           role: 'user',
           content: [
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: bytes.toString('base64') } },
-            { type: 'text', text: buildPrompt(languages) },
+            { type: 'text', text: buildPrompt(languages, agencyDescription || undefined) },
           ],
         },
       ],
