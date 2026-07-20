@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, Plus, ExternalLink, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { generatePropertyFromPdf } from './ai-actions'
 import { PropertyFormModal, TYPE_LABELS, STATUS_CONFIG, type AiInit } from './property-form-modal'
+import { AiCreateModal } from './ai-create-modal'
 
 // Lista de propiedades: tarjetas clickeables → detalle. El formulario de
 // crear/editar vive en property-form-modal.tsx (compartido con el detalle).
@@ -44,10 +45,7 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
   const [tab, setTab]     = useState<FilterTab>('all')
   const [modal, setModal] = useState<ModalState | null>(null)
   const [modalKey, setModalKey] = useState(0)
-  const [aiBusy, setAiBusy] = useState(false)
-  // Idiomas que "Crear con IA" generará (máx 3). El usuario puede ajustarlos.
-  const [aiLangs, setAiLangs] = useState<string[]>(['es', 'en'])
-  const [, startTransition] = useTransition()
+  const [showAiModal, setShowAiModal] = useState(false)
 
   const filtered = tab === 'all' ? properties : properties.filter(p => p.status === tab)
   const existingSlugs = properties.map(p => p.slug).filter((s): s is string => !!s)
@@ -57,26 +55,17 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
     setModal(state)
   }
 
-  // ── "Crear con IA": upload a listing PDF and open the form prefilled ─────────
-  function triggerAiCreate(files: FileList | null) {
-    const file = files?.[0]
-    if (!file) return
-    setAiBusy(true)
-    startTransition(async () => {
-      const fd = new FormData()
-      fd.set('file', file)
-      // Idiomas del contenido a generar (elegidos por el usuario; default es+en).
-      fd.set('languages', (aiLangs.length ? aiLangs : ['es', 'en']).join(','))
-      if (isSuperAdmin && tenants[0]?.id) fd.set('tenant_id', tenants[0].id)
-      const res = await generatePropertyFromPdf(fd)
-      setAiBusy(false)
-      if (!res.ok) {
-        // Surface the failure in the modal so the user can retry or fill manually.
-        openModal({ error: res.error })
-        return
-      }
-      openModal({ aiInit: { draft: res.draft, fields: res.fields }, error: res.warning ?? null })
-    })
+  // ── "Crear con IA": el modal recoge PDF + idiomas y llama aquí. Corremos la
+  //    extracción y, si funciona, abrimos el formulario prellenado. ────────────
+  async function runAiGenerate(file: File, langs: string[]): Promise<{ ok: boolean; error?: string }> {
+    const fd = new FormData()
+    fd.set('file', file)
+    fd.set('languages', (langs.length ? langs : ['es', 'en']).join(','))
+    if (isSuperAdmin && tenants[0]?.id) fd.set('tenant_id', tenants[0].id)
+    const res = await generatePropertyFromPdf(fd)
+    if (!res.ok) return { ok: false, error: res.error }
+    openModal({ aiInit: { draft: res.draft, fields: res.fields }, error: res.warning ?? null })
+    return { ok: true }
   }
 
   return (
@@ -102,61 +91,22 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {/* Idiomas que generará la IA (máx 3) — se aplican también al abrir el form. */}
+          {/* Crear con IA — abre el popup (PDF + idiomas). */}
           {AI_ENABLED && (
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }} title="Idiomas que generará la IA (máx 3)">
-              {(['es', 'en', 'pt', 'fr', 'zh'] as const).map(l => {
-                const on = aiLangs.includes(l)
-                return (
-                  <button
-                    key={l}
-                    onClick={() => setAiLangs(prev => on ? prev.filter(x => x !== l) : (prev.length >= 3 ? prev : [...prev, l]))}
-                    style={{
-                      padding: '4px 8px', fontSize: '11px', fontWeight: 600, letterSpacing: '0.04em', cursor: 'pointer', borderRadius: '6px',
-                      background: on ? 'rgba(201,169,110,0.15)' : 'transparent',
-                      border: `1px solid ${on ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                      color: on ? 'var(--accent-gold)' : 'var(--text-muted)',
-                    }}
-                  >
-                    {l.toUpperCase()}
-                  </button>
-                )
-              })}
-            </div>
+            <button
+              onClick={() => setShowAiModal(true)}
+              title="Sube el PDF del listado y la IA prellena el formulario"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+                background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+                border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
+              }}
+            >
+              <Sparkles size={14} color="var(--accent-gold)" />
+              Crear con IA
+            </button>
           )}
-          {/* Crear con IA — upload a listing PDF, prefill the form.
-              Gated off until the Claude API is provisioned (see AI_ENABLED). */}
-          <label
-            title={AI_ENABLED ? 'Sube el PDF del listado y la IA prellena el formulario' : 'Disponible próximamente'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--bg-surface)',
-              color: AI_ENABLED ? 'var(--text-secondary)' : 'var(--text-muted)',
-              border: '1px solid var(--border-subtle)', borderRadius: '8px',
-              cursor: (!AI_ENABLED || aiBusy) ? 'default' : 'pointer',
-              opacity: (!AI_ENABLED || aiBusy) ? 0.6 : 1,
-            }}
-          >
-            <Sparkles size={14} color="var(--accent-gold)" />
-            {aiBusy ? 'Procesando PDF…' : 'Crear con IA'}
-            {!AI_ENABLED && (
-              <span style={{
-                fontSize: '9px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
-                padding: '1px 6px', borderRadius: '10px',
-                background: 'rgba(201,169,110,0.15)', color: 'var(--accent-gold)',
-              }}>
-                Próximamente
-              </span>
-            )}
-            <input
-              type="file"
-              accept="application/pdf"
-              disabled={!AI_ENABLED || aiBusy}
-              onChange={e => { triggerAiCreate(e.target.files); e.target.value = '' }}
-              style={{ display: 'none' }}
-            />
-          </label>
           <button
             onClick={() => openModal({})}
             style={{
@@ -407,6 +357,14 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
             )
           })}
         </div>
+      )}
+
+      {/* ── Popup "Crear con IA" (PDF + idiomas) ─────────────────────────────── */}
+      {showAiModal && (
+        <AiCreateModal
+          onClose={() => setShowAiModal(false)}
+          onGenerate={runAiGenerate}
+        />
       )}
 
       {/* ── Create modal (manual o con borrador de IA) ───────────────────────── */}

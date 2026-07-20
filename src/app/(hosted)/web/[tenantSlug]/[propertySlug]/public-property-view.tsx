@@ -109,34 +109,74 @@ export function PublicPropertyView({
           <ArrowLeft size={14} /> Volver al portafolio
         </Link>
 
-        {/* Galería */}
-        {photos.length > 0 && (
-          <div className="ppv-rise" style={{ display: 'grid', gap: '10px', marginBottom: '32px' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="ppv-hero"
-              src={photos[0]}
-              alt={property.name ?? property.address}
-              onClick={() => setBox({ list: photos, i: 0 })}
-              style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: '16px', display: 'block' }}
-            />
-            {photos.length > 1 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' }}>
-                {photos.slice(1).map((url, idx) => (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    key={url}
-                    className="ppv-thumb"
-                    src={url}
-                    alt=""
-                    onClick={() => setBox({ list: photos, i: idx + 1 })}
-                    style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: '10px', display: 'block' }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Galería — foto única a 16:9, o mosaico 4×N con portada 2×2 y overlay +N */}
+        {photos.length === 1 && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            className="ppv-hero ppv-rise"
+            src={photos[0]}
+            alt={property.name ?? property.address}
+            onClick={() => setBox({ list: photos, i: 0 })}
+            style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: '16px', display: 'block', marginBottom: '32px' }}
+          />
         )}
+        {photos.length >= 2 && (() => {
+          // Mosaico: portada (2×2) + hasta 12 miniaturas. Filas según la cantidad
+          // para mantener celdas cuadradas; en la última visible, overlay "+N".
+          const shown  = photos.slice(0, 13)
+          const thumbs = shown.slice(1)
+          const extra  = photos.length - shown.length            // fotos no mostradas
+          const rows   = thumbs.length <= 4 ? 2 : thumbs.length <= 8 ? 3 : 4
+          return (
+            <div
+              className="ppv-rise"
+              style={{
+                display: 'grid', gap: '8px', marginBottom: '32px',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gridTemplateRows: `repeat(${rows}, 1fr)`,
+                aspectRatio: `4 / ${rows}`,
+              }}
+            >
+              {/* Portada 2×2 */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="ppv-hero"
+                src={photos[0]}
+                alt={property.name ?? property.address}
+                onClick={() => setBox({ list: photos, i: 0 })}
+                style={{ gridColumn: '1 / span 2', gridRow: '1 / span 2', width: '100%', height: '100%', objectFit: 'cover', borderRadius: '14px', display: 'block' }}
+              />
+              {thumbs.map((url, idx) => {
+                const overlay = idx === thumbs.length - 1 && extra > 0
+                return (
+                  <div key={url} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', background: 'var(--bg-surface)' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      className="ppv-thumb"
+                      src={url}
+                      alt=""
+                      onClick={() => setBox({ list: photos, i: idx + 1 })}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                    {overlay && (
+                      <div
+                        onClick={() => setBox({ list: photos, i: idx + 1 })}
+                        style={{
+                          position: 'absolute', inset: 0, cursor: 'zoom-in',
+                          background: 'rgba(8,8,10,0.62)', backdropFilter: 'blur(1px)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 'clamp(16px, 2.4vw, 24px)', fontWeight: 600, letterSpacing: '0.02em',
+                        }}
+                      >
+                        +{extra} más
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
 
         {/* Encabezado */}
         <div className="ppv-rise" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '10px' }}>
