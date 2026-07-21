@@ -1,4 +1,4 @@
--- 065 · Carousel Engine (fase de prueba, solo super_admin).
+-- 066 · Carousel Engine (fase de prueba, solo super_admin).
 --
 -- Motor que genera carruseles de Instagram completos (tema → copy → imágenes →
 -- slides compuestos) para agentes de un tenant. Hoy: un solo agente activo
