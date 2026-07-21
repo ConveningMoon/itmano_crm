@@ -16,6 +16,7 @@ import {
   Bell,
   LifeBuoy,
   Inbox,
+  Images,
 } from 'lucide-react'
 
 const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -31,6 +32,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   Bell,
   LifeBuoy,
   Inbox,
+  Images,
 }
 
 interface NavItemProps {

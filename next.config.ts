@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   // of letting the bundler trace/link it (Turbopack's Windows junction-point
   // creation for it fails outright on some filesystems).
   serverExternalPackages: ["sharp"],
+  // The Carousel Engine compositor rasterizes bundled OFL fonts (opentype.js →
+  // paths → sharp) inside the /admin/carousels server actions. Next's file
+  // tracer must copy the .ttf files into that route's serverless function.
+  outputFileTracingIncludes: {
+    "/admin/carousels": ["./src/lib/carousels/fonts/**"],
+  },
   experimental: {
     serverActions: {
       // Default is 1 MB, which silently rejects any Server Action request body
