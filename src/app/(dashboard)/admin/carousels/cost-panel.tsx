@@ -135,11 +135,11 @@ export function CostPanel({ report }: { report: CarouselCostReport }) {
       </div>
 
       <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-        El <strong>copy</strong> se genera con la Claude API y su costo es real, calculado con los tokens de
-        cada request (registrado en el uso de IA de ITMANO). La <strong>investigación</strong> (Gemini) y las
-        <strong> imágenes</strong> (Nano Banana) usan el free tier de Google AI Studio; aquí se muestran como
-        estimación con tarifas aproximadas (~{fmtCost(0.039)} por imagen, ~{fmtCost(0.003)} por investigación) para dar una
-        referencia — no se facturan a la cuenta de Anthropic.
+        Cada generación registra su costo en el ledger del proceso. El <strong>copy</strong> (Claude API) es
+        costo <strong>real</strong> por tokens; la <strong>investigación</strong> (Gemini) y las <strong>imágenes</strong>
+        (Nano Banana) usan el free tier de Google y se muestran como <strong>estimado</strong> (~{fmtCost(0.039)} por imagen,
+        ~{fmtCost(0.003)} por investigación) solo como referencia. Como cada imagen —incluida cada
+        <strong> regeneración</strong>— cuenta como una request, el costo de regenerar sí queda contabilizado.
       </p>
     </div>
   )

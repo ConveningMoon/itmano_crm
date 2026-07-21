@@ -18,10 +18,13 @@ async function assertAccess() {
   return ctx
 }
 
+// Cliente admin cacheado solo para construir URLs públicas (getPublicUrl es
+// síncrono y sin estado); evita crear un cliente por slide al abrir un carrusel.
+let urlClient: ReturnType<typeof createAdminClient> | null = null
 function publicUrl(path: string | null): string | null {
   if (!path) return null
-  const db = createAdminClient()
-  return db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  urlClient ??= createAdminClient()
+  return urlClient.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,12 +105,10 @@ export async function getRecentJobs(limit = 12): Promise<CarouselJob[]> {
 }
 
 // ── Reporte de costo por carrusel ────────────────────────────────────────────
-// El copy (Claude) tiene costo REAL registrado en ai_usage_events. La
-// investigación (Gemini) y las imágenes (Nano Banana) van al free tier de
-// Google y no se registran ahí, así que se ESTIMAN con tarifas aproximadas —
-// marcadas claramente como estimado en la UI.
-const IMAGE_EST_USD = 0.039   // Nano Banana (gemini-2.5-flash-image), aprox por imagen
-const RESEARCH_EST_USD = 0.003 // Gemini 2.5 Flash con grounding, aprox por carrusel
+// Fuente: carousel_logs (migración 068). Cada generación registra su fila con
+// costo — el copy (Claude) es REAL; investigación e imágenes (Google) son
+// ESTIMADO. Como CADA imagen (incl. regeneraciones) inserta su fila, el costo
+// por regeneración SÍ queda contabilizado.
 
 export interface CarouselCostRow {
   jobId:        string
@@ -145,6 +146,8 @@ export interface CarouselCostReport {
   carousels:       number
 }
 
+interface CostLogRow { job_id: string; step: string; provider: string | null; model: string | null; cost_usd: number | null; input_tokens: number | null; output_tokens: number | null }
+
 export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> {
   await assertAccess()
   const db = createAdminClient()
@@ -154,101 +157,95 @@ export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> 
     .select('id, topic, status, topic_source, created_at')
     .order('created_at', { ascending: false })
     .limit(limit)
-  const jobRows = jobs ?? []
+  const jobRows = (jobs ?? []) as { id: string; topic: string | null; status: string; topic_source: string; created_at: string }[]
   if (jobRows.length === 0) {
     return { rows: [], byApi: [], totalCopyUsd: 0, totalEstUsd: 0, totalImages: 0, carousels: 0 }
   }
-  const jobIds = jobRows.map((j: { id: string }) => j.id)
+  const jobIds = jobRows.map((j) => j.id)
 
-  // Costo real del copy (Claude) por job — feature 'carousel_copy', metadata.job_id.
-  const { data: usage } = await db
-    .from('ai_usage_events')
-    .select('cost_usd, input_tokens, output_tokens, metadata')
-    .eq('feature', 'carousel_copy')
-  const copyByJob = new Map<string, { cost: number; tin: number; tout: number }>()
-  for (const u of usage ?? []) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const jid = (u as any).metadata?.job_id as string | undefined
-    if (!jid) continue
-    const cur = copyByJob.get(jid) ?? { cost: 0, tin: 0, tout: 0 }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cur.cost += Number((u as any).cost_usd ?? 0)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cur.tin += Number((u as any).input_tokens ?? 0)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cur.tout += Number((u as any).output_tokens ?? 0)
-    copyByJob.set(jid, cur)
-  }
-
-  // Nº de imágenes Nano Banana por job.
-  const { data: slides } = await db
-    .from('carousel_slides')
-    .select('job_id, image_source')
+  // Ledger: pasos de generación con costo (copy/research/image), incl. regen.
+  const { data: logs } = await db
+    .from('carousel_logs')
+    .select('job_id, step, provider, model, cost_usd, input_tokens, output_tokens')
     .in('job_id', jobIds)
-    .eq('image_source', 'nano_banana')
-  const imagesByJob = new Map<string, number>()
-  for (const s of slides ?? []) {
-    const jid = (s as { job_id: string }).job_id
-    imagesByJob.set(jid, (imagesByJob.get(jid) ?? 0) + 1)
+    .in('step', ['copy', 'research', 'image'])
+    .not('cost_usd', 'is', null)
+  const logRows = (logs ?? []) as CostLogRow[]
+
+  // Agregado por job.
+  const agg = new Map<string, { copy: number; tin: number; tout: number; research: number; images: number; imageEst: number }>()
+  const model = { copy: 'claude-sonnet-5', research: 'gemini-flash-latest', image: 'gemini image (nano banana)' }
+  for (const l of logRows) {
+    const a = agg.get(l.job_id) ?? { copy: 0, tin: 0, tout: 0, research: 0, images: 0, imageEst: 0 }
+    const cost = Number(l.cost_usd ?? 0)
+    if (l.step === 'copy') { a.copy += cost; a.tin += l.input_tokens ?? 0; a.tout += l.output_tokens ?? 0; if (l.model) model.copy = l.model }
+    else if (l.step === 'research') { a.research += cost; if (l.model) model.research = l.model }
+    else if (l.step === 'image') { a.images += 1; a.imageEst += cost; if (l.model) model.image = l.model }
+    agg.set(l.job_id, a)
   }
 
-  const rows: CarouselCostRow[] = jobRows.map((j: {
-    id: string; topic: string | null; status: string; topic_source: string; created_at: string
-  }) => {
-    const copy = copyByJob.get(j.id) ?? { cost: 0, tin: 0, tout: 0 }
-    const imageCount = imagesByJob.get(j.id) ?? 0
-    const imageEstUsd = imageCount * IMAGE_EST_USD
-    const researchEstUsd = j.topic_source === 'trend_research' ? RESEARCH_EST_USD : 0
+  const rows: CarouselCostRow[] = jobRows.map((j) => {
+    const a = agg.get(j.id) ?? { copy: 0, tin: 0, tout: 0, research: 0, images: 0, imageEst: 0 }
     return {
-      jobId: j.id,
-      topic: j.topic ?? null,
-      status: j.status,
-      createdAt: j.created_at,
-      topicSource: j.topic_source,
-      copyCostUsd: copy.cost,
-      copyTokensIn: copy.tin,
-      copyTokensOut: copy.tout,
-      imageCount,
-      imageEstUsd,
-      researchEstUsd,
-      totalEstUsd: copy.cost + imageEstUsd + researchEstUsd,
+      jobId: j.id, topic: j.topic ?? null, status: j.status, createdAt: j.created_at, topicSource: j.topic_source,
+      copyCostUsd: a.copy, copyTokensIn: a.tin, copyTokensOut: a.tout,
+      imageCount: a.images, imageEstUsd: a.imageEst, researchEstUsd: a.research,
+      totalEstUsd: a.copy + a.imageEst + a.research,
     }
   })
 
-  // Desglose por API / acción.
-  const copyReqs = rows.filter(r => r.copyCostUsd > 0 || r.copyTokensIn > 0).length
-  const totalCopyUsd = rows.reduce((a, r) => a + r.copyCostUsd, 0)
-  const totalImages = rows.reduce((a, r) => a + r.imageCount, 0)
-  const researchReqs = rows.filter(r => r.topicSource === 'trend_research').length
-  const totalResearchEst = rows.reduce((a, r) => a + r.researchEstUsd, 0)
-  const totalImageEst = rows.reduce((a, r) => a + r.imageEstUsd, 0)
+  // Desglose por API / acción (requests = nº de llamadas reales, incl. regen).
+  const copyReqs = logRows.filter((l) => l.step === 'copy').length
+  const researchReqs = logRows.filter((l) => l.step === 'research').length
+  const imageReqs = logRows.filter((l) => l.step === 'image').length
+  const totalCopyUsd = rows.reduce((s, r) => s + r.copyCostUsd, 0)
 
   const byApi: CarouselApiCost[] = [
     {
-      provider: 'Anthropic', action: 'Copy del carrusel', model: 'claude-sonnet-5',
-      billing: 'real', requests: copyReqs,
-      inputTokens: rows.reduce((a, r) => a + r.copyTokensIn, 0),
-      outputTokens: rows.reduce((a, r) => a + r.copyTokensOut, 0),
+      provider: 'Anthropic', action: 'Copy del carrusel', model: model.copy, billing: 'real', requests: copyReqs,
+      inputTokens: rows.reduce((s, r) => s + r.copyTokensIn, 0), outputTokens: rows.reduce((s, r) => s + r.copyTokensOut, 0),
       costUsd: totalCopyUsd,
     },
-    {
-      provider: 'Google Gemini', action: 'Investigación de tendencias', model: 'gemini-flash-latest',
-      billing: 'estimado', requests: researchReqs, costUsd: totalResearchEst,
-    },
-    {
-      provider: 'Google Nano Banana', action: 'Imágenes editoriales', model: 'gemini image (nano banana)',
-      billing: 'estimado', requests: totalImages, costUsd: totalImageEst,
-    },
+    { provider: 'Google Gemini', action: 'Investigación de tendencias', model: model.research, billing: 'estimado', requests: researchReqs, costUsd: rows.reduce((s, r) => s + r.researchEstUsd, 0) },
+    { provider: 'Google Nano Banana', action: 'Imágenes editoriales (incl. regen)', model: model.image, billing: 'estimado', requests: imageReqs, costUsd: rows.reduce((s, r) => s + r.imageEstUsd, 0) },
   ]
 
   return {
-    rows,
-    byApi,
-    totalCopyUsd,
-    totalEstUsd: rows.reduce((a, r) => a + r.totalEstUsd, 0),
-    totalImages,
+    rows, byApi, totalCopyUsd,
+    totalEstUsd: rows.reduce((s, r) => s + r.totalEstUsd, 0),
+    totalImages: imageReqs,
     carousels: rows.length,
   }
+}
+
+// ── Registro del proceso (para diagnóstico / vista de logs) ──────────────────
+export interface CarouselLogRow {
+  id:           string
+  slide_number: number | null
+  level:        string
+  step:         string
+  message:      string
+  provider:     string | null
+  model:        string | null
+  billing:      string | null
+  cost_usd:     number | null
+  detail:       unknown
+  created_at:   string
+}
+
+export async function getCarouselLogs(jobId: string): Promise<CarouselLogRow[]> {
+  await assertAccess()
+  const db = createAdminClient()
+  const { data } = await db
+    .from('carousel_logs')
+    .select('id, slide_number, level, step, message, provider, model, billing, cost_usd, detail, created_at')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((r: any) => ({
+    id: r.id, slide_number: r.slide_number, level: r.level, step: r.step, message: r.message,
+    provider: r.provider, model: r.model, billing: r.billing, cost_usd: r.cost_usd, detail: r.detail, created_at: r.created_at,
+  }))
 }
 
 export async function getJobWithSlides(jobId: string): Promise<CarouselJobWithSlides | null> {

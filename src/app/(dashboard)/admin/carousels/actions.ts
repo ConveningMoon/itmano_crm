@@ -4,16 +4,21 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canAccessCarouselEngine } from '@/lib/access/carousel-engine'
-import { recordAiUsage } from '@/lib/services/ai-usage'
-import { researchTrends, generateImage, hasGoogleKey } from '@/lib/carousels/gemini'
+import { recordAiUsage, computeCostUsd, type AiUsageTokens } from '@/lib/services/ai-usage'
+import { researchTrends, generateImage, hasGoogleKey, lastResearchModel } from '@/lib/carousels/gemini'
 import { generateCopy } from '@/lib/carousels/copy'
 import { composeSlide } from '@/lib/carousels/compositor'
-import { getJobWithSlides } from '@/lib/data/carousels'
+import { getJobWithSlides, getCarouselLogs, type CarouselLogRow } from '@/lib/data/carousels'
+import { logCarousel, CAROUSEL_PRICING } from '@/lib/carousels/log'
 import type {
   ActionResult, CarouselBrandProfile, CarouselJobWithSlides, CarouselSlide, SlideCopy,
 } from '@/lib/carousels/types'
 
 const BUCKET = 'carousel-assets'
+
+function costFromUsage(usage: AiUsageTokens): number {
+  return computeCostUsd('claude-sonnet-5', usage)
+}
 
 async function gate() {
   const ctx = await getCurrentTenantContext()
@@ -112,6 +117,7 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
   }).select('id').single()
   if (jobErr || !jobRow) return { ok: false, error: 'No se pudo crear el job' }
   const jobId = jobRow.id as string
+  await logCarousel({ jobId, step: 'start', message: `Job creado para ${brand.display_name}`, detail: { topic, topic_source: topic ? 'manual' : 'trend_research' } })
 
   try {
     // 1) Investigación de tendencias (solo si no hay tema manual).
@@ -120,12 +126,24 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
       await db.from('carousel_jobs').update({ status: 'researching', updated_at: new Date().toISOString() }).eq('id', jobId)
       research = await researchTrends(brand)
       await db.from('carousel_jobs').update({ research_json: research, updated_at: new Date().toISOString() }).eq('id', jobId)
+      await logCarousel({
+        jobId, step: 'research', message: `Tendencia elegida: ${research.chosen?.title ?? '—'}`,
+        provider: 'Google Gemini', model: lastResearchModel() ?? undefined, billing: 'estimado', costUsd: CAROUSEL_PRICING.researchEstUsd,
+        detail: { trends: research.trends.map((t) => t.title), summary: research.summary },
+      })
     }
 
     // 2) Copy estructurado con Claude.
     await db.from('carousel_jobs').update({ status: 'writing_copy', updated_at: new Date().toISOString() }).eq('id', jobId)
     const { copy, usage } = await generateCopy({ brand, topic, research })
     await recordAiUsage({ tenantId: brand.tenant_id, userId: ctx.user_id, feature: 'carousel_copy', model: 'claude-sonnet-5', usage, metadata: { job_id: jobId } })
+    const copyCost = costFromUsage(usage)
+    await logCarousel({
+      jobId, step: 'copy', message: `Copy generado: ${copy.slides.length} slides`,
+      provider: 'Anthropic', model: 'claude-sonnet-5', billing: 'real', costUsd: copyCost,
+      inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0,
+      detail: { audience: copy.audience, hashtags: copy.hashtags },
+    })
 
     // 3) Persistir copy + filas de slides (aún sin imagen).
     await db.from('carousel_jobs').update({
@@ -159,7 +177,7 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
     return { ok: true, data: job }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error desconocido'
-    console.error(JSON.stringify({ service: 'carousel-start', job_id: jobId, agent_id: agentId, had_topic: !!topic, detail: msg }))
+    await logCarousel({ jobId, step: 'start', level: 'error', message: `Falló la generación: ${msg}`, detail: { agent_id: agentId, had_topic: !!topic } })
     await db.from('carousel_jobs').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', jobId)
     return { ok: false, error: msg }
   }
@@ -208,6 +226,13 @@ export async function loadCarouselJob(jobId: string): Promise<ActionResult<Carou
   return { ok: true, data: job }
 }
 
+// ── Registro completo del proceso de un carrusel (para diagnóstico en la UI) ──
+export async function loadCarouselLogs(jobId: string): Promise<ActionResult<CarouselLogRow[]>> {
+  const ctx = await gate()
+  if (!ctx) return { ok: false, error: 'Sin acceso' }
+  return { ok: true, data: await getCarouselLogs(jobId) }
+}
+
 // ── Renderizar (o regenerar) un slide: imagen + composición ──────────────────
 export async function renderSlide(slideId: string): Promise<ActionResult<CarouselSlide>> {
   const ctx = await gate()
@@ -237,12 +262,22 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
     let imageWarning: string | null = null
     if (slideRow.image_prompt) {
       try {
-        bg = await generateImage(slideRow.image_prompt as string)
+        const img = await generateImage(slideRow.image_prompt as string)
+        bg = img.data
         imageStoragePath = await uploadPng(`${base}/bg-${n}.png`, bg)
+        // Ledger: CADA generación de imagen (incl. regeneración) registra su costo.
+        await logCarousel({
+          jobId: jobRow.id, slideNumber: n, step: 'image', message: `Imagen generada para slide ${n}`,
+          provider: 'Google Nano Banana', model: img.model, billing: 'estimado', costUsd: CAROUSEL_PRICING.imageEstUsd,
+        })
       } catch (imgErr) {
         bg = null
         imageWarning = imgErr instanceof Error ? imgErr.message : 'No se pudo generar la imagen'
-        console.error(JSON.stringify({ service: 'carousel-image', slide_id: slideId, detail: imageWarning }))
+        await logCarousel({
+          jobId: jobRow.id, slideNumber: n, level: 'warn', step: 'image',
+          message: `Imagen falló → fondo procedural: ${imageWarning}`,
+          detail: { image_prompt: (slideRow.image_prompt as string)?.slice(0, 200) },
+        })
       }
     }
 
@@ -271,6 +306,8 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
       updated_at: new Date().toISOString(),
     }).eq('id', slideId)
 
+    await logCarousel({ jobId: jobRow.id, slideNumber: n, step: 'render', message: `Slide ${n} listo (${bg ? 'con foto' : 'procedural'})` })
+
     // Estado del job: ready si todos los slides están listos.
     const { data: siblings } = await db.from('carousel_slides').select('status').eq('job_id', jobRow.id)
     const allReady = (siblings ?? []).every((s: { status: string }) => s.status === 'ready')
@@ -292,11 +329,11 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error desconocido'
-    // Log detallado para revisar en Vercel (fase de prueba).
-    console.error(JSON.stringify({
-      service: 'carousel-render', slide_id: slideId, job_id: slideRow.job_id,
-      slide_number: slideRow.slide_number, had_image_prompt: !!slideRow.image_prompt, detail: msg,
-    }))
+    await logCarousel({
+      jobId: slideRow.job_id, slideNumber: slideRow.slide_number, level: 'error', step: 'render',
+      message: `Slide ${slideRow.slide_number} falló: ${msg}`,
+      detail: { had_image_prompt: !!slideRow.image_prompt, stack: e instanceof Error ? e.stack?.slice(0, 600) : null },
+    })
     await db.from('carousel_slides').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', slideId)
     return { ok: false, error: msg }
   }
