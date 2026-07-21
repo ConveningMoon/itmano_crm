@@ -35,6 +35,7 @@ export function navItemsForRole(role: TenantRole, opts?: { hubMode?: boolean }):
   return [
     ...navItems,
     { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+    { label: 'Carruseles', href: '/admin/carousels', icon: 'Images' },
     { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
   ]
 }
