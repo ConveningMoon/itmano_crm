@@ -64,7 +64,7 @@ function engineRules(brand: CarouselBrandProfile): string {
     `\n\n${DATA_INTEGRITY_RULE}`,
     `\n\n${IMAGE_COMPLIANCE_RULE}`,
     `\n\n${ICON_HINT}`,
-    `\n\nDevuelve el resultado llamando a la herramienta write_carousel. Los image_prompt van en INGLÉS (la IA de imagen entiende mejor inglés); todo el copy visible va en español.`,
+    `\n\nSALIDA: devuelve el resultado llamando a la herramienta write_carousel. Escribe TEXTO PLANO en todos los campos — NUNCA incluyas etiquetas HTML/XML, "<...>", ni nombres de parámetros dentro del texto. El caption es prosa; NO metas los hashtags dentro del caption (van en el campo hashtags aparte). Los hashtags: exactamente 5, todos DISTINTOS, sin repetir. Los image_prompt van en INGLÉS (la IA de imagen entiende mejor inglés); todo el copy visible va en español.`,
   ].join('')
 }
 
@@ -134,42 +134,76 @@ export async function generateCopy(params: {
   return { copy, usage: message.usage }
 }
 
+// Limpia texto que a veces sale del modelo con etiquetas HTML/XML incrustadas
+// (p. ej. </caption>, <parameter name="hashtags">) o entidades. Nunca deben
+// aparecer en un slide ni en el caption.
+function clean(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const t = v
+    .replace(/<[^>]*>/g, ' ')                    // quita etiquetas <...>
+    .replace(/&[a-z]+;/gi, ' ')                  // entidades &nbsp; etc.
+    .replace(/\bname\s*=\s*"[^"]*"/gi, ' ')       // restos de atributos
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return t.length ? t : null
+}
+
 // ── Coerción defensiva del output de la herramienta ──────────────────────────
 function coerceCopy(input: Record<string, unknown>): CarouselCopy {
-  const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
   const arr = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()) : []
+    Array.isArray(v) ? v.map((x) => clean(x)).filter((x): x is string => !!x) : []
 
   const rawSlides = Array.isArray(input.slides) ? input.slides : []
   const slides: SlideCopy[] = rawSlides.map((s, i) => {
     const o = (s && typeof s === 'object' ? s : {}) as Record<string, unknown>
     const type = SLIDE_TYPES.includes(o.slide_type as SlideType) ? (o.slide_type as SlideType) : 'text'
-    const iconRaw = str(o.icon)
+    const iconRaw = clean(o.icon)
     const icon = iconRaw && ICON_KEYS.includes(iconRaw) ? iconRaw : null
     const lines = arr(o.lines)
-    let imgPrompt = str(o.image_prompt)
+    let imgPrompt = clean(o.image_prompt)
     if (imgPrompt && imgPrompt.length > 1000) imgPrompt = imgPrompt.slice(0, 1000)
     return {
       slide_number: typeof o.slide_number === 'number' ? o.slide_number : i + 1,
       slide_type:   type,
-      label:        str(o.label),
-      title:        str(o.title),
-      subtitle:     str(o.subtitle),
+      label:        clean(o.label),
+      title:        clean(o.title),
+      subtitle:     clean(o.subtitle),
       lines:        lines.length ? lines : null,
       icon,
       image_prompt: imgPrompt,
     }
   })
 
-  // hashtags: normaliza a exactamente 5 con # inicial.
-  const hashtags = arr(input.hashtags).map((h) => (h.startsWith('#') ? h : `#${h}`)).slice(0, 5)
-  while (hashtags.length < 5) hashtags.push('#BienesRaices')
+  // Caption: limpio + sin fragmentos de array de hashtags filtrados + sin el
+  // bloque final de hashtags (los mostramos aparte).
+  let caption = clean(input.caption) ?? ''
+  caption = caption
+    .replace(/\[\s*"?#[^\]]*\]/g, '')                    // ["#CasaPropia", ...] filtrado
+    .replace(/(?:\s*#[\wÁÉÍÓÚÑáéíóúñ]+)+\s*$/u, '')        // bloque de hashtags al final
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+
+  // Hashtags: dedup (case-insensitive), con # inicial, exactamente 5 sin repetir.
+  const seen = new Set<string>()
+  const hashtags: string[] = []
+  for (const raw of arr(input.hashtags)) {
+    const tag = (raw.startsWith('#') ? raw : `#${raw}`).replace(/\s+/g, '')
+    const key = tag.toLowerCase()
+    if (tag.length > 1 && !seen.has(key)) { seen.add(key); hashtags.push(tag) }
+    if (hashtags.length === 5) break
+  }
+  // Relleno con tags relevantes DISTINTOS (nunca el mismo repetido).
+  for (const fb of ['#BienesRaices', '#CasaPropia', '#ComunidadHispana', '#Inversion', '#RealEstate']) {
+    if (hashtags.length >= 5) break
+    if (!seen.has(fb.toLowerCase())) { seen.add(fb.toLowerCase()); hashtags.push(fb) }
+  }
 
   return {
-    topic:    str(input.topic) ?? '',
-    audience: str(input.audience) ?? '',
+    topic:    clean(input.topic) ?? '',
+    audience: clean(input.audience) ?? '',
     slides,
-    caption:  str(input.caption) ?? '',
+    caption,
     hashtags,
   }
 }

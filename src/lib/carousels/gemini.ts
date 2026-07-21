@@ -36,7 +36,12 @@ const IMAGE_MODELS = dedupe([
 let cachedResearchModel: string | null = null
 let cachedImageModel: string | null = null
 
+export function lastResearchModel(): string | null { return cachedResearchModel }
+export function lastImageModel(): string | null { return cachedImageModel }
+
 export class GeminiError extends Error {}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function dedupe(xs: (string | undefined | null)[]): string[] {
   return [...new Set(xs.filter((x): x is string => !!x && x.trim().length > 0))]
@@ -65,36 +70,45 @@ function isModelUnavailable(status: number, body: string): boolean {
 }
 
 // POST genérico con fallback de modelos. Devuelve el JSON + el modelo que sirvió.
+// `retries429`: reintentos con backoff ante un 429 (throttle) del MISMO modelo,
+// antes de rendirse — un 429 no gasta cuota de generación, solo hay que esperar.
 async function callWithFallback(
   models: string[],
   cached: string | null,
   body: unknown,
+  retries429 = 0,
 ): Promise<{ json: Record<string, unknown>; model: string }> {
   const order = cached ? dedupe([cached, ...models]) : models
   if (order.length === 0) throw new GeminiError('No hay modelos de Gemini configurados')
 
   let lastUnavailable: GeminiError | null = null
   for (const model of order) {
-    let res: Response
-    try {
-      res = await fetch(`${BASE}/${model}:generateContent?key=${apiKey()}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-    } catch (e) {
-      // Fallo de red — no seguimos probando modelos (no es problema del modelo).
-      throw new GeminiError(`No se pudo contactar a Google AI: ${e instanceof Error ? e.message : 'error de red'}`)
-    }
-    if (res.ok) return { json: await res.json(), model }
+    for (let attempt = 0; ; attempt++) {
+      let res: Response
+      try {
+        res = await fetch(`${BASE}/${model}:generateContent?key=${apiKey()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+      } catch (e) {
+        // Fallo de red — no seguimos probando modelos (no es problema del modelo).
+        throw new GeminiError(`No se pudo contactar a Google AI: ${e instanceof Error ? e.message : 'error de red'}`)
+      }
+      if (res.ok) return { json: await res.json(), model }
 
-    const bodyText = (await res.text()).slice(0, 300)
-    if (isModelUnavailable(res.status, bodyText)) {
-      lastUnavailable = new GeminiError(`Modelo ${model} no disponible (${res.status})`)
-      continue // probar el siguiente candidato
+      const bodyText = (await res.text()).slice(0, 300)
+      if (res.status === 429 && attempt < retries429) {
+        await sleep(2500 * (attempt + 1)) // backoff: 2.5s, 5s…
+        continue // reintentar el mismo modelo
+      }
+      if (isModelUnavailable(res.status, bodyText)) {
+        lastUnavailable = new GeminiError(`Modelo ${model} no disponible (${res.status})`)
+        break // probar el siguiente candidato
+      }
+      // Error real (key/cuota agotada/solicitud) — no malgastes probando más.
+      throw new GeminiError(friendlyError(res.status, bodyText))
     }
-    // Error real (key/cuota/solicitud) — no malgastes probando más modelos.
-    throw new GeminiError(friendlyError(res.status, bodyText))
   }
   throw new GeminiError(
     `Ningún modelo de Gemini está disponible para tu cuenta (${order.join(', ')}). ` +
@@ -151,17 +165,20 @@ export async function researchTrends(brand: CarouselBrandProfile): Promise<Resea
 }
 
 // ── Generación de imagen (Nano Banana) ───────────────────────────────────────
-export async function generateImage(prompt: string): Promise<Buffer> {
-  const { json, model } = await callWithFallback(IMAGE_MODELS, cachedImageModel, {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-  })
+// Devuelve el buffer + el modelo que sirvió (para el ledger de costos). Reintenta
+// una vez ante 429 para reducir fallos por throttle sin desperdiciar tokens.
+export async function generateImage(prompt: string): Promise<{ data: Buffer; model: string }> {
+  const { json, model } = await callWithFallback(
+    IMAGE_MODELS, cachedImageModel,
+    { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
+    1,
+  )
   cachedImageModel = model
 
   const parts = (((json?.candidates as unknown[])?.[0] as { content?: { parts?: { inlineData?: { data?: string } }[] } })?.content?.parts ?? [])
   const inline = parts.find((p) => p?.inlineData?.data)?.inlineData?.data
-  if (!inline) throw new GeminiError('La respuesta de imagen no contenía datos')
-  return Buffer.from(inline, 'base64')
+  if (!inline) throw new GeminiError('La respuesta de imagen no contenía datos (posible bloqueo de seguridad del prompt)')
+  return { data: Buffer.from(inline, 'base64'), model }
 }
 
 // Extrae el primer objeto JSON de un texto (tolera ```json fences o prosa).

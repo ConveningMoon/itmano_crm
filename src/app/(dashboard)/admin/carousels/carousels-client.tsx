@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCircle, Trash2, Search, PenLine } from 'lucide-react'
+import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCircle, Trash2, Search, PenLine, PlayCircle, ScrollText } from 'lucide-react'
 import type { CarouselBrandProfile, CarouselJob, CarouselJobWithSlides, CarouselSlide } from '@/lib/carousels/types'
-import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel } from './actions'
+import type { CarouselLogRow } from '@/lib/data/carousels'
+import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel, loadCarouselLogs } from './actions'
 
 type Phase = 'idle' | 'researching' | 'rendering' | 'done' | 'error'
 
@@ -11,17 +12,22 @@ const SLIDE_TYPE_LABEL: Record<string, string> = {
   cover: 'Portada', data: 'Dato', emotional: 'Emocional', text: 'Impacto', cta: 'Cierre',
 }
 
-export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandProfile[]; recentJobs: CarouselJob[] }) {
+export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: CarouselBrandProfile[]; recentJobs: CarouselJob[]; initialJob: CarouselJobWithSlides | null }) {
   const [agentId, setAgentId] = useState(brands[0]?.agent_id ?? '')
   const [topic, setTopic] = useState('')
-  const [job, setJob] = useState<CarouselJobWithSlides | null>(null)
+  const [job, setJob] = useState<CarouselJobWithSlides | null>(initialJob)
   const [jobs, setJobs] = useState<CarouselJob[]>(recentJobs)
-  const [phase, setPhase] = useState<Phase>('idle')
+  const [phase, setPhase] = useState<Phase>(initialJob ? 'done' : 'idle')
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [regenId, setRegenId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [openingId, setOpeningId] = useState<string | null>(null)
+  const [resuming, setResuming] = useState(false)
+  const [logs, setLogs] = useState<CarouselLogRow[] | null>(null)
+  const [logsOpen, setLogsOpen] = useState(false)
+  const [logsLoading, setLogsLoading] = useState(false)
 
   const busy = phase === 'researching' || phase === 'rendering'
 
@@ -86,10 +92,58 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
   }
 
   async function openJob(id: string) {
-    if (busy) return
-    setError(null); setStatus('')
+    if (busy || openingId) return
+    setError(null); setStatus(''); setOpeningId(id); setLogs(null); setLogsOpen(false)
     const r = await loadCarouselJob(id)
+    setOpeningId(null)
     if (r.ok) { setJob(r.data); setPhase('done') } else { setPhase('error'); setError(r.error) }
+  }
+
+  // Reanudar: renderiza los slides pendientes o en error (p. ej. tras recargar).
+  async function resumePending() {
+    if (!job || resuming || busy) return
+    const todo = job.slides.filter((s) => s.status === 'pending' || s.status === 'failed')
+    if (todo.length === 0) return
+    setResuming(true); setPhase('rendering')
+    let current = job
+    for (let i = 0; i < todo.length; i++) {
+      const s = todo[i]
+      setStatus(`Renderizando pendiente ${i + 1} de ${todo.length} (slide ${s.slide_number})…`)
+      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? { ...x, status: 'rendering' } : x)) }
+      setJob(current)
+      const out = await safeRender(s.id)
+      const next: CarouselSlide = 'error' in out ? { ...s, status: 'failed', error_message: out.error } : out
+      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? next : x)) }
+      setJob(current)
+    }
+    const failed = current.slides.filter((s) => s.status === 'failed').length
+    setResuming(false); setPhase('done')
+    setStatus(failed > 0 ? `Terminado con ${failed} slide(s) con error` : 'Pendientes completados')
+  }
+
+  async function toggleLogs() {
+    if (!job) return
+    if (logsOpen) { setLogsOpen(false); return }
+    setLogsOpen(true)
+    if (!logs) {
+      setLogsLoading(true)
+      const r = await loadCarouselLogs(job.id)
+      setLogsLoading(false)
+      setLogs(r.ok ? r.data : [])
+    }
+  }
+
+  function downloadLogs() {
+    if (!job || !logs) return
+    const text = logs.map((l) => {
+      const cost = l.cost_usd != null ? ` [${l.provider ?? ''} ${l.model ?? ''} $${Number(l.cost_usd).toFixed(4)} ${l.billing ?? ''}]` : ''
+      const detail = l.detail ? `\n    ${JSON.stringify(l.detail)}` : ''
+      return `${l.created_at} · ${l.level.toUpperCase()} · ${l.step}${l.slide_number != null ? ` · slide ${l.slide_number}` : ''} · ${l.message}${cost}${detail}`
+    }).join('\n')
+    const blob = new Blob([`Carrusel ${job.id} — ${job.topic ?? ''}\n\n${text}\n`], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `carousel-${job.id.slice(0, 8)}-logs.txt`
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
   }
 
   async function removeJob(id: string) {
@@ -134,6 +188,7 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
   const total = slides.length
   const doneCount = readyCount + failedCount
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
+  const pendingCount = queuedCount + failedCount // pendientes + con error (reintentables)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -243,7 +298,15 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
                 {job.topic_source === 'trend_research' ? ' · tema por IA' : ' · tema manual'}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {pendingCount > 0 && !busy && (
+                <button className="ce-btn" onClick={resumePending} disabled={resuming} style={{ ...secondaryBtn(resuming), color: 'var(--accent-gold)', borderColor: 'var(--accent-gold)' }}>
+                  {resuming ? <Loader2 size={14} className="spin" /> : <PlayCircle size={14} />} Renderizar {pendingCount} pendiente{pendingCount > 1 ? 's' : ''}
+                </button>
+              )}
+              <button className="ce-btn" onClick={toggleLogs} style={secondaryBtn(false)}>
+                <ScrollText size={14} /> {logsOpen ? 'Ocultar' : 'Ver'} registro
+              </button>
               <button className="ce-btn" onClick={downloadAll} disabled={readyCount === 0} style={secondaryBtn(readyCount === 0)}>
                 <Download size={14} /> Descargar PNGs
               </button>
@@ -277,6 +340,36 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
               </div>
             </div>
           )}
+
+          {/* Registro del proceso (logs) */}
+          {logsOpen && (
+            <div style={{ marginTop: '18px', padding: '16px', borderRadius: '10px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Registro del proceso</span>
+                {logs && logs.length > 0 && (
+                  <button className="ce-btn" onClick={downloadLogs} style={secondaryBtn(false)}><Download size={14} /> Descargar .txt</button>
+                )}
+              </div>
+              {logsLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-muted)' }}><Loader2 size={14} className="spin" /> Cargando registro…</div>
+              ) : !logs || logs.length === 0 ? (
+                <div style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>Sin registros para este carrusel.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '320px', overflowY: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: '11.5px' }}>
+                  {logs.map((l) => {
+                    const c = l.level === 'error' ? 'var(--status-lost, #c96b6b)' : l.level === 'warn' ? 'var(--accent-gold)' : 'var(--text-secondary)'
+                    return (
+                      <div key={l.id} style={{ display: 'flex', gap: '8px', color: c, lineHeight: 1.4 }}>
+                        <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{new Date(l.created_at).toLocaleTimeString('es')}</span>
+                        <span style={{ color: 'var(--text-muted)', flexShrink: 0, textTransform: 'uppercase' }}>{l.step}{l.slide_number != null ? `·${l.slide_number}` : ''}</span>
+                        <span>{l.message}{l.cost_usd != null ? ` · $${Number(l.cost_usd).toFixed(4)} (${l.billing})` : ''}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -300,7 +393,9 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
                     {j.topic || 'Sin título'}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                    <StatusBadge status={j.status} />
+                    {openingId === j.id
+                      ? <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--accent-gold)' }}><Loader2 size={13} className="spin" /> Cargando…</span>
+                      : <StatusBadge status={j.status} />}
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{new Date(j.created_at).toLocaleDateString('es')}</span>
                   </span>
                 </button>
