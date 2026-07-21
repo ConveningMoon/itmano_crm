@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canAccessCarouselEngine } from '@/lib/access/carousel-engine'
 import { getBrandProfiles, getRecentJobs, getCarouselCosts } from '@/lib/data/carousels'
+import { V2_COPY_RULES } from '@/lib/carousels/brand'
 import { CarouselsTabs } from './carousels-tabs'
 
 // Motor de carruseles — fase de prueba, SOLO super_admin. Genera carruseles de
@@ -27,7 +28,7 @@ export default async function CarouselsPage() {
           Tema → copy → imágenes → slides · fase de prueba, solo ITMANO
         </p>
       </div>
-      <CarouselsTabs brands={brands} recentJobs={recentJobs} costs={costs} />
+      <CarouselsTabs brands={brands} recentJobs={recentJobs} costs={costs} defaultStylePrompt={V2_COPY_RULES} />
     </>
   )
 }

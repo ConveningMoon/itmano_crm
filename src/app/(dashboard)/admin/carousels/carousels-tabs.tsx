@@ -9,10 +9,11 @@ import { CostPanel } from './cost-panel'
 
 // Envoltura de tabs del motor: Generar · Contexto · Costos. Client para poder
 // alternar sin recargar; cada panel recibe sus datos ya cargados por el server.
-export function CarouselsTabs({ brands, recentJobs, costs }: {
+export function CarouselsTabs({ brands, recentJobs, costs, defaultStylePrompt }: {
   brands:     CarouselBrandProfile[]
   recentJobs: CarouselJob[]
   costs:      CarouselCostReport
+  defaultStylePrompt: string
 }) {
   return (
     <Tabs
@@ -23,7 +24,7 @@ export function CarouselsTabs({ brands, recentJobs, costs }: {
       ]}
       content={{
         generate: <CarouselsClient brands={brands} recentJobs={recentJobs} />,
-        context:  <ContextPanel brands={brands} />,
+        context:  <ContextPanel brands={brands} defaultStylePrompt={defaultStylePrompt} />,
         costs:    <CostPanel report={costs} />,
       }}
     />

@@ -52,10 +52,15 @@ function buildTool(): Anthropic.Tool {
 //   2) Contexto de marca del agente — cambia si el super_admin lo edita. Va
 //      después del breakpoint, así editarlo NO invalida el bloque grande cacheado
 //      (solo se reprocesa este bloque pequeño, ~una vez).
-function engineRules(): string {
+// El prompt de estilo/diseño (reglas v2) es editable por agente. Si el agente no
+// lo sobreescribió, se usa el default del código (V2_COPY_RULES). Las reglas
+// duras (no inventar datos, no rostros reales, íconos, formato de salida) SIEMPRE
+// se anexan aparte — no dependen del prompt editable.
+function engineRules(brand: CarouselBrandProfile): string {
+  const style = brand.style_prompt?.trim() || V2_COPY_RULES
   return [
     `Eres un redactor experto de carruseles de Instagram para agentes inmobiliarios. Idioma: español neutro latino, cálido y experto.`,
-    `\n\n${V2_COPY_RULES}`,
+    `\n\n${style}`,
     `\n\n${DATA_INTEGRITY_RULE}`,
     `\n\n${IMAGE_COMPLIANCE_RULE}`,
     `\n\n${ICON_HINT}`,
@@ -115,7 +120,7 @@ export async function generateCopy(params: {
     tool_choice: { type: 'tool', name: 'write_carousel' },
     // Bloque 1 cacheado (reglas del motor) + bloque 2 con el contexto de marca.
     system: [
-      { type: 'text', text: engineRules(), cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: engineRules(params.brand), cache_control: { type: 'ephemeral' } },
       { type: 'text', text: brandContext(params.brand) },
     ],
     messages: [{ role: 'user', content: userPrompt(params.topic, params.research) }],

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Check, Loader2, AlertCircle, Info } from 'lucide-react'
+import { Save, Check, Loader2, AlertCircle, Info, RotateCcw } from 'lucide-react'
 import type { CarouselBrandProfile } from '@/lib/carousels/types'
 import { updateBrandProfile } from './actions'
 
@@ -21,7 +21,7 @@ function input(): React.CSSProperties {
   }
 }
 
-export function ContextPanel({ brands }: { brands: CarouselBrandProfile[] }) {
+export function ContextPanel({ brands, defaultStylePrompt }: { brands: CarouselBrandProfile[]; defaultStylePrompt: string }) {
   const [agentId, setAgentId] = useState(brands[0]?.agent_id ?? '')
   const active = brands.find((b) => b.agent_id === agentId) ?? brands[0]
 
@@ -33,20 +33,24 @@ export function ContextPanel({ brands }: { brands: CarouselBrandProfile[] }) {
     )
   }
 
-  return <BrandForm key={active.agent_id} brand={active} brands={brands} onPick={setAgentId} agentId={agentId} />
+  return <BrandForm key={active.agent_id} brand={active} brands={brands} onPick={setAgentId} agentId={agentId} defaultStylePrompt={defaultStylePrompt} />
 }
 
-function BrandForm({ brand, brands, onPick, agentId }: {
+function BrandForm({ brand, brands, onPick, agentId, defaultStylePrompt }: {
   brand: CarouselBrandProfile
   brands: CarouselBrandProfile[]
   onPick: (id: string) => void
   agentId: string
+  defaultStylePrompt: string
 }) {
   const [displayName, setDisplayName] = useState(brand.display_name)
   const [handle, setHandle] = useState(brand.instagram_handle)
   const [agency, setAgency] = useState(brand.agency_name ?? '')
   const [market, setMarket] = useState(brand.market ?? '')
   const [voice, setVoice] = useState(brand.brand_voice ?? '')
+  // Prompt de estilo/diseño: si el agente no lo sobreescribió, arranca del default.
+  const usingDefaultStyle = !brand.style_prompt
+  const [style, setStyle] = useState(brand.style_prompt ?? defaultStylePrompt)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,11 +65,15 @@ function BrandForm({ brand, brands, onPick, agentId }: {
       market: market || null,
       language: brand.language,
       brand_voice: voice || null,
+      // Si coincide con el default, guardamos null (seguir el default del código).
+      style_prompt: style.trim() === defaultStylePrompt.trim() ? null : (style || null),
     })
     setSaving(false)
     if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
     else setError(res.error)
   }
+
+  function resetStyle() { setStyle(defaultStylePrompt) }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -133,7 +141,32 @@ function BrandForm({ brand, brands, onPick, agentId }: {
             placeholder="Audiencia, tono, family-first, bilingüe, sin venta agresiva, objetivo de los carruseles…"
           />
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-            Esto define cómo deben crearse los carruseles y a quién van dirigidos. Sé específico del nicho del tenant.
+            Esto define a quién van dirigidos los carruseles y con qué tono. Sé específico del nicho del tenant.
+          </p>
+        </div>
+
+        {/* Prompt de estilo / diseño (reglas v2) — editable */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
+            <label style={{ ...FIELD_LABEL, marginBottom: 0 }}>Prompt de estilo y diseño (sistema v2) — cómo se genera</label>
+            <button
+              onClick={resetStyle}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 9px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              <RotateCcw size={12} /> Restaurar default
+            </button>
+          </div>
+          <textarea
+            value={style}
+            onChange={(e) => setStyle(e.target.value)}
+            rows={14}
+            style={{ ...input(), resize: 'vertical', lineHeight: 1.55, fontFamily: 'ui-monospace, monospace', fontSize: '12px' }}
+          />
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+            Estas son las reglas que la IA sigue para el estilo, la estructura y la redacción de cada carrusel.
+            {usingDefaultStyle && <span style={{ color: 'var(--accent-gold)' }}> Actualmente se usa el default del sistema.</span>}{' '}
+            Las <strong>reglas duras</strong> (no inventar datos ni cifras sin fuente, no rostros reales identificables, footer y hashtags)
+            se aplican <strong>siempre</strong>, edites o no este prompt. Si lo dejas igual al default, se sigue usando el default.
           </p>
         </div>
 
