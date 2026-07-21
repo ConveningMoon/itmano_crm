@@ -4,23 +4,102 @@ import type { CarouselBrandProfile, ResearchResult, ResearchTrend } from './type
 // Cliente de Google AI (Gemini) para dos pasos del pipeline:
 //   1. Investigación de tendencias con grounding (`google_search`).
 //   2. Generación de fondos editoriales con Nano Banana (gemini image).
-// API keys directas (GOOGLE_AI_API_KEY), REST v1beta — sin SDK, igual de simple
-// que el resto de integraciones externas del CRM.
+// API keys directas (GOOGLE_AI_API_KEY), REST v1beta — sin SDK.
 //
-// Nota de costos: estas llamadas van al free tier de Google y NO se registran en
-// ai_usage_events (esa tabla y su tabla de precios son solo para la Claude API;
-// mezclar Gemini falsearía el costo en USD de los dashboards del super_admin).
+// Robustez: los IDs de modelo de Google cambian/retiran seguido (p. ej.
+// gemini-2.5-flash quedó "no longer available to new users"). Por eso cada paso
+// prueba una LISTA de modelos candidatos y, ante un 404 / modelo retirado, pasa
+// al siguiente — sin desperdiciar la request. Errores no-404 (key inválida,
+// cuota, request inválida) se propagan de inmediato sin probar más modelos.
+// Los defaults se pueden sobreescribir por env (GEMINI_RESEARCH_MODEL /
+// GEMINI_IMAGE_MODEL) sin re-deploy.
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
-const RESEARCH_MODEL = 'gemini-2.5-flash'       // grounding con google_search
-const IMAGE_MODEL = 'gemini-2.5-flash-image'    // "Nano Banana"
+
+// Alias `-latest` primero (Google lo mantiene apuntando al último flash), luego
+// versiones concretas como respaldo.
+const RESEARCH_MODELS = dedupe([
+  process.env.GEMINI_RESEARCH_MODEL,
+  'gemini-flash-latest',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+])
+// Nano Banana: flash (barato) primero, pro (estable) y el original de respaldo.
+const IMAGE_MODELS = dedupe([
+  process.env.GEMINI_IMAGE_MODEL,
+  'gemini-3.1-flash-image-preview',
+  'gemini-3-pro-image',
+  'gemini-2.5-flash-image',
+])
+
+// Recordamos el modelo que funcionó para no volver a golpear los retirados.
+let cachedResearchModel: string | null = null
+let cachedImageModel: string | null = null
 
 export class GeminiError extends Error {}
+
+function dedupe(xs: (string | undefined | null)[]): string[] {
+  return [...new Set(xs.filter((x): x is string => !!x && x.trim().length > 0))]
+}
+
+export function hasGoogleKey(): boolean {
+  return !!process.env.GOOGLE_AI_API_KEY
+}
 
 function apiKey(): string {
   const k = process.env.GOOGLE_AI_API_KEY
   if (!k) throw new GeminiError('Falta GOOGLE_AI_API_KEY')
   return k
+}
+
+function friendlyError(status: number, body: string): string {
+  if (status === 401 || status === 403) return 'La API key de Google no es válida o no tiene permisos (revisa GOOGLE_AI_API_KEY en Vercel).'
+  if (status === 429) return 'Se alcanzó el límite/cuota de Google AI (429). Intenta más tarde.'
+  if (status === 400) return `Google rechazó la solicitud (400): ${body}`
+  return `Gemini falló (${status}): ${body}`
+}
+
+// ¿El error es "modelo no disponible" → conviene probar el siguiente candidato?
+function isModelUnavailable(status: number, body: string): boolean {
+  return status === 404 || /no longer available|not\s*found|is not supported|unknown name|does not exist/i.test(body)
+}
+
+// POST genérico con fallback de modelos. Devuelve el JSON + el modelo que sirvió.
+async function callWithFallback(
+  models: string[],
+  cached: string | null,
+  body: unknown,
+): Promise<{ json: Record<string, unknown>; model: string }> {
+  const order = cached ? dedupe([cached, ...models]) : models
+  if (order.length === 0) throw new GeminiError('No hay modelos de Gemini configurados')
+
+  let lastUnavailable: GeminiError | null = null
+  for (const model of order) {
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/${model}:generateContent?key=${apiKey()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    } catch (e) {
+      // Fallo de red — no seguimos probando modelos (no es problema del modelo).
+      throw new GeminiError(`No se pudo contactar a Google AI: ${e instanceof Error ? e.message : 'error de red'}`)
+    }
+    if (res.ok) return { json: await res.json(), model }
+
+    const bodyText = (await res.text()).slice(0, 300)
+    if (isModelUnavailable(res.status, bodyText)) {
+      lastUnavailable = new GeminiError(`Modelo ${model} no disponible (${res.status})`)
+      continue // probar el siguiente candidato
+    }
+    // Error real (key/cuota/solicitud) — no malgastes probando más modelos.
+    throw new GeminiError(friendlyError(res.status, bodyText))
+  }
+  throw new GeminiError(
+    `Ningún modelo de Gemini está disponible para tu cuenta (${order.join(', ')}). ` +
+    `Actualiza GEMINI_RESEARCH_MODEL / GEMINI_IMAGE_MODEL. Último detalle: ${lastUnavailable?.message ?? 'desconocido'}`,
+  )
 }
 
 // ── Investigación de tendencias ──────────────────────────────────────────────
@@ -39,35 +118,29 @@ export async function researchTrends(brand: CarouselBrandProfile): Promise<Resea
     `\n{"trends":[{"title":"...","angle":"conexión a bienes raíces","audience":"audiencia específica","source":"fuente citable","url":"opcional"}],"chosen_index":0,"summary":"por qué se eligió y por qué es viral ahora"}`,
   ].join('')
 
-  const res = await fetch(`${BASE}/${RESEARCH_MODEL}:generateContent?key=${apiKey()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { temperature: 0.95 },
-    }),
+  const { json, model } = await callWithFallback(RESEARCH_MODELS, cachedResearchModel, {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    tools: [{ google_search: {} }],
+    generationConfig: { temperature: 0.95 },
   })
-  if (!res.ok) {
-    throw new GeminiError(`Investigación falló (${res.status}): ${(await res.text()).slice(0, 300)}`)
-  }
-  const json = await res.json()
-  const text: string = (json?.candidates?.[0]?.content?.parts ?? [])
-    .map((p: { text?: string }) => p?.text ?? '')
+  cachedResearchModel = model
+
+  const text: string = (((json?.candidates as unknown[])?.[0] as { content?: { parts?: { text?: string }[] } })?.content?.parts ?? [])
+    .map((p) => p?.text ?? '')
     .join('')
   const parsed = extractJson(text)
 
   const trends: ResearchTrend[] = Array.isArray(parsed?.trends)
-    ? parsed.trends
-        .filter((t: unknown): t is Record<string, unknown> => !!t && typeof t === 'object')
-        .map((t: Record<string, unknown>) => ({
+    ? (parsed.trends as unknown[])
+        .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
+        .map((t) => ({
           title:    String(t.title ?? '').trim(),
           angle:    String(t.angle ?? '').trim(),
           audience: String(t.audience ?? '').trim(),
           source:   String(t.source ?? '').trim(),
           url:      typeof t.url === 'string' ? t.url : undefined,
         }))
-        .filter((t: ResearchTrend) => t.title)
+        .filter((t) => t.title)
     : []
 
   if (trends.length === 0) throw new GeminiError('La investigación no devolvió tendencias utilizables')
@@ -78,23 +151,14 @@ export async function researchTrends(brand: CarouselBrandProfile): Promise<Resea
 }
 
 // ── Generación de imagen (Nano Banana) ───────────────────────────────────────
-// Devuelve el PNG/JPEG crudo. El compositor lo recorta a 4:5 y lo funde en la
-// textura crema. `prompt` debe venir ya validado (< 1000 chars, sin personas
-// reales identificables) desde el paso de copy.
 export async function generateImage(prompt: string): Promise<Buffer> {
-  const res = await fetch(`${BASE}/${IMAGE_MODEL}:generateContent?key=${apiKey()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-    }),
+  const { json, model } = await callWithFallback(IMAGE_MODELS, cachedImageModel, {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
   })
-  if (!res.ok) {
-    throw new GeminiError(`Generación de imagen falló (${res.status}): ${(await res.text()).slice(0, 300)}`)
-  }
-  const json = await res.json()
-  const parts: Array<{ inlineData?: { data?: string } }> = json?.candidates?.[0]?.content?.parts ?? []
+  cachedImageModel = model
+
+  const parts = (((json?.candidates as unknown[])?.[0] as { content?: { parts?: { inlineData?: { data?: string } }[] } })?.content?.parts ?? [])
   const inline = parts.find((p) => p?.inlineData?.data)?.inlineData?.data
   if (!inline) throw new GeminiError('La respuesta de imagen no contenía datos')
   return Buffer.from(inline, 'base64')
