@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCircle } from 'lucide-react'
+import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCircle, Trash2, Search, PenLine } from 'lucide-react'
 import type { CarouselBrandProfile, CarouselJob, CarouselJobWithSlides, CarouselSlide } from '@/lib/carousels/types'
-import { startCarousel, renderSlide, loadCarouselJob } from './actions'
+import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel } from './actions'
 
-type Phase = 'idle' | 'working' | 'done' | 'error'
+type Phase = 'idle' | 'researching' | 'rendering' | 'done' | 'error'
 
 const SLIDE_TYPE_LABEL: Record<string, string> = {
   cover: 'Portada', data: 'Dato', emotional: 'Emocional', text: 'Impacto', cta: 'Cierre',
@@ -15,51 +15,95 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
   const [agentId, setAgentId] = useState(brands[0]?.agent_id ?? '')
   const [topic, setTopic] = useState('')
   const [job, setJob] = useState<CarouselJobWithSlides | null>(null)
+  const [jobs, setJobs] = useState<CarouselJob[]>(recentJobs)
   const [phase, setPhase] = useState<Phase>('idle')
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [regenId, setRegenId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const busy = phase === 'working'
+  const busy = phase === 'researching' || phase === 'rendering'
 
   function patchSlide(s: CarouselSlide) {
     setJob((j) => (j ? { ...j, slides: j.slides.map((x) => (x.id === s.id ? s : x)) } : j))
   }
 
+  async function safeRender(id: string): Promise<CarouselSlide | { error: string }> {
+    try {
+      const r = await renderSlide(id)
+      return r.ok ? r.data : { error: r.error }
+    } catch (e) {
+      // Nunca dejar que un throw rompa el bucle: los demás slides deben seguir.
+      return { error: e instanceof Error ? e.message : 'Error inesperado al renderizar' }
+    }
+  }
+
   async function generate() {
     if (!agentId || busy) return
-    setError(null); setJob(null); setPhase('working')
-    setStatus('Investigando tendencias y escribiendo el copy…')
-    const res = await startCarousel({ agentId, topic: topic.trim() || undefined })
+    setError(null); setJob(null); setPhase('researching')
+    setStatus(topic.trim() ? 'Redactando el copy con IA…' : 'Investigando tendencias y redactando el copy con IA…')
+
+    let res
+    try {
+      res = await startCarousel({ agentId, topic: topic.trim() || undefined })
+    } catch (e) {
+      setPhase('error'); setError(e instanceof Error ? e.message : 'Error al iniciar la generación'); setStatus(''); return
+    }
     if (!res.ok) { setPhase('error'); setError(res.error); setStatus(''); return }
+
     let current = res.data
     setJob(current)
-    for (const s of current.slides) {
-      setStatus(`Componiendo slide ${s.slide_number} de ${current.slides.length}…`)
-      const r = await renderSlide(s.id)
-      const next: CarouselSlide = r.ok ? r.data : { ...s, status: 'failed', error_message: r.error }
+    setPhase('rendering')
+
+    for (let i = 0; i < current.slides.length; i++) {
+      const s = current.slides[i]
+      setStatus(`Componiendo slide ${s.slide_number} (${i + 1} de ${current.slides.length})…`)
+      // Marcar "componiendo" en vivo.
+      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? { ...x, status: 'rendering' } : x)) }
+      setJob(current)
+      const out = await safeRender(s.id)
+      const next: CarouselSlide = 'error' in out ? { ...s, status: 'failed', error_message: out.error } : out
       current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? next : x)) }
       setJob(current)
     }
-    setPhase('done'); setStatus('Carrusel listo')
+
+    const failed = current.slides.filter((s) => s.status === 'failed').length
+    setPhase('done')
+    setStatus(failed > 0
+      ? `Terminado con ${failed} slide(s) con error — revisa el detalle y usa "Regenerar"`
+      : 'Carrusel listo')
   }
 
   async function regenerate(slideId: string) {
     if (regenId) return
     setRegenId(slideId)
-    patchSlide({ ...(job!.slides.find((s) => s.id === slideId) as CarouselSlide), status: 'rendering', error_message: null })
-    const r = await renderSlide(slideId)
-    if (r.ok) patchSlide(r.data)
-    else patchSlide({ ...(job!.slides.find((s) => s.id === slideId) as CarouselSlide), status: 'failed', error_message: r.error })
+    const orig = job!.slides.find((s) => s.id === slideId) as CarouselSlide
+    patchSlide({ ...orig, status: 'rendering', error_message: null })
+    const out = await safeRender(slideId)
+    patchSlide('error' in out ? { ...orig, status: 'failed', error_message: out.error } : out)
     setRegenId(null)
   }
 
   async function openJob(id: string) {
     if (busy) return
-    setError(null); setStatus(''); setPhase('working')
+    setError(null); setStatus('')
     const r = await loadCarouselJob(id)
     if (r.ok) { setJob(r.data); setPhase('done') } else { setPhase('error'); setError(r.error) }
+  }
+
+  async function removeJob(id: string) {
+    if (deletingId) return
+    if (!window.confirm('¿Eliminar este carrusel? Se borran sus slides, imágenes y su historial de costos. No se puede deshacer.')) return
+    setDeletingId(id)
+    const r = await deleteCarousel(id)
+    setDeletingId(null)
+    if (r.ok) {
+      setJobs((xs) => xs.filter((j) => j.id !== id))
+      if (job?.id === id) { setJob(null); setPhase('idle'); setStatus('') }
+    } else {
+      window.alert(`No se pudo eliminar: ${r.error}`)
+    }
   }
 
   function copyCaption() {
@@ -82,7 +126,14 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
     }
   }
 
-  const readyCount = job?.slides.filter((s) => s.status === 'ready').length ?? 0
+  const slides = job?.slides ?? []
+  const readyCount = slides.filter((s) => s.status === 'ready').length
+  const failedCount = slides.filter((s) => s.status === 'failed').length
+  const renderingCount = slides.filter((s) => s.status === 'rendering').length
+  const queuedCount = slides.filter((s) => s.status === 'pending').length
+  const total = slides.length
+  const doneCount = readyCount + failedCount
+  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -90,6 +141,8 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
         .ce-btn:hover:not(:disabled){filter:brightness(1.08)}
         .ce-chip:hover:not(.ce-on){border-color:var(--accent-gold)!important}
         .ce-slide:hover .ce-regen{opacity:1}
+        .ce-jobrow:hover .ce-del{opacity:1}
+        .spin{animation:cespin 1s linear infinite}@keyframes cespin{to{transform:rotate(360deg)}}
       `}</style>
 
       {/* ── Panel de control ── */}
@@ -147,13 +200,35 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
           </button>
         </div>
 
-        {(status || error) && (
-          <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: error ? 'var(--status-lost, #c96b6b)' : 'var(--text-secondary)' }}>
-            {error ? <AlertCircle size={14} /> : busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
-            <span>{error ?? status}</span>
+        {/* ── Progreso ── */}
+        {(phase !== 'idle') && (
+          <div style={{ marginTop: '16px' }}>
+            <Stepper phase={phase} doneCount={doneCount} total={total} />
+            {(phase === 'rendering' && total > 0) && (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  <span>{status}</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{doneCount}/{total} · {pct}%</span>
+                </div>
+                <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.max(3, pct)}%`, borderRadius: '3px', background: 'var(--accent-gold)', transition: 'width .3s' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '14px', marginTop: '8px', flexWrap: 'wrap', fontSize: '11.5px' }}>
+                  <Count color="var(--accent-green, #6bbf8a)" label="Listos" n={readyCount} />
+                  <Count color="var(--accent-gold)" label="Componiendo" n={renderingCount} />
+                  <Count color="var(--text-muted)" label="En cola" n={queuedCount} />
+                  <Count color="var(--status-lost, #c96b6b)" label="Con error" n={failedCount} />
+                </div>
+              </div>
+            )}
+            {(phase === 'researching' || phase === 'done' || phase === 'error') && (status || error) && (
+              <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: error ? 'var(--status-lost, #c96b6b)' : 'var(--text-secondary)' }}>
+                {error ? <AlertCircle size={14} /> : phase === 'researching' ? <Loader2 size={14} className="spin" /> : <Check size={14} />}
+                <span>{error ?? status}</span>
+              </div>
+            )}
           </div>
         )}
-        <style>{`.spin{animation:cespin 1s linear infinite}@keyframes cespin{to{transform:rotate(360deg)}}`}</style>
       </div>
 
       {/* ── Resultado ── */}
@@ -164,12 +239,16 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
               <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>{job.topic || 'Carrusel'}</div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                 {job.audience ? `${job.audience} · ` : ''}{readyCount}/{job.slides.length} slides listos
+                {failedCount > 0 ? ` · ${failedCount} con error` : ''}
                 {job.topic_source === 'trend_research' ? ' · tema por IA' : ' · tema manual'}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button className="ce-btn" onClick={downloadAll} disabled={readyCount === 0} style={secondaryBtn(readyCount === 0)}>
                 <Download size={14} /> Descargar PNGs
+              </button>
+              <button className="ce-btn" onClick={() => removeJob(job.id)} disabled={deletingId === job.id} style={dangerBtn(deletingId === job.id)}>
+                {deletingId === job.id ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />} Eliminar
               </button>
             </div>
           </div>
@@ -202,29 +281,44 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
       )}
 
       {/* ── Historial ── */}
-      {recentJobs.length > 0 && (
+      {jobs.length > 0 && (
         <div style={card()}>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Carruseles recientes</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {recentJobs.map((j) => (
-              <button
-                key={j.id}
-                onClick={() => openJob(j.id)}
-                className="ce-btn"
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
-                  padding: '10px 12px', borderRadius: '8px', border: 'none', background: 'transparent',
-                  cursor: 'pointer', textAlign: 'left', width: '100%',
-                }}
-              >
-                <span style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {j.topic || 'Sin título'}
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                  <StatusBadge status={j.status} />
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{new Date(j.created_at).toLocaleDateString('es')}</span>
-                </span>
-              </button>
+            {jobs.map((j) => (
+              <div key={j.id} className="ce-jobrow" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => openJob(j.id)}
+                  className="ce-btn"
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+                    padding: '10px 12px', borderRadius: '8px', border: 'none', background: 'transparent',
+                    cursor: 'pointer', textAlign: 'left', minWidth: 0,
+                  }}
+                >
+                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {j.topic || 'Sin título'}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                    <StatusBadge status={j.status} />
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{new Date(j.created_at).toLocaleDateString('es')}</span>
+                  </span>
+                </button>
+                <button
+                  className="ce-del ce-btn"
+                  onClick={() => removeJob(j.id)}
+                  disabled={deletingId === j.id}
+                  title="Eliminar carrusel"
+                  style={{
+                    opacity: deletingId === j.id ? 1 : 0, transition: 'opacity var(--dur-fast, .15s)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px',
+                    borderRadius: '7px', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
+                    color: 'var(--status-lost, #c96b6b)', cursor: deletingId === j.id ? 'default' : 'pointer', flexShrink: 0,
+                  }}
+                >
+                  {deletingId === j.id ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />}
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -233,17 +327,52 @@ export function CarouselsClient({ brands, recentJobs }: { brands: CarouselBrandP
   )
 }
 
+function Stepper({ phase, doneCount, total }: { phase: Phase; doneCount: number; total: number }) {
+  const copyDone = phase === 'rendering' || phase === 'done'
+  const renderDone = phase === 'done' && (total === 0 || doneCount >= total)
+  const steps = [
+    { key: 'research', label: 'Investigación y copy', icon: phase === 'researching' ? 'spin' : copyDone ? 'done' : phase === 'error' && !copyDone ? 'err' : 'idle', node: <Search size={13} /> },
+    { key: 'render', label: 'Composición de slides', icon: phase === 'rendering' ? 'spin' : renderDone ? 'done' : 'idle', node: <PenLine size={13} /> },
+    { key: 'done', label: 'Listo', icon: renderDone ? 'done' : 'idle', node: <Check size={13} /> },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {steps.map((s) => {
+        const color = s.icon === 'done' ? 'var(--accent-green, #6bbf8a)' : s.icon === 'spin' ? 'var(--accent-gold)' : s.icon === 'err' ? 'var(--status-lost, #c96b6b)' : 'var(--text-muted)'
+        return (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', borderRadius: '20px', border: `1px solid ${s.icon === 'idle' ? 'var(--border-subtle)' : color}`, background: s.icon === 'idle' ? 'transparent' : `color-mix(in srgb, ${color} 10%, transparent)` }}>
+            <span style={{ color }}>
+              {s.icon === 'spin' ? <Loader2 size={13} className="spin" /> : s.icon === 'done' ? <Check size={13} /> : s.icon === 'err' ? <AlertCircle size={13} /> : s.node}
+            </span>
+            <span style={{ fontSize: '11.5px', color: s.icon === 'idle' ? 'var(--text-muted)' : 'var(--text-secondary)' }}>{s.label}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Count({ color, label, n }: { color: string; label: string; n: number }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: 'var(--text-muted)' }}>
+      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color }} />
+      {label}: <strong style={{ color: 'var(--text-secondary)' }}>{n}</strong>
+    </span>
+  )
+}
+
 function SlideCard({ slide, regenerating, onRegen }: { slide: CarouselSlide; regenerating: boolean; onRegen: () => void }) {
   const rendering = slide.status === 'rendering' || regenerating
+  const proceduralNote = slide.status === 'ready' && slide.error_message
   return (
-    <div className="ce-slide" style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-subtle)', aspectRatio: '4 / 5', background: 'var(--bg-base)' }}>
+    <div className="ce-slide" style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: `1px solid ${slide.status === 'failed' ? 'var(--status-lost, #c96b6b)' : 'var(--border-subtle)'}`, aspectRatio: '4 / 5', background: 'var(--bg-base)' }}>
       {slide.rendered_url && !rendering ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={slide.rendered_url} alt={`Slide ${slide.slide_number}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
       ) : (
         <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: slide.status === 'failed' ? 'var(--status-lost, #c96b6b)' : 'var(--text-muted)' }}>
           {rendering ? <Loader2 size={20} className="spin" /> : slide.status === 'failed' ? <AlertCircle size={20} /> : <ImageIcon size={20} />}
-          <span style={{ fontSize: '11px', textAlign: 'center', padding: '0 10px' }}>
+          <span style={{ fontSize: '11px', textAlign: 'center', padding: '0 10px', lineHeight: 1.4 }}>
             {rendering ? 'Componiendo…' : slide.status === 'failed' ? (slide.error_message ?? 'Error') : 'En cola'}
           </span>
         </div>
@@ -252,6 +381,7 @@ function SlideCard({ slide, regenerating, onRegen }: { slide: CarouselSlide; reg
       <div style={{ position: 'absolute', top: '6px', left: '6px', display: 'flex', gap: '4px' }}>
         <span style={badge()}>{slide.slide_number}</span>
         {slide.slide_type && <span style={badge()}>{SLIDE_TYPE_LABEL[slide.slide_type] ?? slide.slide_type}</span>}
+        {proceduralNote && <span style={{ ...badge(), background: 'rgba(190,154,84,0.85)' }} title={slide.error_message ?? ''}>sin foto</span>}
       </div>
 
       <button
@@ -293,6 +423,13 @@ function secondaryBtn(disabled: boolean): React.CSSProperties {
     display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', fontSize: '12px', borderRadius: '7px',
     border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
     cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
+  }
+}
+function dangerBtn(disabled: boolean): React.CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', fontSize: '12px', borderRadius: '7px',
+    border: '1px solid color-mix(in srgb, var(--status-lost, #c96b6b) 40%, transparent)', background: 'color-mix(in srgb, var(--status-lost, #c96b6b) 10%, transparent)',
+    color: 'var(--status-lost, #c96b6b)', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
   }
 }
 function badge(): React.CSSProperties {
