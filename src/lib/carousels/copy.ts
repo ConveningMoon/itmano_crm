@@ -46,18 +46,31 @@ function buildTool(): Anthropic.Tool {
   }
 }
 
-function systemPrompt(brand: CarouselBrandProfile): string {
+// El system prompt se parte en DOS bloques para el prompt caching:
+//   1) Reglas del motor (v2 + datos + imagen + íconos) — estáticas, iguales para
+//      todos los tenants. Se cachean (cache_control) → relecturas cuestan 0.1×.
+//   2) Contexto de marca del agente — cambia si el super_admin lo edita. Va
+//      después del breakpoint, así editarlo NO invalida el bloque grande cacheado
+//      (solo se reprocesa este bloque pequeño, ~una vez).
+function engineRules(): string {
   return [
-    `Eres el redactor de carruseles de Instagram de ${brand.display_name} (${brand.instagram_handle})`,
-    brand.agency_name ? `, de ${brand.agency_name}` : '',
-    brand.market ? `, en ${brand.market}` : '',
-    `. Idioma: español neutro latino, cálido y experto.`,
-    brand.brand_voice ? `\n\nContexto de marca:\n${brand.brand_voice}` : '',
+    `Eres un redactor experto de carruseles de Instagram para agentes inmobiliarios. Idioma: español neutro latino, cálido y experto.`,
     `\n\n${V2_COPY_RULES}`,
     `\n\n${DATA_INTEGRITY_RULE}`,
     `\n\n${IMAGE_COMPLIANCE_RULE}`,
     `\n\n${ICON_HINT}`,
     `\n\nDevuelve el resultado llamando a la herramienta write_carousel. Los image_prompt van en INGLÉS (la IA de imagen entiende mejor inglés); todo el copy visible va en español.`,
+  ].join('')
+}
+
+function brandContext(brand: CarouselBrandProfile): string {
+  return [
+    `PERFIL DE MARCA DE ESTE CARRUSEL:`,
+    `\n- Agente: ${brand.display_name} (${brand.instagram_handle})`,
+    brand.agency_name ? `\n- Agencia: ${brand.agency_name}` : '',
+    brand.market ? `\n- Mercado: ${brand.market}` : '',
+    brand.brand_voice ? `\n- Voz de marca: ${brand.brand_voice}` : '',
+    `\n\nEscribe todo el copy fiel a este perfil.`,
   ].join('')
 }
 
@@ -100,7 +113,11 @@ export async function generateCopy(params: {
     thinking: { type: 'disabled' },
     tools: [buildTool()],
     tool_choice: { type: 'tool', name: 'write_carousel' },
-    system: systemPrompt(params.brand),
+    // Bloque 1 cacheado (reglas del motor) + bloque 2 con el contexto de marca.
+    system: [
+      { type: 'text', text: engineRules(), cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: brandContext(params.brand) },
+    ],
     messages: [{ role: 'user', content: userPrompt(params.topic, params.research) }],
   })
 

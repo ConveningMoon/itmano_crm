@@ -40,6 +40,42 @@ async function uploadPng(path: string, png: Buffer): Promise<string> {
   return path
 }
 
+// ── Editar el perfil de marca (contexto) de un agente ────────────────────────
+export async function updateBrandProfile(input: {
+  agentId:          string
+  display_name:     string
+  instagram_handle: string
+  agency_name:      string | null
+  market:           string | null
+  language:         string
+  brand_voice:      string | null
+}): Promise<ActionResult<CarouselBrandProfile>> {
+  const ctx = await gate()
+  if (!ctx) return { ok: false, error: 'Sin acceso' }
+
+  const agentId = (input.agentId ?? '').trim()
+  const display = (input.display_name ?? '').trim()
+  const handle = (input.instagram_handle ?? '').trim()
+  if (!agentId) return { ok: false, error: 'Falta el agente' }
+  if (!display) return { ok: false, error: 'El nombre no puede estar vacío' }
+  if (!handle) return { ok: false, error: 'El @usuario no puede estar vacío' }
+
+  const db = createAdminClient()
+  const { data, error } = await db.from('carousel_brand_profiles').update({
+    display_name:     display,
+    instagram_handle: handle.startsWith('@') ? handle : `@${handle}`,
+    agency_name:      (input.agency_name ?? '').trim() || null,
+    market:           (input.market ?? '').trim() || null,
+    language:         (input.language ?? 'es').trim() || 'es',
+    brand_voice:      (input.brand_voice ?? '').trim() || null,
+    updated_at:       new Date().toISOString(),
+  }).eq('agent_id', agentId).select('*').maybeSingle()
+
+  if (error || !data) return { ok: false, error: error?.message ?? 'No se pudo guardar' }
+  revalidatePath('/admin/carousels')
+  return { ok: true, data: toBrand(data) }
+}
+
 // ── Iniciar un carrusel: investigación (opcional) + copy + filas de slides ────
 export async function startCarousel(input: { agentId: string; topic?: string }): Promise<ActionResult<CarouselJobWithSlides>> {
   const ctx = await gate()
