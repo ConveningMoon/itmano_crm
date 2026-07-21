@@ -19,6 +19,21 @@ import {
   Images,
 } from 'lucide-react'
 
+// Un ítem está activo si su href es el prefijo MÁS específico que coincide con la
+// ruta actual. Con la lista completa de hrefs, /admin/carousels gana sobre /admin
+// (y así "Centro de control" no se ilumina cuando estás en Carruseles). Sin la
+// lista, cae al comportamiento previo (exacto o startsWith).
+function computeActive(pathname: string, href: string, hrefs?: string[]): boolean {
+  const matchesHref = (h: string) => pathname === h || pathname.startsWith(`${h}/`)
+  if (hrefs && hrefs.length > 0) {
+    const matches = hrefs.filter(matchesHref)
+    if (matches.length === 0) return false
+    const best = matches.reduce((a, b) => (b.length > a.length ? b : a))
+    return best === href
+  }
+  return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+}
+
 const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
   LayoutDashboard,
   Users,
@@ -43,11 +58,14 @@ interface NavItemProps {
   // Sidebar y MobileNav coexisten montados; cada lista necesita su propio
   // layoutId para que el indicador no salte entre ambas.
   indicatorId?: string
+  // Todos los hrefs del nav — para resolver el activo por el prefijo MÁS largo.
+  // Sin esto, /admin quedaría activo también en /admin/carousels (startsWith).
+  hrefs?: string[]
 }
 
-export function NavItem({ label, href, icon, badge, indicatorId = 'nav-indicator' }: NavItemProps) {
+export function NavItem({ label, href, icon, badge, indicatorId = 'nav-indicator', hrefs }: NavItemProps) {
   const pathname = usePathname()
-  const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+  const isActive = computeActive(pathname, href, hrefs)
   const Icon = ICONS[icon]
 
   return (

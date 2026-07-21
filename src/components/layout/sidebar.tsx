@@ -71,7 +71,7 @@ export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tena
         }}
       >
         {items.map(item => (
-          <NavItem key={item.href} {...item} />
+          <NavItem key={item.href} {...item} hrefs={items.map(i => i.href)} />
         ))}
       </nav>
 

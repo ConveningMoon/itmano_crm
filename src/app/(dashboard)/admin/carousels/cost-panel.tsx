@@ -49,6 +49,51 @@ export function CostPanel({ report }: { report: CarouselCostReport }) {
         <Kpi icon={<ImageIcon size={14} />} color="var(--accent-teal)" label="Imágenes IA" value={String(report.totalImages)} sub="Nano Banana generadas" />
       </div>
 
+      {/* Desglose por API / acción */}
+      <div style={CARD}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          Desglose por API y acción
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={TH}>API</th>
+                <th style={TH}>Acción</th>
+                <th style={TH}>Modelo</th>
+                <th style={TH}>Facturación</th>
+                <th style={{ ...TH, textAlign: 'right' }}>Requests</th>
+                <th style={{ ...TH, textAlign: 'right' }}>Entrada</th>
+                <th style={{ ...TH, textAlign: 'right' }}>Salida</th>
+                <th style={{ ...TH, textAlign: 'right' }}>Costo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.byApi.map((a) => (
+                <tr key={`${a.provider}-${a.action}`}>
+                  <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap' }}>{a.provider}</td>
+                  <td style={TD}>{a.action}</td>
+                  <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>{a.model}</td>
+                  <td style={TD}>
+                    <span style={{
+                      fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '6px',
+                      color: a.billing === 'real' ? 'var(--accent-green)' : 'var(--text-muted)',
+                      background: a.billing === 'real' ? 'color-mix(in srgb, var(--accent-green) 14%, transparent)' : 'var(--bg-elevated)',
+                    }}>
+                      {a.billing === 'real' ? 'Real' : 'Estimado'}
+                    </span>
+                  </td>
+                  <td style={NUM}>{a.requests}</td>
+                  <td style={NUM}>{a.inputTokens !== undefined ? a.inputTokens.toLocaleString('es-419') : '—'}</td>
+                  <td style={NUM}>{a.outputTokens !== undefined ? a.outputTokens.toLocaleString('es-419') : '—'}</td>
+                  <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(a.costUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div style={CARD}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           Costo por carrusel

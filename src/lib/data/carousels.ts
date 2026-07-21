@@ -85,6 +85,7 @@ export async function getBrandProfiles(): Promise<CarouselBrandProfile[]> {
     market: r.market ?? null,
     language: r.language,
     brand_voice: r.brand_voice ?? null,
+    style_prompt: r.style_prompt ?? null,
     active: r.active,
   }))
 }
@@ -123,8 +124,21 @@ export interface CarouselCostRow {
   totalEstUsd:  number   // copy real + estimados
 }
 
+// Desglose por API / acción (proveedor + modelo + facturación).
+export interface CarouselApiCost {
+  provider:      string   // 'Anthropic' | 'Google Gemini' | 'Google Nano Banana'
+  action:        string   // 'Copy del carrusel' | 'Investigación de tendencias' | 'Imágenes editoriales'
+  model:         string
+  billing:       'real' | 'estimado'
+  requests:      number
+  inputTokens?:  number
+  outputTokens?: number
+  costUsd:       number
+}
+
 export interface CarouselCostReport {
   rows:            CarouselCostRow[]
+  byApi:           CarouselApiCost[]
   totalCopyUsd:    number   // real
   totalEstUsd:     number   // real + estimados
   totalImages:     number
@@ -142,7 +156,7 @@ export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> 
     .limit(limit)
   const jobRows = jobs ?? []
   if (jobRows.length === 0) {
-    return { rows: [], totalCopyUsd: 0, totalEstUsd: 0, totalImages: 0, carousels: 0 }
+    return { rows: [], byApi: [], totalCopyUsd: 0, totalEstUsd: 0, totalImages: 0, carousels: 0 }
   }
   const jobIds = jobRows.map((j: { id: string }) => j.id)
 
@@ -201,11 +215,38 @@ export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> 
     }
   })
 
+  // Desglose por API / acción.
+  const copyReqs = rows.filter(r => r.copyCostUsd > 0 || r.copyTokensIn > 0).length
+  const totalCopyUsd = rows.reduce((a, r) => a + r.copyCostUsd, 0)
+  const totalImages = rows.reduce((a, r) => a + r.imageCount, 0)
+  const researchReqs = rows.filter(r => r.topicSource === 'trend_research').length
+  const totalResearchEst = rows.reduce((a, r) => a + r.researchEstUsd, 0)
+  const totalImageEst = rows.reduce((a, r) => a + r.imageEstUsd, 0)
+
+  const byApi: CarouselApiCost[] = [
+    {
+      provider: 'Anthropic', action: 'Copy del carrusel', model: 'claude-sonnet-5',
+      billing: 'real', requests: copyReqs,
+      inputTokens: rows.reduce((a, r) => a + r.copyTokensIn, 0),
+      outputTokens: rows.reduce((a, r) => a + r.copyTokensOut, 0),
+      costUsd: totalCopyUsd,
+    },
+    {
+      provider: 'Google Gemini', action: 'Investigación de tendencias', model: 'gemini-2.5-flash',
+      billing: 'estimado', requests: researchReqs, costUsd: totalResearchEst,
+    },
+    {
+      provider: 'Google Nano Banana', action: 'Imágenes editoriales', model: 'gemini-2.5-flash-image',
+      billing: 'estimado', requests: totalImages, costUsd: totalImageEst,
+    },
+  ]
+
   return {
     rows,
-    totalCopyUsd: rows.reduce((a, r) => a + r.copyCostUsd, 0),
+    byApi,
+    totalCopyUsd,
     totalEstUsd: rows.reduce((a, r) => a + r.totalEstUsd, 0),
-    totalImages: rows.reduce((a, r) => a + r.imageCount, 0),
+    totalImages,
     carousels: rows.length,
   }
 }

@@ -9,7 +9,7 @@ const OUT = process.env.CAROUSEL_OUT_DIR // opcional: volcar PNGs para QA visual
 const brand: CarouselBrandProfile = {
   agent_id: 'agent-adriana', tenant_id: 'aj-real-estate', display_name: 'Adriana Melendez',
   instagram_handle: '@adrysofi_realestate', agency_name: 'A&J Real Estate Group',
-  market: 'Virginia & North Carolina', language: 'es', brand_voice: null, active: true,
+  market: 'Virginia & North Carolina', language: 'es', brand_voice: null, style_prompt: null, active: true,
 }
 
 // Fondo editorial simulado (Nano Banana lo reemplaza en producción).

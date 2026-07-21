@@ -27,7 +27,7 @@ function toBrand(r: any): CarouselBrandProfile {
     agent_id: r.agent_id, tenant_id: r.tenant_id, display_name: r.display_name,
     instagram_handle: r.instagram_handle, agency_name: r.agency_name ?? null,
     market: r.market ?? null, language: r.language, brand_voice: r.brand_voice ?? null,
-    active: r.active,
+    style_prompt: r.style_prompt ?? null, active: r.active,
   }
 }
 
@@ -49,6 +49,7 @@ export async function updateBrandProfile(input: {
   market:           string | null
   language:         string
   brand_voice:      string | null
+  style_prompt:     string | null
 }): Promise<ActionResult<CarouselBrandProfile>> {
   const ctx = await gate()
   if (!ctx) return { ok: false, error: 'Sin acceso' }
@@ -68,6 +69,8 @@ export async function updateBrandProfile(input: {
     market:           (input.market ?? '').trim() || null,
     language:         (input.language ?? 'es').trim() || 'es',
     brand_voice:      (input.brand_voice ?? '').trim() || null,
+    // vacío → null → el motor cae al prompt de estilo por defecto del código.
+    style_prompt:     (input.style_prompt ?? '').trim() || null,
     updated_at:       new Date().toISOString(),
   }).eq('agent_id', agentId).select('*').maybeSingle()
 

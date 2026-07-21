@@ -27,6 +27,10 @@ export interface CarouselBrandProfile {
   market:           string | null
   language:         string
   brand_voice:      string | null
+  // Prompt de estilo/diseño (reglas v2) editable por agente. null = usar el
+  // default del código (V2_COPY_RULES). Las reglas duras de cumplimiento se
+  // aplican siempre aparte, se sobreescriba o no este prompt.
+  style_prompt:     string | null
   active:           boolean
 }
 

@@ -131,7 +131,7 @@ export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, te
             style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}
           >
             {items.map(item => (
-              <NavItem key={item.href} {...item} indicatorId="nav-indicator-mobile" />
+              <NavItem key={item.href} {...item} indicatorId="nav-indicator-mobile" hrefs={items.map(i => i.href)} />
             ))}
           </nav>
 
