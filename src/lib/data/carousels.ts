@@ -232,11 +232,11 @@ export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> 
       costUsd: totalCopyUsd,
     },
     {
-      provider: 'Google Gemini', action: 'Investigación de tendencias', model: 'gemini-2.5-flash',
+      provider: 'Google Gemini', action: 'Investigación de tendencias', model: 'gemini-flash-latest',
       billing: 'estimado', requests: researchReqs, costUsd: totalResearchEst,
     },
     {
-      provider: 'Google Nano Banana', action: 'Imágenes editoriales', model: 'gemini-2.5-flash-image',
+      provider: 'Google Nano Banana', action: 'Imágenes editoriales', model: 'gemini image (nano banana)',
       billing: 'estimado', requests: totalImages, costUsd: totalImageEst,
     },
   ]

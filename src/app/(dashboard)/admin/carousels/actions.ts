@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canAccessCarouselEngine } from '@/lib/access/carousel-engine'
 import { recordAiUsage } from '@/lib/services/ai-usage'
-import { researchTrends, generateImage } from '@/lib/carousels/gemini'
+import { researchTrends, generateImage, hasGoogleKey } from '@/lib/carousels/gemini'
 import { generateCopy } from '@/lib/carousels/copy'
 import { composeSlide } from '@/lib/carousels/compositor'
 import { getJobWithSlides } from '@/lib/data/carousels'
@@ -87,6 +87,15 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
   const agentId = (input.agentId ?? '').trim()
   const topic = (input.topic ?? '').trim() || null
   if (!agentId) return { ok: false, error: 'Falta el agente' }
+
+  // Validar prerequisitos ANTES de crear el job o gastar en ninguna API.
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: 'Falta ANTHROPIC_API_KEY. Configúrala antes de generar carruseles.' }
+  }
+  // Sin tema manual → hace falta Google para investigar tendencias.
+  if (!topic && !hasGoogleKey()) {
+    return { ok: false, error: 'Falta GOOGLE_AI_API_KEY para investigar tendencias. Escribe un tema manual o configura la key.' }
+  }
 
   const db = createAdminClient()
   const { data: brandRow } = await db.from('carousel_brand_profiles').select('*').eq('agent_id', agentId).eq('active', true).maybeSingle()
@@ -184,12 +193,22 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
     const n = slideRow.slide_number as number
     const base = `${jobRow.agent_id}/${jobRow.id}`
 
-    // Fondo editorial con Nano Banana (solo si el slide lo pide).
+    // Fondo editorial con Nano Banana (solo si el slide lo pide). Si la
+    // generación de imagen falla (modelo retirado, cuota, etc.) NO se rompe el
+    // slide: cae a fondo procedural para no desperdiciar el copy ya generado.
+    // El super_admin puede regenerar ese slide luego para reintentar la imagen.
     let bg: Buffer | null = null
     let imageStoragePath: string | null = slideRow.image_storage_path ?? null
+    let imageWarning: string | null = null
     if (slideRow.image_prompt) {
-      bg = await generateImage(slideRow.image_prompt as string)
-      imageStoragePath = await uploadPng(`${base}/bg-${n}.png`, bg)
+      try {
+        bg = await generateImage(slideRow.image_prompt as string)
+        imageStoragePath = await uploadPng(`${base}/bg-${n}.png`, bg)
+      } catch (imgErr) {
+        bg = null
+        imageWarning = imgErr instanceof Error ? imgErr.message : 'No se pudo generar la imagen'
+        console.error(JSON.stringify({ service: 'carousel-image', slide_id: slideId, detail: imageWarning }))
+      }
     }
 
     const slideCopy: SlideCopy = {
@@ -208,10 +227,12 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
 
     await db.from('carousel_slides').update({
       status: 'ready',
-      image_source: slideRow.image_prompt ? 'nano_banana' : 'procedural',
+      // Si el slide pedía imagen pero falló, quedó con fondo procedural.
+      image_source: bg ? 'nano_banana' : 'procedural',
       image_storage_path: imageStoragePath,
       rendered_storage_path: renderedPath,
-      error_message: null,
+      // Nota (no error): imagen no generada → fondo procedural. status sigue ready.
+      error_message: imageWarning ? `Fondo procedural: ${imageWarning}` : null,
       updated_at: new Date().toISOString(),
     }).eq('id', slideId)
 
