@@ -159,9 +159,44 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
     return { ok: true, data: job }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error desconocido'
+    console.error(JSON.stringify({ service: 'carousel-start', job_id: jobId, agent_id: agentId, had_topic: !!topic, detail: msg }))
     await db.from('carousel_jobs').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', jobId)
     return { ok: false, error: msg }
   }
+}
+
+// ── Eliminar un carrusel (job + slides + assets + historial de costos) ───────
+export async function deleteCarousel(jobId: string): Promise<ActionResult<{ id: string }>> {
+  const ctx = await gate()
+  if (!ctx) return { ok: false, error: 'Sin acceso' }
+  const id = (jobId ?? '').trim()
+  if (!id) return { ok: false, error: 'Falta el id del carrusel' }
+
+  const db = createAdminClient()
+  const { data: job } = await db.from('carousel_jobs').select('id, agent_id').eq('id', id).maybeSingle()
+  if (!job) return { ok: false, error: 'Carrusel no encontrado' }
+
+  // 1) Borrar los assets del bucket (fondos + PNG renderizados). Best-effort:
+  //    si falla, seguimos con el borrado de filas para no dejar el job huérfano.
+  try {
+    const prefix = `${job.agent_id}/${id}`
+    const { data: files } = await db.storage.from(BUCKET).list(prefix)
+    if (files && files.length) {
+      await db.storage.from(BUCKET).remove(files.map((f: { name: string }) => `${prefix}/${f.name}`))
+    }
+  } catch (e) {
+    console.error(JSON.stringify({ service: 'carousel-delete', step: 'storage', job_id: id, detail: e instanceof Error ? e.message : 'unknown' }))
+  }
+
+  // 2) Borrar el historial de costos del copy (ai_usage_events con este job_id).
+  await db.from('ai_usage_events').delete().eq('feature', 'carousel_copy').eq('metadata->>job_id', id)
+
+  // 3) Borrar el job — carousel_slides cae por ON DELETE CASCADE.
+  const { error } = await db.from('carousel_jobs').delete().eq('id', id)
+  if (error) return { ok: false, error: `No se pudo eliminar: ${error.message}` }
+
+  revalidatePath('/admin/carousels')
+  return { ok: true, data: { id } }
 }
 
 // ── Cargar un job anterior (con sus slides) para la vista ────────────────────
@@ -257,6 +292,11 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error desconocido'
+    // Log detallado para revisar en Vercel (fase de prueba).
+    console.error(JSON.stringify({
+      service: 'carousel-render', slide_id: slideId, job_id: slideRow.job_id,
+      slide_number: slideRow.slide_number, had_image_prompt: !!slideRow.image_prompt, detail: msg,
+    }))
     await db.from('carousel_slides').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', slideId)
     return { ok: false, error: msg }
   }
