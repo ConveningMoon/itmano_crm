@@ -154,6 +154,45 @@ export async function uploadHostedImage(
   return { ok: true, url: pub.publicUrl }
 }
 
+// Extrae el path del objeto desde una URL pública del bucket de assets.
+function hostedPathFromPublicUrl(url: unknown): string | null {
+  if (typeof url !== 'string') return null
+  const marker = `/${HOSTED_IMG_BUCKET}/`
+  const i = url.indexOf(marker)
+  if (i === -1) return null
+  const raw = url.slice(i + marker.length)
+  try { return decodeURIComponent(raw) } catch { return raw }
+}
+
+// Borra imágenes de páginas alojadas por sus URLs públicas. Se usa para
+// reconciliar Storage cuando el constructor reemplaza/quita una imagen o se
+// cancela con subidas de la sesión (igual que en propiedades). Scoped a la
+// carpeta `<tenant>/hosted/` del tenant — nunca borra fuera de ella. Best-effort.
+export async function deleteHostedImages(
+  urls: string[],
+): Promise<{ ok: true }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return { ok: true } // sin permiso de escritura: no-op silencioso
+  if (!ctx.tenant_id) return { ok: true }
+
+  const prefix = `${ctx.tenant_id}/hosted/`
+  const paths: string[] = []
+  for (const url of urls) {
+    const p = hostedPathFromPublicUrl(url)
+    // Seguridad: solo dentro de la carpeta hosted del propio tenant.
+    if (p && p.startsWith(prefix)) paths.push(p)
+  }
+  if (paths.length === 0) return { ok: true }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase.storage.from(HOSTED_IMG_BUCKET).remove(paths)
+  if (error) {
+    console.error(JSON.stringify({ service: 'delete-hosted-images', tenant_id: ctx.tenant_id, error: error.message }))
+  }
+  return { ok: true }
+}
+
 // ─── Textos de la página con IA ───────────────────────────────────────────────
 // Rellena headline/subheadline/bullets/CTA/éxito/beneficios desde la
 // descripción del material (o el texto que el usuario pegue). Mismo patrón que
@@ -254,9 +293,9 @@ export async function generateHostedPageCopy(input: {
   description: string
   tenantName?: string
   agentName?: string
-  // Documento opcional (PDF en base64) que la IA usa como fuente adicional.
-  // La descripción sigue siendo obligatoria.
-  documentBase64?: string
+  // Archivo opcional que la IA usa como fuente adicional: PDF/imagen en base64,
+  // o texto plano. La descripción sigue siendo obligatoria.
+  attachment?: { kind: 'pdf' | 'image' | 'text'; data: string; mediaType: string }
 }): Promise<PageCopyResult> {
   const ctx = await getCurrentTenantContext()
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -268,9 +307,14 @@ export async function generateHostedPageCopy(input: {
   const description = input.description?.trim()
   if (!description) return { ok: false, error: 'Describe el material o el objetivo de la página.' }
   if (description.length > 6000) return { ok: false, error: 'La descripción es demasiado larga.' }
-  // Límite defensivo del documento (base64 ~1.37× el binario → ~10MB de PDF).
-  if (input.documentBase64 && input.documentBase64.length > 14_000_000) {
-    return { ok: false, error: 'El documento supera el límite de 10 MB.' }
+  // Límite defensivo del archivo (base64 ~1.37× el binario → ~10MB).
+  const attachment = input.attachment
+  const IMAGE_MEDIA = ['image/png', 'image/jpeg', 'image/webp']
+  if (attachment && attachment.data.length > 14_000_000) {
+    return { ok: false, error: 'El archivo supera el límite de 10 MB.' }
+  }
+  if (attachment && attachment.kind === 'image' && !IMAGE_MEDIA.includes(attachment.mediaType)) {
+    return { ok: false, error: 'Formato de imagen no admitido. Usa PNG, JPG o WebP.' }
   }
 
   const typeLabel = { lead_magnet: 'lead magnet (material descargable gratuito)', event: 'evento presencial', contact_form: 'formulario de contacto' }[input.channelType] ?? 'página de captación'
@@ -297,17 +341,21 @@ export async function generateHostedPageCopy(input: {
     agencyDescription ? `Contexto y mercado de la agencia (úsalo para que el copy sea relevante; NO inventes datos fuera de esto):\n${agencyDescription}` : null,
     input.agentName ? `Agente responsable: ${input.agentName}.` : null,
     agentDescription ? `Sobre el agente (voz y especialidad): ${agentDescription}` : null,
-    input.documentBase64 ? 'Se adjunta un documento con material de referencia — úsalo como fuente principal de los hechos, complementado por la descripción.' : null,
+    attachment ? 'Se adjunta un archivo con material de referencia — úsalo como fuente principal de los hechos, complementado por la descripción.' : null,
+    attachment?.kind === 'text' ? `Contenido del archivo de referencia:\n${attachment.data}` : null,
     input.channelType === 'event' ? 'Extrae fecha, hora y lugar SOLO si aparecen en la descripción — nunca los inventes.' : null,
     '',
     'Descripción del material / objetivo (base de todo el copy):',
     description,
   ].filter((l): l is string => l !== null).join('\n')
 
-  // Contenido del mensaje: documento (si hay) + prompt.
+  // Contenido del mensaje: archivo (si hay: PDF/imagen como bloque; el texto ya
+  // va dentro del prompt) + prompt.
   const userContent: Anthropic.ContentBlockParam[] = []
-  if (input.documentBase64) {
-    userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.documentBase64 } })
+  if (attachment?.kind === 'pdf') {
+    userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: attachment.data } })
+  } else if (attachment?.kind === 'image') {
+    userContent.push({ type: 'image', source: { type: 'base64', media_type: attachment.mediaType as 'image/png' | 'image/jpeg' | 'image/webp', data: attachment.data } })
   }
   userContent.push({ type: 'text', text: prompt })
 

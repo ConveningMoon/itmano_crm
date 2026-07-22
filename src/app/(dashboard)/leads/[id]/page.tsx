@@ -122,13 +122,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // Estado del análisis de fit con IA (064) — se muestra en el detalle del lead.
   const { data: tenantAi } = await supabase.from('tenants').select('ai_lead_scoring_enabled').eq('id', leadTenantId).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const aiFitMeta = ((lr.metadata as any)?.ai_fit ?? null) as { reasoning?: string; at?: string; model?: string } | null
+  const aiFitMeta = ((lr.metadata as any)?.ai_fit ?? null) as { reasoning?: string; at?: string } | null
   const aiFit = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     enabled:   ((tenantAi as any)?.ai_lead_scoring_enabled as boolean) ?? false,
     reasoning: aiFitMeta?.reasoning ?? null,
     at:        aiFitMeta?.at ?? null,
-    model:     aiFitMeta?.model ?? null,
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channels: ChannelOption[] = (rawChannels ?? []).map((r: any) => ({

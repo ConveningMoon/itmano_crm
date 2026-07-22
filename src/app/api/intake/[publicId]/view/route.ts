@@ -70,6 +70,25 @@ export async function POST(
     return new Response(null, { status: 200, headers: CORS_HEADERS })
   }
 
+  // Dedup de vista única: si este mismo visitante (fingerprint estable en
+  // localStorage) ya registró una vista de este canal en las últimas 24h, no
+  // insertamos otra fila. Así, abrir/recargar el link repetidamente en el mismo
+  // navegador cuenta como una sola visita (las métricas ya cuentan visitantes
+  // distintos, esto además evita inflar la tabla con recargas y reintentos).
+  const dedupSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: recentView } = await db
+    .from('channel_page_views')
+    .select('id')
+    .eq('channel_id', channel.id)
+    .eq('visitor_fingerprint', visitorId)
+    .gte('created_at', dedupSince)
+    .limit(1)
+    .maybeSingle()
+  if (recentView) {
+    console.log(JSON.stringify({ service: 'intake-view', public_id: publicId, channel_id: channel.id, result: 'deduped' }))
+    return new Response(null, { status: 200, headers: CORS_HEADERS })
+  }
+
   // Surface insert failures (RLS / validation / schema) — they were being swallowed,
   // which is one reason a visit may not register. We still return 200 (beacon).
   const { error: insertError } = await db.from('channel_page_views').insert({

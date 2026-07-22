@@ -180,33 +180,35 @@ export function PageOptions({
                 Formulario 100% propio (avanzado)
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.6 }}>
-                Si tu desarrollador construye el formulario desde cero, DEBE respetar este contrato — es lo que permite
-                que el CRM entienda las respuestas, puntúe al lead y dispare la secuencia. <strong>No cambies las claves
-                (<code>key</code>) entre versiones del formulario</strong>: el scoring y la deduplicación dependen de ellas.
+                Tu desarrollador puede construir el formulario como quiera. Solo tiene que hacer un
+                <strong> POST</strong> con las respuestas a este endpoint — el CRM las interpreta con IA, así que
+                el <code>form_answers</code> puede tener las preguntas y opciones que definas, sin claves fijas.
               </div>
-              <pre style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', fontSize: '11px', color: 'var(--text-secondary)', overflowX: 'auto', margin: '10px 0 0' }}>
+
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '14px 0 6px' }}>
+                Endpoint
+              </div>
+              <pre style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', fontSize: '11.5px', color: 'var(--accent-gold)', overflowX: 'auto', margin: 0 }}>
 {`POST https://app.itmano.com/api/intake/${publicId}/submit
-Content-Type: application/json
-
-{
-  "first_name": "…",            // OBLIGATORIO
-  "email": "…",                 // OBLIGATORIO
-  "last_name": "…",             // opcional
-  "phone": "…",                 // opcional
-  "language": "es",             // es | en | pt
-  "visitor_id": "uuid-estable", // opcional (métricas de conversión)
-  "source_url": "https://…",    // opcional
-  "website": "",                // honeypot — SIEMPRE vacío
-  "form_answers": [             // preguntas de calificación (opcional)
-    { "key": "timeline", "question": "¿Horizonte de compra?",
-      "value": "menos_3_meses", "label": "Menos de 3 meses" }
-  ]
-}
-
-→ { "ok": true, "status": "created" | "already_submitted" }`}
+Content-Type: application/json`}
               </pre>
               <div style={{ marginTop: '8px' }}>
-                <CopyBtn text={`POST https://app.itmano.com/api/intake/${publicId}/submit`} label="Copiar endpoint" />
+                <CopyBtn text={`https://app.itmano.com/api/intake/${publicId}/submit`} label="Copiar endpoint" />
+              </div>
+
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 6px' }}>
+                Reglas obligatorias
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+                <li><strong>Obligatorios:</strong> <code>first_name</code> y <code>email</code>.</li>
+                <li><strong>Anti-spam:</strong> incluye un campo <code>website</code> (honeypot) y envíalo SIEMPRE vacío.</li>
+                <li><strong>Respuestas:</strong> <code>form_answers</code> es un arreglo libre de objetos
+                  {' '}<code>{'{ key, question, value, label }'}</code> — las preguntas y opciones las eliges tú.</li>
+                <li><strong>Opcionales:</strong> <code>last_name</code>, <code>phone</code>, <code>language</code> (es·en·pt),
+                  {' '}<code>visitor_id</code> (métricas) y <code>source_url</code>.</li>
+              </ul>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.6 }}>
+                Respuesta: <code>{'{ "ok": true, "status": "created" | "already_submitted" }'}</code>.
               </div>
             </div>
           )}

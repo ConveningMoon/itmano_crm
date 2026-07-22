@@ -9,14 +9,13 @@ import { analyzeLeadFit } from './actions'
 // del último análisis y permite re-analizar a demanda. El análisis también corre
 // solo en cada acción del lead (formulario, respuesta de correo…).
 export function AiFitCard({
-  leadId, enabled, reasoning, at, model,
+  leadId, enabled, reasoning, at,
 }: {
   leadId: string
   // El tenant tiene el análisis con IA activado.
   enabled: boolean
   reasoning: string | null
   at: string | null
-  model: string | null
 }) {
   const router = useRouter()
   const [result, setResult] = useState<string | null>(reasoning)
@@ -71,7 +70,6 @@ export function AiFitCard({
           {when && (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' }}>
               {new Date(when).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              {model ? ` · ${model}` : ''}
             </div>
           )}
         </>

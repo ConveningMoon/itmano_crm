@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Copy, Download, ExternalLink, Globe, Plus, Quote, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { hostedChannelUrl, HostedPageConfigSchema, type HostedPageConfig, type HostedQuestion, type HostedTestimonial } from '@/lib/hosted-page'
-import { generateHostedPageCopy, updateHostedPage, uploadHostedImage } from '../actions'
+import { deleteHostedImages, generateHostedPageCopy, updateHostedPage, uploadHostedImage } from '../actions'
 
 // Constructor de la página alojada del canal. Secciones según el tipo:
 //   contact_form → copy base + preguntas
@@ -69,6 +69,91 @@ function slugifyKey(label: string, fallback: string): string {
   return s || fallback
 }
 
+// Tipos de archivo que la IA puede leer como fuente (además del texto): PDF,
+// imágenes (folletos, fichas, capturas) y texto plano/markdown/csv.
+const AI_DOC_ACCEPT = 'application/pdf,image/png,image/jpeg,image/webp,text/plain,text/markdown,text/csv,.md,.csv'
+const AI_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+function aiAttachmentKind(file: File): 'pdf' | 'image' | 'text' | null {
+  if (file.type === 'application/pdf') return 'pdf'
+  if (AI_IMAGE_TYPES.includes(file.type)) return 'image'
+  if (file.type.startsWith('text/') || /\.(txt|md|csv)$/i.test(file.name)) return 'text'
+  return null
+}
+
+// JSON de EJEMPLO (no el contenido actual): estructura auto-descriptiva para que
+// el usuario le pida a su modelo de IA que genere el contenido y lo suba. Las
+// imágenes van vacías (se suben a mano) y es válido contra el schema para poder
+// re-subirlo. Los testimonios se dejan vacíos: son citas reales del agente.
+function buildTemplateJson(channelType: string): Record<string, unknown> {
+  const isLm    = channelType === 'lead_magnet'
+  const isEvent = channelType === 'event'
+  const questions = (isLm ? DEFAULT_LM_QUESTIONS : [
+    { key: '', label: 'Ejemplo de pregunta de opción', type: 'select' as const, required: false, options: ['Opción A', 'Opción B'] },
+  ]).map((q, i) => ({ ...q, key: slugifyKey(q.label, `pregunta_${i + 1}`) }))
+
+  const tpl: Record<string, unknown> = {
+    _instrucciones: [
+      'Este es un EJEMPLO de la estructura, no tu contenido actual.',
+      'Pídele a tu modelo de IA que rellene cada campo con contenido real, en el idioma de tu mercado.',
+      'Deja las URLs de imágenes VACÍAS ("") — las imágenes se suben a mano en el constructor.',
+      'No inventes testimonios: son citas reales de clientes que escribes tú.',
+      'Puedes editar, quitar o agregar preguntas; las respuestas se analizan con IA.',
+      'Cuando termines, súbelo con el botón "Subir JSON".',
+    ],
+    enabled: false,
+    language: 'es',
+    headline: isEvent ? 'Ejemplo: Seminario para compradores primerizos' : 'Ejemplo: Guía para comprar tu primera casa',
+    subheadline: 'Ejemplo: todo lo que necesitas saber, paso a paso.',
+    bullets: ['Beneficio concreto 1', 'Beneficio concreto 2', 'Beneficio concreto 3'],
+    cta_label: isEvent ? 'Reservar mi lugar' : 'Quiero la guía',
+    success_message: '¡Listo! Revisa tu correo.',
+    ask_phone: false,
+    cover_image_url: '',
+    background_image_url: '',
+    questions,
+  }
+
+  if (isLm) {
+    Object.assign(tpl, {
+      badge: 'Guía gratuita · [tu ciudad]',
+      microcopy: '100% gratis · Sin compromiso',
+      benefits_title: 'Todo lo que nadie te explica, paso a paso',
+      benefits_subtitle: 'Preparada por tu agente con base en años acompañando familias.',
+      benefits: [
+        { title: 'Título de la tarjeta 1', desc: 'Descripción breve.' },
+        { title: 'Título de la tarjeta 2', desc: 'Descripción breve.' },
+        { title: 'Título de la tarjeta 3', desc: 'Descripción breve.' },
+      ],
+      form_title: 'Cuéntanos un poco sobre ti y recibe la guía',
+      form_subtitle: 'Toma menos de 2 minutos.',
+      agent_intro: {
+        name: 'Nombre del agente', title: 'Título (ej.: Asesora bilingüe)',
+        paragraph: 'Párrafo de presentación personal.', quote: 'Cita personal (opcional).',
+        photo_url: '', whatsapp_url: '', instagram_url: '',
+      },
+      testimonials_title: 'Ellos también pensaban que comprar era complicado',
+      testimonials: [],
+      final_cta_title: 'Esta guía es tuya, gratis, hoy.',
+      final_cta_paragraph: 'No importa si estás explorando o listo para empezar.',
+    })
+  }
+  if (isEvent) {
+    tpl.event = { date: 'Sábado 12 de octubre', time: '10:00 AM', location: 'Lugar / dirección', short_description: 'Qué verá el asistente y para quién es.' }
+  }
+  return tpl
+}
+
+// URLs de imagen referenciadas por una config (portada, fondo, foto del agente,
+// fotos de testimonios) — para reconciliar Storage al reemplazar/quitar/cancelar.
+function collectImageUrls(cfg: HostedPageConfig): string[] {
+  const urls: (string | undefined)[] = [
+    cfg.cover_image_url, cfg.background_image_url, cfg.agent_intro?.photo_url,
+    ...(cfg.testimonials ?? []).map(t => t.photo_url),
+  ]
+  return urls.filter((u): u is string => !!u && u.trim().length > 0)
+}
+
 // Encabezado de sección del editor.
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -116,6 +201,9 @@ export function HostedPageEditor({
   const testiInputRef           = useRef<HTMLInputElement>(null)
   const [testiUploadIdx, setTestiUploadIdx] = useState<number | null>(null)
   const [imgBusy, setImgBusy]   = useState<'cover' | 'background' | 'photo' | 'testimonial' | null>(null)
+  // Todas las imágenes vistas en esta sesión de edición (iniciales + subidas).
+  // Al guardar/cancelar borramos de Storage las que ya no se usan.
+  const trackedImagesRef = useRef<Set<string>>(new Set())
 
   const isContact = channelType === 'contact_form'
   const isEvent   = channelType === 'event'
@@ -140,6 +228,8 @@ export function HostedPageEditor({
     })
     setBulletsText((base.bullets ?? []).join('\n'))
     setError(null)
+    // Semilla del set de imágenes con lo que ya está publicado.
+    trackedImagesRef.current = new Set(collectImageUrls(base))
   }
 
   function set<K extends keyof HostedPageConfig>(key: K, value: HostedPageConfig[K]) {
@@ -193,9 +283,28 @@ export function HostedPageEditor({
     start(async () => {
       const res = await updateHostedPage(channelId, normalized)
       if (!res.ok) { setError(res.error); return }
+      // Reconcilia Storage: borra las imágenes que se vieron en la sesión pero
+      // ya no se usan (reemplazadas o quitadas).
+      await reconcileImages(collectImageUrls(normalized))
       setOpen(false)
       router.refresh()
     })
+  }
+
+  // Borra de Storage las imágenes registradas en la sesión que NO están en `used`.
+  async function reconcileImages(used: string[]) {
+    const usedSet = new Set(used)
+    const removed = [...trackedImagesRef.current].filter(u => !usedSet.has(u))
+    trackedImagesRef.current = usedSet
+    if (removed.length > 0) { try { await deleteHostedImages(removed) } catch { /* best-effort */ } }
+  }
+
+  // Cancelar: descarta el borrador y limpia las imágenes subidas esta sesión que
+  // no estaban en la config publicada.
+  function handleCancel() {
+    setError(null)
+    void reconcileImages(collectImageUrls(initial ?? EMPTY))
+    setOpen(false)
   }
 
   function copyUrl() {
@@ -210,12 +319,12 @@ export function HostedPageEditor({
     setError(null)
     if (!aiDesc.trim()) { setError('La descripción es obligatoria para generar con IA.'); return }
     setAiBusy(true)
-    const run = (documentBase64?: string) => generateHostedPageCopy({
+    const run = (attachment?: { kind: 'pdf' | 'image' | 'text'; data: string; mediaType: string }) => generateHostedPageCopy({
       channelType,
       description: aiDesc,
       tenantName,
       agentName: agentName ?? undefined,
-      documentBase64,
+      attachment,
     }).then(res => {
       setAiBusy(false)
       if (!res.ok) { setError(res.error); return }
@@ -249,26 +358,36 @@ export function HostedPageEditor({
     }).catch(() => { setAiBusy(false); setError('No se pudo generar el copy.') })
 
     if (aiDoc) {
-      // PDF → base64 (sin el prefijo data:) para el bloque document de la IA.
+      const kind = aiAttachmentKind(aiDoc)
+      if (!kind) { setAiBusy(false); setError('Tipo de archivo no admitido. Usa PDF, imagen o texto.'); return }
       const reader = new FileReader()
-      reader.onload = () => {
-        const result = String(reader.result)
-        const base64 = result.includes(',') ? result.slice(result.indexOf(',') + 1) : result
-        run(base64)
+      reader.onerror = () => { setAiBusy(false); setError('No se pudo leer el archivo.') }
+      if (kind === 'text') {
+        // Texto plano/markdown/csv → se manda tal cual como contexto.
+        reader.onload = () => run({ kind, data: String(reader.result).slice(0, 40000), mediaType: aiDoc.type || 'text/plain' })
+        reader.readAsText(aiDoc)
+      } else {
+        // PDF / imagen → base64 (sin el prefijo data:) para el bloque de la IA.
+        reader.onload = () => {
+          const result = String(reader.result)
+          const base64 = result.includes(',') ? result.slice(result.indexOf(',') + 1) : result
+          run({ kind, data: base64, mediaType: aiDoc.type || (kind === 'pdf' ? 'application/pdf' : 'image/png') })
+        }
+        reader.readAsDataURL(aiDoc)
       }
-      reader.onerror = () => { setAiBusy(false); setError('No se pudo leer el documento.') }
-      reader.readAsDataURL(aiDoc)
     } else {
       run()
     }
   }
 
-  // ── JSON: descargar template / subir template completado ────────────────────
+  // ── JSON: descargar EJEMPLO / subir template completado ─────────────────────
+  // Se descarga un template de EJEMPLO (no el contenido actual) para que el
+  // usuario le pida a su modelo de IA que genere el contenido según la estructura.
   function handleDownloadJson() {
-    const blob = new Blob([JSON.stringify({ ...cfg, bullets: bulletsText.split('\n').map(l => l.trim()).filter(Boolean) }, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(buildTemplateJson(channelType), null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `pagina-${channelSlug}.json`
+    a.download = `plantilla-${channelSlug}.json`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -301,6 +420,7 @@ export function HostedPageEditor({
     uploadHostedImage(fd).then(res => {
       setImgBusy(null)
       if (!res.ok) { setError(res.error); return }
+      trackedImagesRef.current.add(res.url)
       if (kind === 'cover') set('cover_image_url', res.url)
       else if (kind === 'background') set('background_image_url', res.url)
       else if (kind === 'photo') setIntro({ photo_url: res.url })
@@ -404,7 +524,7 @@ export function HostedPageEditor({
             {/* Documento opcional para la IA (PDF) */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={() => aiDocInputRef.current?.click()} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <Upload size={12} /> {aiDoc ? 'Cambiar documento' : 'Adjuntar documento (PDF)'}
+                <Upload size={12} /> {aiDoc ? 'Cambiar archivo' : 'Adjuntar archivo (PDF, imagen o texto)'}
               </button>
               {aiDoc && (
                 <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
@@ -412,12 +532,13 @@ export function HostedPageEditor({
                   <button onClick={() => setAiDoc(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'inline-flex' }} title="Quitar"><X size={12} /></button>
                 </span>
               )}
-              <input ref={aiDocInputRef} type="file" accept="application/pdf" hidden onChange={e => { const f = e.target.files?.[0]; if (f && f.size > 10 * 1024 * 1024) { setError('El documento supera 10 MB.') } else { setAiDoc(f ?? null) } e.target.value = '' }} />
+              <input ref={aiDocInputRef} type="file" accept={AI_DOC_ACCEPT} hidden onChange={e => { const f = e.target.files?.[0]; if (f && f.size > 10 * 1024 * 1024) { setError('El archivo supera 10 MB.') } else if (f && !aiAttachmentKind(f)) { setError('Tipo de archivo no admitido. Usa PDF, imagen o texto.') } else { setAiDoc(f ?? null) } e.target.value = '' }} />
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              La descripción es obligatoria — la IA escribe en el idioma en que la redactes. Opcional: adjunta un PDF
-              (folleto, ficha, guía) como fuente. También puedes descargar el JSON, completarlo con tu modelo de
-              confianza y subirlo. Las imágenes y los testimonios se agregan a mano.
+              La descripción es obligatoria — la IA escribe en el idioma en que la redactes. Opcional: adjunta un
+              archivo como fuente (PDF, imagen de un folleto/ficha, o texto). También puedes descargar un JSON de
+              ejemplo, pedirle a tu modelo de confianza que lo complete y subirlo. Las imágenes y los testimonios se
+              agregan a mano.
             </div>
           </div>
 
@@ -828,7 +949,7 @@ export function HostedPageEditor({
             <button onClick={() => handleSave(false)} disabled={pending} style={BTN_GHOST}>
               {active ? 'Guardar despublicada' : 'Guardar borrador'}
             </button>
-            <button onClick={() => { setOpen(false); setError(null) }} style={BTN_GHOST}>Cancelar</button>
+            <button onClick={handleCancel} style={BTN_GHOST}>Cancelar</button>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
               El borrador se previsualiza con &quot;Ver borrador&quot; antes de publicar.
             </span>

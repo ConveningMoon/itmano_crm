@@ -7,6 +7,7 @@ import { Plus, Copy, Check, X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
 import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
 import { FormSection } from '@/components/ui/form-section'
+import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 
 type TabValue = ChannelType | 'all' | 'archived'
 
@@ -47,7 +48,7 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
 // ─── Channel Card ─────────────────────────────────────────────────────────────
 
 function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number }) {
-  const router = useRouter()
+  const { navigate, pending: navPending } = useCardNavigation()
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
 
@@ -56,8 +57,8 @@ function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number
       className="source-card"
       role="link"
       tabIndex={0}
-      onClick={() => router.push(`/sources/${ch.slug}`)}
-      onKeyDown={e => { if (e.key === 'Enter') router.push(`/sources/${ch.slug}`) }}
+      onClick={() => navigate(`/sources/${ch.slug}`)}
+      onKeyDown={e => { if (e.key === 'Enter') navigate(`/sources/${ch.slug}`) }}
       style={{
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-subtle)',
@@ -70,6 +71,7 @@ function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number
         flexDirection: 'column',
       }}
     >
+      <NavLoadingOverlay show={navPending} />
       {/* Header */}
       <div style={{
         background: 'var(--bg-elevated)',

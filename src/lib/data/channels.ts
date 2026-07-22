@@ -115,7 +115,7 @@ async function fetchChannelsWithMetrics(
       .gte('created_at', windowStart),
     supabase
       .from('channel_page_views')
-      .select('channel_id')
+      .select('channel_id, visitor_fingerprint')
       .in('channel_id', channelIds)
       .gte('created_at', windowStart),
     supabase
@@ -132,12 +132,22 @@ async function fetchChannelsWithMetrics(
     const totalLeads = (allLeads ?? []).filter(
       (l: { acquisition_channel_id: string }) => l.acquisition_channel_id === c.id
     )
-    const views = (windowViews ?? []).filter(
+    // Vistas ÚNICAS: distintos visitantes (visitor_fingerprint) en la ventana.
+    // Abrir el mismo link varias veces en el mismo navegador cuenta una sola vez
+    // (el fingerprint es estable en localStorage). Filas sin fingerprint (legacy)
+    // se cuentan como una vista cada una para no perderlas.
+    const viewRows = (windowViews ?? []).filter(
       (pv: { channel_id: string }) => pv.channel_id === c.id
-    )
+    ) as { channel_id: string; visitor_fingerprint: string | null }[]
+    const uniqueVisitors = new Set<string>()
+    let anonViews = 0
+    for (const v of viewRows) {
+      if (v.visitor_fingerprint) uniqueVisitors.add(v.visitor_fingerprint)
+      else anonViews++
+    }
 
     const leadsInWindow = wLeads.length
-    const pageViewsInWindow = views.length
+    const pageViewsInWindow = uniqueVisitors.size + anonViews
     const conversionRate = pageViewsInWindow > 0
       ? Math.round((leadsInWindow / pageViewsInWindow) * 100)
       : 0

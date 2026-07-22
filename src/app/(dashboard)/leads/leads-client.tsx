@@ -9,6 +9,7 @@ import {
   Trash2, Download, CheckSquare, Square,
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
+import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadStatus } from '@/lib/types'
 import type { ChannelOption } from './new/page'
@@ -216,6 +217,7 @@ export function LeadsClient({
   leads, agents, channels, viewerRole, viewerAgentId, initialSource, initialChannelId,
 }: LeadsClientProps) {
   const router = useRouter()
+  const { navigate, pending: navPending } = useCardNavigation()
 
   const [view, setView]               = useState<'table' | 'kanban'>('table')
   const [search, setSearch]           = useState('')
@@ -419,6 +421,7 @@ export function LeadsClient({
 
   return (
     <div style={{ padding: '24px' }}>
+      <NavLoadingOverlay show={navPending} />
       <style>{`
         .kanban-card { transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
         .kanban-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-sm); }
@@ -742,7 +745,7 @@ export function LeadsClient({
                         cursor: 'pointer',
                         background: isSelected ? 'rgba(201,169,110,0.06)' : undefined,
                       }}
-                      onClick={() => router.push(`/leads/${lead.id}`)}
+                      onClick={() => navigate(`/leads/${lead.id}`)}
                     >
                       {/* Checkbox de selección */}
                       <td style={{ padding: '12px 0 12px 16px', width: '36px' }} onClick={e => e.stopPropagation()}>
@@ -928,7 +931,7 @@ export function LeadsClient({
                           marginBottom: '8px',
                           cursor:       'pointer',
                         }}
-                        onClick={() => router.push(`/leads/${lead.id}`)}
+                        onClick={() => navigate(`/leads/${lead.id}`)}
                       >
                         {/* Row 1: avatar + name + date */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
