@@ -63,9 +63,20 @@ function buildTool(dims: Dimension[]) {
 
 interface AnswerItem { key?: string; question?: string; value?: unknown; label?: unknown }
 
-export async function assessLeadFit(input: { leadId: string; tenantId: string }): Promise<void> {
+export interface FitAssessResult { ok: boolean; skipped?: string; error?: string; reasoning?: string }
+
+function skip(reason: string, leadId: string): FitAssessResult {
+  console.log(JSON.stringify({ service: 'ai-lead-fit', lead_id: leadId, skipped: reason }))
+  return { ok: false, skipped: reason }
+}
+
+// Analiza el fit del lead con IA tomando TODA su información: respuestas de
+// formularios, historial de actividad, scoring actual, contacto, y el contexto
+// de agencia/agente/mercado. Se dispara en cada acción del lead (formulario,
+// respuesta de correo…) y también manualmente. `reason` etiqueta el disparador.
+export async function assessLeadFit(input: { leadId: string; tenantId: string; reason?: string }): Promise<FitAssessResult> {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) return
+    if (!process.env.ANTHROPIC_API_KEY) return skip('no_api_key', input.leadId)
     const db = createAdminClient()
 
     // Tenant: gate por toggle + contexto de mercado.
@@ -75,22 +86,26 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string })
       .eq('id', input.tenantId)
       .maybeSingle()
     const tenant = tenantRow as { name: string; description: string | null; ai_lead_scoring_enabled: boolean } | null
-    if (!tenant?.ai_lead_scoring_enabled) return
+    if (!tenant) return skip('tenant_not_found', input.leadId)
+    if (!tenant.ai_lead_scoring_enabled) return skip('scoring_disabled', input.leadId)
 
     // Presupuesto de IA del mes.
     const limit = await getAiLimitStatus(input.tenantId)
-    if (limit.blocked) return
+    if (limit.blocked) return skip('budget_blocked', input.leadId)
 
-    // Lead + intent + estado (los estados post-funnel están congelados: no gastes).
+    // Lead + intent + estado + scoring actual.
     const { data: leadRow } = await db
       .from('leads')
-      .select('id, first_name, last_name, language, status, agent_id, fit_profile, metadata')
+      .select('id, first_name, last_name, email, phone, language, status, agent_id, fit_profile, metadata, fit_score, engagement_score, manual_score, current_score')
       .eq('id', input.leadId)
       .maybeSingle()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lead = leadRow as any
-    if (!lead) return
-    if (['process_started', 'process_completed', 'closed', 'lost'].includes(lead.status as string)) return
+    if (!lead) return skip('lead_not_found', input.leadId)
+    // Los estados post-funnel están congelados: recompute no cambia su score,
+    // pero igual analizamos y guardamos el razonamiento (el usuario pidió que
+    // TODA acción del lead se analice).
+    const frozen = ['process_started', 'process_completed', 'closed', 'lost'].includes(lead.status as string)
 
     const intent = (lead.metadata?.intent as string | undefined) ?? null
     const dims: Dimension[] = intent === 'sell' ? SELL_DIMS : BUY_DIMS
@@ -105,13 +120,13 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string })
       agentDesc = a?.description ?? ''
     }
 
-    // Respuestas más recientes del lead (todas sus fuentes).
+    // Respuestas del lead (todas sus fuentes, más recientes primero).
     const { data: subsRows } = await db
       .from('form_submissions')
       .select('answers, submitted_at')
       .eq('lead_id', input.leadId)
       .order('submitted_at', { ascending: false })
-      .limit(3)
+      .limit(5)
     const answers: AnswerItem[] = []
     for (const s of (subsRows ?? []) as { answers: unknown }[]) {
       if (Array.isArray(s.answers)) answers.push(...(s.answers as AnswerItem[]))
@@ -119,28 +134,44 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string })
     const answerLines = answers
       .map(a => `- ${a.question ?? a.key ?? '¿?'}: ${a.label ?? a.value ?? ''}`)
       .filter(l => l.trim().length > 3)
-      .slice(0, 30)
+      .slice(0, 40)
 
-    if (answerLines.length === 0 && !intent) return // nada que interpretar
+    // Historial de actividad (lead_events): da comportamiento + señales al análisis.
+    const { data: eventRows } = await db
+      .from('lead_events')
+      .select('type, description, points, created_at')
+      .eq('lead_id', input.leadId)
+      .order('created_at', { ascending: false })
+      .limit(25)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const activityLines = ((eventRows ?? []) as any[])
+      .map(e => `- ${new Date(e.created_at).toISOString().slice(0, 10)} · ${e.type}${e.description ? `: ${String(e.description).slice(0, 120)}` : ''}${e.points ? ` (${e.points > 0 ? '+' : ''}${e.points} pts)` : ''}`)
 
     const prompt = [
-      'Eres analista de leads inmobiliarios. Clasifica al lead en buckets de fit usando el tool.',
+      'Eres analista de leads inmobiliarios. Con TODA la información del lead, clasifícalo en los buckets de fit usando el tool.',
       'Regla clave: el nivel de presupuesto (budget_tier) es RELATIVO al mercado de la agencia — el mismo monto puede ser premium en un mercado y de entrada en otro. Usa el contexto de la agencia para decidir.',
-      'No inventes datos: si una dimensión no se puede determinar con lo dado, usa "unknown".',
+      'Toma en cuenta el historial de actividad y el scoring actual como señales de intención. No inventes datos: si una dimensión no se puede determinar, usa "unknown".',
       '',
       `Agencia: ${tenant.name}.`,
       tenant.description ? `Contexto y mercado de la agencia:\n${tenant.description}` : 'Contexto de la agencia: no especificado.',
       agentName ? `Agente asignado: ${agentName}.${agentDesc ? ' ' + agentDesc : ''}` : null,
-      intent ? `Intención del lead: ${intent}.` : null,
       '',
-      'Respuestas del lead:',
+      `Lead: ${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() + '.',
+      `Estado actual: ${lead.status}${frozen ? ' (congelado / post-embudo)' : ''}. Idioma: ${lead.language ?? 'es'}.${lead.phone ? ' Tiene teléfono.' : ''}`,
+      intent ? `Intención declarada: ${intent}.` : null,
+      `Scoring actual — total ${lead.current_score ?? 0}/100 (fit ${lead.fit_score ?? 0}, engagement ${lead.engagement_score ?? 0}, manual ${lead.manual_score ?? 0}).`,
+      '',
+      'Respuestas de formularios:',
       answerLines.length ? answerLines.join('\n') : '(sin respuestas de formulario)',
+      '',
+      'Historial de actividad (más reciente primero):',
+      activityLines.length ? activityLines.join('\n') : '(sin actividad registrada)',
     ].filter((l): l is string => l !== null).join('\n')
 
     const anthropic = new Anthropic()
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 600,
+      max_tokens: 700,
       tools: [buildTool(dims)],
       tool_choice: { type: 'tool', name: 'assess_lead_fit' },
       messages: [{ role: 'user', content: prompt }],
@@ -154,11 +185,11 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string })
       feature:  'lead_fit',
       model:    MODEL,
       usage:    message.usage,
-      metadata: { lead_id: input.leadId, lead_name: leadName },
+      metadata: { lead_id: input.leadId, lead_name: leadName, reason: input.reason ?? 'action' },
     })
 
     const block = message.content.find(b => b.type === 'tool_use')
-    if (!block || block.type !== 'tool_use') return
+    if (!block || block.type !== 'tool_use') return { ok: false, error: 'La IA no devolvió el análisis.' }
     const out = block.input as Record<string, unknown>
 
     // Merge de buckets válidos en fit_profile (latest-wins). 'unknown' no escribe.
@@ -179,15 +210,18 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string })
     }).eq('id', input.leadId)
     if (updErr) {
       console.error(JSON.stringify({ service: 'ai-lead-fit', lead_id: input.leadId, error: 'fit_update_failed', detail: updErr.message }))
-      return
+      return { ok: false, error: 'No se pudo guardar el análisis.' }
     }
 
-    // Revalora con las reglas ajustables.
+    // Revalora con las reglas ajustables (no-op si el lead está congelado).
     const { error: recErr } = await db.rpc('recompute_lead_score', { p_lead_id: input.leadId })
     if (recErr) {
       console.error(JSON.stringify({ service: 'ai-lead-fit', lead_id: input.leadId, error: 'recompute_failed', detail: recErr.message }))
     }
+    console.log(JSON.stringify({ service: 'ai-lead-fit', lead_id: input.leadId, result: 'ok', reason: input.reason ?? 'action' }))
+    return { ok: true, reasoning }
   } catch (e) {
     console.error(JSON.stringify({ service: 'ai-lead-fit', error: 'assess_threw', detail: e instanceof Error ? e.message : 'unknown' }))
+    return { ok: false, error: e instanceof Error ? e.message : 'Error desconocido' }
   }
 }

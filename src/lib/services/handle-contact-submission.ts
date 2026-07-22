@@ -1,8 +1,10 @@
 import 'server-only'
+import { after } from 'next/server'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
+import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -185,6 +187,10 @@ export async function handleContactSubmission(
   if (submissionError) {
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
   }
+
+  // Análisis de fit con IA (si el tenant lo tiene activado) — cada acción del
+  // lead se reanaliza. Fire-and-forget: no bloquea la respuesta.
+  after(() => assessLeadFit({ leadId, tenantId, reason: 'contact_form' }))
 
   console.log(JSON.stringify({
     service:   'handle-contact-submission',

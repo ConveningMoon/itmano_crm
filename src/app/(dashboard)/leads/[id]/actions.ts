@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteLead } from '@/lib/auth/guards'
 import { EmailContentSchema } from '@/lib/email-content'
+import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 import type { LeadStatus } from '@/lib/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -431,6 +432,40 @@ export async function deleteLead(
   revalidatePath('/leads')
   revalidatePath('/dashboard')
   return { ok: true }
+}
+
+// ─── Analizar fit con IA manualmente ──────────────────────────────────────────
+// Corre el análisis on-demand desde el detalle del lead (además de los
+// disparadores automáticos en cada acción). await para devolver el resultado y
+// que la UI muestre el razonamiento o el motivo por el que no corrió.
+export async function analyzeLeadFit(
+  leadId: string,
+): Promise<{ ok: true; reasoning?: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  let q = supabase.from('leads').select('id, tenant_id, agent_id').eq('id', leadId)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+  const { data: lead } = await q.maybeSingle()
+  if (!lead) return { ok: false, error: 'Lead no encontrado.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = lead as any
+  const denied = assertCanWriteLead(ctx, { tenant_id: l.tenant_id, agent_id: l.agent_id })
+  if (denied) return denied
+
+  const res = await assessLeadFit({ leadId, tenantId: l.tenant_id as string, reason: 'manual' })
+  if (res.ok) {
+    revalidatePath('/leads/[id]', 'page')
+    return { ok: true, reasoning: res.reasoning }
+  }
+  const MSG: Record<string, string> = {
+    no_api_key:       'Falta ANTHROPIC_API_KEY en el entorno.',
+    scoring_disabled: 'El análisis de fit con IA está desactivado para este tenant (actívalo en el centro de control).',
+    budget_blocked:   'Se alcanzó el límite mensual de IA del tenant.',
+    tenant_not_found: 'Tenant no encontrado.',
+    lead_not_found:   'Lead no encontrado.',
+  }
+  return { ok: false, error: res.skipped ? (MSG[res.skipped] ?? `No se ejecutó (${res.skipped}).`) : (res.error ?? 'No se pudo analizar.') }
 }
 
 // ─── Borrado en lote (selección múltiple en /leads) ───────────────────────────

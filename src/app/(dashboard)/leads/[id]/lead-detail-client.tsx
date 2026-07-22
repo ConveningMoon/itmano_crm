@@ -17,6 +17,7 @@ import { FormSection } from '@/components/ui/form-section'
 import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
 import { SendEmailModal, type EmailSendingInfo } from './send-email-modal'
+import { AiFitCard } from './ai-fit-card'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
@@ -176,11 +177,12 @@ interface LeadDetailProps {
   statusHistory: StatusChange[]
   scoreBreakdown: ScoreBreakdown
   emailSending?: EmailSendingInfo
+  aiFit?: { enabled: boolean; reasoning: string | null; at: string | null; model: string | null }
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, emailSending }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, emailSending, aiFit }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
@@ -193,6 +195,13 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [modalNotes, setModalNotes]         = useState('')
   const [showEditModal, setShowEditModal]   = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
+  // Tab activo del historial (controlado) — permite que los eventos de la
+  // actividad enlacen a su contenido (formulario / correo).
+  const [historyTab, setHistoryTab] = useState('actividad')
+  function openHistoryTab(tab: string) {
+    setHistoryTab(tab)
+    document.getElementById('lead-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   const [confirmClose, setConfirmClose]     = useState(false)
   const [confirmLost, setConfirmLost]       = useState(false)
   const [actionError, setActionError]       = useState<string | null>(null)
@@ -419,6 +428,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
           {/* Card: Score breakdown */}
           <ScoreBreakdownPanel breakdown={scoreBreakdown} />
+
+          {/* Card: Análisis de fit con IA */}
+          {aiFit && (
+            <AiFitCard leadId={lead.id} enabled={aiFit.enabled} reasoning={aiFit.reasoning} at={aiFit.at} model={aiFit.model} />
+          )}
 
           {/* Card 3: Notes */}
           <div style={CARD}>
@@ -729,8 +743,10 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       />
 
       {/* ── Historial del lead: actividad, formularios, emails y estados ── */}
-      <div style={{ marginTop: '24px' }}>
+      <div id="lead-history" style={{ marginTop: '24px', scrollMarginTop: '80px' }}>
         <Tabs
+          value={historyTab}
+          onChange={setHistoryTab}
           items={[
             { key: 'actividad',   label: 'Actividad',   badge: events.length },
             { key: 'formularios', label: 'Formularios', badge: submissions.length },
@@ -738,7 +754,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             { key: 'historial',   label: 'Historial',   badge: statusHistory.length },
           ]}
           content={{
-            actividad:   <ActivityTimeline events={events} />,
+            actividad:   <ActivityTimeline events={events} onOpen={openHistoryTab} />,
             formularios: <LeadSubmissionsList submissions={submissions} />,
             emails:      <LeadEmailRepliesList replies={emailReplies} />,
             historial:   <StatusHistoryTimeline changes={statusHistory} />,
