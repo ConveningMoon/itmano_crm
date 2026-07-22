@@ -1,9 +1,10 @@
 import { Webhook } from 'svix'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resend } from '@/lib/resend'
 import { stripQuotedReply } from '@/lib/email/strip-quoted-reply'
+import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -301,6 +302,10 @@ async function handleInboundEvent(
   }
 
   log({ event_type: event.type, event_id: svixId, lead_id: match.id, result: 'inserted' })
+
+  // Reanaliza el fit del lead con IA (si el tenant lo tiene activado): una
+  // respuesta agrega información. Fire-and-forget; el servicio verifica el gate.
+  after(() => assessLeadFit({ leadId: match.id, tenantId: match.tenant_id, reason: 'email_reply' }))
 
   // Fetch the full email body via the Resend API.
   // The email.received webhook carries metadata only (from/to/subject/email_id)

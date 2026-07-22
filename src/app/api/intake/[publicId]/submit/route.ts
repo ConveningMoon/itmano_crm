@@ -419,7 +419,7 @@ export async function POST(
   // Si el tenant tiene el análisis con IA activado, reinterpreta el fit_profile con
   // contexto de mercado tras responder. Fire-and-forget con after(): no bloquea la
   // respuesta al visitante y el servicio verifica el toggle + presupuesto + clave.
-  after(() => assessLeadFit({ leadId, tenantId }))
+  after(() => assessLeadFit({ leadId, tenantId, reason: 'form_submit' }))
 
   console.log(JSON.stringify({
     service:      'intake-submit',
