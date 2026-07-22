@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
@@ -135,6 +136,16 @@ function ScoreBreakdownPanel({ breakdown }: { breakdown: ScoreBreakdown }) {
           Score congelado por estado.
         </div>
       )}
+
+      <Link
+        href="/settings?tab=scoring"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px',
+          fontSize: '11.5px', fontWeight: 600, color: 'var(--accent-gold)', textDecoration: 'none',
+        }}
+      >
+        Ver o ajustar los puntajes en Ajustes → Scoring
+      </Link>
     </div>
   )
 }
@@ -177,7 +188,7 @@ interface LeadDetailProps {
   statusHistory: StatusChange[]
   scoreBreakdown: ScoreBreakdown
   emailSending?: EmailSendingInfo
-  aiFit?: { enabled: boolean; reasoning: string | null; at: string | null; model: string | null }
+  aiFit?: { enabled: boolean; reasoning: string | null; at: string | null }
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -431,7 +442,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
           {/* Card: Análisis de fit con IA */}
           {aiFit && (
-            <AiFitCard leadId={lead.id} enabled={aiFit.enabled} reasoning={aiFit.reasoning} at={aiFit.at} model={aiFit.model} />
+            <AiFitCard leadId={lead.id} enabled={aiFit.enabled} reasoning={aiFit.reasoning} at={aiFit.at} />
           )}
 
           {/* Card 3: Notes */}

@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Building2, Plus, ExternalLink, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { generatePropertyFromPdf } from './ai-actions'
 import { PropertyFormModal, TYPE_LABELS, STATUS_CONFIG, type AiInit } from './property-form-modal'
 import { AiCreateModal } from './ai-create-modal'
+import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 
 // Lista de propiedades: tarjetas clickeables → detalle. El formulario de
 // crear/editar vive en property-form-modal.tsx (compartido con el detalle).
@@ -40,7 +40,7 @@ type ModalState = { aiInit?: AiInit | null; error?: string | null }
 
 export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
   const isSuperAdmin = viewerRole === 'super_admin'
-  const router       = useRouter()
+  const { navigate, pending: navPending } = useCardNavigation()
 
   const [tab, setTab]     = useState<FilterTab>('all')
   const [modal, setModal] = useState<ModalState | null>(null)
@@ -70,6 +70,7 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
 
   return (
     <>
+      <NavLoadingOverlay show={navPending} />
       <style>{`
         @keyframes prop-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
         .prop-card { animation: prop-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
@@ -196,8 +197,8 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
                 className="prop-card"
                 role="link"
                 tabIndex={0}
-                onClick={() => router.push(`/properties/${prop.id}`)}
-                onKeyDown={e => { if (e.key === 'Enter') router.push(`/properties/${prop.id}`) }}
+                onClick={() => navigate(`/properties/${prop.id}`)}
+                onKeyDown={e => { if (e.key === 'Enter') navigate(`/properties/${prop.id}`) }}
                 style={{
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border-subtle)',

@@ -172,7 +172,12 @@ function RuleRow({
 
 // ─── Section ────────────────────────────────────────────────────────────────────
 
-export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit: boolean }) {
+export function ScoringSection({ rules, canEdit, recommended }: {
+  rules: ScoreRule[]
+  canEdit: boolean
+  // Valores recomendados por ITMANO (reglas globales) por id de regla.
+  recommended?: Record<string, { points: number; isActive: boolean }>
+}) {
   const [draft, setDraft]       = useState<DraftMap>(() => buildDraft(rules))
   const [baseline, setBaseline] = useState<DraftMap>(() => buildDraft(rules))
   const [error, setError]       = useState<string | null>(null)
@@ -258,6 +263,25 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
     const d = draft[r.id]; const b = baseline[r.id]
     return d && b && (d.points !== b.points || d.isActive !== b.isActive)
   }).length
+
+  // ── Restablecer a los valores recomendados por ITMANO ──────────────────────
+  // Lleva el borrador a las reglas globales; el usuario aún confirma y guarda.
+  const differsFromRecommended = !!recommended && rules.some(r => {
+    const rec = recommended[r.id]; const d = draft[r.id]
+    return rec && d && (String(rec.points) !== d.points || rec.isActive !== d.isActive)
+  })
+  function resetToRecommended() {
+    if (!recommended) return
+    setError(null); setSaved(false); setConfirmStep(0)
+    setDraft(prev => {
+      const next: DraftMap = { ...prev }
+      for (const r of rules) {
+        const rec = recommended[r.id]
+        if (rec) next[r.id] = { points: String(rec.points), isActive: rec.isActive }
+      }
+      return next
+    })
+  }
 
   return (
     <div>
@@ -356,6 +380,23 @@ export function ScoringSection({ rules, canEdit }: { rules: ScoreRule[]; canEdit
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end' }}>
             {error && <span style={{ fontSize: '12px', color: 'var(--accent-coral)', flex: 1 }}>{error}</span>}
             {saved && !dirty && <span style={{ fontSize: '12px', color: 'var(--accent-green)', flex: 1 }}>Cambios guardados.</span>}
+            {recommended && (
+              <button
+                onClick={resetToRecommended}
+                disabled={!differsFromRecommended || pending || confirmStep > 0}
+                title="Lleva todos los puntos a los valores recomendados por ITMANO (luego confirma y guarda)."
+                style={{
+                  marginRight: 'auto',
+                  padding: '8px 16px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
+                  background: 'transparent',
+                  border: '1px solid var(--border-subtle)',
+                  color: (!differsFromRecommended || pending || confirmStep > 0) ? 'var(--text-muted)' : 'var(--text-secondary)',
+                  cursor: (!differsFromRecommended || pending || confirmStep > 0) ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Restablecer a recomendados
+              </button>
+            )}
             <button
               onClick={requestSave}
               disabled={!dirty || hasInvalid || pending || confirmStep > 0}

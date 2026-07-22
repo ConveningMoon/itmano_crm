@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Building2, Sparkles } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
@@ -1242,6 +1242,9 @@ interface Props {
   agentAccess: Record<string, boolean>
   accessCount: number
   scoringRules: ScoreRule[]
+  // Valores recomendados por ITMANO (reglas globales) por id de regla — para el
+  // botón "Restablecer a recomendados" del scoring.
+  recommendedRules: Record<string, { points: number; isActive: boolean }>
   canEditScoring: boolean
   canManageAgents: boolean
   multiAgent: boolean
@@ -1260,11 +1263,13 @@ interface Props {
 }
 
 export function SettingsClient({
-  tenant, agents, agentAccess, accessCount, scoringRules,
+  tenant, agents, agentAccess, accessCount, scoringRules, recommendedRules,
   canEditScoring, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
-  const [tab, setTab] = useState<Tab>('perfil')
+  const searchParams = useSearchParams()
+  const initialTab = TABS.some(t => t.value === searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'perfil'
+  const [tab, setTab] = useState<Tab>(initialTab)
 
   return (
     <Tabs
@@ -1290,7 +1295,7 @@ export function SettingsClient({
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
-        scoring: <ScoringSection rules={scoringRules} canEdit={canEditScoring} />,
+        scoring: <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />,
         contexto: <ContextSection tenantDescription={tenant.description} agents={agents} canManage={canManageAgents} />,
         ia: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

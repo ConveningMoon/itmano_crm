@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
-import { getEffectiveScoreRules } from '@/lib/data/score-rules'
+import { getEffectiveScoreRules, getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
@@ -26,10 +26,11 @@ export default async function SettingsPage() {
   // el resumen del equipo con desglose por agente.
   const isAgentViewer = ctx.role === 'agent'
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, globalRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getEffectiveScoreRules(tenantId),
+    getGlobalScoreRules(),
     // Honest "active accesses" = every login profile in this tenant (owner + any
     // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
     supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
@@ -45,6 +46,12 @@ export default async function SettingsPage() {
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+
+  // Valores recomendados por ITMANO (reglas globales) por id — los efectivos del
+  // tenant conservan el id global, así el botón "Restablecer a recomendados"
+  // matchea por id. Para super_admin, efectivo == global (reset es no-op).
+  const recommendedRules: Record<string, { points: number; isActive: boolean }> =
+    Object.fromEntries(globalRules.map(r => [r.id, { points: r.points, isActive: r.isActive }]))
 
   // Access status per agent (user_id present) — kept off the global Agent type.
   const agentAccess: Record<string, boolean> = {}
@@ -109,6 +116,7 @@ export default async function SettingsPage() {
         agentAccess={agentAccess}
         accessCount={accessCountRes.count ?? 0}
         scoringRules={scoringRules}
+        recommendedRules={recommendedRules}
         canEditScoring={ctx.role === 'super_admin' || ctx.role === 'agent_owner'}
         canManageAgents={ctx.role !== 'agent'}
         multiAgent={multiAgent}
