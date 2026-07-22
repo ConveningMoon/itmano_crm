@@ -72,6 +72,10 @@ export interface Lead {
   engagementScore: number | null
   manualScore: number | null
   lastEventAt: string | null
+  // Premura de la próxima acción según el último briefing de IA (metadata.ai_fit).
+  // NO es la temperatura (esa mide qué tan bueno es el lead): mide qué tan pronto
+  // conviene actuar. null cuando no hay briefing con IA.
+  attentionWhen?: 'hoy' | 'esta_semana' | 'sin_apuro' | null
   lender?: string
   notes?: string
   createdAt: string

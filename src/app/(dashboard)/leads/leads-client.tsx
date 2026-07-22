@@ -6,7 +6,7 @@ import { AnimatePresence, m } from 'motion/react'
 import {
   Search, List, LayoutGrid, ChevronDown, X, Users, SlidersHorizontal,
   Camera, ThumbsUp, MessageCircle, PenLine, FileDown, Calendar, Globe,
-  Trash2, Download, CheckSquare, Square,
+  Trash2, Download, CheckSquare, Square, Clock,
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
@@ -213,11 +213,43 @@ interface LeadsClientProps {
   initialChannelId: string
 }
 
+// Prioridad de atención (menor = más urgente). Usa el `when` del briefing de IA
+// cuando existe; si no, una heurística determinista (actividad fresca en banda
+// activa con score real) para que la vista sirva aunque el tenant no tenga IA.
+// NO reemplaza la temperatura: ordena por PREMURA de la próxima acción.
+const FROZEN_LEAD_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
+function attentionRank(lead: Lead): number {
+  switch (lead.attentionWhen) {
+    case 'hoy':         return 0
+    case 'esta_semana': return 2
+    case 'sin_apuro':   return 4
+  }
+  const fresh  = !!lead.lastEventAt && Date.now() - new Date(lead.lastEventAt).getTime() < 3 * 24 * 3600 * 1000
+  const active = !FROZEN_LEAD_STATUSES.includes(lead.status)
+  if (fresh && active && (lead.currentScore ?? 0) >= 35) return 1
+  return 3
+}
+
+// Chip "Hoy": la IA marcó que la próxima acción de este lead es de hoy.
+function TodayChip() {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+      padding: '1px 6px', borderRadius: '8px',
+      color: '#E07B3A', background: 'rgba(224,123,58,0.14)',
+    }}>
+      <Clock size={9} /> Hoy
+    </span>
+  )
+}
+
 export function LeadsClient({
   leads, agents, channels, viewerRole, viewerAgentId, initialSource, initialChannelId,
 }: LeadsClientProps) {
   const router = useRouter()
   const { navigate, pending: navPending } = useCardNavigation()
+  const [sortMode, setSortMode] = useState<'recientes' | 'atencion'>('recientes')
 
   const [view, setView]               = useState<'table' | 'kanban'>('table')
   const [search, setSearch]           = useState('')
@@ -295,16 +327,28 @@ export function LeadsClient({
     })
   }, [leads, channels, search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
 
+  // Orden final: "recientes" respeta el orden del servidor (created_at desc);
+  // "atencion" ordena por premura de la próxima acción y desempata por score.
+  const sortedLeads = useMemo(() => {
+    if (sortMode !== 'atencion') return filteredLeads
+    return [...filteredLeads].sort((a, b) => {
+      const ra = attentionRank(a), rb = attentionRank(b)
+      if (ra !== rb) return ra - rb
+      return (b.currentScore ?? 0) - (a.currentScore ?? 0)
+    })
+  }, [filteredLeads, sortMode])
+  const attentionTodayCount = useMemo(() => leads.filter(l => l.attentionWhen === 'hoy').length, [leads])
+
   useEffect(() => {
     // reason: reset pagination + selección on filter change — updating derived state in effect is intentional
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
     setSelected(new Set())
-  }, [search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
+  }, [search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage, sortMode])
 
   const hotCount    = filteredLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
-  const totalPages  = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE)
-  const pagedLeads  = filteredLeads.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
+  const totalPages  = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE)
+  const pagedLeads  = sortedLeads.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
   const hasActiveFilters =
     search !== '' ||
     filterAgent !== 'all' ||
@@ -435,8 +479,30 @@ export function LeadsClient({
         <div>
           <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Leads</div>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {filteredLeads.length} leads · {hotCount} calientes
+            {filteredLeads.length} leads · {hotCount} calientes{attentionTodayCount > 0 ? ` · ${attentionTodayCount} para hoy` : ''}
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Sort: recientes / atención */}
+        <div style={{ display: 'flex', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
+          {([['recientes', 'Recientes'], ['atencion', 'Atención']] as const).map(([v, label], i) => (
+            <button
+              key={v}
+              onClick={() => setSortMode(v)}
+              title={v === 'atencion' ? 'Ordena por premura de la próxima acción (no por temperatura)' : 'Orden por fecha de registro'}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                height: '32px', padding: '0 14px', justifyContent: 'center',
+                fontSize: '13px', cursor: 'pointer', border: 'none',
+                borderRight: i === 0 ? '1px solid var(--border-subtle)' : 'none',
+                background: sortMode === v ? 'var(--bg-elevated)' : 'transparent',
+                color: sortMode === v ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              {v === 'atencion' && <Clock size={14} />}{label}
+            </button>
+          ))}
         </div>
 
         {/* View toggle */}
@@ -458,6 +524,7 @@ export function LeadsClient({
               {v === 'table' ? 'Tabla' : 'Kanban'}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
@@ -762,8 +829,11 @@ export function LeadsClient({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <LeadAvatar lead={lead} agents={agents} size={32} />
                           <div>
-                            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                              {lead.firstName} {lead.lastName}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+                                {lead.firstName} {lead.lastName}
+                              </span>
+                              {lead.attentionWhen === 'hoy' && <TodayChip />}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lead.email}</div>
                           </div>
@@ -941,6 +1011,7 @@ export function LeadsClient({
                               {lead.firstName} {lead.lastName}
                             </div>
                           </div>
+                          {lead.attentionWhen === 'hoy' && <TodayChip />}
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
                             {formatDate(lead.createdAt)}
                           </span>
