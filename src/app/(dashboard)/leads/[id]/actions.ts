@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteLead } from '@/lib/auth/guards'
 import { EmailContentSchema } from '@/lib/email-content'
-import { assessLeadFit } from '@/lib/services/ai-lead-fit'
+import { assessLeadFit, type LeadBriefing } from '@/lib/services/ai-lead-fit'
 import type { LeadStatus } from '@/lib/types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -440,7 +440,7 @@ export async function deleteLead(
 // que la UI muestre el razonamiento o el motivo por el que no corrió.
 export async function analyzeLeadFit(
   leadId: string,
-): Promise<{ ok: true; reasoning?: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; briefing?: LeadBriefing } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
@@ -456,7 +456,7 @@ export async function analyzeLeadFit(
   const res = await assessLeadFit({ leadId, tenantId: l.tenant_id as string, reason: 'manual' })
   if (res.ok) {
     revalidatePath('/leads/[id]', 'page')
-    return { ok: true, reasoning: res.reasoning }
+    return { ok: true, briefing: res.briefing }
   }
   const MSG: Record<string, string> = {
     no_api_key:       'Falta ANTHROPIC_API_KEY en el entorno.',

@@ -10,6 +10,7 @@ import {
   type PurchaseProcessRow,
 } from '@/lib/db'
 import { LeadDetailClient } from './lead-detail-client'
+import type { AiFitBriefing } from './ai-fit-card'
 import { notFound } from 'next/navigation'
 import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
@@ -122,12 +123,28 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // Estado del análisis de fit con IA (064) — se muestra en el detalle del lead.
   const { data: tenantAi } = await supabase.from('tenants').select('ai_lead_scoring_enabled').eq('id', leadTenantId).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const aiFitMeta = ((lr.metadata as any)?.ai_fit ?? null) as { reasoning?: string; at?: string } | null
+  const aiFitMeta = ((lr.metadata as any)?.ai_fit ?? null) as {
+    read?: string; next_action?: string; next_action_when?: string
+    talking_points?: unknown; watch_out?: string; at?: string; reasoning?: string
+  } | null
+  // Briefing estructurado; compat con análisis viejos que solo tenían `reasoning`.
+  const rawWhen = aiFitMeta?.next_action_when
+  const nextWhen: 'hoy' | 'esta_semana' | 'sin_apuro' | null =
+    rawWhen === 'hoy' || rawWhen === 'esta_semana' || rawWhen === 'sin_apuro' ? rawWhen : null
+  const briefing: AiFitBriefing | null = aiFitMeta && (aiFitMeta.read || aiFitMeta.next_action || aiFitMeta.reasoning)
+    ? {
+        read:          aiFitMeta.read ?? aiFitMeta.reasoning ?? '',
+        nextAction:    aiFitMeta.next_action ?? '',
+        when:          nextWhen,
+        talkingPoints: Array.isArray(aiFitMeta.talking_points) ? aiFitMeta.talking_points.filter((t): t is string => typeof t === 'string') : [],
+        watchOut:      aiFitMeta.watch_out ?? '',
+      }
+    : null
   const aiFit = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    enabled:   ((tenantAi as any)?.ai_lead_scoring_enabled as boolean) ?? false,
-    reasoning: aiFitMeta?.reasoning ?? null,
-    at:        aiFitMeta?.at ?? null,
+    enabled:  ((tenantAi as any)?.ai_lead_scoring_enabled as boolean) ?? false,
+    briefing,
+    at:       aiFitMeta?.at ?? null,
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channels: ChannelOption[] = (rawChannels ?? []).map((r: any) => ({

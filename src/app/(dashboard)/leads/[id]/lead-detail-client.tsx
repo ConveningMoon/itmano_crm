@@ -18,7 +18,7 @@ import { FormSection } from '@/components/ui/form-section'
 import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
 import { SendEmailModal, type EmailSendingInfo } from './send-email-modal'
-import { AiFitCard } from './ai-fit-card'
+import { AiFitCard, type AiFitBriefing } from './ai-fit-card'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
@@ -188,7 +188,7 @@ interface LeadDetailProps {
   statusHistory: StatusChange[]
   scoreBreakdown: ScoreBreakdown
   emailSending?: EmailSendingInfo
-  aiFit?: { enabled: boolean; reasoning: string | null; at: string | null }
+  aiFit?: { enabled: boolean; briefing: AiFitBriefing | null; at: string | null }
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -442,7 +442,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
           {/* Card: Análisis de fit con IA */}
           {aiFit && (
-            <AiFitCard leadId={lead.id} enabled={aiFit.enabled} reasoning={aiFit.reasoning} at={aiFit.at} />
+            <AiFitCard leadId={lead.id} enabled={aiFit.enabled} briefing={aiFit.briefing} at={aiFit.at} />
           )}
 
           {/* Card 3: Notes */}

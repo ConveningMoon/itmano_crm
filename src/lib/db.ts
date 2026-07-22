@@ -39,6 +39,7 @@ export interface LeadRow {
   last_event_at: string | null
   lender: string | null
   notes: string | null
+  metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -121,11 +122,18 @@ export function mapLead(r: LeadRow): Lead {
     engagementScore: r.engagement_score ?? null,
     manualScore: r.manual_score ?? null,
     lastEventAt: r.last_event_at ?? null,
+    attentionWhen: extractAttentionWhen(r.metadata),
     lender: r.lender ?? undefined,
     notes: r.notes ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
+}
+
+// Premura del último briefing de IA (leads.metadata.ai_fit.next_action_when).
+function extractAttentionWhen(metadata: Record<string, unknown> | null | undefined): Lead['attentionWhen'] {
+  const w = (metadata?.ai_fit as { next_action_when?: unknown } | undefined)?.next_action_when
+  return w === 'hoy' || w === 'esta_semana' || w === 'sin_apuro' ? w : null
 }
 
 export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
