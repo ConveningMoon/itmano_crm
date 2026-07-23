@@ -58,6 +58,7 @@ function mapJob(r: any): CarouselJob {
     topic: r.topic ?? null,
     topic_source: r.topic_source,
     audience: r.audience ?? null,
+    pillar: r.pillar ?? null,
     status: r.status,
     copy_json: r.copy_json ?? null,
     research_json: r.research_json ?? null,

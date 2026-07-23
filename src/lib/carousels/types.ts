@@ -69,6 +69,7 @@ export interface SlideCopy {
 export interface CarouselCopy {
   topic:    string
   audience: string
+  pillar:   string     // pilar de contenido elegido (ver CAROUSEL_PILLARS)
   slides:   SlideCopy[]
   caption:  string
   hashtags: string[]   // exactamente 5
@@ -82,6 +83,7 @@ export interface CarouselJob {
   topic:         string | null
   topic_source:  TopicSource
   audience:      string | null
+  pillar:        string | null
   status:        CarouselJobStatus
   copy_json:     CarouselCopy | null
   research_json: ResearchResult | null

@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   V2_COPY_RULES, DATA_INTEGRITY_RULE, IMAGE_COMPLIANCE_RULE, ICON_HINT, ICON_KEYS,
+  PILLAR_HINT, CAROUSEL_PILLARS, PILLAR_LABELS,
 } from './brand'
 import type { CarouselBrandProfile, CarouselCopy, ResearchResult, SlideCopy, SlideType } from './types'
 
@@ -20,6 +21,7 @@ function buildTool(): Anthropic.Tool {
       properties: {
         topic:    { type: 'string', description: 'El tema final del carrusel (1 frase).' },
         audience: { type: 'string', description: 'La audiencia específica elegida para este carrusel.' },
+        pillar:   { type: 'string', enum: CAROUSEL_PILLARS as unknown as string[], description: 'El pilar de contenido que usa este carrusel (ver la guía de pilares).' },
         slides: {
           type: 'array',
           description: 'Exactamente 8 slides en orden.',
@@ -41,7 +43,7 @@ function buildTool(): Anthropic.Tool {
         caption:  { type: 'string', description: 'Caption para publicar: gancho + resumen fluido + CTA (comentar palabra clave + seguir + guardar).' },
         hashtags: { type: 'array', items: { type: 'string' }, description: 'EXACTAMENTE 5 hashtags relevantes, con # incluido.' },
       },
-      required: ['topic', 'audience', 'slides', 'caption', 'hashtags'],
+      required: ['topic', 'audience', 'pillar', 'slides', 'caption', 'hashtags'],
     },
   }
 }
@@ -64,6 +66,7 @@ function engineRules(brand: CarouselBrandProfile): string {
     `\n\n${DATA_INTEGRITY_RULE}`,
     `\n\n${IMAGE_COMPLIANCE_RULE}`,
     `\n\n${ICON_HINT}`,
+    `\n\n${PILLAR_HINT}`,
     `\n\nSALIDA: devuelve el resultado llamando a la herramienta write_carousel. Escribe TEXTO PLANO en todos los campos — NUNCA incluyas etiquetas HTML/XML, "<...>", ni nombres de parámetros dentro del texto. El caption es prosa; NO metas los hashtags dentro del caption (van en el campo hashtags aparte). Los hashtags: exactamente 5, todos DISTINTOS, sin repetir. Los image_prompt van en INGLÉS (la IA de imagen entiende mejor inglés); todo el copy visible va en español.`,
   ].join('')
 }
@@ -79,7 +82,21 @@ function brandContext(brand: CarouselBrandProfile): string {
   ].join('')
 }
 
-function userPrompt(topic: string | null, research: ResearchResult | null): string {
+// Bloque de diversidad: temas ya usados (evitar) + pilares recientes (rotar).
+// Va en el mensaje (no en el system cacheado) porque cambia por generación.
+function diversityBlock(recentTopics: string[], recentPillars: string[]): string {
+  if (recentTopics.length === 0 && recentPillars.length === 0) return ''
+  const parts = ['\n\nNO REPETIR — variedad:']
+  if (recentTopics.length) parts.push(`\n- Temas de carruseles recientes (evita repetirlos o parecerte demasiado): ${recentTopics.map((t) => `"${t}"`).join('; ')}.`)
+  if (recentPillars.length) {
+    const labels = recentPillars.map((p) => PILLAR_LABELS[p] ?? p).join(', ')
+    parts.push(`\n- Pilares usados recientemente: ${labels}. ELIGE un pilar DISTINTO a esos para este carrusel.`)
+  }
+  return parts.join('')
+}
+
+function userPrompt(topic: string | null, research: ResearchResult | null, recentTopics: string[], recentPillars: string[]): string {
+  const diversity = diversityBlock(recentTopics, recentPillars)
   // 1) Investigación estructurada: tema ya elegido.
   if (research?.chosen) {
     const c = research.chosen
@@ -91,6 +108,7 @@ function userPrompt(topic: string | null, research: ResearchResult | null): stri
       c.source ? `\n- Fuente citable: ${c.source}` : '',
       research.summary ? `\n- Por qué es viral ahora: ${research.summary}` : '',
       `\n\nSi usas algún dato numérico, debe apoyarse en la fuente citable (o en otra fuente real). Si no hay fuente para un número, reescribe en términos cualitativos.`,
+      diversity,
     ].join('')
   }
   // 2) Investigación sin estructura (prosa del grounding): Claude elige el tema.
@@ -99,6 +117,7 @@ function userPrompt(topic: string | null, research: ResearchResult | null): stri
       `A partir de esta investigación de tendencias ACTUALES, ELIGE TÚ el mejor tema para un carrusel viral (con conexión clara y no forzada a bienes raíces), y también la audiencia y el ángulo:`,
       `\n\n"""\n${research.rawText || research.summary}\n"""`,
       `\n\nPrefiere tendencias populares (artista, serie, evento deportivo, noticia de celebridad) sobre datos financieros. No inventes cifras: usa solo datos reales que aparezcan arriba o reescribe en términos cualitativos.`,
+      diversity,
     ].join('')
   }
   // 3) Tema manual.
@@ -106,6 +125,7 @@ function userPrompt(topic: string | null, research: ResearchResult | null): stri
     `Genera el carrusel sobre este tema indicado manualmente: "${topic}".`,
     `\nElige la audiencia específica más adecuada y un ángulo narrativo fresco (evita el clásico "antes vs ahora" de precios/tasas salvo que sea el corazón del tema).`,
     `\nNo inventes cifras: usa solo datos reales citables o reescribe en términos cualitativos.`,
+    diversity,
   ].join('')
 }
 
@@ -115,9 +135,11 @@ export interface CopyResult {
 }
 
 export async function generateCopy(params: {
-  brand:    CarouselBrandProfile
-  topic:    string | null
-  research: ResearchResult | null
+  brand:          CarouselBrandProfile
+  topic:          string | null
+  research:       ResearchResult | null
+  recentTopics?:  string[]
+  recentPillars?: string[]
 }): Promise<CopyResult> {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('Falta ANTHROPIC_API_KEY')
 
@@ -133,7 +155,7 @@ export async function generateCopy(params: {
       { type: 'text', text: engineRules(params.brand), cache_control: { type: 'ephemeral' } },
       { type: 'text', text: brandContext(params.brand) },
     ],
-    messages: [{ role: 'user', content: userPrompt(params.topic, params.research) }],
+    messages: [{ role: 'user', content: userPrompt(params.topic, params.research, params.recentTopics ?? [], params.recentPillars ?? []) }],
   })
 
   const block = message.content.find((b) => b.type === 'tool_use')
@@ -209,9 +231,13 @@ function coerceCopy(input: Record<string, unknown>): CarouselCopy {
     if (!seen.has(fb.toLowerCase())) { seen.add(fb.toLowerCase()); hashtags.push(fb) }
   }
 
+  const pillarRaw = clean(input.pillar)
+  const pillar = pillarRaw && (CAROUSEL_PILLARS as readonly string[]).includes(pillarRaw) ? pillarRaw : 'other'
+
   return {
     topic:    clean(input.topic) ?? '',
     audience: clean(input.audience) ?? '',
+    pillar,
     slides,
     caption,
     hashtags,

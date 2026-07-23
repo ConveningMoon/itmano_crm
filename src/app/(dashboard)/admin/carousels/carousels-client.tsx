@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCircle, Trash2, Search, PenLine, PlayCircle, ScrollText } from 'lucide-react'
 import type { CarouselBrandProfile, CarouselJob, CarouselJobWithSlides, CarouselSlide } from '@/lib/carousels/types'
 import type { CarouselLogRow } from '@/lib/data/carousels'
+import { PILLAR_LABELS } from '@/lib/carousels/brand'
 import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel, loadCarouselLogs } from './actions'
 
 type Phase = 'idle' | 'researching' | 'rendering' | 'done' | 'error'
@@ -293,6 +294,7 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>{job.topic || 'Carrusel'}</div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {job.pillar ? `${PILLAR_LABELS[job.pillar] ?? job.pillar} · ` : ''}
                 {job.audience ? `${job.audience} · ` : ''}{readyCount}/{job.slides.length} slides listos
                 {failedCount > 0 ? ` · ${failedCount} con error` : ''}
                 {job.topic_source === 'trend_research' ? ' · tema por IA' : ' · tema manual'}
@@ -389,8 +391,15 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
                     cursor: 'pointer', textAlign: 'left', minWidth: 0,
                   }}
                 >
-                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {j.topic || 'Sin título'}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {j.topic || 'Sin título'}
+                    </span>
+                    {j.pillar && (
+                      <span style={{ flexShrink: 0, fontSize: '10px', color: 'var(--accent-gold)', background: 'rgba(190,154,84,0.1)', padding: '1px 7px', borderRadius: '5px', whiteSpace: 'nowrap' }}>
+                        {PILLAR_LABELS[j.pillar] ?? j.pillar}
+                      </span>
+                    )}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                     {openingId === j.id
