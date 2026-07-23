@@ -4,9 +4,11 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getHubData } from '@/lib/data/super-admin'
 import { getNotifications } from '@/lib/data/notifications'
 import { getAiUsageSummary, getAiDailyUsage, getLeadFitUsage } from '@/lib/data/ai-usage'
+import { getBriefingOutcomes } from '@/lib/data/ai-briefings'
 import { AiUsagePanel } from '@/components/dashboard/ai-usage-panel'
 import { AiUsageDailyChart } from './ai-usage-chart'
 import { LeadFitPanel } from './lead-fit-panel'
+import { BriefingOutcomesPanel } from './briefing-outcomes-panel'
 import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { AnimatedNumber } from '@/components/motion/animated-number'
 import { Tabs } from '@/components/ui/tabs'
@@ -20,13 +22,14 @@ export default async function AdminPage() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
-  const [{ kpis, tenants }, feed, aiUsage, aiDaily, leadFit] = await Promise.all([
+  const [{ kpis, tenants }, feed, aiUsage, aiDaily, leadFit, briefingOutcomes] = await Promise.all([
     getHubData(),
     getNotifications(null, { limit: 10 }),
     // Vista global: todos los tenants + uso ITMANO sin tenant.
     getAiUsageSummary(null),
     getAiDailyUsage(30),
     getLeadFitUsage(null),
+    getBriefingOutcomes(null),
   ])
 
   const kpiCards = [
@@ -118,7 +121,12 @@ export default async function AdminPage() {
               <AiUsagePanel summary={aiUsage} showRecent={false} />
             </div>
           ),
-          fit: <LeadFitPanel summary={leadFit} />,
+          fit: (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <BriefingOutcomesPanel outcomes={briefingOutcomes} />
+              <LeadFitPanel summary={leadFit} />
+            </div>
+          ),
           gestion: <AdminClient tenants={tenants} />,
         }}
       />

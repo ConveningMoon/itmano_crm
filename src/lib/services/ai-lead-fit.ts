@@ -272,6 +272,27 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
       return { ok: false, error: 'No se pudo guardar el análisis.' }
     }
 
+    // Log del briefing (append-only) con snapshot del estado — base para medir el
+    // loop en el centro de control (¿seguir la recomendación correlaciona con que
+    // el lead avance?). Best-effort: nunca rompe el análisis. Snapshot ANTES del
+    // recompute, para reflejar el estado en el momento del briefing.
+    const { error: logErr } = await db.from('ai_briefings').insert({
+      tenant_id:        input.tenantId,
+      lead_id:          input.leadId,
+      agent_id:         (lead.agent_id as string | null) ?? null,
+      reason:           input.reason ?? 'action',
+      next_action_when: briefing.when,
+      read:             briefing.read || null,
+      next_action:      briefing.nextAction || null,
+      talking_points:   briefing.talkingPoints,
+      watch_out:        briefing.watchOut || null,
+      status_at:        (lead.status as string | null) ?? null,
+      score_at:         (lead.current_score as number | null) ?? null,
+    })
+    if (logErr) {
+      console.error(JSON.stringify({ service: 'ai-lead-fit', lead_id: input.leadId, error: 'briefing_log_failed', detail: logErr.message }))
+    }
+
     // Revalora con las reglas ajustables (no-op si el lead está congelado).
     const { error: recErr } = await db.rpc('recompute_lead_score', { p_lead_id: input.leadId })
     if (recErr) {
