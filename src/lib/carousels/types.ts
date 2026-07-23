@@ -45,8 +45,9 @@ export interface ResearchTrend {
 
 export interface ResearchResult {
   trends:  ResearchTrend[]
-  chosen:  ResearchTrend | null   // la que el modelo eligió desarrollar
+  chosen:  ResearchTrend | null   // la que el modelo eligió desarrollar (null si el JSON no parseó)
   summary: string                 // por qué se eligió y por qué es viral ahora
+  rawText: string                 // texto crudo del grounding (fallback si no hay JSON estructurado)
 }
 
 // El copy estructurado que devuelve Claude, por slide. Espejo de carousel_slides

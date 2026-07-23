@@ -146,7 +146,7 @@ export interface CarouselCostReport {
   carousels:       number
 }
 
-interface CostLogRow { job_id: string; step: string; provider: string | null; model: string | null; cost_usd: number | null; input_tokens: number | null; output_tokens: number | null }
+interface CostLogRow { job_id: string; step: string; model: string | null; cost_usd: number | null }
 
 export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> {
   await assertAccess()
@@ -163,46 +163,69 @@ export async function getCarouselCosts(limit = 30): Promise<CarouselCostReport> 
   }
   const jobIds = jobRows.map((j) => j.id)
 
-  // Ledger: pasos de generación con costo (copy/research/image), incl. regen.
+  // COPY (real): fuente autoritativa = ai_usage_events (presente para todos los
+  // jobs, incluso los previos al logging). metadata.job_id enlaza al carrusel.
+  const { data: usage } = await db
+    .from('ai_usage_events')
+    .select('cost_usd, input_tokens, output_tokens, metadata, model')
+    .eq('feature', 'carousel_copy')
+  const copyByJob = new Map<string, { cost: number; tin: number; tout: number }>()
+  let copyModel = 'claude-sonnet-5'
+  let copyReqs = 0
+  for (const u of usage ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const jid = (u as any).metadata?.job_id as string | undefined
+    if (!jid || !jobIds.includes(jid)) continue
+    copyReqs++
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((u as any).model) copyModel = (u as any).model
+    const cur = copyByJob.get(jid) ?? { cost: 0, tin: 0, tout: 0 }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cur.cost += Number((u as any).cost_usd ?? 0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cur.tin += Number((u as any).input_tokens ?? 0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    cur.tout += Number((u as any).output_tokens ?? 0)
+    copyByJob.set(jid, cur)
+  }
+
+  // RESEARCH + IMAGE (estimado): del ledger carousel_logs. Cada imagen (incl.
+  // regeneración) es una fila → el costo de regenerar sí se cuenta.
   const { data: logs } = await db
     .from('carousel_logs')
-    .select('job_id, step, provider, model, cost_usd, input_tokens, output_tokens')
+    .select('job_id, step, model, cost_usd')
     .in('job_id', jobIds)
-    .in('step', ['copy', 'research', 'image'])
+    .in('step', ['research', 'image'])
     .not('cost_usd', 'is', null)
   const logRows = (logs ?? []) as CostLogRow[]
-
-  // Agregado por job.
-  const agg = new Map<string, { copy: number; tin: number; tout: number; research: number; images: number; imageEst: number }>()
-  const model = { copy: 'claude-sonnet-5', research: 'gemini-flash-latest', image: 'gemini image (nano banana)' }
+  const genByJob = new Map<string, { research: number; images: number; imageEst: number }>()
+  const model = { research: 'gemini-flash-latest', image: 'gemini image (nano banana)' }
   for (const l of logRows) {
-    const a = agg.get(l.job_id) ?? { copy: 0, tin: 0, tout: 0, research: 0, images: 0, imageEst: 0 }
+    const a = genByJob.get(l.job_id) ?? { research: 0, images: 0, imageEst: 0 }
     const cost = Number(l.cost_usd ?? 0)
-    if (l.step === 'copy') { a.copy += cost; a.tin += l.input_tokens ?? 0; a.tout += l.output_tokens ?? 0; if (l.model) model.copy = l.model }
-    else if (l.step === 'research') { a.research += cost; if (l.model) model.research = l.model }
+    if (l.step === 'research') { a.research += cost; if (l.model) model.research = l.model }
     else if (l.step === 'image') { a.images += 1; a.imageEst += cost; if (l.model) model.image = l.model }
-    agg.set(l.job_id, a)
+    genByJob.set(l.job_id, a)
   }
 
   const rows: CarouselCostRow[] = jobRows.map((j) => {
-    const a = agg.get(j.id) ?? { copy: 0, tin: 0, tout: 0, research: 0, images: 0, imageEst: 0 }
+    const copy = copyByJob.get(j.id) ?? { cost: 0, tin: 0, tout: 0 }
+    const gen = genByJob.get(j.id) ?? { research: 0, images: 0, imageEst: 0 }
     return {
       jobId: j.id, topic: j.topic ?? null, status: j.status, createdAt: j.created_at, topicSource: j.topic_source,
-      copyCostUsd: a.copy, copyTokensIn: a.tin, copyTokensOut: a.tout,
-      imageCount: a.images, imageEstUsd: a.imageEst, researchEstUsd: a.research,
-      totalEstUsd: a.copy + a.imageEst + a.research,
+      copyCostUsd: copy.cost, copyTokensIn: copy.tin, copyTokensOut: copy.tout,
+      imageCount: gen.images, imageEstUsd: gen.imageEst, researchEstUsd: gen.research,
+      totalEstUsd: copy.cost + gen.imageEst + gen.research,
     }
   })
 
-  // Desglose por API / acción (requests = nº de llamadas reales, incl. regen).
-  const copyReqs = logRows.filter((l) => l.step === 'copy').length
   const researchReqs = logRows.filter((l) => l.step === 'research').length
   const imageReqs = logRows.filter((l) => l.step === 'image').length
   const totalCopyUsd = rows.reduce((s, r) => s + r.copyCostUsd, 0)
 
   const byApi: CarouselApiCost[] = [
     {
-      provider: 'Anthropic', action: 'Copy del carrusel', model: model.copy, billing: 'real', requests: copyReqs,
+      provider: 'Anthropic', action: 'Copy del carrusel', model: copyModel, billing: 'real', requests: copyReqs,
       inputTokens: rows.reduce((s, r) => s + r.copyTokensIn, 0), outputTokens: rows.reduce((s, r) => s + r.copyTokensOut, 0),
       costUsd: totalCopyUsd,
     },

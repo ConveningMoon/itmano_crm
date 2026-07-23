@@ -80,6 +80,7 @@ function brandContext(brand: CarouselBrandProfile): string {
 }
 
 function userPrompt(topic: string | null, research: ResearchResult | null): string {
+  // 1) Investigación estructurada: tema ya elegido.
   if (research?.chosen) {
     const c = research.chosen
     return [
@@ -92,6 +93,15 @@ function userPrompt(topic: string | null, research: ResearchResult | null): stri
       `\n\nSi usas algún dato numérico, debe apoyarse en la fuente citable (o en otra fuente real). Si no hay fuente para un número, reescribe en términos cualitativos.`,
     ].join('')
   }
+  // 2) Investigación sin estructura (prosa del grounding): Claude elige el tema.
+  if (research?.rawText || research?.summary) {
+    return [
+      `A partir de esta investigación de tendencias ACTUALES, ELIGE TÚ el mejor tema para un carrusel viral (con conexión clara y no forzada a bienes raíces), y también la audiencia y el ángulo:`,
+      `\n\n"""\n${research.rawText || research.summary}\n"""`,
+      `\n\nPrefiere tendencias populares (artista, serie, evento deportivo, noticia de celebridad) sobre datos financieros. No inventes cifras: usa solo datos reales que aparezcan arriba o reescribe en términos cualitativos.`,
+    ].join('')
+  }
+  // 3) Tema manual.
   return [
     `Genera el carrusel sobre este tema indicado manualmente: "${topic}".`,
     `\nElige la audiencia específica más adecuada y un ángulo narrativo fresco (evita el clásico "antes vs ahora" de precios/tasas salvo que sea el corazón del tema).`,

@@ -135,17 +135,26 @@ export async function researchTrends(brand: CarouselBrandProfile): Promise<Resea
   const { json, model } = await callWithFallback(RESEARCH_MODELS, cachedResearchModel, {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.95 },
+    generationConfig: { temperature: 0.9 },
   })
   cachedResearchModel = model
 
   const text: string = (((json?.candidates as unknown[])?.[0] as { content?: { parts?: { text?: string }[] } })?.content?.parts ?? [])
     .map((p) => p?.text ?? '')
     .join('')
-  const parsed = extractJson(text)
+    .trim()
+
+  // Con grounding, Gemini a veces devuelve prosa + citas en vez de JSON limpio.
+  // Intentamos extraer JSON; si no se puede, NO fallamos: devolvemos el texto
+  // crudo para que Claude elija el tema/ángulo/audiencia (produce estructura
+  // confiable). Un research vacío sí es error (no hay nada que usar).
+  if (!text) throw new GeminiError('La investigación no devolvió texto')
+
+  let parsed: Record<string, unknown> | null = null
+  try { parsed = extractJson(text) } catch { parsed = null }
 
   const trends: ResearchTrend[] = Array.isArray(parsed?.trends)
-    ? (parsed.trends as unknown[])
+    ? (parsed!.trends as unknown[])
         .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
         .map((t) => ({
           title:    String(t.title ?? '').trim(),
@@ -157,11 +166,14 @@ export async function researchTrends(brand: CarouselBrandProfile): Promise<Resea
         .filter((t) => t.title)
     : []
 
-  if (trends.length === 0) throw new GeminiError('La investigación no devolvió tendencias utilizables')
+  if (trends.length > 0) {
+    const idx = Number.isInteger(parsed?.chosen_index) ? Number(parsed!.chosen_index) : 0
+    const chosen = trends[idx] ?? trends[0]
+    return { trends, chosen, summary: String(parsed?.summary ?? '').trim(), rawText: text.slice(0, 4000) }
+  }
 
-  const idx = Number.isInteger(parsed?.chosen_index) ? Number(parsed.chosen_index) : 0
-  const chosen = trends[idx] ?? trends[0]
-  return { trends, chosen, summary: String(parsed?.summary ?? '').trim() }
+  // Fallback: sin JSON utilizable → Claude decide a partir del texto de grounding.
+  return { trends: [], chosen: null, summary: text.slice(0, 1500), rawText: text.slice(0, 4000) }
 }
 
 // ── Generación de imagen (Nano Banana) ───────────────────────────────────────
