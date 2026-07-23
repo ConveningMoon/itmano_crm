@@ -117,8 +117,11 @@ async function callWithFallback(
 }
 
 // ── Investigación de tendencias ──────────────────────────────────────────────
-export async function researchTrends(brand: CarouselBrandProfile): Promise<ResearchResult> {
+export async function researchTrends(brand: CarouselBrandProfile, recentTopics: string[] = []): Promise<ResearchResult> {
   const today = new Date().toISOString().slice(0, 10)
+  const avoid = recentTopics.length
+    ? ` EVITA estos temas ya usados en carruseles recientes (busca algo claramente distinto): ${recentTopics.map((t) => `"${t}"`).join('; ')}.`
+    : ''
   const prompt = [
     `Hoy es ${today}. Eres estratega de contenido para ${brand.display_name}, agente de bienes raíces`,
     brand.market ? ` en ${brand.market}` : '',
@@ -126,6 +129,7 @@ export async function researchTrends(brand: CarouselBrandProfile): Promise<Resea
     ` Usa búsqueda web para encontrar 3 a 5 temas o noticias EN TENDENCIA esta semana relevantes para esa audiencia,`,
     ` conectables a bienes raíces, finanzas personales o cultura pop.`,
     ` VARÍA los ángulos: no todos sobre precios/tasas. Prefiere tendencias populares NO financieras (un artista, una serie, un evento deportivo como el Mundial 2026, una noticia de celebridad) conectadas de forma creativa y NO forzada a bienes raíces, además de datos duros de mercado con moderación.`,
+    avoid,
     ` Cada dato numérico debe tener fuente real citable.`,
     ` Luego ELIGE el mejor tema para un carrusel de Instagram viral y explica por qué es viral ahora.`,
     `\n\nResponde SOLO con un objeto JSON válido (sin markdown, sin texto extra) con esta forma:`,

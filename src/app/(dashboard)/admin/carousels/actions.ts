@@ -107,6 +107,16 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
   if (!brandRow) return { ok: false, error: 'Agente no habilitado para el motor de carruseles' }
   const brand = toBrand(brandRow)
 
+  // No repetir: temas + pilares de los últimos carruseles (no fallidos) del agente.
+  const { data: recent } = await db.from('carousel_jobs')
+    .select('topic, pillar')
+    .eq('agent_id', brand.agent_id)
+    .neq('status', 'failed')
+    .order('created_at', { ascending: false })
+    .limit(10)
+  const recentTopics = [...new Set((recent ?? []).map((r: { topic: string | null }) => (r.topic ?? '').trim()).filter(Boolean))].slice(0, 8)
+  const recentPillars = [...new Set((recent ?? []).map((r: { pillar: string | null }) => (r.pillar ?? '').trim()).filter(Boolean))].slice(0, 4)
+
   const { data: jobRow, error: jobErr } = await db.from('carousel_jobs').insert({
     tenant_id: brand.tenant_id,
     agent_id: brand.agent_id,
@@ -124,7 +134,7 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
     let research = null
     if (!topic) {
       await db.from('carousel_jobs').update({ status: 'researching', updated_at: new Date().toISOString() }).eq('id', jobId)
-      research = await researchTrends(brand)
+      research = await researchTrends(brand, recentTopics)
       await db.from('carousel_jobs').update({ research_json: research, updated_at: new Date().toISOString() }).eq('id', jobId)
       await logCarousel({
         jobId, step: 'research',
@@ -136,14 +146,14 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
 
     // 2) Copy estructurado con Claude.
     await db.from('carousel_jobs').update({ status: 'writing_copy', updated_at: new Date().toISOString() }).eq('id', jobId)
-    const { copy, usage } = await generateCopy({ brand, topic, research })
+    const { copy, usage } = await generateCopy({ brand, topic, research, recentTopics, recentPillars })
     await recordAiUsage({ tenantId: brand.tenant_id, userId: ctx.user_id, feature: 'carousel_copy', model: 'claude-sonnet-5', usage, metadata: { job_id: jobId } })
     const copyCost = costFromUsage(usage)
     await logCarousel({
-      jobId, step: 'copy', message: `Copy generado: ${copy.slides.length} slides`,
+      jobId, step: 'copy', message: `Copy generado: ${copy.slides.length} slides · pilar ${copy.pillar}`,
       provider: 'Anthropic', model: 'claude-sonnet-5', billing: 'real', costUsd: copyCost,
       inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0,
-      detail: { audience: copy.audience, hashtags: copy.hashtags },
+      detail: { audience: copy.audience, pillar: copy.pillar, hashtags: copy.hashtags, avoided_topics: recentTopics, recent_pillars: recentPillars },
     })
 
     // 3) Persistir copy + filas de slides (aún sin imagen).
@@ -151,6 +161,7 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
       status: 'generating_images',
       topic: copy.topic || topic,
       audience: copy.audience || research?.chosen?.audience || null,
+      pillar: copy.pillar,
       copy_json: copy,
       caption: copy.caption,
       hashtags: copy.hashtags,

@@ -76,3 +76,31 @@ export const IMAGE_COMPLIANCE_RULE = `Los image_prompt NUNCA deben pedir una fot
 
 // Íconos disponibles, para listarlos en el prompt.
 export const ICON_HINT = `Claves de ícono disponibles (elige a lo sumo una por data slide, o null): ${ICON_KEYS.join(', ')}.`
+
+// ── Pilares de contenido (para rotar el ángulo y no repetir) ─────────────────
+// Tomados del sistema v2 de Adriana (fuentes de temas). El copy clasifica cada
+// carrusel en uno; al generar se pide rotar a un pilar distinto del reciente.
+export const CAROUSEL_PILLARS = [
+  'market_data', 'pop_culture', 'gossip_curiosity', 'law_policy', 'financial_strategy', 'cultural_family', 'other',
+] as const
+export type CarouselPillar = typeof CAROUSEL_PILLARS[number]
+
+export const PILLAR_LABELS: Record<string, string> = {
+  market_data:        'Datos de mercado',
+  pop_culture:        'Cultura pop',
+  gossip_curiosity:   'Chisme / curiosidad',
+  law_policy:         'Ley / política',
+  financial_strategy: 'Estrategia financiera',
+  cultural_family:    'Cultural / familiar',
+  other:              'Otro',
+}
+
+// Guía de pilares para el prompt de copy (con ejemplos del doc v2).
+export const PILLAR_HINT = `PILARES DE CONTENIDO (para variar el ángulo, no repetir siempre el mismo tipo):
+- market_data: datos duros de mercado (tasas, inventario, precios) — con moderación.
+- pop_culture: tendencia popular NO financiera conectada creativamente (artista, serie, evento deportivo, Mundial 2026, noticia de celebridad).
+- gossip_curiosity: historia de "chisme"/curiosidad genuina ("lo que nadie te dice").
+- law_policy: ley o política pública explicada simple.
+- financial_strategy: estrategia financiera poco conocida (house hopping, 15 vs 30 años…).
+- cultural_family: diferencias culturales/familiares (casa multigeneracional, Familia Mortgage).
+Clasifica el carrusel con UNO de estos valores en el campo "pillar".`
