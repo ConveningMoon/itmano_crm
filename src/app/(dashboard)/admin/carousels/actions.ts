@@ -127,9 +127,10 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
       research = await researchTrends(brand)
       await db.from('carousel_jobs').update({ research_json: research, updated_at: new Date().toISOString() }).eq('id', jobId)
       await logCarousel({
-        jobId, step: 'research', message: `Tendencia elegida: ${research.chosen?.title ?? '—'}`,
+        jobId, step: 'research',
+        message: research.chosen ? `Tendencia elegida: ${research.chosen.title}` : 'Investigación sin JSON estructurado → Claude elige el tema del texto',
         provider: 'Google Gemini', model: lastResearchModel() ?? undefined, billing: 'estimado', costUsd: CAROUSEL_PRICING.researchEstUsd,
-        detail: { trends: research.trends.map((t) => t.title), summary: research.summary },
+        detail: { trends: research.trends.map((t) => t.title), summary: research.summary, raw_text: research.rawText?.slice(0, 800) },
       })
     }
 
