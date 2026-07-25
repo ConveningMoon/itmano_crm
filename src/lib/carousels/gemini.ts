@@ -70,31 +70,45 @@ function isModelUnavailable(status: number, body: string): boolean {
 }
 
 // POST genérico con fallback de modelos. Devuelve el JSON + el modelo que sirvió.
-// `retries429`: reintentos con backoff ante un 429 (throttle) del MISMO modelo,
-// antes de rendirse — un 429 no gasta cuota de generación, solo hay que esperar.
+// `retries429`: reintentos con backoff ante un 429 (throttle) del MISMO modelo.
+// `timeoutMs`: corta el fetch si Gemini se cuelga/tarda de más — CLAVE para que
+// la función serverless no muera con 504 ("An unexpected response..."). Un
+// timeout se trata como "modelo no disponible" → se prueba el siguiente
+// candidato (normalmente uno más estable/rápido).
 async function callWithFallback(
   models: string[],
   cached: string | null,
   body: unknown,
-  retries429 = 0,
+  opts: { retries429?: number; timeoutMs?: number } = {},
 ): Promise<{ json: Record<string, unknown>; model: string }> {
+  const { retries429 = 0, timeoutMs = 30000 } = opts
   const order = cached ? dedupe([cached, ...models]) : models
   if (order.length === 0) throw new GeminiError('No hay modelos de Gemini configurados')
 
   let lastUnavailable: GeminiError | null = null
   for (const model of order) {
     for (let attempt = 0; ; attempt++) {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs)
       let res: Response
       try {
         res = await fetch(`${BASE}/${model}:generateContent?key=${apiKey()}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
+          signal: ctrl.signal,
         })
       } catch (e) {
-        // Fallo de red — no seguimos probando modelos (no es problema del modelo).
+        clearTimeout(timer)
+        if (e instanceof Error && e.name === 'AbortError') {
+          // Timeout: el modelo tardó demasiado → probar el siguiente candidato.
+          lastUnavailable = new GeminiError(`Modelo ${model} excedió el tiempo límite (${Math.round(timeoutMs / 1000)}s)`)
+          break
+        }
+        // Fallo de red real — no seguimos probando modelos.
         throw new GeminiError(`No se pudo contactar a Google AI: ${e instanceof Error ? e.message : 'error de red'}`)
       }
+      clearTimeout(timer)
       if (res.ok) return { json: await res.json(), model }
 
       const bodyText = (await res.text()).slice(0, 300)
@@ -111,8 +125,8 @@ async function callWithFallback(
     }
   }
   throw new GeminiError(
-    `Ningún modelo de Gemini está disponible para tu cuenta (${order.join(', ')}). ` +
-    `Actualiza GEMINI_RESEARCH_MODEL / GEMINI_IMAGE_MODEL. Último detalle: ${lastUnavailable?.message ?? 'desconocido'}`,
+    `Ningún modelo de Gemini sirvió (${order.join(', ')}). ` +
+    `Último detalle: ${lastUnavailable?.message ?? 'desconocido'}`,
   )
 }
 
@@ -136,11 +150,11 @@ export async function researchTrends(brand: CarouselBrandProfile, recentTopics: 
     `\n{"trends":[{"title":"...","angle":"conexión a bienes raíces","audience":"audiencia específica","source":"fuente citable","url":"opcional"}],"chosen_index":0,"summary":"por qué se eligió y por qué es viral ahora"}`,
   ].join('')
 
-  const { json, model } = await callWithFallback(RESEARCH_MODELS, cachedResearchModel, {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    tools: [{ google_search: {} }],
-    generationConfig: { temperature: 0.9 },
-  })
+  const { json, model } = await callWithFallback(
+    RESEARCH_MODELS, cachedResearchModel,
+    { contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.9 } },
+    { timeoutMs: 40000 },
+  )
   cachedResearchModel = model
 
   const text: string = (((json?.candidates as unknown[])?.[0] as { content?: { parts?: { text?: string }[] } })?.content?.parts ?? [])
@@ -187,7 +201,7 @@ export async function generateImage(prompt: string): Promise<{ data: Buffer; mod
   const { json, model } = await callWithFallback(
     IMAGE_MODELS, cachedImageModel,
     { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
-    1,
+    { retries429: 1, timeoutMs: 35000 },
   )
   cachedImageModel = model
 

@@ -36,9 +36,9 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     setJob((j) => (j ? { ...j, slides: j.slides.map((x) => (x.id === s.id ? s : x)) } : j))
   }
 
-  async function safeRender(id: string): Promise<CarouselSlide | { error: string }> {
+  async function safeRender(id: string, forceImage = false): Promise<CarouselSlide | { error: string }> {
     try {
-      const r = await renderSlide(id)
+      const r = await renderSlide(id, { forceImage })
       return r.ok ? r.data : { error: r.error }
     } catch (e) {
       // Nunca dejar que un throw rompa el bucle: los demás slides deben seguir.
@@ -78,16 +78,18 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     const failed = current.slides.filter((s) => s.status === 'failed').length
     setPhase('done')
     setStatus(failed > 0
-      ? `Terminado con ${failed} slide(s) con error — revisa el detalle y usa "Regenerar"`
+      ? `Terminado con ${failed} slide(s) con error — usa "Renderizar pendientes" o "Nueva imagen"`
       : 'Carrusel listo')
   }
 
-  async function regenerate(slideId: string) {
+  // forceImage=false → recompone reutilizando la imagen existente (GRATIS).
+  // forceImage=true → genera una imagen NUEVA (paga) — solo con "Nueva imagen".
+  async function regenerate(slideId: string, forceImage = false) {
     if (regenId) return
     setRegenId(slideId)
     const orig = job!.slides.find((s) => s.id === slideId) as CarouselSlide
     patchSlide({ ...orig, status: 'rendering', error_message: null })
-    const out = await safeRender(slideId)
+    const out = await safeRender(slideId, forceImage)
     patchSlide('error' in out ? { ...orig, status: 'failed', error_message: out.error } : out)
     setRegenId(null)
   }
@@ -100,10 +102,12 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     if (r.ok) { setJob(r.data); setPhase('done') } else { setPhase('error'); setError(r.error) }
   }
 
-  // Reanudar: renderiza los slides pendientes o en error (p. ej. tras recargar).
+  // Reanudar: renderiza los slides pendientes, en error o atascados en
+  // 'rendering' (p. ej. si la función murió a mitad y se recargó la página).
+  // Reutiliza imágenes ya generadas → reanudar NO re-paga imágenes.
   async function resumePending() {
     if (!job || resuming || busy) return
-    const todo = job.slides.filter((s) => s.status === 'pending' || s.status === 'failed')
+    const todo = job.slides.filter((s) => s.status === 'pending' || s.status === 'failed' || s.status === 'rendering')
     if (todo.length === 0) return
     setResuming(true); setPhase('rendering')
     let current = job
@@ -189,7 +193,9 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
   const total = slides.length
   const doneCount = readyCount + failedCount
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0
-  const pendingCount = queuedCount + failedCount // pendientes + con error (reintentables)
+  // pendientes + con error + atascados en 'rendering' (solo relevante fuera de
+  // una generación activa; el botón se oculta mientras busy).
+  const pendingCount = queuedCount + failedCount + renderingCount
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -321,7 +327,7 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
           {/* Grid de slides */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '14px' }}>
             {job.slides.map((s) => (
-              <SlideCard key={s.id} slide={s} regenerating={regenId === s.id} onRegen={() => regenerate(s.id)} />
+              <SlideCard key={s.id} slide={s} regenerating={regenId === s.id} onRegen={() => regenerate(s.id)} onNewImage={() => regenerate(s.id, true)} />
             ))}
           </div>
 
@@ -465,9 +471,10 @@ function Count({ color, label, n }: { color: string; label: string; n: number })
   )
 }
 
-function SlideCard({ slide, regenerating, onRegen }: { slide: CarouselSlide; regenerating: boolean; onRegen: () => void }) {
+function SlideCard({ slide, regenerating, onRegen, onNewImage }: { slide: CarouselSlide; regenerating: boolean; onRegen: () => void; onNewImage: () => void }) {
   const rendering = slide.status === 'rendering' || regenerating
   const proceduralNote = slide.status === 'ready' && slide.error_message
+  const isImageSlide = !!slide.image_prompt
   return (
     <div className="ce-slide" style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: `1px solid ${slide.status === 'failed' ? 'var(--status-lost, #c96b6b)' : 'var(--border-subtle)'}`, aspectRatio: '4 / 5', background: 'var(--bg-base)' }}>
       {slide.rendered_url && !rendering ? (
@@ -488,19 +495,28 @@ function SlideCard({ slide, regenerating, onRegen }: { slide: CarouselSlide; reg
         {proceduralNote && <span style={{ ...badge(), background: 'rgba(190,154,84,0.85)' }} title={slide.error_message ?? ''}>sin foto</span>}
       </div>
 
-      <button
-        className="ce-regen ce-btn"
-        onClick={onRegen}
-        disabled={rendering}
-        title="Regenerar slide"
-        style={{
-          position: 'absolute', bottom: '6px', right: '6px', opacity: rendering ? 1 : 0, transition: 'opacity var(--dur-fast, .15s)',
-          display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 9px', fontSize: '11px', borderRadius: '6px',
-          border: 'none', cursor: rendering ? 'default' : 'pointer', background: 'rgba(20,20,24,0.82)', color: '#fff',
-        }}
-      >
-        <RefreshCw size={12} className={rendering ? 'spin' : undefined} /> Regenerar
-      </button>
+      <div className="ce-regen" style={{ position: 'absolute', bottom: '6px', right: '6px', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end', opacity: rendering ? 1 : 0, transition: 'opacity var(--dur-fast, .15s)' }}>
+        <button
+          className="ce-btn"
+          onClick={onRegen}
+          disabled={rendering}
+          title="Recompone el texto reutilizando la imagen (sin costo)"
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 9px', fontSize: '11px', borderRadius: '6px', border: 'none', cursor: rendering ? 'default' : 'pointer', background: 'rgba(20,20,24,0.82)', color: '#fff' }}
+        >
+          <RefreshCw size={12} className={rendering ? 'spin' : undefined} /> Recomponer
+        </button>
+        {isImageSlide && (
+          <button
+            className="ce-btn"
+            onClick={onNewImage}
+            disabled={rendering}
+            title="Genera una imagen NUEVA con IA (consume/paga una imagen)"
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 9px', fontSize: '11px', borderRadius: '6px', border: 'none', cursor: rendering ? 'default' : 'pointer', background: 'rgba(190,154,84,0.92)', color: '#1B1508' }}
+          >
+            <ImageIcon size={12} /> Nueva imagen
+          </button>
+        )}
+      </div>
     </div>
   )
 }

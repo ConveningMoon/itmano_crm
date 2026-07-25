@@ -246,9 +246,12 @@ export async function loadCarouselLogs(jobId: string): Promise<ActionResult<Caro
 }
 
 // ── Renderizar (o regenerar) un slide: imagen + composición ──────────────────
-export async function renderSlide(slideId: string): Promise<ActionResult<CarouselSlide>> {
+// forceImage=true → genera una imagen NUEVA (paga). Por defecto (false) se
+// REUTILIZA la imagen ya generada si existe (reanudar/recomponer no re-paga).
+export async function renderSlide(slideId: string, opts?: { forceImage?: boolean }): Promise<ActionResult<CarouselSlide>> {
   const ctx = await gate()
   if (!ctx) return { ok: false, error: 'Sin acceso' }
+  const forceImage = opts?.forceImage === true
 
   const db = createAdminClient()
   const { data: slideRow } = await db.from('carousel_slides').select('*').eq('id', slideId).maybeSingle()
@@ -261,35 +264,52 @@ export async function renderSlide(slideId: string): Promise<ActionResult<Carouse
 
   await db.from('carousel_slides').update({ status: 'rendering', error_message: null, updated_at: new Date().toISOString() }).eq('id', slideId)
 
+  const n = slideRow.slide_number as number
   try {
-    const n = slideRow.slide_number as number
     const base = `${jobRow.agent_id}/${jobRow.id}`
 
-    // Fondo editorial con Nano Banana (solo si el slide lo pide). Si la
-    // generación de imagen falla (modelo retirado, cuota, etc.) NO se rompe el
-    // slide: cae a fondo procedural para no desperdiciar el copy ya generado.
-    // El super_admin puede regenerar ese slide luego para reintentar la imagen.
+    // Fondo editorial con Nano Banana (solo si el slide lo pide).
     let bg: Buffer | null = null
     let imageStoragePath: string | null = slideRow.image_storage_path ?? null
     let imageWarning: string | null = null
     if (slideRow.image_prompt) {
-      try {
-        const img = await generateImage(slideRow.image_prompt as string)
-        bg = img.data
-        imageStoragePath = await uploadPng(`${base}/bg-${n}.png`, bg)
-        // Ledger: CADA generación de imagen (incl. regeneración) registra su costo.
-        await logCarousel({
-          jobId: jobRow.id, slideNumber: n, step: 'image', message: `Imagen generada para slide ${n}`,
-          provider: 'Google Nano Banana', model: img.model, billing: 'estimado', costUsd: CAROUSEL_PRICING.imageEstUsd,
-        })
-      } catch (imgErr) {
-        bg = null
-        imageWarning = imgErr instanceof Error ? imgErr.message : 'No se pudo generar la imagen'
-        await logCarousel({
-          jobId: jobRow.id, slideNumber: n, level: 'warn', step: 'image',
-          message: `Imagen falló → fondo procedural: ${imageWarning}`,
-          detail: { image_prompt: (slideRow.image_prompt as string)?.slice(0, 200) },
-        })
+      const hasExisting = !!slideRow.image_storage_path
+      // 1) REUTILIZAR la imagen existente (sin pagar) al reanudar/recomponer.
+      if (hasExisting && !forceImage) {
+        try {
+          const { data: blob } = await db.storage.from(BUCKET).download(slideRow.image_storage_path as string)
+          if (!blob) throw new Error('descarga vacía')
+          bg = Buffer.from(await blob.arrayBuffer())
+          await logCarousel({ jobId: jobRow.id, slideNumber: n, step: 'image', message: `Reutilizó la imagen existente del slide ${n} (sin costo)` })
+        } catch (dlErr) {
+          // Si no se pudo descargar, generamos de nuevo (fallback).
+          await logCarousel({ jobId: jobRow.id, slideNumber: n, level: 'warn', step: 'image', message: `No se pudo reutilizar la imagen del slide ${n}, se regenerará: ${dlErr instanceof Error ? dlErr.message : 'error'}` })
+        }
+      }
+      // 2) GENERAR imagen nueva (paga) si se fuerza, no había, o falló la reutilización.
+      if (!bg) {
+        // Breadcrumb ANTES de la llamada cara: si la función muriera aquí,
+        // queda rastro de que se intentó (aunque el timeout de fetch lo evita).
+        await logCarousel({ jobId: jobRow.id, slideNumber: n, step: 'image', message: `Solicitando imagen a Nano Banana (slide ${n})…` })
+        try {
+          const img = await generateImage(slideRow.image_prompt as string)
+          // Ledger: se registra EN CUANTO llega la imagen (antes de subir), así
+          // una imagen facturada NUNCA queda sin contabilizar aunque falle el paso siguiente.
+          await logCarousel({
+            jobId: jobRow.id, slideNumber: n, step: 'image', message: `Imagen generada (slide ${n})`,
+            provider: 'Google Nano Banana', model: img.model, billing: 'estimado', costUsd: CAROUSEL_PRICING.imageEstUsd,
+          })
+          bg = img.data
+          imageStoragePath = await uploadPng(`${base}/bg-${n}.png`, img.data)
+        } catch (imgErr) {
+          bg = null
+          imageWarning = imgErr instanceof Error ? imgErr.message : 'No se pudo generar la imagen'
+          await logCarousel({
+            jobId: jobRow.id, slideNumber: n, level: 'warn', step: 'image',
+            message: `Imagen falló → fondo procedural: ${imageWarning}`,
+            detail: { image_prompt: (slideRow.image_prompt as string)?.slice(0, 200) },
+          })
+        }
       }
     }
 

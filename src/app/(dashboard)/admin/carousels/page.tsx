@@ -5,6 +5,12 @@ import { getBrandProfiles, getRecentJobs, getCarouselCosts, getJobWithSlides } f
 import { V2_COPY_RULES } from '@/lib/carousels/brand'
 import { CarouselsTabs } from './carousels-tabs'
 
+// Las server actions de esta ruta (generar copy, render de slide con imagen de
+// Nano Banana) pueden tardar; damos holgura para que un render lento no muera con
+// 504. Los fetch a Gemini tienen su propio timeout (35s img / 40s research) para
+// abortar limpio antes de este límite y degradar a fondo procedural si hace falta.
+export const maxDuration = 120
+
 // Motor de carruseles — fase de prueba, SOLO super_admin. Genera carruseles de
 // Instagram (tema → copy → imágenes → slides compuestos) para agentes de un
 // tenant. Guardado server-side por canAccessCarouselEngine.
