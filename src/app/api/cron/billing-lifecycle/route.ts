@@ -192,17 +192,32 @@ export async function GET(request: NextRequest) {
         // La condicion SQL de arriba (degraded_at <= hace 330 dias) sigue
         // siendo verdadera todos los dias entre el mes 11 y el mes 12: sin este
         // chequeo se reinsertaria el aviso en cada pasada diaria. Se ancla en
-        // `degraded_at` (inicio de ESTE ciclo de degradacion) — no en el texto
-        // del mensaje — para que "¿ya se avisó en este ciclo?" siga siendo
-        // verdad aunque manana se retoque el copy (una tilde, personalizacion
-        // por tenant...). Comparar el mensaje literal habria reabierto la
-        // ventana de duplicados para todo aviso ya emitido con el copy viejo.
+        // `type` — no en el texto del mensaje — para que "¿ya se avisó en este
+        // ciclo?" siga siendo verdad aunque manana se retoque el copy (una
+        // tilde, personalizacion por tenant...). Comparar el mensaje literal
+        // habria reabierto la ventana de duplicados para todo aviso ya emitido
+        // con el copy viejo.
+        //
+        // OJO: la ventana de busqueda arranca en el dia 330, NO en
+        // `degraded_at`. La Task 16 inserta una notificacion del MISMO `type`
+        // ('subscription_request') en el instante en que el tenant se degrada
+        // — su `created_at` es esencialmente igual a `degraded_at`. Si se
+        // buscara desde `degraded_at`, esa notificacion de degradacion
+        // cumpliria la condicion SIEMPRE y el aviso de retencion no se
+        // enviaria jamas, en silencio, para ningun tenant. Un aviso de
+        // retencion previo solo puede existir dentro de esta ventana (a partir
+        // del dia 330), asi que acotar la busqueda a ella basta para no
+        // confundirlo con el de degradacion y sigue impidiendo el duplicado.
+        const retentionWindowStart = new Date(
+          new Date(row.degraded_at).getTime() + 330 * 86_400_000
+        ).toISOString()
+
         const { data: existingWarning, error: existingError } = await supabase
           .from('notifications')
           .select('id')
           .eq('tenant_id', row.tenant_id)
           .eq('type', 'subscription_request')
-          .gte('created_at', row.degraded_at)
+          .gte('created_at', retentionWindowStart)
           .limit(1)
 
         if (existingError) throw existingError
