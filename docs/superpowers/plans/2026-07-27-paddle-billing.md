@@ -275,7 +275,7 @@ git commit -m "feat(billing): migracion 070 — columnas de paddle y log de even
 
 **Interfaces:**
 - Consumes: `BillingCycle` de Task 1.
-- Produces: `PlanDefinition.priceAnnualUsd: number | null` · `PlanDefinition.inversionAnual: string` · `PlanDefinition.annualSavingsUsd: number` · `ANNUAL_MONTHS_CHARGED = 10` · `BILLING_CYCLE_LABELS`
+- Produces: `PlanDefinition.priceAnnualUsd: number` · `PlanDefinition.inversionAnual: string` · `PlanDefinition.annualSavingsUsd: number` · `ANNUAL_MONTHS_CHARGED = 10` · `BILLING_CYCLE_LABELS`
 
 - [ ] **Step 1: Escribir el test que falla**
 
