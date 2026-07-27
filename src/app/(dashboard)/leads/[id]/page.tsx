@@ -23,6 +23,7 @@ import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import type { ManualActionItem } from './manual-actions-panel'
 
 const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost']
@@ -103,15 +104,25 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // Identidad de envío del tenant (065) — el popup de correo muestra desde qué
   // dirección sale el corporativo y avisa si el dominio propio aún no está
   // verificado (mientras tanto sale por el dominio de ITMANO).
-  const { data: tenantRow } = await supabase
-    .from('tenants')
-    .select('name, slug, email_from_address, resend_account, domain_status, sending_domain')
-    .eq('id', leadTenantId)
-    .maybeSingle()
+  // El badge necesita el acceso de facturación (customDomainAllowed) igual que
+  // los puntos de envío reales: si la suscripción está degradada (paused/cancelled),
+  // el envío ya sale por el dominio compartido y el badge no puede seguir
+  // mostrando el dominio propio del tenant — le mentiría al usuario justo
+  // cuando más necesita saber la verdad.
+  const [{ data: tenantRow }, tenantAccess] = await Promise.all([
+    supabase
+      .from('tenants')
+      .select('name, slug, email_from_address, resend_account, domain_status, sending_domain')
+      .eq('id', leadTenantId)
+      .maybeSingle(),
+    getTenantAccessFor(leadTenantId),
+  ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tRow = tenantRow as any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const identity = tRow ? resolveSenderIdentity(tRow as any) : null
+  const identity = tRow
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? resolveSenderIdentity(tRow as any, { customDomainAllowed: tenantAccess.customDomainAllowed })
+    : null
   const emailSending = {
     from:          identity?.from ?? null,
     sendingDomain: (tRow?.sending_domain as string | null) ?? null,
