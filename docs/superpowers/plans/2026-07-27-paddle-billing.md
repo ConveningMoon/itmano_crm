@@ -1380,7 +1380,8 @@ La segunda pieza pura. Concentra toda la regla de degradación.
 - Produces:
   - `getTenantAccess(input: AccessInput): TenantAccess`
   - `DEGRADED_LIMITS = { monthlyEmailQuota: 200, publishedPropertiesCap: 3 }`
-  - `GRACE_DAYS = { properties: 14, sendingDomain: 60, resumableRun: 30 }`
+  - `GRACE_DAYS = { properties: 14, sendingDomain: 60, staleRun: 30 }`
+  - `isRunStale(nextSendAt: string, now: Date): boolean`
 
 - [ ] **Step 1: Escribir los tests que fallan**
 
