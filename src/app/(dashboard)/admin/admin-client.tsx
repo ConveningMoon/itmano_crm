@@ -424,7 +424,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             {tenant.subscriptionBillingExempt && (
               <span style={{
                 marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
-                color: 'var(--accent-teal)', background: 'rgba(90,175,160,0.12)',
+                color: 'var(--accent-teal)', background: 'color-mix(in srgb, var(--accent-teal) 12%, transparent)',
               }}>
                 Exenta de facturación
               </span>
