@@ -886,11 +886,14 @@ async function resolveTenantId(event: PaddleSubscriptionEvent): Promise<string |
   if (typeof fromCustomData === 'string' && fromCustomData) return fromCustomData
 
   const supabase = createAdminClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
     .select('tenant_id')
     .eq('paddle_subscription_id', event.subscriptionId)
     .maybeSingle()
+  // Tragar este error devolvería 'no_tenant' → 200 → Paddle deja de reintentar y
+  // el evento se pierde por un fallo puramente transitorio de lectura.
+  if (error) throw new Error(`No se pudo resolver el tenant del evento: ${error.message}`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return ((data as any)?.tenant_id as string | undefined) ?? null
 }
@@ -899,14 +902,28 @@ export async function applySubscriptionEvent(
   event: PaddleSubscriptionEvent,
 ): Promise<'applied' | 'stale' | 'no_tenant'> {
   const tenantId = await resolveTenantId(event)
-  if (!tenantId) return 'no_tenant'
+  if (!tenantId) {
+    // 'no_tenant' acaba en un 200 (Paddle no debe reintentar algo que nunca va a
+    // resolverse solo), así que este log es la ÚNICA señal de que pasó. La fila
+    // de paddle_webhook_events conserva el payload íntegro con processed_at NULL
+    // y es recuperable a mano — pero solo si alguien se entera.
+    console.error(JSON.stringify({
+      service: 'paddle-webhook', event_id: event.eventId, event_type: event.eventType,
+      subscription_id: event.subscriptionId, error: 'no_tenant',
+    }))
+    return 'no_tenant'
+  }
 
   const supabase = createAdminClient()
-  const { data: row } = await supabase
+  const { data: row, error: readError } = await supabase
     .from('subscriptions')
     .select('status, last_event_at, degraded_at')
     .eq('tenant_id', tenantId)
     .maybeSingle()
+  // Un fallo de lectura NO puede degradar a los defaults: con lastEventAt null
+  // se desactiva la guardia de orden del reductor, y con degradedAt null se
+  // reinician los relojes de 14 y 60 días. Mejor 500 y que Paddle reintente.
+  if (readError) throw new Error(`No se pudo leer la suscripción de ${tenantId}: ${readError.message}`)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = row as any
@@ -919,8 +936,15 @@ export async function applySubscriptionEvent(
   const patch = reduceSubscriptionEvent(event, snapshot)
   if (!patch) return 'stale'
 
-  const { error } = await supabase.from('subscriptions').update(patch).eq('tenant_id', tenantId)
+  const { data: updated, error } = await supabase
+    .from('subscriptions').update(patch).eq('tenant_id', tenantId).select('tenant_id')
   if (error) throw new Error(`No se pudo aplicar el evento de Paddle: ${error.message}`)
+  // PostgREST NO devuelve error cuando el WHERE no encuentra filas. Sin este
+  // chequeo, un cobro real contra un tenant sin fila en `subscriptions` se le
+  // reportaría a Paddle como 200 OK y se marcaría processed_at, mintiendo en la
+  // traza. Ocurre de verdad: el alta de tenant inserta la suscripción en
+  // best-effort (admin/actions.ts), así que puede faltar.
+  if (!updated?.length) throw new Error(`Sin fila de subscriptions para el tenant ${tenantId}`)
 
   await supabase
     .from('paddle_webhook_events')
@@ -949,9 +973,21 @@ import { createAdminClient } from '@/lib/supabase/admin'
 //   3. Idempotencia por event_id — Paddle garantiza entrega at-least-once.
 //   4. Orden — el reductor descarta eventos anteriores al último aplicado.
 
+// Se manejan TODOS los eventos de suscripción, no solo created/updated/canceled.
+// La doc de Paddle dice que subscription.updated "may also occur immediately
+// after a dedicated lifecycle event" — "puede", no "siempre". Apostar a esa
+// palabra dejaría el modo degradado inerte si Paddle no emitiera el updated tras
+// un past_due o un paused. Manejar los dedicados no cuesta nada: todos llevan la
+// misma entidad Subscription, el reductor decide por `status`, y los duplicados
+// los absorben la PK de event_id y la guardia de orden.
 const HANDLED = new Set([
   'subscription.created',
   'subscription.updated',
+  'subscription.activated',
+  'subscription.trialing',
+  'subscription.past_due',
+  'subscription.paused',
+  'subscription.resumed',
   'subscription.canceled',
 ])
 
@@ -986,10 +1022,26 @@ export async function POST(request: NextRequest) {
     payload:     JSON.parse(raw),
   })
   if (dupError) {
-    // 23505 = unique_violation. Reentrega: responder 200 para que Paddle pare.
-    if (dupError.code === '23505') return NextResponse.json({ ok: true, duplicate: true })
-    console.error(JSON.stringify({ service: 'paddle-webhook', error: dupError.message }))
-    return NextResponse.json({ error: 'storage failed' }, { status: 500 })
+    if (dupError.code !== '23505') { // 23505 = unique_violation
+      console.error(JSON.stringify({ service: 'paddle-webhook', error: dupError.message }))
+      return NextResponse.json({ error: 'storage failed' }, { status: 500 })
+    }
+    // Ya existe la fila — pero eso NO significa que el evento se aplicara. Si un
+    // intento anterior insertó la fila y luego murió aplicando el patch,
+    // `processed_at` sigue en NULL y hay que reintentar: darlo por duplicado
+    // sellaría el evento sin efecto PARA SIEMPRE, porque el reintento de Paddle
+    // volvería a chocar con la misma PK. Reprocesar es seguro: si el intento
+    // anterior sí escribió, el reductor lo descarta por `occurred_at`.
+    const { data: prev, error: prevError } = await supabase
+      .from('paddle_webhook_events')
+      .select('processed_at')
+      .eq('event_id', event.eventId)
+      .maybeSingle()
+    if (prevError) {
+      console.error(JSON.stringify({ service: 'paddle-webhook', error: prevError.message }))
+      return NextResponse.json({ error: 'storage failed' }, { status: 500 })
+    }
+    if (prev?.processed_at) return NextResponse.json({ ok: true, duplicate: true })
   }
 
   if (!HANDLED.has(event.eventType)) return NextResponse.json({ ok: true, ignored: true })
