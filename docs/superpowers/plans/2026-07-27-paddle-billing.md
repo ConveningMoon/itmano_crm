@@ -1694,7 +1694,10 @@ export function getTenantAccess(input: AccessInput): TenantAccess {
       ...FULL_ACCESS(input.plan),
       banner: {
         tone:    'amber',
-        message: 'No pudimos procesar tu inversión de este período. Actualiza tu método de pago para no interrumpir tu operación.',
+        // "método de pago" rompe la regla de money-words del proyecto (nunca
+        // costo/precio/pago/cargo en copy visible). Se nombra la tarjeta, que es
+        // además más concreto para quien tiene que actuar.
+        message: 'No pudimos procesar tu inversión de este período. Actualiza los datos de tu tarjeta para no interrumpir tu operación.',
         cta:     'Gestionar inversión',
       },
     }
