@@ -86,7 +86,23 @@ export async function applySubscriptionEvent(
   // es el estado ANTES de este evento, así que la combinación de ambos aísla
   // el instante exacto en que el tenant vuelve a estar al día.
   if (snapshot.degradedAt && patch.degraded_at === null) {
-    await restoreAfterReactivation(tenantId)
+    try {
+      await restoreAfterReactivation(tenantId)
+    } catch (err) {
+      // NO se relanza a propósito. El estado de FACTURACIÓN (lo crítico) ya
+      // quedó bien escrito arriba — devolver 500 aquí no lo arregla, y además
+      // sería contraproducente: en el reintento de Paddle el reductor
+      // descartaría este mismo evento por `occurred_at <= last_event_at` (ya
+      // quedó grabado en el intento que sí llegó hasta acá) y la restauración
+      // jamás volvería a intentarse. Preferimos un webhook en 200 con un log
+      // inequívoco a un 500 que reintenta infinitamente sin poder tener éxito.
+      // Este log es la ÚNICA señal de que un cliente que ya paga tiene sus
+      // propiedades aún despublicadas — no hay retry automático para esto.
+      console.error(JSON.stringify({
+        service: 'paddle-reactivation', tenant_id: tenantId, event_id: event.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
   }
 
   // Best-effort: marcar el evento como procesado en el log de auditoría. Si
