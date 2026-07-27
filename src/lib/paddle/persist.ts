@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { reduceSubscriptionEvent, type PaddleSubscriptionEvent, type SubscriptionSnapshot } from '@/lib/paddle/reducer'
 import type { SubscriptionStatus } from '@/lib/subscriptions'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
+import { notifyDegradation } from '@/lib/subscriptions/notify-degradation'
 
 /**
  * Resuelve el tenant de un evento. El puente es `custom_data.tenant_id`, que se
@@ -100,6 +101,28 @@ export async function applySubscriptionEvent(
       // propiedades aún despublicadas — no hay retry automático para esto.
       console.error(JSON.stringify({
         service: 'paddle-reactivation', tenant_id: tenantId, event_id: event.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }
+
+  // Entrada al modo degradado: detecta la TRANSICIÓN (no estaba degradado y
+  // este evento lo degrada), nunca solo el estado nuevo — mismo motivo que la
+  // reactivación de arriba: mirar solo `patch.degraded_at !== null` dispararía
+  // el aviso en cada evento posterior mientras el tenant siga degradado (sigue
+  // viniendo no-null). `snapshot.degradedAt` es el estado ANTES de este
+  // evento, así que la combinación aísla el instante exacto de la degradación.
+  if (!snapshot.degradedAt && patch.degraded_at !== null) {
+    try {
+      await notifyDegradation(tenantId, patch.status)
+    } catch (err) {
+      // NO se relanza, por la misma razón que la reactivación: el estado de
+      // FACTURACIÓN ya quedó bien escrito arriba, y un 500 aquí solo lograría
+      // que Paddle reintente un evento que el reductor descartaría como viejo
+      // sin volver a intentar nunca la notificación. Preferimos un 200 con un
+      // log inequívoco a un reintento infinito que no puede tener éxito.
+      console.error(JSON.stringify({
+        service: 'paddle-degradation-notify', tenant_id: tenantId, event_id: event.eventId,
         error: err instanceof Error ? err.message : String(err),
       }))
     }
