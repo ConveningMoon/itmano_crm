@@ -144,9 +144,18 @@ credenciales, que cambia entre sandbox y live: **el go-live no toca código**.
 
 ## 4. Modelo de datos — migración `070_paddle_billing.sql`
 
-> Numeración: `070` está libre. Observado y **no corregido** (fuera de alcance):
-> no existe `065_*.sql` aunque el código lo referencia, y hay dos migraciones
-> `069` (`069_ai_briefings.sql` y `069_carousel_pillar.sql`).
+> Numeración: `070` está libre — verificado contra el registro real de la base
+> (última aplicada: `069_ai_briefings`, 2026-07-22).
+>
+> Observado y **no corregido** (fuera de alcance), sin riesgo de drift en ninguno
+> de los dos casos:
+> - `065_email_accounts_and_domains` **sí está aplicada** en la base; lo que falta
+>   es el archivo `.sql` en `supabase/migrations/`. Las columnas que consume
+>   `sender-identity.ts` (`tenants.resend_account`, `tenants.domain_status`) están
+>   confirmadas en la base.
+> - `069_carousel_pillar.sql` no figura en el registro de migraciones, pero la
+>   columna `carousel_jobs.pillar` **sí existe**. Es ruido del registro, no una
+>   migración pendiente.
 
 ### 4.1 Columnas nuevas en `subscriptions`
 
@@ -193,9 +202,21 @@ exactamente el conjunto que tocó el sistema.
 
 ### 4.4 Nota operativa
 
-El MCP de Supabase requiere autorización y esta sesión no puede completar el flujo
-OAuth. La migración se entrega como archivo SQL en `supabase/migrations/` (el
-patrón del repo) y se aplica con la CLI de Supabase o desde el dashboard.
+El MCP de Supabase está operativo y verificado contra la base real. La migración
+se entrega **de las dos formas**, en el mismo commit:
+
+1. Como archivo `supabase/migrations/070_paddle_billing.sql` — es el patrón del
+   repo y la fuente de verdad versionada.
+2. Aplicada a la base vía `apply_migration`, para que el registro de migraciones y
+   el repo queden alineados.
+
+Ambos pasos son obligatorios: aplicar sin versionar es cómo aparecieron los dos
+casos raros de §4 (`065` sin archivo, `069_carousel_pillar` sin registro).
+
+**Estructura de `subscriptions` verificada contra la base** (2026-07-27): `id`,
+`tenant_id`, `plan`, `status`, `requested_plan`, `started_at`, `updated_at`,
+`created_at`, `trial_ends_at`. Coincide exactamente con las migraciones 054/055 —
+las columnas de §4.1 se añaden sin colisión.
 
 ---
 
