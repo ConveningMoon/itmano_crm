@@ -1162,13 +1162,25 @@ export async function createCheckoutTransaction(
   // a la suscripción. Va el tenant_id (para saber a quién pertenece) y el plan
   // (para saber qué compró — este es el único punto del sistema que lo sabe con
   // certeza, incluido Partner, cuyo precio es a medida y no está en ningún env).
-  const txn = await getPaddle().transactions.create({
-    items: [{ priceId, quantity: 1 }],
-    ...(customerId ? { customerId } : {}),
-    customData: { tenant_id: tenantId, plan },
-  })
-
-  return { transactionId: txn.id }
+  // El error del SDK NO puede salir tal cual hacia el navegador: un ApiError de
+  // Paddle trae `detail` en inglés y, en los 4xx de recurso inválido, suele
+  // incluir el propio priceId — justo lo que no debe cruzar al cliente cuando es
+  // el precio negociado de un Partner. Se registra completo en el servidor y se
+  // devuelve un mensaje genérico en español.
+  try {
+    const txn = await getPaddle().transactions.create({
+      items: [{ priceId, quantity: 1 }],
+      ...(customerId ? { customerId } : {}),
+      customData: { tenant_id: tenantId, plan },
+    })
+    return { transactionId: txn.id }
+  } catch (err) {
+    console.error(JSON.stringify({
+      service: 'paddle-checkout', tenant_id: tenantId, plan, cycle,
+      error: err instanceof Error ? err.message : String(err),
+    }))
+    throw new Error('No se pudo iniciar el proceso de inversión. Intenta de nuevo o contacta a ITMANO.')
+  }
 }
 
 /**
@@ -1190,12 +1202,22 @@ export async function createPortalUrl(tenantId: string): Promise<string> {
   if (!customerId) throw new Error('Este equipo todavía no tiene una suscripción activa en Paddle.')
 
   const subscriptionId = r?.paddle_subscription_id as string | null
-  const session = await getPaddle().customerPortalSessions.create(
-    customerId,
-    subscriptionId ? [subscriptionId] : [],
-  )
 
-  return session.urls.general.overview
+  // Mismo criterio que en el checkout: el error crudo del SDK se queda en el
+  // servidor y al cliente le llega un mensaje en español, sin identificadores.
+  try {
+    const session = await getPaddle().customerPortalSessions.create(
+      customerId,
+      subscriptionId ? [subscriptionId] : [],
+    )
+    return session.urls.general.overview
+  } catch (err) {
+    console.error(JSON.stringify({
+      service: 'paddle-portal', tenant_id: tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    }))
+    throw new Error('No se pudo abrir el portal de inversión. Intenta de nuevo o contacta a ITMANO.')
+  }
 }
 ```
 
