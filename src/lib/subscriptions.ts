@@ -21,6 +21,20 @@ export interface TenantSubscription {
   requestedPlan: SubscriptionPlan | null
   /** Solo cuando status = 'trial'. ISO timestamp. */
   trialEndsAt:   string | null
+  /** Ciclo de facturación de Paddle. null hasta el primer checkout. */
+  billingCycle:     BillingCycle | null
+  /** Fin del período de facturación en curso (renovación). ISO timestamp. */
+  currentPeriodEnd: string | null
+  /** Si está poblado, la suscripción termina en esta fecha (cancelación
+   * programada de Paddle) — el acceso se conserva hasta entonces. */
+  cancelAt:         string | null
+  /** Precio negociado de Paddle. Solo Partner lo usa (catálogo estándar en env). */
+  paddlePriceId:    string | null
+  paddleCustomerId: string | null
+  /** A&J (piloto): true — nunca toca Paddle. */
+  billingExempt:    boolean
+  /** ISO timestamp de cuándo la suscripción perdió acceso completo (paused/cancelled). */
+  degradedAt:       string | null
 }
 
 export const PLAN_CONFIG: Record<SubscriptionPlan, {
