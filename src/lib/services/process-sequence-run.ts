@@ -4,6 +4,7 @@ import { sendSequenceEmail, type PendingRun } from '@/lib/services/send-sequence
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { parseEmailContent } from '@/lib/email-content'
 import type { EmailLocale } from '@/lib/services/email-render'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 // Resend template IDs are UUIDs; anything else is a placeholder.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -59,7 +60,9 @@ export async function processSequenceRun(params: {
   const stepOrder  = r.current_step_order as number
 
   // ── Bulk-fetch related entities in parallel ────────────────────────────────
-  const [leadRes, tenantRes, stepRes, channelRes, seqRes] = await Promise.all([
+  // getTenantAccessFor viaja en el mismo Promise.all — es una query barata y
+  // así no añade una vuelta secuencial extra al camino de envío.
+  const [leadRes, tenantRes, stepRes, channelRes, seqRes, access] = await Promise.all([
     db.from('leads')
       .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email, email_signature)')
       .eq('id', leadId)
@@ -83,6 +86,7 @@ export async function processSequenceRun(params: {
       .select('name, language')
       .eq('id', sequenceId)
       .maybeSingle(),
+    getTenantAccessFor(tenantId),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -140,6 +144,10 @@ export async function processSequenceRun(params: {
     tenant_slug:          (tenant?.slug as string | undefined) ?? '',
     resend_account:       (tenant?.resend_account as string | null | undefined) ?? null,
     domain_status:        (tenant?.domain_status as string | null | undefined) ?? null,
+    // Suscripción degradada: revoca el dominio propio en la resolución de
+    // identidad (no en la base — ver sender-identity.ts). Pasado a través de
+    // PendingRun para que sendSequenceEmail lo use en el envío real.
+    custom_domain_allowed: access.customDomainAllowed,
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',
     agent_signature:    (agent?.email_signature as string | null) ?? null,
@@ -165,7 +173,10 @@ export async function processSequenceRun(params: {
         return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
       }
     }
-    if (!resolveSenderIdentity({ name: pending.tenant_name, slug: pending.tenant_slug, email_from_address: pending.email_from_address, resend_account: pending.resend_account, domain_status: pending.domain_status })) {
+    if (!resolveSenderIdentity(
+      { name: pending.tenant_name, slug: pending.tenant_slug, email_from_address: pending.email_from_address, resend_account: pending.resend_account, domain_status: pending.domain_status },
+      { customDomainAllowed: pending.custom_domain_allowed },
+    )) {
       return { action: 'paused', reason: 'no_from_address', details: 'No se pudo resolver la identidad de envío del tenant (email_from_address y dominio)', ...diag }
     }
     if (!pending.lead_email) {
