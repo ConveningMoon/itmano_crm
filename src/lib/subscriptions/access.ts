@@ -52,6 +52,9 @@ export const GRACE_DAYS = {
  */
 export function isRunStale(nextSendAt: string, now: Date): boolean {
   const days = (now.getTime() - new Date(nextSendAt).getTime()) / 86_400_000
+  // Fecha ilegible (NaN): se considera obsoleto. En una guardia que frena
+  // envíos, la duda debe resolverse a favor de NO enviar, no al revés.
+  if (Number.isNaN(days)) return true
   return days > GRACE_DAYS.staleRun
 }
 
@@ -73,6 +76,13 @@ export interface TenantAccess {
   banner: { tone: 'amber' | 'red'; message: string; cta: string } | null
 }
 
+// `customDomainAllowed` significa "la facturación no lo revoca", NO "es
+// elegible para configurarlo ahora". Un trial es `plan: 'growth'`, así que
+// este flag sale en `true` para un trial — pero `plans.ts` es explícito en que
+// el trial no debe consumir un slot de dominio de Resend. Hoy eso no se rompe
+// porque un trial nunca llega a tener `domain_status = 'verified'` (cae al
+// dominio compartido igual), pero la responsabilidad de NO aprovisionar un
+// dominio en trial es de la capa de onboarding, no de este flag.
 const FULL_ACCESS = (plan: SubscriptionPlan): TenantAccess => ({
   canUseAi:               true,
   canCreateSequences:     true,
@@ -94,7 +104,7 @@ export function getTenantAccess(input: AccessInput): TenantAccess {
       ...FULL_ACCESS(input.plan),
       banner: {
         tone:    'amber',
-        message: 'No pudimos procesar tu inversión de este período. Actualiza tu método de pago para no interrumpir tu operación.',
+        message: 'No pudimos procesar tu inversión de este período. Actualiza los datos de tu tarjeta para no interrumpir tu operación.',
         cta:     'Gestionar inversión',
       },
     }
