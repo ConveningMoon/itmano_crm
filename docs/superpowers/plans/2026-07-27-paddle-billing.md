@@ -735,6 +735,13 @@ export interface SubscriptionSnapshot {
 
 export interface SubscriptionPatch {
   status:                  SubscriptionStatus
+  /**
+   * Solo se escribe si el evento lo trae en custom_data. Lo inyecta
+   * createCheckoutTransaction, que es quien sabe con certeza qué se compró
+   * (incluido Partner, cuyo precio es a medida). Sin esto, un tenant que compra
+   * Growth se quedaría con el plan por defecto y recibiría cuotas de Esencial.
+   */
+  plan?:                   SubscriptionPlan
   billing_cycle:           BillingCycle | null
   paddle_customer_id:      string
   paddle_subscription_id:  string
@@ -745,10 +752,12 @@ export interface SubscriptionPatch {
   last_event_at:           string
   /** Al empezar a pagar el trial deja de existir. */
   trial_ends_at:           null
-  /** Un pago resuelve cualquier solicitud sales-led pendiente. */
-  requested_plan:          null
   updated_at:              string
 }
+
+// NOTA: `requested_plan` NO se toca aquí a propósito. Una solicitud sales-led la
+// resuelve un humano desde el Centro de control; una renovación rutinaria de
+// Paddle no debe hacerla desaparecer sin que nadie la haya atendido.
 
 const STATUS_MAP: Record<string, SubscriptionStatus> = {
   trialing: 'active',   // trialing de Paddle = acceso completo, igual que active
@@ -777,24 +786,47 @@ export function isDegraded(status: SubscriptionStatus): boolean {
  * anterior o igual al último aplicado se descarta: aplicarlo revertiría el
  * estado a uno ya superado.
  */
+const PLAN_VALUES: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
+
+/** Lee el plan de custom_data, solo si es uno de los valores válidos. */
+function planFromCustomData(customData: Record<string, unknown> | null): SubscriptionPlan | undefined {
+  const raw = customData?.plan
+  return typeof raw === 'string' && PLAN_VALUES.includes(raw as SubscriptionPlan)
+    ? (raw as SubscriptionPlan)
+    : undefined
+}
+
 export function reduceSubscriptionEvent(
   event: PaddleSubscriptionEvent,
   current: SubscriptionSnapshot,
 ): SubscriptionPatch | null {
-  if (current.lastEventAt && event.occurredAt <= current.lastEventAt) return null
+  // Comparación NUMÉRICA, nunca lexicográfica. Los dos lados vienen de
+  // formateadores distintos: Paddle emite "2026-08-01T10:00:00.635628Z" y
+  // Postgres devuelve "2026-08-01 10:00:00.635628+00" — con espacio en vez de
+  // 'T'. Como texto, cualquier fecha de Paddle resulta "mayor" que cualquiera
+  // de Postgres (0x54 > 0x20) y la guardia no filtraría NADA. Date.parse es
+  // puro, así que no rompe la pureza del reductor.
+  const prev = current.lastEventAt ? Date.parse(current.lastEventAt) : NaN
+  const now  = Date.parse(event.occurredAt)
+  if (!Number.isNaN(prev) && !Number.isNaN(now) && now <= prev) return null
 
   const status   = mapPaddleStatus(event.status)
   const degraded = isDegraded(status)
 
   // degraded_at ancla los plazos de 14 y 60 días: se fija en la ENTRADA al modo
   // degradado y no se toca mientras siga degradado, para que los plazos no se
-  // reinicien con cada evento. Se limpia al reactivar.
+  // reinicien con cada evento. Solo un 'active' real lo limpia — `past_due` es
+  // un reintento de cobro, no una vuelta al buen estado, así que preserva el
+  // ancla en lugar de reiniciar los relojes de 14 y 60 días.
   const degradedAt = degraded
     ? (current.degradedAt ?? event.occurredAt)
-    : null
+    : (status === 'active' ? null : current.degradedAt)
+
+  const plan = planFromCustomData(event.customData)
 
   return {
     status,
+    ...(plan ? { plan } : {}),
     billing_cycle:          event.billingCycle,
     paddle_customer_id:     event.customerId,
     paddle_subscription_id: event.subscriptionId,
@@ -804,7 +836,6 @@ export function reduceSubscriptionEvent(
     degraded_at:            degradedAt,
     last_event_at:          event.occurredAt,
     trial_ends_at:          null,
-    requested_plan:         null,
     updated_at:             event.occurredAt,
   }
 }
@@ -1075,10 +1106,14 @@ export async function createCheckoutTransaction(
 
   const customerId = (r?.paddle_customer_id as string | null) ?? undefined
 
+  // custom_data es el puente con el webhook: Paddle lo copia de la transacción
+  // a la suscripción. Va el tenant_id (para saber a quién pertenece) y el plan
+  // (para saber qué compró — este es el único punto del sistema que lo sabe con
+  // certeza, incluido Partner, cuyo precio es a medida y no está en ningún env).
   const txn = await getPaddle().transactions.create({
     items: [{ priceId, quantity: 1 }],
     ...(customerId ? { customerId } : {}),
-    customData: { tenant_id: tenantId },
+    customData: { tenant_id: tenantId, plan },
   })
 
   return { transactionId: txn.id }
