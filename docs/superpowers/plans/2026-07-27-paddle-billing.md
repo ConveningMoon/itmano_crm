@@ -199,7 +199,10 @@ alter table subscriptions add constraint subscriptions_status_check
                     'cancel_requested', 'change_requested', 'cancelled'));
 
 -- A&J Real Estate: piloto en cortesía, nunca toca Paddle.
-update subscriptions set billing_exempt = true where tenant_id = 'aj-real-estate';
+-- OJO: el id del tenant es 'tenant-aj'. 'aj-real-estate' es el SLUG, no el id —
+-- usarlo aquí no coincidiría con ninguna fila y la exención fallaría en silencio.
+-- Verificado contra la base el 2026-07-27.
+update subscriptions set billing_exempt = true where tenant_id = 'tenant-aj';
 
 -- ── Registro de eventos de webhook ───────────────────────────────────────────
 -- Doble función: deduplicar el at-least-once de Paddle (event_id como PK) y
