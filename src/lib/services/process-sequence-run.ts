@@ -5,6 +5,7 @@ import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { parseEmailContent } from '@/lib/email-content'
 import type { EmailLocale } from '@/lib/services/email-render'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { isRunStale } from '@/lib/subscriptions/access'
 
 // Resend template IDs are UUIDs; anything else is a placeholder.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -45,7 +46,7 @@ export async function processSequenceRun(params: {
   // ── Fetch the run ──────────────────────────────────────────────────────────
   const { data: run } = await db
     .from('lead_sequence_runs')
-    .select('id, tenant_id, lead_id, sequence_id, current_step_order, status')
+    .select('id, tenant_id, lead_id, sequence_id, current_step_order, status, next_send_at')
     .eq('id', runId)
     .maybeSingle()
 
@@ -153,9 +154,23 @@ export async function processSequenceRun(params: {
     agent_signature:    (agent?.email_signature as string | null) ?? null,
     channel_name:       channel?.name ?? null,
     sequence_language:  seqLang,
+    next_send_at:       (r.next_send_at as string | null) ?? null,
   }
 
   const diag = { leadEmail: pending.lead_email, sequenceName: seqName ?? sequenceId, stepOrder }
+
+  // ── Guard: suscripción degradada — secuencias automáticas en pausa ────────
+  // El run NO cambia de estado en la base: se re-evalúa en el siguiente tick
+  // del cron, y al reactivar la suscripción se reanuda solo, sin barrido ni
+  // columna nueva. `access` ya viene resuelto del Promise.all de arriba.
+  if (!access.sequencesRunnable) {
+    return {
+      action:  'paused',
+      reason:  'subscription_inactive',
+      details: 'Suscripción inactiva: las secuencias automáticas están en pausa',
+      ...diag,
+    }
+  }
 
   // ── Dry-run: diagnose guards without side effects ──────────────────────────
   if (dryRun) {
@@ -186,6 +201,17 @@ export async function processSequenceRun(params: {
       return { action: 'paused', reason: 'no_agent', details: 'agent.email is null', ...diag }
     }
     return { action: 'sent', reason: 'would_send', ...diag }
+  }
+
+  // ── Guard: envío vencido — no reactivar un run stale ────────────────────────
+  // Enviar el "paso N" a un lead que no sabe nada del agente desde hace meses
+  // es malo para el cliente y para la reputación de envío. Se completa el run
+  // en vez de dispararlo; el owner re-inscribe deliberadamente a quien quiera.
+  if (pending.next_send_at && isRunStale(pending.next_send_at, new Date())) {
+    if (!dryRun) {
+      await db.from('lead_sequence_runs').update({ status: 'completed' }).eq('id', runId)
+    }
+    return { action: 'completed', reason: 'stale_run', details: 'Envío vencido hace más de 30 días', ...diag }
   }
 
   // ── Production: delegate the actual send to sendSequenceEmail ───────────────

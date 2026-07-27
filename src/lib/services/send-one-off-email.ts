@@ -6,6 +6,7 @@ import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 import type { EmailContent } from '@/lib/email-content'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { assertEmailQuota } from '@/lib/subscriptions/quota'
 
 const BLOCK_LABEL: Record<string, string> = {
   unsubscribed:   'el lead canceló su suscripción',
@@ -39,6 +40,11 @@ export async function sendOneOffEmail(
   }
   const leadEmail = l.email as string | null
   if (!leadEmail) return { ok: false, error: 'El lead no tiene email.' }
+
+  // Cuota de envío corporativo en modo degradado. Solo aplica aquí: el modo
+  // Personal del composer abre un mailto: y nunca llega a esta función.
+  const quotaDenied = await assertEmailQuota(tenantId)
+  if (quotaDenied) return quotaDenied
 
   const agent      = Array.isArray(l.agents) ? l.agents[0] : l.agents
   const agentName  = (agent?.name as string | undefined) ?? ''

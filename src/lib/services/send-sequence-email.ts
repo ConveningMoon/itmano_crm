@@ -42,6 +42,9 @@ export type PendingRun = {
   channel_name:       string | null
   // Sequence
   sequence_language:  EmailLocale
+  // Guardia de frescura (Task 12): cuándo estaba programado este envío. Un run
+  // reactivado meses después de su next_send_at no se dispara — ver isRunStale.
+  next_send_at:       string | null
 }
 
 export type SendResult =
