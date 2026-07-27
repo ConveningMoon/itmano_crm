@@ -1522,9 +1522,21 @@ export const GRACE_DAYS = {
   properties: 14,
   /** Días antes de liberar el slot de dominio en Resend. */
   sendingDomain: 60,
-  /** Un run pausado más tiempo que esto se completa en vez de reanudarse. */
-  resumableRun: 30,
+  /** Un envío vencido más tiempo que esto no se dispara: el run se completa. */
+  staleRun: 30,
 } as const
+
+/**
+ * Guardia de frescura de un run de secuencia. Enviar el "paso 3" a un lead que
+ * lleva meses sin saber del agente es malo para el cliente y malo para la
+ * deliverability. Se evalúa justo ANTES de enviar, así que cubre cualquier
+ * causa de obsolescencia (suscripción caída, cron parado, run reactivado a
+ * mano), no solo el impago.
+ */
+export function isRunStale(nextSendAt: string, now: Date): boolean {
+  const days = (now.getTime() - new Date(nextSendAt).getTime()) / 86_400_000
+  return days > GRACE_DAYS.staleRun
+}
 
 export interface AccessInput {
   status:        SubscriptionStatus
@@ -1783,7 +1795,7 @@ git commit -m "feat(billing): apagar ia y revocar dominio propio al degradar"
 **Files:**
 - Create: `src/lib/subscriptions/quota.ts`
 - Modify: `src/lib/services/send-one-off-email.ts`
-- Modify: `src/lib/services/process-sequence-run.ts:54`
+- Modify: `src/lib/services/process-sequence-run.ts` (gate de suscripción + guardia de frescura)
 - Modify: `src/app/(dashboard)/emails/` (acción de crear secuencia)
 - Modify: `src/app/(dashboard)/properties/actions.ts`
 - Create: `tests/billing/quota.test.ts`
@@ -1871,13 +1883,71 @@ En `send-one-off-email.ts`, antes de llamar a Resend:
 
 - [ ] **Step 4: Parar las secuencias en modo degradado**
 
-En `process-sequence-run.ts`, junto a la comprobación existente `if (r.status !== 'active')` (línea 54), añadir tras resolver el tenant:
+**Importante — no escribir `status` en la base.** En `ProcessRunResult`,
+`action: 'paused'` es un valor de **reporte**, no un estado de fila: el guard de
+email bloqueado (`process-sequence-run.ts:105-120`) devuelve `action: 'paused'`
+y escribe `status: 'cancelled'`. Aquí el run se queda en `active` con su
+`next_send_at` vencido; el gate lo frena en cada tick sin enviar, y al reactivar
+la suscripción se reanuda solo. Sin barrido de reactivación y sin columna nueva.
+
+En `process-sequence-run.ts`, **después** del bloque que carga el tenant (el
+`select` de la línea ~68, que es donde el `tenant_id` está disponible) y antes
+de resolver la identidad de envío:
 
 ```ts
-    const access = await getTenantAccessFor(tenantId)
-    if (!access.sequencesRunnable) {
-      return { action: 'paused', reason: 'subscription_inactive', details: 'Suscripción inactiva: las secuencias automáticas están en pausa' }
+  // Suscripción degradada: no se envía nada automático. El run NO cambia de
+  // estado — vuelve a evaluarse en el siguiente tick, y al reactivar sigue solo.
+  const access = await getTenantAccessFor(tenantId)
+  if (!access.sequencesRunnable) {
+    return {
+      action:  'paused',
+      reason:  'subscription_inactive',
+      details: 'Suscripción inactiva: las secuencias automáticas están en pausa',
+      ...diag,
     }
+  }
+```
+
+- [ ] **Step 4b: Guardia de frescura antes de enviar**
+
+En el mismo archivo, justo antes de delegar el envío a `sendSequenceEmail`:
+
+```ts
+  // Un envío vencido hace meses no se dispara: le mandaría el "paso 3" a un
+  // lead que no sabe nada del agente desde entonces. Se completa el run y el
+  // owner re-inscribe deliberadamente a quien quiera.
+  if (pending.next_send_at && isRunStale(pending.next_send_at, new Date())) {
+    if (!dryRun) {
+      await db.from('lead_sequence_runs').update({ status: 'completed' }).eq('id', runId)
+    }
+    return { action: 'completed', reason: 'stale_run', details: 'Envío vencido hace más de 30 días', ...diag }
+  }
+```
+
+Si `PendingRun` no expone `next_send_at`, añadirlo al `select` y a la interfaz.
+
+- [ ] **Step 4c: Test de la guardia de frescura**
+
+Añadir a `tests/billing/quota.test.ts`:
+
+```ts
+import { isRunStale } from '@/lib/subscriptions/access'
+
+describe('isRunStale', () => {
+  const now = new Date('2026-12-01T00:00:00.000Z')
+
+  it('un envio vencido hace poco si se dispara', () => {
+    expect(isRunStale('2026-11-20T00:00:00.000Z', now)).toBe(false)
+  })
+
+  it('un envio vencido hace mas de 30 dias no se dispara', () => {
+    expect(isRunStale('2026-09-01T00:00:00.000Z', now)).toBe(true)
+  })
+
+  it('el limite exacto de 30 dias todavia se dispara', () => {
+    expect(isRunStale('2026-11-01T00:00:00.000Z', now)).toBe(false)
+  })
+})
 ```
 
 - [ ] **Step 5: Bloquear la creación de secuencias**
@@ -2117,32 +2187,29 @@ git commit -m "feat(billing): cron de ciclo de vida para los plazos de 14 y 60 d
 - Create: `tests/billing/reactivate.test.ts`
 
 **Interfaces:**
-- Consumes: `GRACE_DAYS` (Task 10).
-- Produces: `restoreAfterReactivation(tenantId): Promise<{ propertiesRepublished: number; runsResumed: number; runsCompleted: number }>` · `classifyPausedRun(pausedAt, now): 'resume' | 'complete'`
+- Consumes: nada de tareas previas más allá del esquema.
+- Produces: `restoreAfterReactivation(tenantId): Promise<{ propertiesRepublished: number }>`
 
-- [ ] **Step 1: Escribir el test de la regla de los 30 días**
+> **Las secuencias NO se tocan aquí.** Los runs nunca cambian de estado al
+> degradar (Task 12 Step 4): se quedan en `active` y el gate los frena en cada
+> tick. Al reactivar vuelven a pasar el gate y siguen solos, y la guardia de
+> frescura de la Task 12 Step 4b impide que un envío vencido hace meses se
+> dispare. Esta tarea solo restaura lo que sí se modificó: las propiedades.
+
+- [ ] **Step 1: Escribir el test que falla**
 
 Crear `tests/billing/reactivate.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { classifyPausedRun } from '@/lib/subscriptions/reactivate'
+import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 
-const now = new Date('2026-12-01T00:00:00.000Z')
-
-describe('classifyPausedRun', () => {
-  it('reanuda un run pausado hace poco', () => {
-    expect(classifyPausedRun('2026-11-20T00:00:00.000Z', now)).toBe('resume')
-  })
-
-  it('completa un run pausado hace mas de 30 dias', () => {
-    // Reanudarlo mandaria el "paso 3" a un lead que no sabe nada desde agosto:
-    // malo para el cliente y malo para la deliverability.
-    expect(classifyPausedRun('2026-09-01T00:00:00.000Z', now)).toBe('complete')
-  })
-
-  it('el limite exacto de 30 dias todavia reanuda', () => {
-    expect(classifyPausedRun('2026-11-01T00:00:00.000Z', now)).toBe('resume')
+describe('restoreAfterReactivation', () => {
+  it('exporta una funcion que devuelve el conteo de republicadas', () => {
+    // Contrato mínimo: el filtro por unpublished_by_billing es lo que impide
+    // republicar una casa que el cliente quitó a propósito por estar vendida.
+    // El comportamiento contra la base se verifica en la prueba manual (paso 8).
+    expect(typeof restoreAfterReactivation).toBe('function')
   })
 })
 ```
@@ -2154,35 +2221,25 @@ Expected: FAIL — módulo inexistente.
 
 - [ ] **Step 3: Implementar**
 
-Crear `src/lib/subscriptions/reactivate.ts` con la función pura y la restauración:
+Crear `src/lib/subscriptions/reactivate.ts`:
 
 ```ts
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { GRACE_DAYS } from '@/lib/subscriptions/access'
-
-/**
- * Un run pausado más de 30 días NO se reanuda: enviarle el siguiente paso a un
- * lead que lleva meses sin saber del agente es malo para el cliente y malo para
- * la deliverability. Se marca completado y el owner re-inscribe deliberadamente.
- */
-export function classifyPausedRun(pausedAt: string, now: Date): 'resume' | 'complete' {
-  const days = (now.getTime() - new Date(pausedAt).getTime()) / 86_400_000
-  return days > GRACE_DAYS.resumableRun ? 'complete' : 'resume'
-}
 
 export interface ReactivationReport {
   propertiesRepublished: number
-  runsResumed:           number
-  runsCompleted:         number
 }
 
+/**
+ * Restaura lo que la degradación modificó. Hoy son solo las propiedades: los
+ * runs de secuencia nunca cambiaron de estado, así que se reanudan solos.
+ */
 export async function restoreAfterReactivation(tenantId: string): Promise<ReactivationReport> {
   const supabase = createAdminClient()
-  const now = new Date()
 
-  // 1. Republicar SOLO lo que despublicó el sistema. Sin este filtro se
-  //    republicaría una casa que el cliente quitó a propósito por estar vendida.
+  // Republicar SOLO lo que despublicó el sistema. Sin este filtro se
+  // republicaría una casa que el cliente quitó a propósito por estar vendida.
   const { data: restored } = await supabase
     .from('properties')
     .update({ published_to_web: true, unpublished_by_billing: false })
@@ -2190,43 +2247,9 @@ export async function restoreAfterReactivation(tenantId: string): Promise<Reacti
     .eq('unpublished_by_billing', true)
     .select('id')
 
-  // 2. Resolver los runs pausados según la regla de los 30 días.
-  const { data: paused } = await supabase
-    .from('lead_sequence_runs')
-    .select('id, updated_at')
-    .eq('tenant_id', tenantId)
-    .eq('status', 'paused')
-
-  let runsResumed = 0
-  let runsCompleted = 0
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const run of (paused ?? []) as any[]) {
-    const verdict = classifyPausedRun(run.updated_at as string, now)
-    if (verdict === 'resume') {
-      await supabase
-        .from('lead_sequence_runs')
-        .update({ status: 'active', next_send_at: now.toISOString() })
-        .eq('id', run.id)
-      runsResumed++
-    } else {
-      await supabase
-        .from('lead_sequence_runs')
-        .update({ status: 'completed' })
-        .eq('id', run.id)
-      runsCompleted++
-    }
-  }
-
-  return { propertiesRepublished: (restored ?? []).length, runsResumed, runsCompleted }
+  return { propertiesRepublished: (restored ?? []).length }
 }
 ```
-
-> **Antes de implementar este paso**, confirmar con
-> `mcp__supabase__execute_sql` que `lead_sequence_runs` tiene las columnas
-> `tenant_id`, `status`, `updated_at` y `next_send_at`, y qué valores admite el
-> CHECK de `status`. Si `paused` no es un valor válido, añadirlo en la migración
-> 070 antes de continuar.
 
 - [ ] **Step 4: Llamarla desde el persistidor**
 
