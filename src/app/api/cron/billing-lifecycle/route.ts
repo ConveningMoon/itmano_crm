@@ -13,20 +13,35 @@ import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 //      que despublicar de nuevo.
 //   2. dominio      -> domain_status ya no es 'verified', no hay nada que
 //      liberar de nuevo.
-//   3. retencion    -> se busca si el aviso EXACTO ya existe antes de
-//      insertarlo; si no se hiciera esta comprobacion, el aviso se reinsertaria
-//      cada dia entre el mes 11 y el 12 (~30 notificaciones) en vez de una sola.
+//   3. retencion    -> se busca si ya existe un aviso de este ciclo de
+//      degradacion antes de insertar (ver comentario junto al chequeo).
 //
 // En los tres pasos, `billing_exempt = true` (piloto A&J) queda fuera del
 // filtro SQL desde el origen: nunca llega a evaluarse el resto de la logica.
+//
+// Esta es la unica pieza del sistema que modifica datos del cliente sin que
+// nadie la este mirando en el momento — por eso cada paso corre aislado (un
+// paso que falla no impide los otros dos) y cada fila corre aislada dentro de
+// su paso (un tenant que lanza una excepcion no bloquea al resto), y cada
+// error que hoy se ignoraba en silencio queda registrado con console.error
+// para que Vercel lo capture antes de que lo note un cliente.
 
 function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString()
 }
 
-// Aviso de retencion: mensaje fijo para poder detectar si ya se envio (ver
-// paso 3). Cambiar el texto crea, en la practica, un aviso "nuevo" — se deja
-// como constante para que quede claro que ambos usos deben coincidir.
+function logError(step: string, tenantId: string | null, error: unknown): void {
+  console.error(JSON.stringify({
+    service:   'billing-lifecycle',
+    step,
+    tenant_id: tenantId,
+    error:     error instanceof Error ? error.message : String(error),
+  }))
+}
+
+// Aviso de retencion: mensaje fijo de cara al cliente. La idempotencia del
+// paso 3 NO depende de este texto (ver el chequeo junto a su insercion) para
+// que retocar el copy no reabra la ventana de duplicados.
 const RETENTION_WARNING_MESSAGE =
   'Este equipo lleva 11 meses cancelado. La politica de retencion elimina sus datos al cumplirse 12.'
 
@@ -37,104 +52,182 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const report = { propertiesUnpublished: 0, domainsReleased: 0, retentionWarnings: 0 }
+  const report = {
+    propertiesUnpublished: 0,
+    domainsReleased:       0,
+    retentionWarnings:     0,
+    // Que pasos completaron su pasada vs. cuales abortaron por una excepcion en
+    // la consulta base (no en una fila individual — eso se registra por log y
+    // el paso sigue). Sin esto, el reporte no distingue "no habia nada que
+    // hacer" de "fallo en silencio".
+    steps: {
+      properties: 'ok' as 'ok' | 'failed',
+      domain:     'ok' as 'ok' | 'failed',
+      retention:  'ok' as 'ok' | 'failed',
+    },
+  }
 
   // ── 1. Propiedades: gracia de 14 dias agotada ───────────────────────────────
-  const { data: overdueProps } = await supabase
-    .from('subscriptions')
-    .select('tenant_id')
-    .in('status', ['paused', 'cancelled'])
-    .eq('billing_exempt', false)
-    .lte('degraded_at', daysAgoIso(GRACE_DAYS.properties))
+  // Todo el paso va envuelto: si la excepcion ocurre en la consulta base (red,
+  // timeout), los pasos 2 y 3 deben poder correr igual ese dia.
+  try {
+    const { data: overdueProps, error: overduePropsError } = await supabase
+      .from('subscriptions')
+      .select('tenant_id')
+      .in('status', ['paused', 'cancelled'])
+      .eq('billing_exempt', false)
+      .lte('degraded_at', daysAgoIso(GRACE_DAYS.properties))
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const row of (overdueProps ?? []) as any[]) {
-    const { data: published } = await supabase
-      .from('properties')
-      .select('id')
-      .eq('tenant_id', row.tenant_id)
-      .eq('published_to_web', true)
-      .order('updated_at', { ascending: false })
+    if (overduePropsError) throw overduePropsError
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const all = (published ?? []) as any[]
-    if (all.length <= DEGRADED_LIMITS.publishedPropertiesCap) continue
+    for (const row of (overdueProps ?? []) as any[]) {
+      // Cada tenant aislado: si uno lanza (no solo si Supabase devuelve
+      // { error }), el resto de tenants de este paso se siguen procesando.
+      try {
+        const { data: published, error: publishedError } = await supabase
+          .from('properties')
+          .select('id')
+          .eq('tenant_id', row.tenant_id)
+          .eq('published_to_web', true)
+          .order('updated_at', { ascending: false })
+          // Desempate deterministico: tras un import masivo es real que varias
+          // filas compartan updated_at exacto, y sin un segundo criterio el
+          // conjunto de "las 3 conservadas" podria variar entre pasadas.
+          .order('id', { ascending: false })
 
-    // Regla determinista: se conservan las mas recientemente actualizadas.
-    // NO destructivo — la fila, las fotos y el slug quedan intactos.
-    const toUnpublish = all.slice(DEGRADED_LIMITS.publishedPropertiesCap).map(p => p.id)
-    const { error } = await supabase
-      .from('properties')
-      .update({ published_to_web: false, unpublished_by_billing: true })
-      .in('id', toUnpublish)
-    if (!error) report.propertiesUnpublished += toUnpublish.length
+        if (publishedError) throw publishedError
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const all = (published ?? []) as any[]
+        if (all.length <= DEGRADED_LIMITS.publishedPropertiesCap) continue
+
+        // Regla determinista: se conservan las mas recientemente actualizadas
+        // (con id como desempate). NO destructivo — la fila, las fotos y el
+        // slug quedan intactos.
+        const toUnpublish = all.slice(DEGRADED_LIMITS.publishedPropertiesCap).map(p => p.id)
+        const { error } = await supabase
+          .from('properties')
+          .update({ published_to_web: false, unpublished_by_billing: true })
+          .in('id', toUnpublish)
+
+        if (error) {
+          logError('properties', row.tenant_id, error)
+          continue
+        }
+        report.propertiesUnpublished += toUnpublish.length
+      } catch (err) {
+        logError('properties', row.tenant_id, err)
+      }
+    }
+  } catch (err) {
+    logError('properties', null, err)
+    report.steps.properties = 'failed'
   }
 
   // ── 2. Dominio: gracia de 60 dias agotada ───────────────────────────────────
   // Hasta aqui el dominio siguio registrado en Resend para que la reactivacion
   // fuera instantanea y los replies en vuelo siguieran llegando.
-  const { data: overdueDomains } = await supabase
-    .from('subscriptions')
-    .select('tenant_id')
-    .in('status', ['paused', 'cancelled'])
-    .eq('billing_exempt', false)
-    .lte('degraded_at', daysAgoIso(GRACE_DAYS.sendingDomain))
+  try {
+    const { data: overdueDomains, error: overdueDomainsError } = await supabase
+      .from('subscriptions')
+      .select('tenant_id')
+      .in('status', ['paused', 'cancelled'])
+      .eq('billing_exempt', false)
+      .lte('degraded_at', daysAgoIso(GRACE_DAYS.sendingDomain))
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const row of (overdueDomains ?? []) as any[]) {
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id, domain_status')
-      .eq('id', row.tenant_id)
-      .maybeSingle()
+    if (overdueDomainsError) throw overdueDomainsError
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((tenant as any)?.domain_status !== 'verified') continue
+    for (const row of (overdueDomains ?? []) as any[]) {
+      try {
+        const { data: tenant, error: tenantError } = await supabase
+          .from('tenants')
+          .select('id, domain_status')
+          .eq('id', row.tenant_id)
+          .maybeSingle()
 
-    // 'released' es el estado terminal: reactivar exigira re-verificar el DNS.
-    // Nota: esto NO borra el dominio de la cuenta de Resend (eso exige la API
-    // de Resend Domains); solo corta su uso desde el CRM. El slot queda
-    // identificable para liberarlo a mano desde el panel de Resend.
-    const { error } = await supabase
-      .from('tenants')
-      .update({ domain_status: 'released' })
-      .eq('id', row.tenant_id)
-    if (!error) report.domainsReleased += 1
+        if (tenantError) throw tenantError
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((tenant as any)?.domain_status !== 'verified') continue
+
+        // 'released' es el estado terminal: reactivar exigira re-verificar el DNS.
+        // Nota: esto NO borra el dominio de la cuenta de Resend (eso exige la API
+        // de Resend Domains); solo corta su uso desde el CRM. El slot queda
+        // identificable para liberarlo a mano desde el panel de Resend.
+        const { error } = await supabase
+          .from('tenants')
+          .update({ domain_status: 'released' })
+          .eq('id', row.tenant_id)
+
+        if (error) {
+          logError('domain', row.tenant_id, error)
+          continue
+        }
+        report.domainsReleased += 1
+      } catch (err) {
+        logError('domain', row.tenant_id, err)
+      }
+    }
+  } catch (err) {
+    logError('domain', null, err)
+    report.steps.domain = 'failed'
   }
 
   // ── 3. Retencion: aviso a los 11 meses ──────────────────────────────────────
-  const { data: oldCancelled } = await supabase
-    .from('subscriptions')
-    .select('tenant_id')
-    .eq('status', 'cancelled')
-    .eq('billing_exempt', false)
-    .lte('degraded_at', daysAgoIso(330))
+  try {
+    const { data: oldCancelled, error: oldCancelledError } = await supabase
+      .from('subscriptions')
+      .select('tenant_id, degraded_at')
+      .eq('status', 'cancelled')
+      .eq('billing_exempt', false)
+      .lte('degraded_at', daysAgoIso(330))
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const row of (oldCancelled ?? []) as any[]) {
-    // La condicion SQL de arriba (degraded_at <= hace 330 dias) sigue siendo
-    // verdadera todos los dias entre el mes 11 y el mes 12: sin este chequeo
-    // se reinsertaria el mismo aviso en cada pasada diaria. Se comprueba si el
-    // aviso EXACTO ya existe para este tenant y, si es asi, no se repite —
-    // la idempotencia sale de una condicion (¿ya existe?), no de un flag nuevo.
-    const { data: existingWarning } = await supabase
-      .from('notifications')
-      .select('id')
-      .eq('tenant_id', row.tenant_id)
-      .eq('type', 'subscription_request')
-      .eq('message', RETENTION_WARNING_MESSAGE)
-      .limit(1)
+    if (oldCancelledError) throw oldCancelledError
 
-    if (existingWarning && existingWarning.length > 0) continue
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const row of (oldCancelled ?? []) as any[]) {
+      try {
+        // La condicion SQL de arriba (degraded_at <= hace 330 dias) sigue
+        // siendo verdadera todos los dias entre el mes 11 y el mes 12: sin este
+        // chequeo se reinsertaria el aviso en cada pasada diaria. Se ancla en
+        // `degraded_at` (inicio de ESTE ciclo de degradacion) — no en el texto
+        // del mensaje — para que "¿ya se avisó en este ciclo?" siga siendo
+        // verdad aunque manana se retoque el copy (una tilde, personalizacion
+        // por tenant...). Comparar el mensaje literal habria reabierto la
+        // ventana de duplicados para todo aviso ya emitido con el copy viejo.
+        const { data: existingWarning, error: existingError } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('tenant_id', row.tenant_id)
+          .eq('type', 'subscription_request')
+          .gte('created_at', row.degraded_at)
+          .limit(1)
 
-    const { error } = await supabase.from('notifications').insert({
-      tenant_id: row.tenant_id,
-      type:      'subscription_request',
-      message:   RETENTION_WARNING_MESSAGE,
-      read:      false,
-      agent_id:  null,
-    })
-    if (!error) report.retentionWarnings += 1
+        if (existingError) throw existingError
+        if (existingWarning && existingWarning.length > 0) continue
+
+        const { error } = await supabase.from('notifications').insert({
+          tenant_id: row.tenant_id,
+          type:      'subscription_request',
+          message:   RETENTION_WARNING_MESSAGE,
+          read:      false,
+          agent_id:  null,
+        })
+
+        if (error) {
+          logError('retention', row.tenant_id, error)
+          continue
+        }
+        report.retentionWarnings += 1
+      } catch (err) {
+        logError('retention', row.tenant_id, err)
+      }
+    }
+  } catch (err) {
+    logError('retention', null, err)
+    report.steps.retention = 'failed'
   }
 
   return NextResponse.json({ ok: true, ...report })
