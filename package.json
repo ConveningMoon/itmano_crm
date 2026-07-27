@@ -15,7 +15,8 @@
     "test:routing": "vitest run tests/routing",
     "test:visibility": "vitest run tests/visibility",
     "test:ai-limits": "vitest run tests/ai-limits",
-    "test:carousels": "vitest run tests/carousels"
+    "test:carousels": "vitest run tests/carousels",
+    "test:billing": "vitest run tests/billing"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

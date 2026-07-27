@@ -7,7 +7,13 @@
 import { PLANS, TRIAL, trialDaysLeft } from '@/lib/plans'
 
 export type SubscriptionPlan = 'esencial' | 'growth' | 'partner'
-export type SubscriptionStatus = 'trial' | 'active' | 'cancel_requested' | 'change_requested' | 'cancelled'
+// Ampliado (migración 070) con los estados que llegan de Paddle: past_due
+// (cobro fallido, reintentos en curso) y paused (suscripción pausada por el
+// cliente o por dunning agotado). El CHECK de `subscriptions.status` en la
+// base ya los admite — este tipo solo se alinea con la base.
+export type SubscriptionStatus =
+  | 'trial' | 'active' | 'past_due' | 'paused'
+  | 'cancel_requested' | 'change_requested' | 'cancelled'
 
 export interface TenantSubscription {
   plan:          SubscriptionPlan
@@ -42,12 +48,23 @@ export const PLAN_CONFIG: Record<SubscriptionPlan, {
 export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   trial:            'Período de prueba',
   active:           'Activa',
+  past_due:         'Inversión pendiente',
+  paused:           'Suscripción en pausa',
   cancel_requested: 'Cancelación solicitada',
   change_requested: 'Cambio de plan solicitado',
   cancelled:        'Cancelada',
 }
 
 export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
+
+// Ciclo de facturación de Paddle: mensual o anual (10 meses cobrados, ver
+// ANNUAL_MONTHS_CHARGED en plans.ts).
+export type BillingCycle = 'month' | 'year'
+
+export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
+  month: 'Mensual',
+  year:  'Anual',
+}
 
 // Label corto para el sidebar (bajo el nombre del usuario).
 export function planBadgeLabel(sub: TenantSubscription | null): string | null {
