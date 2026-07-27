@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { reduceSubscriptionEvent, type PaddleSubscriptionEvent, type SubscriptionSnapshot } from '@/lib/paddle/reducer'
 import type { SubscriptionStatus } from '@/lib/subscriptions'
+import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 
 /**
  * Resuelve el tenant de un evento. El puente es `custom_data.tenant_id`, que se
@@ -77,6 +78,16 @@ export async function applySubscriptionEvent(
   // traza. Ocurre de verdad: el alta de tenant inserta la suscripción en
   // best-effort (admin/actions.ts), así que puede faltar.
   if (!updated?.length) throw new Error(`Sin fila de subscriptions para el tenant ${tenantId}`)
+
+  // Reactivación: detecta la TRANSICIÓN (estaba degradado y este evento lo
+  // devuelve a activo), nunca solo el estado nuevo — si se mirara únicamente
+  // `patch.degraded_at === null` se dispararía en cada evento posterior a la
+  // reactivación (ya viene null y seguiría viniendo null). `snapshot.degradedAt`
+  // es el estado ANTES de este evento, así que la combinación de ambos aísla
+  // el instante exacto en que el tenant vuelve a estar al día.
+  if (snapshot.degradedAt && patch.degraded_at === null) {
+    await restoreAfterReactivation(tenantId)
+  }
 
   // Best-effort: marcar el evento como procesado en el log de auditoría. Si
   // esto falla no se revierte el update de arriba — el efecto de negocio ya
