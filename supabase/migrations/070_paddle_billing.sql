@@ -59,6 +59,11 @@ create index if not exists paddle_webhook_events_tenant_idx
 alter table paddle_webhook_events enable row level security;
 
 -- Solo ITMANO ve el log de cobros. Escrituras solo por service role.
+--
+-- Postgres no soporta CREATE POLICY IF NOT EXISTS, así que el drop previo es lo
+-- que hace re-aplicable esta migración. (054 no lo lleva y por eso no se puede
+-- re-aplicar; aquí no repetimos el descuido.)
+drop policy if exists "paddle_webhook_events_select" on paddle_webhook_events;
 create policy "paddle_webhook_events_select"
   on paddle_webhook_events for select
   using (is_super_admin());
