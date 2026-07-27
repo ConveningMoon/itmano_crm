@@ -6,6 +6,7 @@ import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { assertEmailQuota } from '@/lib/subscriptions/quota'
 
 export type PurchaseMilestone = 'start' | 'pre_close' | 'completed'
 
@@ -171,6 +172,17 @@ export async function sendPurchaseEmail(
       service: 'sendPurchaseEmail', processId, milestone, language,
       warning: 'no_content_skipped', template_id: templateId ?? '(none)',
     }))
+    return
+  }
+
+  // Cuota de envío corporativo en modo degradado. Estos correos son
+  // AUTOMÁTICOS y no supervisados por un agente (el cron los dispara la
+  // víspera del cierre) — exactamente el escenario que motiva el tope: un
+  // tenant que ya no paga no debe poder quemar la cuota mensual sin que nadie
+  // lo esté mirando. Se somete al mismo gate que el envío manual one-off.
+  const quotaDenied = await assertEmailQuota(tenantId)
+  if (quotaDenied) {
+    console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'quota_exceeded' }))
     return
   }
 
