@@ -6,7 +6,7 @@ import { Building2 } from 'lucide-react'
 import type { TenantWithOwner } from '@/lib/data/tenants'
 import { createTenant, updateTenant, deleteTenant, provisionOwner, updateTenantSubscription } from './actions'
 import { updateTenantLogo, removeTenantLogo } from '../settings/actions'
-import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type SubscriptionPlan, type SubscriptionStatus } from '@/lib/subscriptions'
+import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type SubscriptionPlan, type SubscriptionStatus, type BillingCycle } from '@/lib/subscriptions'
 import { TRIAL, trialDaysLeft, trialEndsAtFromNow } from '@/lib/plans'
 
 // Estado editable del select de suscripción: las solicitudes pendientes
@@ -22,6 +22,13 @@ function dateInputValue(iso: string | null): string {
   const d = iso ? new Date(iso) : trialEndsAtFromNow()
   const pad = (v: number) => String(v).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// Fecha corta para los campos de solo lectura de Paddle (current_period_end,
+// degraded_at) — los escribe el webhook, aquí solo se muestran.
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 // ─── Style constants (consistent with Settings) ──────────────────────────────
@@ -266,6 +273,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [subPlan, setSubPlan]     = useState<SubscriptionPlan>((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
   const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'cancelled'>(editableStatus(tenant.subscriptionStatus))
   const [trialEnd, setTrialEnd]   = useState(dateInputValue(tenant.subscriptionTrialEndsAt))
+  const [paddlePriceId, setPaddlePriceId] = useState(tenant.subscriptionPaddlePriceId ?? '')
+  const [billingExempt, setBillingExempt] = useState(tenant.subscriptionBillingExempt)
   const [confirmSlug, setConfirmSlug] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -278,6 +287,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
     setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
     setSubStatus(editableStatus(tenant.subscriptionStatus))
     setTrialEnd(dateInputValue(tenant.subscriptionTrialEndsAt))
+    setPaddlePriceId(tenant.subscriptionPaddlePriceId ?? '')
+    setBillingExempt(tenant.subscriptionBillingExempt)
   }
 
   function handleSave() {
@@ -304,6 +315,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
         trialEndsAt: subStatus === 'trial' && trialEnd
           ? new Date(`${trialEnd}T23:59:59`).toISOString()
           : null,
+        paddlePriceId: paddlePriceId.trim() || null,
+        billingExempt,
       })
       if (!subRes.ok) { setError(subRes.error); return }
 
@@ -396,6 +409,27 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               </span>
             )}
           </div>
+          {/* Paddle (migración 070): billing_cycle/current_period_end/degraded_at
+              son de solo lectura — los escribe el webhook de Paddle. */}
+          <div style={{ fontSize: '11px', marginTop: '2px', color: 'var(--text-muted)' }}>
+            Paddle:{' '}
+            {tenant.subscriptionBillingCycle
+              ? BILLING_CYCLE_LABELS[tenant.subscriptionBillingCycle as BillingCycle] ?? tenant.subscriptionBillingCycle
+              : 'sin ciclo'}
+            {tenant.subscriptionCurrentPeriodEnd && <> · renueva {fmtDate(tenant.subscriptionCurrentPeriodEnd)}</>}
+            {tenant.subscriptionDegradedAt && (
+              <span style={{ color: 'var(--accent-coral)' }}> · degradada el {fmtDate(tenant.subscriptionDegradedAt)}</span>
+            )}
+            {tenant.subscriptionPaddlePriceId && <> · precio <code>{tenant.subscriptionPaddlePriceId}</code></>}
+            {tenant.subscriptionBillingExempt && (
+              <span style={{
+                marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
+                color: 'var(--accent-teal)', background: 'rgba(90,175,160,0.12)',
+              }}>
+                Exenta de facturación
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           {tenant.ownerEmail ? (
@@ -414,6 +448,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
                 setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
                 setSubStatus(editableStatus(tenant.subscriptionStatus))
                 setTrialEnd(dateInputValue(tenant.subscriptionTrialEndsAt))
+                setPaddlePriceId(tenant.subscriptionPaddlePriceId ?? '')
+                setBillingExempt(tenant.subscriptionBillingExempt)
                 setMode('edit')
               }}
             >
@@ -540,6 +576,30 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
               Guardar aplica el plan/estado y resuelve cualquier solicitud pendiente del tenant.
               {subStatus === 'trial' && <> En prueba, el plan efectivo es {PLAN_CONFIG[TRIAL.plan].label}; cambia la fecha para extenderla.</>}
+            </div>
+          </div>
+          <div>
+            <label style={LABEL}>Paddle</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <input
+                style={{ ...INPUT, width: '260px', fontFamily: 'monospace' }}
+                value={paddlePriceId}
+                onChange={e => setPaddlePriceId(e.target.value)}
+                placeholder="pri_01… (precio negociado de Partner)"
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={billingExempt}
+                  onChange={e => setBillingExempt(e.target.checked)}
+                  style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+                />
+                Exenta de facturación
+              </label>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              El precio de Paddle es obligatorio para que un tenant Partner pueda pagar desde /settings
+              (sin él, ve el flujo de solicitud). Marca &quot;Exenta&quot; para tenants como A&J que nunca pasan por Paddle.
             </div>
           </div>
           {error && <div style={ERROR}>{error}</div>}

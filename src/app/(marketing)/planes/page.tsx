@@ -4,6 +4,7 @@ import { Check, Minus } from 'lucide-react'
 import { Reveal } from '@/components/marketing/reveal'
 import { AuroraBackground } from '@/components/marketing/aurora-background'
 import { PLANS, PLAN_ORDER, PARTNER_SEAT, TRIAL } from '@/lib/plans'
+import { PricingTable } from './pricing-table'
 
 export const metadata: Metadata = {
   title: 'Planes e inversión — ITMANO',
@@ -208,35 +209,18 @@ export default function PlanesPage() {
       {/* Comparativa de planes */}
       <section className="mk-container mk-section" style={{ paddingTop: '56px' }}>
         <Reveal>
-          <div className="pl-table-wrap">
-            <table className="pl-table">
-              <thead>
-                <tr>
-                  <th />
-                  {PLAN_ORDER.map(key => {
-                    const p = PLANS[key]
-                    return (
-                      <th key={key} className={p.highlighted ? 'pl-col-growth' : undefined}>
-                        <div className="pl-plan-name" style={{ color: p.highlighted ? 'var(--accent-gold)' : 'var(--text-primary)' }}>
-                          {p.label}
-                        </div>
-                        <div className="pl-plan-price mk-num">{p.inversion}</div>
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON.map(group => (
-                  <FragmentGroup key={group.title} group={group} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PricingTable>
+            {COMPARISON.map(group => (
+              <FragmentGroup key={group.title} group={group} />
+            ))}
+          </PricingTable>
           <p style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
             Los límites de capacidad son por mes calendario. Si tu operación crece
             más allá de tu plan, nuestro equipo te propone el ajuste — nada se corta
             de un día para otro.
+          </p>
+          <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Los impuestos correspondientes se calculan al momento de completar tu inversión.
           </p>
         </Reveal>
 
