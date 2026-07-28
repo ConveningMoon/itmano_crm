@@ -7,6 +7,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 import { MEDIA_BUCKET, sanitizeSlugFolder, objectPathFromPublicUrl } from '@/lib/services/property-media'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 // http(s)-only URL, empty string tolerated (normalized to null before insert).
 const httpUrl = z
@@ -170,6 +171,13 @@ export async function createProperty(
 
   const db = createAdminClient()
 
+  // Una propiedad nueva puede crearse sin publicar sin importar el modo de
+  // facturación; el tope solo se evalúa si nace ya publicada.
+  if (parsed.data.published_to_web) {
+    const capDenied = await assertPublishCap(db, targetTenant)
+    if (capDenied) return capDenied
+  }
+
   // Resolve authorship: agent → their agent record; owner → look up linked agent
   // record by user_id (e.g. Adriana is both login user and agent-adriana);
   // super_admin → no individual author.
@@ -225,7 +233,7 @@ export async function updateProperty(
 
   const { data: existing } = await db
     .from('properties')
-    .select('tenant_id, created_by_user_id')
+    .select('tenant_id, created_by_user_id, published_to_web')
     .eq('id', id)
     .maybeSingle()
 
@@ -238,6 +246,16 @@ export async function updateProperty(
     created_by_user_id: existingRow.created_by_user_id ?? null,
   })
   if (denial) return denial
+
+  // El tope solo se evalúa cuando la propiedad PASA a publicarse en este
+  // guardado. Una propiedad que ya estaba publicada y se sigue editando (o que
+  // se está despublicando) no debe bloquearse — solo se limita la publicación
+  // nueva.
+  const wasPublished = existingRow.published_to_web === true
+  if (parsed.data.published_to_web && !wasPublished) {
+    const capDenied = await assertPublishCap(db, existingRow.tenant_id as string)
+    if (capDenied) return capDenied
+  }
 
   const { error } = await db
     .from('properties')
@@ -294,6 +312,32 @@ export async function deleteProperty(
 
   revalidatePath('/properties')
   return { ok: true }
+}
+
+// Tope de propiedades publicadas en modo degradado (spec §10). Solo aplica
+// cuando la propiedad PASA a publicarse — nunca bloquea crear/editar una
+// propiedad que se queda sin publicar o que ya estaba publicada (eso rompería
+// "seguir creando y editando con normalidad" del modo degradado).
+async function assertPublishCap(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+): Promise<{ ok: false; error: string } | null> {
+  const access = await getTenantAccessFor(tenantId)
+  if (access.publishedPropertiesCap === null) return null
+
+  const { count } = await db
+    .from('properties')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('published_to_web', true)
+
+  if ((count ?? 0) >= access.publishedPropertiesCap) {
+    return {
+      ok: false,
+      error: `Tu suscripción inactiva permite ${access.publishedPropertiesCap} propiedades publicadas. Despublica una o reactiva tu suscripción.`,
+    }
+  }
+  return null
 }
 
 // Translates the (tenant_id, slug) unique-index violation into a friendly

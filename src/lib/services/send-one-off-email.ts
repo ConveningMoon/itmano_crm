@@ -5,6 +5,8 @@ import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 import type { EmailContent } from '@/lib/email-content'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { assertEmailQuota } from '@/lib/subscriptions/quota'
 
 const BLOCK_LABEL: Record<string, string> = {
   unsubscribed:   'el lead canceló su suscripción',
@@ -39,6 +41,11 @@ export async function sendOneOffEmail(
   const leadEmail = l.email as string | null
   if (!leadEmail) return { ok: false, error: 'El lead no tiene email.' }
 
+  // Cuota de envío corporativo en modo degradado. Solo aplica aquí: el modo
+  // Personal del composer abre un mailto: y nunca llega a esta función.
+  const quotaDenied = await assertEmailQuota(tenantId)
+  if (quotaDenied) return quotaDenied
+
   const agent      = Array.isArray(l.agents) ? l.agents[0] : l.agents
   const agentName  = (agent?.name as string | undefined) ?? ''
   const agentEmail = (agent?.email as string | undefined) ?? ''
@@ -46,13 +53,18 @@ export async function sendOneOffEmail(
   const language   = (['es', 'en', 'pt'].includes(l.language as string) ? l.language : 'es') as EmailLocale
 
   // Tenant: identidad de envío (cuenta Resend + from) según plan/dominio (065).
-  const { data: tenant } = await db
-    .from('tenants')
-    .select('name, slug, email_from_address, resend_account, domain_status')
-    .eq('id', tenantId)
-    .maybeSingle()
+  // Acceso de facturación en paralelo — no depende del tenant y así no añade
+  // una vuelta secuencial extra a un envío manual disparado por el agente.
+  const [{ data: tenant }, access] = await Promise.all([
+    db
+      .from('tenants')
+      .select('name, slug, email_from_address, resend_account, domain_status')
+      .eq('id', tenantId)
+      .maybeSingle(),
+    getTenantAccessFor(tenantId),
+  ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const identity = resolveSenderIdentity(tenant as any)
+  const identity = resolveSenderIdentity(tenant as any, { customDomainAllowed: access.customDomainAllowed })
   if (!identity) {
     return { ok: false, error: 'El equipo no tiene una dirección de envío configurada.' }
   }

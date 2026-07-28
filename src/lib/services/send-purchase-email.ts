@@ -5,6 +5,8 @@ import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { assertEmailQuota } from '@/lib/subscriptions/quota'
 
 export type PurchaseMilestone = 'start' | 'pre_close' | 'completed'
 
@@ -173,15 +175,31 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Identidad de envío del tenant (cuenta Resend + from) según plan/dominio (065).
-  const { data: tenant } = await db
-    .from('tenants')
-    .select('name, slug, email_from_address, resend_account, domain_status')
-    .eq('id', tenantId)
-    .single()
+  // Cuota de envío corporativo en modo degradado. Estos correos son
+  // AUTOMÁTICOS y no supervisados por un agente (el cron los dispara la
+  // víspera del cierre) — exactamente el escenario que motiva el tope: un
+  // tenant que ya no paga no debe poder quemar la cuota mensual sin que nadie
+  // lo esté mirando. Se somete al mismo gate que el envío manual one-off.
+  const quotaDenied = await assertEmailQuota(tenantId)
+  if (quotaDenied) {
+    console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'quota_exceeded' }))
+    return
+  }
+
+  // Identidad de envío del tenant (cuenta Resend + from) según plan/dominio
+  // (065). Acceso de facturación en paralelo — tenantId ya se conoce desde el
+  // inicio de la función.
+  const [{ data: tenant }, access] = await Promise.all([
+    db
+      .from('tenants')
+      .select('name, slug, email_from_address, resend_account, domain_status')
+      .eq('id', tenantId)
+      .single(),
+    getTenantAccessFor(tenantId),
+  ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const identity = resolveSenderIdentity(tenant as any)
+  const identity = resolveSenderIdentity(tenant as any, { customDomainAllowed: access.customDomainAllowed })
   if (!identity) {
     console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'no_from_address' }))
     return

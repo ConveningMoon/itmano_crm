@@ -15,11 +15,14 @@
     "test:routing": "vitest run tests/routing",
     "test:visibility": "vitest run tests/visibility",
     "test:ai-limits": "vitest run tests/ai-limits",
-    "test:carousels": "vitest run tests/carousels"
+    "test:carousels": "vitest run tests/carousels",
+    "test:billing": "vitest run tests/billing"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
     "@base-ui/react": "^1.4.1",
+    "@paddle/paddle-js": "1.6.4",
+    "@paddle/paddle-node-sdk": "3.8.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "class-variance-authority": "^0.7.1",

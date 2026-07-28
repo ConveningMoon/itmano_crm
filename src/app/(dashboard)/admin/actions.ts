@@ -350,10 +350,19 @@ const UpdateSubscriptionSchema = z.object({
   // Requerido cuando status = 'trial' (constraint de coherencia en la 055).
   // Permite fijar o EXTENDER el vencimiento de la prueba.
   trialEndsAt: z.string().datetime({ offset: true }).nullish(),
+  // Paddle (migración 070). paddlePriceId es el precio negociado de Partner —
+  // sin él, /settings mantiene el flujo de solicitud en vez del botón de pago.
+  // Cadena vacía se normaliza a null (campo "sin asignar").
+  paddlePriceId: z.string().trim().max(80).nullish(),
+  // A&J (piloto): true — nunca toca Paddle, aunque tenga plan/estado asignado.
+  billingExempt: z.boolean().default(false),
 })
 
 export async function updateTenantSubscription(
-  input: { tenantId: string; plan: string; status: string; trialEndsAt?: string | null },
+  input: {
+    tenantId: string; plan: string; status: string; trialEndsAt?: string | null
+    paddlePriceId?: string | null; billingExempt?: boolean
+  },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') {
@@ -378,7 +387,9 @@ export async function updateTenantSubscription(
       status:         parsed.data.status,
       requested_plan: null,
       trial_ends_at:  parsed.data.status === 'trial' ? parsed.data.trialEndsAt : null,
-      updated_at:     new Date().toISOString(),
+      paddle_price_id: parsed.data.paddlePriceId?.trim() || null,
+      billing_exempt:  parsed.data.billingExempt,
+      updated_at:      new Date().toISOString(),
     }, { onConflict: 'tenant_id' })
   if (error) return { ok: false, error: error.message }
 

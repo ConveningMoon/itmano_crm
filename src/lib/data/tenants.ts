@@ -65,6 +65,14 @@ export interface TenantWithOwner {
   subscriptionStatus:        string | null
   subscriptionRequestedPlan: string | null
   subscriptionTrialEndsAt:   string | null
+  // Campos de Paddle (migración 070) — billing_cycle/current_period_end/
+  // degraded_at son de solo lectura (los escribe el webhook de Paddle);
+  // paddle_price_id y billing_exempt los edita el super_admin desde el hub.
+  subscriptionBillingCycle:     string | null
+  subscriptionCurrentPeriodEnd: string | null
+  subscriptionDegradedAt:       string | null
+  subscriptionPaddlePriceId:    string | null
+  subscriptionBillingExempt:    boolean
 }
 
 /**
@@ -85,11 +93,16 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited, ai_lead_scoring_enabled, resend_account, sending_domain, resend_domain_id, domain_status, domain_records').order('created_at'),
     supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
-    supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at'),
+    supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, degraded_at, paddle_price_id, billing_exempt'),
   ])
 
-  const subByTenant = new Map<string, { plan: string; status: string; requested_plan: string | null; trial_ends_at: string | null }>()
-  for (const s of (subRows ?? []) as { tenant_id: string; plan: string; status: string; requested_plan: string | null; trial_ends_at: string | null }[]) {
+  type SubRow = {
+    tenant_id: string; plan: string; status: string; requested_plan: string | null; trial_ends_at: string | null
+    billing_cycle: string | null; current_period_end: string | null; degraded_at: string | null
+    paddle_price_id: string | null; billing_exempt: boolean | null
+  }
+  const subByTenant = new Map<string, SubRow>()
+  for (const s of (subRows ?? []) as SubRow[]) {
     subByTenant.set(s.tenant_id, s)
   }
 
@@ -141,6 +154,11 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       subscriptionStatus:        subByTenant.get(t.id)?.status ?? null,
       subscriptionRequestedPlan: subByTenant.get(t.id)?.requested_plan ?? null,
       subscriptionTrialEndsAt:   subByTenant.get(t.id)?.trial_ends_at ?? null,
+      subscriptionBillingCycle:     subByTenant.get(t.id)?.billing_cycle ?? null,
+      subscriptionCurrentPeriodEnd: subByTenant.get(t.id)?.current_period_end ?? null,
+      subscriptionDegradedAt:       subByTenant.get(t.id)?.degraded_at ?? null,
+      subscriptionPaddlePriceId:    subByTenant.get(t.id)?.paddle_price_id ?? null,
+      subscriptionBillingExempt:    subByTenant.get(t.id)?.billing_exempt ?? false,
     })
   }
 

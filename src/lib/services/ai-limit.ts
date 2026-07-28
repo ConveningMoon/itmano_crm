@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { TenantContext } from '@/lib/auth/tenant-context'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 // ── Límite mensual de IA por tenant ──────────────────────────────────────────
 // El tope (tenants.ai_monthly_limit_usd, default $10) aplica sobre la suma de
@@ -183,6 +184,17 @@ export async function assertAiWithinLimit(
 ): Promise<{ ok: false; error: string } | null> {
   if (ctx.role === 'super_admin') return null
   if (!ctx.tenant_id) return { ok: false, error: 'Acceso no autorizado' }
+
+  // Suscripción inactiva: la IA se apaga por completo (spec §6.2). Va DESPUÉS
+  // de la comprobación de super_admin — un operador ITMANO inspeccionando un
+  // tenant caído no debe quedar bloqueado por la suscripción de ese tenant.
+  const access = await getTenantAccessFor(ctx.tenant_id)
+  if (!access.canUseAi) {
+    return {
+      ok: false,
+      error: 'La generación con IA está en pausa porque tu suscripción está inactiva. Reactívala desde Configuración para volver a usarla.',
+    }
+  }
 
   const status = await getAiLimitStatus(ctx.tenant_id)
   if (status.blocked) {

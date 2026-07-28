@@ -12,8 +12,10 @@ import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-u
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
 import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
-import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, type TenantSubscription, type SubscriptionPlan } from '@/lib/subscriptions'
-import { trialDaysLeft } from '@/lib/plans'
+import { openBillingPortal } from './billing-actions'
+import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
+import { PLANS, trialDaysLeft } from '@/lib/plans'
+import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { ScoringSection } from './scoring-section'
 import { Tabs } from '@/components/ui/tabs'
 
@@ -992,6 +994,9 @@ function SubscriptionCard({ subscription, canManage }: {
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [checkoutCycle, setCheckoutCycle] = useState<BillingCycle>('month')
+  const [portalError, setPortalError] = useState<string | null>(null)
+  const [portalPending, startPortalTransition] = useTransition()
 
   if (!subscription) {
     return (
@@ -1016,6 +1021,17 @@ function SubscriptionCard({ subscription, canManage }: {
       if (!res.ok) { setError(res.error); return }
       setMode('view')
       setSelectedPlan(null)
+    })
+  }
+
+  // La URL del portal de Paddle es de un solo uso y vida corta — se pide al
+  // pulsar y se navega de inmediato. Nunca se guarda en estado ni se cachea.
+  function openPortal() {
+    setPortalError(null)
+    startPortalTransition(async () => {
+      const res = await openBillingPortal()
+      if (!res.ok) { setPortalError(res.error); return }
+      window.location.href = res.data.url
     })
   }
 
@@ -1045,6 +1061,25 @@ function SubscriptionCard({ subscription, canManage }: {
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>{cfg.blurb}</div>
         </div>
 
+        {subscription.billingCycle && (
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            {BILLING_CYCLE_LABELS[subscription.billingCycle]}
+            {subscription.currentPeriodEnd && (
+              <> · Renueva el{' '}
+                {new Date(subscription.currentPeriodEnd).toLocaleDateString('es', { day: 'numeric', month: 'long' })}
+              </>
+            )}
+          </div>
+        )}
+
+        {subscription.cancelAt && (
+          <div style={{ fontSize: '12px', color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
+            Tu suscripción termina el{' '}
+            <strong>{new Date(subscription.cancelAt).toLocaleDateString('es', { day: 'numeric', month: 'long' })}</strong>.
+            Conservas el acceso completo hasta entonces.
+          </div>
+        )}
+
         {subscription.status === 'trial' && subscription.trialEndsAt && (
           <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
             {trialDaysLeft(subscription.trialEndsAt) > 0 ? (
@@ -1071,6 +1106,86 @@ function SubscriptionCard({ subscription, canManage }: {
               >
                 Retirar solicitud
               </button>
+            )}
+          </div>
+        )}
+
+        {/* Botón de inversión — checkout de Paddle. Esencial y Growth se pagan
+            directo; Partner solo si el super_admin ya fijó su inversión
+            negociada (paddlePriceId). Sin ese precio, Partner sigue el flujo
+            de solicitud de abajo.
+            El plan actual se oculta solo si ya está pagado y vigente: volver a
+            comprarlo crearía una SEGUNDA suscripción en Paddle y, como
+            guardamos una sola fila por tenant, la anterior seguiría cobrando
+            sin que nadie la vea. En trial o con la suscripción caída, pagar el
+            plan actual es precisamente la acción esperada.
+            Tampoco se muestra con una solicitud de cambio/cancelación
+            pendiente — pagar por su cuenta mientras ITMANO ya está
+            procesando esa solicitud sería incoherente. */}
+        {canManage && !hasPendingRequest && (() => {
+          const canBuy = (p: SubscriptionPlan) =>
+            (p !== 'partner' || !!subscription.paddlePriceId) &&
+            !(subscription.status === 'active' && p === subscription.plan)
+          const buyablePlans = PLAN_ORDER.filter(canBuy)
+          if (buyablePlans.length === 0) return null
+          return (
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={LABEL}>Paga tu inversión</label>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {(['month', 'year'] as BillingCycle[]).map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setCheckoutCycle(c)}
+                      style={{
+                        padding: '4px 10px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer',
+                        border: `1px solid ${checkoutCycle === c ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                        background: checkoutCycle === c ? 'rgba(201,169,110,0.08)' : 'transparent',
+                        color: checkoutCycle === c ? 'var(--accent-gold)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {BILLING_CYCLE_LABELS[c]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {buyablePlans.map(p => (
+                  <div key={p} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
+                    padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: '8px',
+                  }}>
+                    <span>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{PLAN_CONFIG[p].label}</span>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--accent-gold)', marginTop: '2px' }}>
+                        {checkoutCycle === 'year' ? PLANS[p].inversionAnual : PLANS[p].inversion}
+                      </span>
+                    </span>
+                    <PaddleCheckoutButton plan={p} cycle={checkoutCycle} label="Pagar ahora" />
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Al pagar se abre el checkout seguro de Paddle. El equipo ITMANO recibe la
+                confirmación de inmediato.
+              </div>
+            </div>
+          )
+        })()}
+
+        {canManage && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+            <button
+              onClick={openPortal}
+              disabled={portalPending}
+              style={{ ...BTN_GHOST, opacity: portalPending ? 0.6 : 1 }}
+            >
+              {portalPending ? 'Abriendo…' : 'Gestionar inversión y facturas'}
+            </button>
+            {portalError && (
+              <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'rgba(201,123,107,0.08)', borderRadius: '6px' }}>
+                {portalError}
+              </div>
             )}
           </div>
         )}
@@ -1150,8 +1265,8 @@ function SubscriptionCard({ subscription, canManage }: {
         )}
 
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Los cambios de suscripción los gestiona el equipo ITMANO — al enviar una solicitud,
-          te contactamos para completarla sin interrupciones en tu servicio.
+          El plan Partner se define a medida con nuestro equipo. Para cancelar tu
+          suscripción, usa el portal de inversión o escríbenos.
         </div>
       </div>
     </div>

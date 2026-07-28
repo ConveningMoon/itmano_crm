@@ -65,6 +65,12 @@ export interface PlanDefinition {
   priceUsd: number | null
   /** Para Partner: precio base "desde". */
   basePriceUsd?: number
+  /** Inversión anual en USD. Se cobran 10 meses y se usan 12. */
+  priceAnnualUsd: number
+  /** String de inversión anual ("$590 / año"). */
+  inversionAnual: string
+  /** Ahorro frente a 12 mensualidades, en USD. */
+  annualSavingsUsd: number
   /** String de inversión para UI ("$59 / mes", "desde $249 / mes"). */
   inversion: string
   audience: string
@@ -76,12 +82,24 @@ export interface PlanDefinition {
   highlighted: boolean
 }
 
+// ─── Ciclo anual ──────────────────────────────────────────────────────────────
+// "2 meses gratis" (16.7%). Se descarta un descuento mayor: en Growth el
+// presupuesto de IA es $30/mes = $360/año contra $1,290 de ingreso — 28% del
+// revenue como COGS — y en posicionamiento premium un 25% off lee como
+// liquidación. DELIBERADAMENTE no se publica un equivalente mensual del anual:
+// $590/12 = $49.17, y redondear a "$49/mes" prometería menos de lo que se cobra
+// (misma convención que aiTokensLabel: nunca prometer de más).
+export const ANNUAL_MONTHS_CHARGED = 10
+
 export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
   esencial: {
     key: 'esencial',
     label: 'Esencial',
     priceUsd: 59,
     inversion: '$59 / mes',
+    priceAnnualUsd:   590,
+    inversionAnual:   '$590 / año',
+    annualSavingsUsd: 118,
     audience: 'Agentes independientes que empiezan a ordenar su operación.',
     blurb: 'CRM completo con scoring automático, secuencias de email y IA para arrancar.',
     limits: {
@@ -111,6 +129,9 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
     label: 'Growth',
     priceUsd: 129,
     inversion: '$129 / mes',
+    priceAnnualUsd:   1290,
+    inversionAnual:   '$1,290 / año',
+    annualSavingsUsd: 258,
     audience: 'Independientes pro que quieren la IA completa y su web alimentada por el CRM.',
     blurb: 'Toda la IA generativa, propiedades sincronizadas con tu web y analytics completo.',
     limits: {
@@ -141,6 +162,9 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
     priceUsd: null,
     basePriceUsd: 249,
     inversion: 'desde $249 / mes',
+    priceAnnualUsd:   2490,
+    inversionAnual:   'desde $2,490 / año',
+    annualSavingsUsd: 498,
     audience: 'Equipos y grupos inmobiliarios: 2 o más agentes con acceso propio.',
     blurb: 'Multi-login por agente, todo ilimitado y onboarding dedicado con migración de datos.',
     limits: {

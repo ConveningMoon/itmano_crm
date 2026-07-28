@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { EmailContentSchema } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
@@ -69,6 +70,14 @@ export async function createSequence(
 
   const tenantId = await getTenantId(parsed.data.tenantId)
   if (typeof tenantId === 'object') return { ok: false, error: tenantId.error }
+
+  // Crear secuencias nuevas requiere suscripción activa; las existentes no se
+  // tocan (siguen enviando o en pausa según sequencesRunnable, ver process-
+  // sequence-run.ts).
+  const access = await getTenantAccessFor(tenantId)
+  if (!access.canCreateSequences) {
+    return { ok: false, error: 'Crear secuencias requiere una suscripción activa. Tus secuencias existentes se conservan intactas.' }
+  }
 
   const supabase = createAdminClient()
   const agent = await resolveSequenceAgent(supabase, tenantId, parsed.data.agentId)

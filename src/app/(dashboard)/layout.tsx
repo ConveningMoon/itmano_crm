@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { SubscriptionBanner } from '@/components/dashboard/subscription-banner'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
@@ -7,6 +8,7 @@ import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { planBadgeLabel } from '@/lib/subscriptions'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 export default async function DashboardLayout({
   children,
@@ -35,6 +37,11 @@ export default async function DashboardLayout({
   // Suscripción del tenant → label bajo el nombre del usuario en el sidebar.
   const subscription = ctx.tenant_id ? await getSubscription(ctx.tenant_id) : null
   const planLabel = planBadgeLabel(subscription)
+
+  // Banner de estado de suscripción — solo con tenant activo. El super_admin
+  // en modo hub (sin tenant_id) no tiene una fila de `subscriptions` que leer;
+  // pedir el acceso con un tenant nulo rompería el panel de administración.
+  const access = ctx.tenant_id ? await getTenantAccessFor(ctx.tenant_id) : null
 
   // The auth email isn't on the tenant context; read it from the session for the
   // sidebar footer (the session is already established — ctx redirected otherwise).
@@ -77,6 +84,7 @@ export default async function DashboardLayout({
           aiLimit={aiLimit}
           planLabel={planLabel}
         />
+        <SubscriptionBanner banner={access?.banner ?? null} />
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>

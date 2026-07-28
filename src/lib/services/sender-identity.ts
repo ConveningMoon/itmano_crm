@@ -27,7 +27,29 @@ export interface SenderIdentity {
   from:    string
 }
 
-export function resolveSenderIdentity(t: TenantSenderFields): SenderIdentity | null {
+export interface SenderIdentityOptions {
+  /**
+   * false cuando la suscripción está degradada: se fuerza el dominio compartido
+   * de ITMANO. NO se toca tenants.email_from_address en la base — el override
+   * ocurre aquí, en la resolución. Es deliberado: el webhook inbound de Resend
+   * resuelve el tenant comparando el `to` del reply contra ese campo, así que
+   * borrarlo dejaría huérfanas las respuestas a conversaciones en vuelo.
+   * Default true = comportamiento previo intacto.
+   */
+  customDomainAllowed?: boolean
+}
+
+export function resolveSenderIdentity(
+  t: TenantSenderFields,
+  opts: SenderIdentityOptions = {},
+): SenderIdentity | null {
+  const customAllowed = opts.customDomainAllowed ?? true
+  const shared = `${t.name} <${t.slug}@${ITMANO_SHARED_DOMAIN}>`
+
+  // Degradado: dominio compartido y cuenta de ITMANO. Forzar la cuenta es
+  // necesario — un from de mail.itmano.com no está verificado en la de A&J.
+  if (!customAllowed) return { account: 'itmano', from: shared }
+
   const account = resolveResendAccount(t.resend_account)
 
   // A&J / legacy: sin cambios.
@@ -37,8 +59,5 @@ export function resolveSenderIdentity(t: TenantSenderFields): SenderIdentity | n
 
   // ITMANO: dominio propio verificado, si no el compartido.
   const useCustom = t.domain_status === 'verified' && !!t.email_from_address
-  const from = useCustom
-    ? (t.email_from_address as string)
-    : `${t.name} <${t.slug}@${ITMANO_SHARED_DOMAIN}>`
-  return { account, from }
+  return { account, from: useCustom ? (t.email_from_address as string) : shared }
 }

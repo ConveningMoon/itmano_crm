@@ -31,6 +31,9 @@ export type PendingRun = {
   tenant_slug:          string
   resend_account:       string | null
   domain_status:        string | null
+  // Suscripción degradada: false fuerza el dominio compartido de ITMANO en la
+  // resolución de identidad (calculado una vez en processSequenceRun).
+  custom_domain_allowed: boolean
   // Agent
   agent_name:         string
   agent_email:        string
@@ -39,6 +42,9 @@ export type PendingRun = {
   channel_name:       string | null
   // Sequence
   sequence_language:  EmailLocale
+  // Guardia de frescura (Task 12): cuándo estaba programado este envío. Un run
+  // reactivado meses después de su next_send_at no se dispara — ver isRunStale.
+  next_send_at:       string | null
 }
 
 export type SendResult =
@@ -82,13 +88,16 @@ export async function sendSequenceEmail(
     return { ok: false, reason: 'no_content', action: 'paused' }
   }
 
-  const identity = resolveSenderIdentity({
-    name:               run.tenant_name,
-    slug:               run.tenant_slug,
-    email_from_address: run.email_from_address,
-    resend_account:     run.resend_account,
-    domain_status:      run.domain_status,
-  })
+  const identity = resolveSenderIdentity(
+    {
+      name:               run.tenant_name,
+      slug:               run.tenant_slug,
+      email_from_address: run.email_from_address,
+      resend_account:     run.resend_account,
+      domain_status:      run.domain_status,
+    },
+    { customDomainAllowed: run.custom_domain_allowed },
+  )
   if (!identity) {
     if (!dryRun) await pauseRun(db, run_id, 'no_from_address')
     return { ok: false, reason: 'no_from_address', action: 'paused' }
