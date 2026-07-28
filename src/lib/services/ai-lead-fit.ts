@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { getAiLimitStatus } from '@/lib/services/ai-limit'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 // ── Análisis de fit de leads con IA (fase de prueba, apagado por tenant) ──────
 //
@@ -120,6 +121,15 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     const tenant = tenantRow as { name: string; description: string | null; ai_lead_scoring_enabled: boolean } | null
     if (!tenant) return skip('tenant_not_found', input.leadId)
     if (!tenant.ai_lead_scoring_enabled) return skip('scoring_disabled', input.leadId)
+
+    // Suscripción: la IA se apaga por completo al degradar. Este gate importa
+    // más aquí que en las acciones de la UI porque assessLeadFit se dispara
+    // AUTOMÁTICAMENTE — desde el endpoint público de formularios, desde el
+    // webhook de respuestas de Resend y desde el de contacto. Sin él, un tenant
+    // cancelado cuyas landing pages sigan vivas quema presupuesto de Anthropic
+    // que paga ITMANO, sin que nadie lo esté mirando.
+    const access = await getTenantAccessFor(input.tenantId)
+    if (!access.canUseAi) return skip('subscription_inactive', input.leadId)
 
     // Presupuesto de IA del mes.
     const limit = await getAiLimitStatus(input.tenantId)
