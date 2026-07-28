@@ -26,6 +26,14 @@ async function gate() {
   return ctx
 }
 
+// Next señaliza redirect() y notFound() LANZANDO un error con `digest`. Un
+// catch genérico se lo tragaría y la navegación se perdería en silencio, así
+// que hay que re-lanzarlo siempre.
+function isNextControlFlow(e: unknown): boolean {
+  const d = (e as { digest?: unknown } | null)?.digest
+  return typeof d === 'string' && (d.startsWith('NEXT_REDIRECT') || d === 'NEXT_NOT_FOUND')
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toBrand(r: any): CarouselBrandProfile {
   return {
@@ -245,27 +253,81 @@ export async function loadCarouselLogs(jobId: string): Promise<ActionResult<Caro
   return { ok: true, data: await getCarouselLogs(jobId) }
 }
 
+// ── Registrar un fallo detectado por el navegador ────────────────────────────
+// Cuando la invocación de renderSlide muere entera (timeout de la función, 500
+// de la plataforma, red caída), su try/catch NUNCA corre: no hay fila en
+// carousel_logs y el slide se queda congelado en 'rendering' aunque la pantalla
+// muestre "error". Fue exactamente el punto ciego que dejó el incidente del
+// 28-07 sin una sola línea de diagnóstico. El cliente, que sí vio el fallo, lo
+// reporta aquí para que quede registrado y para reconciliar el estado en la BD.
+export async function reportRenderFailure(input: { slideId: string; message: string; attempts?: number }): Promise<ActionResult<null>> {
+  const ctx = await gate()
+  if (!ctx) return { ok: false, error: 'Sin acceso' }
+
+  const db = createAdminClient()
+  const { data: slideRow } = await db.from('carousel_slides').select('job_id, slide_number, status').eq('id', (input.slideId ?? '').trim()).maybeSingle()
+  if (!slideRow) return { ok: false, error: 'Slide no encontrado' }
+
+  const msg = (input.message ?? '').slice(0, 500) || 'Error desconocido en el navegador'
+  await logCarousel({
+    jobId: slideRow.job_id, slideNumber: slideRow.slide_number, level: 'error', step: 'render',
+    message: `Slide ${slideRow.slide_number}: la llamada al servidor falló desde el navegador — ${msg}`,
+    detail: { origin: 'client', attempts: input.attempts ?? 1, slide_status_en_bd: slideRow.status },
+  })
+
+  // La BD decía 'rendering' y la pantalla "error": reconciliamos para que
+  // "Renderizar pendientes" y el registro cuenten la misma historia.
+  if (slideRow.status === 'rendering') {
+    await db.from('carousel_slides')
+      .update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() })
+      .eq('id', input.slideId)
+  }
+  return { ok: true, data: null }
+}
+
 // ── Renderizar (o regenerar) un slide: imagen + composición ──────────────────
 // forceImage=true → genera una imagen NUEVA (paga). Por defecto (false) se
 // REUTILIZA la imagen ya generada si existe (reanudar/recomponer no re-paga).
 export async function renderSlide(slideId: string, opts?: { forceImage?: boolean }): Promise<ActionResult<CarouselSlide>> {
+  // gate() queda FUERA del try: getCurrentTenantContext puede hacer redirect()
+  // a /login y ese "error" de control de flujo debe propagarse, no loguearse.
   const ctx = await gate()
   if (!ctx) return { ok: false, error: 'Sin acceso' }
   const forceImage = opts?.forceImage === true
 
   const db = createAdminClient()
-  const { data: slideRow } = await db.from('carousel_slides').select('*').eq('id', slideId).maybeSingle()
-  if (!slideRow) return { ok: false, error: 'Slide no encontrado' }
-  const { data: jobRow } = await db.from('carousel_jobs').select('*').eq('id', slideRow.job_id).maybeSingle()
-  if (!jobRow) return { ok: false, error: 'Job no encontrado' }
-  const { data: brandRow } = await db.from('carousel_brand_profiles').select('*').eq('agent_id', jobRow.agent_id).maybeSingle()
-  if (!brandRow) return { ok: false, error: 'Perfil de marca no encontrado' }
-  const brand = toBrand(brandRow)
 
-  await db.from('carousel_slides').update({ status: 'rendering', error_message: null, updated_at: new Date().toISOString() }).eq('id', slideId)
+  // El resto del preámbulo (las tres lecturas y el marcado 'rendering') vivía
+  // fuera del try. Cualquier fallo ahí — pooler saturado, lectura caída — se
+  // propagaba SIN escribir en carousel_logs y dejando el slide colgado en
+  // 'rendering': error visible en pantalla, cero rastro para diagnosticarlo.
+  // Ahora todo está cubierto y cada salida deja registro.
+  let jobId: string | null = null
+  let n: number | null = null
+  let hadImagePrompt = false
 
-  const n = slideRow.slide_number as number
   try {
+    const { data: slideRow, error: slideErr } = await db.from('carousel_slides').select('*').eq('id', slideId).maybeSingle()
+    if (slideErr) throw new Error(`No se pudo leer el slide: ${slideErr.message}`)
+    if (!slideRow) return { ok: false, error: 'Slide no encontrado' }
+    jobId = slideRow.job_id as string
+    n = slideRow.slide_number as number
+    hadImagePrompt = !!slideRow.image_prompt
+
+    const { data: jobRow, error: jobErr } = await db.from('carousel_jobs').select('*').eq('id', slideRow.job_id).maybeSingle()
+    if (jobErr) throw new Error(`No se pudo leer el carrusel: ${jobErr.message}`)
+    if (!jobRow) return { ok: false, error: 'Job no encontrado' }
+
+    const { data: brandRow, error: brandErr } = await db.from('carousel_brand_profiles').select('*').eq('agent_id', jobRow.agent_id).maybeSingle()
+    if (brandErr) throw new Error(`No se pudo leer el perfil de marca: ${brandErr.message}`)
+    if (!brandRow) return { ok: false, error: 'Perfil de marca no encontrado' }
+    const brand = toBrand(brandRow)
+
+    const { error: markErr } = await db.from('carousel_slides')
+      .update({ status: 'rendering', error_message: null, updated_at: new Date().toISOString() })
+      .eq('id', slideId)
+    if (markErr) throw new Error(`No se pudo marcar el slide como "componiendo": ${markErr.message}`)
+
     const base = `${jobRow.agent_id}/${jobRow.id}`
 
     // Fondo editorial con Nano Banana (solo si el slide lo pide).
@@ -345,7 +407,15 @@ export async function renderSlide(slideId: string, opts?: { forceImage?: boolean
     const allReady = (siblings ?? []).every((s: { status: string }) => s.status === 'ready')
     await db.from('carousel_jobs').update({ status: allReady ? 'ready' : 'composing', updated_at: new Date().toISOString() }).eq('id', jobRow.id)
 
-    revalidatePath('/admin/carousels')
+    // Sin revalidatePath aquí a propósito. Se llamaba una vez POR SLIDE, y cada
+    // llamada obliga a Next a re-renderizar la página entera del motor
+    // (getBrandProfiles + getRecentJobs + getCarouselCosts + getJobWithSlides)
+    // y a devolver ese payload junto con la respuesta — dentro de la MISMA
+    // invocación que acaba de componer un PNG con sharp. Ocho slides eran ocho
+    // re-renderizados completos de la página, con sus decenas de consultas, sin
+    // que el cliente los usara: la UI ya aplica el slide devuelto con patchSlide.
+    // Era el mayor consumo de tiempo y de conexiones del render, y puro
+    // desperdicio. La caché de la ruta se refresca en startCarousel/deleteCarousel.
     const { data: fresh } = await db.from('carousel_slides').select('*').eq('id', slideId).single()
     const url = createAdminClient().storage.from(BUCKET).getPublicUrl(renderedPath).data.publicUrl
     return {
@@ -360,13 +430,24 @@ export async function renderSlide(slideId: string, opts?: { forceImage?: boolean
       },
     }
   } catch (e) {
+    if (isNextControlFlow(e)) throw e
     const msg = e instanceof Error ? e.message : 'Error desconocido'
-    await logCarousel({
-      jobId: slideRow.job_id, slideNumber: slideRow.slide_number, level: 'error', step: 'render',
-      message: `Slide ${slideRow.slide_number} falló: ${msg}`,
-      detail: { had_image_prompt: !!slideRow.image_prompt, stack: e instanceof Error ? e.stack?.slice(0, 600) : null },
-    })
-    await db.from('carousel_slides').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', slideId)
+    // jobId es null solo si ni siquiera se pudo leer la fila del slide; en ese
+    // caso no hay carrusel al que asociar el registro y queda el console.error.
+    if (jobId) {
+      await logCarousel({
+        jobId, slideNumber: n, level: 'error', step: 'render',
+        message: `Slide ${n ?? '?'} falló: ${msg}`,
+        detail: { had_image_prompt: hadImagePrompt, forced_image: forceImage, stack: e instanceof Error ? e.stack?.slice(0, 600) : null },
+      })
+    } else {
+      console.error(JSON.stringify({ service: 'carousel', level: 'error', step: 'render', slide_id: slideId, message: msg }))
+    }
+    // Best-effort: si esta escritura también falla, no queremos perder el error
+    // real de arriba tapándolo con el de la escritura.
+    try {
+      await db.from('carousel_slides').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', slideId)
+    } catch { /* el registro de arriba ya dejó constancia */ }
     return { ok: false, error: msg }
   }
 }
