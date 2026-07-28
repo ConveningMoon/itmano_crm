@@ -73,7 +73,7 @@ ITMANO CRM is a **white-labeled, multi-tenant SaaS CRM for real estate teams**, 
 
 - **Phase 1 ✅** — static UI mockup (all CRM pages).
 - **Phase 2 ✅** — Supabase Postgres + RLS on every table, Magic Link auth, scoring tables/triggers/decay cron, A&J seed, HubSpot migration, Realtime, data-access layer (`src/lib/data/*`). `mockdata.ts` is no longer a data source.
-- **Phase 3 ✅** — Resend integration end-to-end (sequences, webhooks → scoring events, inbound replies), acquisition-channel intake endpoints, Telegram notifications. Plus work beyond the original plan: properties module + web listings, super-admin hub, AI features, per-tenant AI usage tracking (52 migrations as of 2026-07).
+- **Phase 3 ✅** — Resend integration end-to-end (sequences, webhooks → scoring events, inbound replies), acquisition-channel intake endpoints, Telegram notifications. Plus work beyond the original plan: properties module + web listings, super-admin hub, AI features, per-tenant AI usage tracking (69 migrations as of 2026-07).
 
 **Test suites exist** (Vitest): `npm run test:rls | test:scoring | test:auth | test:import | test:leads | test:routing | test:visibility`. Keep them green; `tests/auth/middleware-matcher.test.ts` mirrors the proxy matcher literal.
 
@@ -329,7 +329,7 @@ The scoring system uses **stored scores updated by Postgres triggers, with a per
 | Animations | `motion` v12 (motion.dev) | Contract in `src/components/motion/README.md`: `m.*` via LazyMotion strict, reduced-motion respected, entrances only on first render. Calm and subtle in the CRM; freer on the marketing landing. |
 | Tables | Hand-rolled | If we need sorting/virtualization, evaluate `@tanstack/table` before reinventing |
 | Auth | Supabase Auth (live) | Magic Link only, `@supabase/ssr` cookies, closed signups |
-| Database | Supabase Postgres (live) | RLS mandatory on every table; 52 migrations in `supabase/migrations/` |
+| Database | Supabase Postgres (live) | RLS mandatory on every table; 69 migrations in `supabase/migrations/` |
 | Realtime | Supabase Realtime (live) | Dashboard pipeline + notification bell |
 | CSV/XLSX | `papaparse` + `xlsx` (SheetJS patched build) | Wired in `leads/new`; max 500 rows |
 | Email | Resend (live) | Sequences, one-offs, purchase lifecycle, inbound replies, webhooks → scoring |
@@ -400,7 +400,7 @@ src/
     utils.ts
   proxy.ts                    — Next 16 renamed middleware → proxy; edge auth guard (denylist matcher)
 supabase/
-  migrations/                 — SQL migrations, sequentially numbered (052+ as of 2026-07)
+  migrations/                 — SQL migrations, sequentially numbered (070 latest as of 2026-07)
 tests/                        — Vitest suites (rls, scoring, auth, import, leads, routing, visibility)
 public/                       — static assets (itmano_logo.webp, itmano_banner.webp…)
 ```
