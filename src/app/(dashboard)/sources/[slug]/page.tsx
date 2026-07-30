@@ -122,6 +122,7 @@ export default async function ChannelDetailPage({
           channelId={channel.id}
           channelName={channel.name}
           channelActive={channel.active}
+          channelType={channel.channelType}
           emailSequenceId={channel.emailSequenceId}
           agentId={channel.agentId}
           agents={agents}

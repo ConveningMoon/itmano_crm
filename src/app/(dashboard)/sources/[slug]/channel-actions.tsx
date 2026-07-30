@@ -2,14 +2,16 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, X } from 'lucide-react'
+import { Pencil, Trash2, X, Puzzle } from 'lucide-react'
 import Link from 'next/link'
-import { updateChannel, updateChannelSequence, archiveChannel } from '../actions'
+import { updateChannel, updateChannelSequence, archiveChannel, getIntegrationInfo, regenerateContactSecret } from '../actions'
+import { IntegrationPromptModal } from '../integration-prompt-modal'
 
 interface ChannelActionsProps {
   channelId:       string
   channelName:     string
   channelActive:   boolean
+  channelType:     string
   emailSequenceId: string | null
   agentId:         string | null
   agents:          Array<{ id: string; name: string }>
@@ -38,7 +40,7 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive, emailSequenceId, agentId, agents, sequences }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences }: ChannelActionsProps) {
   const router = useRouter()
   const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
   const [name,       setName]       = useState(channelName)
@@ -47,6 +49,8 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
   const [agId,       setAgId]       = useState<string>(agentId ?? '') // '' = Toda la agencia
   const [error,      setError]      = useState<string | null>(null)
   const [pending,    start]         = useTransition()
+  const [integrationPrompt, setIntegrationPrompt] = useState<string | null>(null)
+  const [integrationError,  setIntegrationError]  = useState<string | null>(null)
 
   function handleSave() {
     setError(null)
@@ -70,6 +74,15 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
     })
   }
 
+  function openIntegrationInfo() {
+    setIntegrationError(null)
+    start(async () => {
+      const res = await getIntegrationInfo(channelId)
+      if (!res.ok) { setIntegrationError(res.error); return }
+      setIntegrationPrompt(res.prompt)
+    })
+  }
+
   return (
     <>
       <style>{`
@@ -78,6 +91,22 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
 
       {/* Action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {['lead_magnet', 'event', 'contact_form'].includes(channelType) && (
+          <button
+            onClick={openIntegrationInfo}
+            disabled={pending}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', fontSize: '12px', fontWeight: 500,
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px', cursor: pending ? 'default' : 'pointer',
+            }}
+          >
+            <Puzzle size={12} /> Ver Opciones de integración
+          </button>
+        )}
         <button
           onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setMode('edit') }}
           style={{
@@ -105,6 +134,12 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
           <Trash2 size={12} /> Archivar
         </button>
       </div>
+
+      {integrationError && (
+        <div style={{ fontSize: '12px', color: '#E04040', marginTop: '8px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+          {integrationError}
+        </div>
+      )}
 
       {/* Edit modal */}
       {mode === 'edit' && (
@@ -278,6 +313,19 @@ export function ChannelActions({ channelId, channelName, channelActive, emailSeq
             </div>
           </div>
         </>
+      )}
+
+      {integrationPrompt !== null && (
+        <IntegrationPromptModal
+          title="Opciones de integración"
+          prompt={integrationPrompt}
+          onClose={() => setIntegrationPrompt(null)}
+          onRegenerateSecret={
+            channelType === 'contact_form'
+              ? () => regenerateContactSecret(channelId)
+              : undefined
+          }
+        />
       )}
     </>
   )
