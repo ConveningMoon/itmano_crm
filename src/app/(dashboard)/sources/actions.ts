@@ -11,6 +11,7 @@ import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { createPlatformRequest } from '@/lib/services/platform-requests'
 import { HostedPageConfigSchema } from '@/lib/hosted-page'
+import { buildIntegrationPrompt, getFitCatalog } from '@/lib/services/integration-prompt'
 
 // ─── Página alojada del canal (constructor — migración 060) ───────────────────
 // Guarda acquisition_channels.hosted_page. Escriben owner/super_admin
@@ -495,6 +496,37 @@ function slugify(name: string): string {
     .slice(0, 60)
 }
 
+// Secret propio por canal, para el header x-contact-secret del endpoint de
+// contacto autenticado. 192 bits — Web Crypto, sin import de Node.
+function generateContactSecret(): string {
+  const bytes = new Uint8Array(24)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// Único punto que arma el prompt de integración — lo llaman las 3 acciones de
+// creación y (Task 5) getIntegrationInfo/regenerateContactSecret. Nunca hay
+// una segunda copia del contrato escrita a mano.
+async function buildPromptForChannel(
+  supabase: ReturnType<typeof createAdminClient>,
+  ch: { tenant_id: string; channel_type: string; name: string; public_id: string },
+  contactSecret?: string,
+): Promise<string> {
+  const { data: tenantRow } = await supabase.from('tenants').select('name').eq('id', ch.tenant_id).maybeSingle()
+  const tenantName = ((tenantRow as { name?: string } | null)?.name) ?? 'tu agencia'
+  const fitCatalog = await getFitCatalog(supabase, ch.tenant_id)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
+  return buildIntegrationPrompt({
+    channelType: ch.channel_type as 'lead_magnet' | 'event' | 'contact_form',
+    channelName: ch.name,
+    publicId:    ch.public_id,
+    tenantName,
+    baseUrl,
+    contactSecret,
+    fitCatalog,
+  })
+}
+
 // Insert a source-CRUD notification (no lead_id). Triggers Telegram via the
 // notifications webhook. Failure is logged, never blocks the parent action.
 async function insertSourceNotification(
@@ -517,7 +549,7 @@ export interface CreateLeadMagnetResult {
   publicId: string
   slug: string
   sequenceId: string
-  embedSnippet: string
+  integrationPrompt: string
 }
 
 export async function createLeadMagnet(fields: {
@@ -597,17 +629,11 @@ export async function createLeadMagnet(fields: {
   revalidatePath('/emails')
   revalidatePath('/analytics')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
-  const embedSnippet = `<script>
-  (function(){
-    var d = {v: localStorage.getItem('_itm_vid') || (function(){
-      var id = crypto.randomUUID(); localStorage.setItem('_itm_vid', id); return id;
-    })()};
-    navigator.sendBeacon('${baseUrl}/api/intake/${publicId}/view', JSON.stringify(d));
-  })();
-</script>`
+  const integrationPrompt = await buildPromptForChannel(supabase, {
+    tenant_id: tenant_id, channel_type: 'lead_magnet', name: fields.name.trim(), public_id: publicId,
+  })
 
-  return { ok: true, channelId, publicId, slug, sequenceId: seqId, embedSnippet }
+  return { ok: true, channelId, publicId, slug, sequenceId: seqId, integrationPrompt }
 }
 
 // ─── Update channel (name + active) ──────────────────────────────────────────
@@ -777,7 +803,7 @@ export interface CreateEventResult {
   channelId: string
   publicId: string
   slug: string
-  formSnippet: string
+  integrationPrompt: string
 }
 
 export async function createEvent(fields: {
@@ -841,19 +867,11 @@ export async function createEvent(fields: {
   revalidatePath('/sources')
   revalidatePath('/analytics')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
-  const formSnippet = `<form action="${baseUrl}/api/intake/${publicId}/submit" method="POST">
-  <input type="hidden" name="traffic_source" value="direct">
-  <input type="text"   name="first_name"    placeholder="Nombre"   required>
-  <input type="text"   name="last_name"     placeholder="Apellido">
-  <input type="email"  name="email"         placeholder="Email"    required>
-  <input type="tel"    name="phone"         placeholder="Teléfono">
-  <!-- Honeypot (invisible, must be empty) -->
-  <input type="text" name="_hp" style="display:none" tabindex="-1" autocomplete="off">
-  <button type="submit">Registrarme al evento</button>
-</form>`
+  const integrationPrompt = await buildPromptForChannel(supabase, {
+    tenant_id: tenant_id, channel_type: 'event', name: fields.name.trim(), public_id: publicId,
+  })
 
-  return { ok: true, channelId, publicId, slug, formSnippet }
+  return { ok: true, channelId, publicId, slug, integrationPrompt }
 }
 
 // ─── Create Contact Form (Web) channel ────────────────────────────────────────
@@ -868,18 +886,14 @@ export interface CreateContactFormResult {
   channelId: string
   publicId:  string
   slug:      string
-  webflowWebhookUrl: string
-  contactBackupUrl:  string
-  publicIntakeUrl:   string
-  hasChannelSecret:  boolean
+  integrationPrompt: string
 }
 
 export async function createContactForm(fields: {
-  name:          string
-  slug?:         string
-  agentId?:      string | null   // owning agent; null/'' = "Toda la agencia"
-  webflowSecret?: string         // optional per-channel Webflow webhook secret
-  tenantId?:     string          // required when caller is super_admin
+  name:      string
+  slug?:     string
+  agentId?:  string | null   // owning agent; null/'' = "Toda la agencia"
+  tenantId?: string          // required when caller is super_admin
 }): Promise<CreateContactFormResult | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
@@ -896,10 +910,10 @@ export async function createContactForm(fields: {
   const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
   if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
 
-  const publicId  = genPublicId()
-  const slug      = fields.slug?.trim() || slugify(fields.name)
-  const channelId = crypto.randomUUID()
-  const secret    = fields.webflowSecret?.trim() || null
+  const publicId      = genPublicId()
+  const slug          = fields.slug?.trim() || slugify(fields.name)
+  const channelId     = crypto.randomUUID()
+  const contactSecret = generateContactSecret()
 
   const { data: existing } = await supabase
     .from('acquisition_channels')
@@ -920,7 +934,7 @@ export async function createContactForm(fields: {
     slug,
     active:       true,
     agent_id:     agent,
-    metadata:     secret ? { webflow_secret: secret } : {},
+    metadata:     { contact_secret: contactSecret },
   })
 
   if (chErr) return { ok: false, error: chErr.message }
@@ -928,12 +942,11 @@ export async function createContactForm(fields: {
   revalidatePath('/sources')
   revalidatePath('/analytics')
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
-  return {
-    ok: true, channelId, publicId, slug,
-    webflowWebhookUrl: `${baseUrl}/api/webhooks/webflow/${publicId}`,
-    contactBackupUrl:  `${baseUrl}/api/contact/${publicId}/submit`,
-    publicIntakeUrl:   `${baseUrl}/api/intake/${publicId}/submit`,
-    hasChannelSecret:  !!secret,
-  }
+  const integrationPrompt = await buildPromptForChannel(
+    supabase,
+    { tenant_id: tenant_id, channel_type: 'contact_form', name: fields.name.trim(), public_id: publicId },
+    contactSecret,
+  )
+
+  return { ok: true, channelId, publicId, slug, integrationPrompt }
 }
