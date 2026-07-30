@@ -165,6 +165,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     name:        r.name as string,
     slug:        r.slug as string,
     agentId:     (r.agent_id ?? null) as string | null,
+    active:      true,  // la query ya filtra active = true
   }))
   return (
     <LeadDetailClient

@@ -11,7 +11,9 @@ import {
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadStatus } from '@/lib/types'
+import type { Agent, LeadStatus } from '@/lib/types'
+import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/list-filters'
+import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
 import type { ChannelOption } from './new/page'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
@@ -55,15 +57,6 @@ function getInitials(firstName: string, lastName: string): string {
   return (f + l).toUpperCase() || f.toUpperCase()
 }
 
-function getKanbanLeads(key: string, leads: Lead[]): Lead[] {
-  if (key === 'finished') {
-    return leads.filter(
-      l => l.status === 'closed' || l.status === 'process_completed' || l.status === 'lost'
-    )
-  }
-  return leads.filter(l => l.status === key)
-}
-
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 function TempBar({ score, segments = 8 }: { score: number; segments?: number }) {
@@ -99,7 +92,7 @@ function StatusBadge({ status }: { status: LeadStatus }) {
   )
 }
 
-function LeadAvatar({ lead, agents, size = 32 }: { lead: Lead; agents: Agent[]; size?: number }) {
+function LeadAvatar({ lead, agents, size = 32 }: { lead: LeadListItem; agents: Agent[]; size?: number }) {
   const agent = agents.find(a => a.id === lead.agentId)
   const initials = getInitials(lead.firstName, lead.lastName)
   return (
@@ -188,8 +181,6 @@ const FILTER_LABEL: React.CSSProperties = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ITEMS_PER_PAGE = 20
-
 const KANBAN_COLUMNS = [
   { key: 'new',             label: 'Nuevo',       color: STATUS_CONFIG.new.color },
   { key: 'nurturing',       label: 'Nurturing',   color: STATUS_CONFIG.nurturing.color },
@@ -202,32 +193,21 @@ const KANBAN_COLUMNS = [
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 interface LeadsClientProps {
-  leads:    Lead[]
+  // Página actual ya filtrada y ordenada por el servidor (vista tabla).
+  leads:    LeadListItem[]
+  // Columnas ya agrupadas por el servidor (vista kanban); null en vista tabla.
+  kanban:   KanbanColumn[] | null
+  total:               number
+  hotCount:            number
+  attentionTodayCount: number
+  page:                number
+  totalPages:          number
+  filters:             LeadListFilters
   agents:   Agent[]
   channels: ChannelOption[]
   // Hide the per-agent filter for role 'agent' (they only ever see their own leads).
   viewerRole:     'super_admin' | 'agent_owner' | 'agent'
   viewerAgentId:  string | null
-  // Initial filter state from URL query params (set by /sources deep-link or manual share).
-  initialSource:    string
-  initialChannelId: string
-}
-
-// Prioridad de atención (menor = más urgente). Usa el `when` del briefing de IA
-// cuando existe; si no, una heurística determinista (actividad fresca en banda
-// activa con score real) para que la vista sirva aunque el tenant no tenga IA.
-// NO reemplaza la temperatura: ordena por PREMURA de la próxima acción.
-const FROZEN_LEAD_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
-function attentionRank(lead: Lead): number {
-  switch (lead.attentionWhen) {
-    case 'hoy':         return 0
-    case 'esta_semana': return 2
-    case 'sin_apuro':   return 4
-  }
-  const fresh  = !!lead.lastEventAt && Date.now() - new Date(lead.lastEventAt).getTime() < 3 * 24 * 3600 * 1000
-  const active = !FROZEN_LEAD_STATUSES.includes(lead.status)
-  if (fresh && active && (lead.currentScore ?? 0) >= 35) return 1
-  return 3
 }
 
 // Chip "Hoy": la IA marcó que la próxima acción de este lead es de hoy.
@@ -245,140 +225,108 @@ function TodayChip() {
 }
 
 export function LeadsClient({
-  leads, agents, channels, viewerRole, viewerAgentId, initialSource, initialChannelId,
+  leads, kanban, total, hotCount, attentionTodayCount, page, totalPages,
+  filters, agents, channels, viewerRole, viewerAgentId,
 }: LeadsClientProps) {
   const router = useRouter()
   const { navigate, pending: navPending } = useCardNavigation()
-  const [sortMode, setSortMode] = useState<'recientes' | 'atencion'>('recientes')
+  // Cada cambio de filtro es una navegación: el servidor devuelve la nueva página.
+  const [isPending, startFilterTransition] = useTransition()
 
-  const [view, setView]               = useState<'table' | 'kanban'>('table')
-  const [search, setSearch]           = useState('')
-  const [filterAgent, setFilterAgent] = useState('all')
-  const [filterStatus, setFilterStatus]     = useState('all')
-  const [filterSource, setFilterSource]     = useState(initialSource)
-  const [filterChannelId, setFilterChannelId] = useState(initialChannelId)
-  const [filterLanguage, setFilterLanguage] = useState('all')
-  const [page, setPage] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
+  // El input se escribe en local y se empuja a la URL con debounce; así no se
+  // dispara una petición por tecla.
+  const [searchInput, setSearchInput] = useState(filters.q)
 
   // Selección múltiple (solo vista tabla): eliminar en lote (doble verificación)
-  // y exportar CSV.
-  const [selected, setSelected]   = useState<Set<string>>(new Set())
+  // y exportar CSV. Guarda el lead completo, no sólo el id, para que la selección
+  // sobreviva al cambio de página (los leads de otras páginas ya no están en props).
+  const [selected, setSelected]   = useState<Map<string, LeadListItem>>(new Map())
   const [deleteStep, setDeleteStep] = useState<0 | 1 | 2>(0)
   const [deleteInput, setDeleteInput] = useState('')
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [bulkPending, startBulk]  = useTransition()
 
-  function toggleSelect(id: string) {
+  function pushFilters(patch: Partial<LeadListFilters>) {
+    // Cualquier cambio de filtro vuelve a la página 1 salvo que se pida otra.
+    const next = { ...filters, ...patch, page: patch.page ?? 1 }
+    const qs = leadListFiltersToQuery(next)
+    startFilterTransition(() => {
+      router.push(qs ? `/leads?${qs}` : '/leads', { scroll: false })
+    })
+  }
+
+  // El input sigue a la URL cuando el filtro cambia por fuera (chip, "Limpiar").
+  useEffect(() => {
+    // reason: sincronizar estado local con la prop del servidor
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearchInput(filters.q)
+  }, [filters.q])
+
+  useEffect(() => {
+    if (searchInput.trim() === filters.q) return
+    const t = setTimeout(() => pushFilters({ q: searchInput.trim() }), 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput, filters.q])
+
+  // La selección se limpia al cambiar de filtro, no al cambiar de página.
+  const filterKey = leadListFiltersToQuery({ ...filters, page: 1 })
+  useEffect(() => {
+    // reason: reset de selección al cambiar los filtros
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelected(new Map())
+  }, [filterKey])
+
+  function toggleSelect(lead: LeadListItem) {
     setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
+      const next = new Map(prev)
+      if (next.has(lead.id)) next.delete(lead.id); else next.set(lead.id, lead)
       return next
     })
   }
-  function clearSelection() { setSelected(new Set()) }
+  function clearSelection() { setSelected(new Map()) }
 
   // Dropdowns activos (los 5) — alimenta el contador del botón "Filtros".
-  const activeFilterCount = [filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage]
-    .filter(v => v !== 'all').length
-
-  // Sync source + channelId to the URL so the filtered view is bookmarkable/shareable.
-  // Uses replaceState to avoid Next.js server re-renders on every filter keystroke.
-  useEffect(() => {
-    const p = new URLSearchParams()
-    if (filterSource    !== 'all') p.set('source',    filterSource)
-    if (filterChannelId !== 'all') p.set('channelId', filterChannelId)
-    const qs = p.toString()
-    window.history.replaceState(null, '', qs ? `/leads?${qs}` : '/leads')
-  }, [filterSource, filterChannelId])
+  const activeFilterCount = [
+    filters.agentId, filters.status, filters.source, filters.channelId, filters.language,
+  ].filter(v => v !== 'all').length
 
   // When source changes, always reset the channel sub-filter.
   function handleSourceChange(v: string) {
-    setFilterSource(v)
-    setFilterChannelId('all')
+    pushFilters({ source: v, channelId: 'all' })
   }
 
-  // Channels eligible for the sub-filter: same type as selected source, scoped by agent role.
+  // Channels eligible for the sub-filter: same type as selected source, scoped by
+  // agent role. Sólo los activos se ofrecen (los inactivos siguen resolviendo
+  // nombre y fuente de leads viejos, pero no son un filtro que ofrecer).
   const channelOptions = useMemo(() => {
-    if (!CHANNEL_SOURCE_TYPES.includes(filterSource)) return []
-    let opts = channels.filter(c => c.channelType === filterSource)
+    if (!CHANNEL_SOURCE_TYPES.includes(filters.source)) return []
+    let opts = channels.filter(c => c.active && c.channelType === filters.source)
     if (viewerAgentId) opts = opts.filter(c => c.agentId === viewerAgentId)
     return opts
-  }, [channels, filterSource, viewerAgentId])
+  }, [channels, filters.source, viewerAgentId])
 
-  const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const fullName = `${lead.firstName} ${lead.lastName}`.toLowerCase()
-      const matchSearch =
-        search === '' ||
-        fullName.includes(search.toLowerCase()) ||
-        lead.email.toLowerCase().includes(search.toLowerCase())
-
-      const matchAgent   = filterAgent === 'all' || lead.agentId === filterAgent
-      const matchStatus  = filterStatus === 'all' || lead.status === filterStatus
-      const channel      = channels.find(c => c.id === lead.acquisitionChannelId)
-      // Composite source: channel type if a channel exists, else traffic_source.
-      const leadSource   = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
-      const matchSource  = filterSource === 'all' || leadSource.kind === filterSource
-      const matchChannel = filterChannelId === 'all' || lead.acquisitionChannelId === filterChannelId
-      const matchLanguage = filterLanguage === 'all' || lead.language === filterLanguage
-
-      return matchSearch && matchAgent && matchStatus && matchSource && matchChannel && matchLanguage
-    })
-  }, [leads, channels, search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage])
-
-  // Orden final: "recientes" respeta el orden del servidor (created_at desc);
-  // "atencion" ordena por premura de la próxima acción y desempata por score.
-  const sortedLeads = useMemo(() => {
-    if (sortMode !== 'atencion') return filteredLeads
-    return [...filteredLeads].sort((a, b) => {
-      const ra = attentionRank(a), rb = attentionRank(b)
-      if (ra !== rb) return ra - rb
-      return (b.currentScore ?? 0) - (a.currentScore ?? 0)
-    })
-  }, [filteredLeads, sortMode])
-  const attentionTodayCount = useMemo(() => leads.filter(l => l.attentionWhen === 'hoy').length, [leads])
-
-  useEffect(() => {
-    // reason: reset pagination + selección on filter change — updating derived state in effect is intentional
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPage(1)
-    setSelected(new Set())
-  }, [search, filterAgent, filterStatus, filterSource, filterChannelId, filterLanguage, sortMode])
-
-  const hotCount    = filteredLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
-  const totalPages  = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE)
-  const pagedLeads  = sortedLeads.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
-  const hasActiveFilters =
-    search !== '' ||
-    filterAgent !== 'all' ||
-    filterStatus !== 'all' ||
-    filterSource !== 'all' ||
-    filterChannelId !== 'all' ||
-    filterLanguage !== 'all'
+  const hasFilters = hasActiveLeadFilters(filters)
 
   function clearFilters() {
-    setSearch('')
-    setFilterAgent('all')
-    setFilterStatus('all')
-    setFilterSource('all')
-    setFilterChannelId('all')
-    setFilterLanguage('all')
+    pushFilters({
+      q: '', agentId: 'all', status: 'all', source: 'all', channelId: 'all', language: 'all',
+    })
   }
 
   // ── Selección múltiple ────────────────────────────────────────────────────
-  const pagedIds = pagedLeads.map(l => l.id)
-  const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => selected.has(id))
+  const allPagedSelected = leads.length > 0 && leads.every(l => selected.has(l.id))
   function toggleAllPaged() {
     setSelected(prev => {
-      const next = new Set(prev)
-      if (allPagedSelected) pagedIds.forEach(id => next.delete(id))
-      else pagedIds.forEach(id => next.add(id))
+      const next = new Map(prev)
+      if (allPagedSelected) leads.forEach(l => next.delete(l.id))
+      else leads.forEach(l => next.set(l.id, l))
       return next
     })
   }
 
-  const selectedLeads = leads.filter(l => selected.has(l.id))
+  const selectedLeads = [...selected.values()]
 
   function exportCsv() {
     if (selectedLeads.length === 0) return
@@ -392,7 +340,7 @@ export function LeadsClient({
       lines.push([
         esc(l.firstName), esc(l.lastName), esc(l.email), esc(l.phone ?? ''),
         esc(STATUS_CONFIG[l.status]?.label ?? l.status), esc(agent?.name ?? ''),
-        esc(channel?.name ?? src.label), esc(String(l.temperatureScore ?? '')),
+        esc(channel?.name ?? src.label), esc(String(l.score ?? '')),
         esc(l.language.toUpperCase()), esc(new Date(l.createdAt).toISOString().slice(0, 10)),
       ].join(','))
     }
@@ -407,7 +355,7 @@ export function LeadsClient({
 
   function handleBulkDelete() {
     setBulkError(null)
-    const ids = [...selected]
+    const ids = [...selected.keys()]
     startBulk(async () => {
       const res = await deleteLeads(ids)
       if (!res.ok) { setBulkError(res.error); return }
@@ -439,28 +387,28 @@ export function LeadsClient({
 
   // Active chips
   const activeChips: { label: string; onRemove: () => void }[] = []
-  if (filterAgent !== 'all') {
-    const a = agents.find(ag => ag.id === filterAgent)
-    if (a) activeChips.push({ label: a.name, onRemove: () => setFilterAgent('all') })
+  if (filters.agentId !== 'all') {
+    const a = agents.find(ag => ag.id === filters.agentId)
+    if (a) activeChips.push({ label: a.name, onRemove: () => pushFilters({ agentId: 'all' }) })
   }
-  if (filterStatus !== 'all') {
-    const cfg = STATUS_CONFIG[filterStatus as LeadStatus]
-    if (cfg) activeChips.push({ label: cfg.label, onRemove: () => setFilterStatus('all') })
+  if (filters.status !== 'all') {
+    const cfg = STATUS_CONFIG[filters.status as LeadStatus]
+    if (cfg) activeChips.push({ label: cfg.label, onRemove: () => pushFilters({ status: 'all' }) })
   }
-  if (filterSource !== 'all') {
-    const opt = sourceOptions.find(o => o.value === filterSource)
-    if (opt) activeChips.push({ label: opt.label, onRemove: () => { setFilterSource('all'); setFilterChannelId('all') } })
+  if (filters.source !== 'all') {
+    const opt = sourceOptions.find(o => o.value === filters.source)
+    if (opt) activeChips.push({ label: opt.label, onRemove: () => pushFilters({ source: 'all', channelId: 'all' }) })
   }
-  if (filterChannelId !== 'all') {
-    const ch = channels.find(c => c.id === filterChannelId)
-    if (ch) activeChips.push({ label: ch.name, onRemove: () => setFilterChannelId('all') })
+  if (filters.channelId !== 'all') {
+    const ch = channels.find(c => c.id === filters.channelId)
+    if (ch) activeChips.push({ label: ch.name, onRemove: () => pushFilters({ channelId: 'all' }) })
   }
-  if (filterLanguage !== 'all') {
-    const opt = languageOptions.find(o => o.value === filterLanguage)
-    if (opt) activeChips.push({ label: opt.label, onRemove: () => setFilterLanguage('all') })
+  if (filters.language !== 'all') {
+    const opt = languageOptions.find(o => o.value === filters.language)
+    if (opt) activeChips.push({ label: opt.label, onRemove: () => pushFilters({ language: 'all' }) })
   }
-  if (search !== '') {
-    activeChips.push({ label: `"${search}"`, onRemove: () => setSearch('') })
+  if (filters.q !== '') {
+    activeChips.push({ label: `"${filters.q}"`, onRemove: () => pushFilters({ q: '' }) })
   }
 
   return (
@@ -472,6 +420,7 @@ export function LeadsClient({
         .filter-input:focus { border-color: var(--border-accent) !important; outline: none; }
         .clear-btn:hover { color: var(--text-secondary) !important; }
         .page-btn:not(:disabled):hover { border-color: var(--border-accent) !important; color: var(--text-primary) !important; }
+        .results-zone { transition: opacity var(--dur-fast); }
       `}</style>
 
       {/* ── ZONA 1: Header ── */}
@@ -479,7 +428,7 @@ export function LeadsClient({
         <div>
           <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Leads</div>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {filteredLeads.length} leads · {hotCount} calientes{attentionTodayCount > 0 ? ` · ${attentionTodayCount} para hoy` : ''}
+            {total} leads · {hotCount} calientes{attentionTodayCount > 0 ? ` · ${attentionTodayCount} para hoy` : ''}
           </div>
         </div>
 
@@ -489,15 +438,15 @@ export function LeadsClient({
           {([['recientes', 'Recientes'], ['atencion', 'Atención']] as const).map(([v, label], i) => (
             <button
               key={v}
-              onClick={() => setSortMode(v)}
+              onClick={() => pushFilters({ sort: v })}
               title={v === 'atencion' ? 'Ordena por premura de la próxima acción (no por temperatura)' : 'Orden por fecha de registro'}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 height: '32px', padding: '0 14px', justifyContent: 'center',
                 fontSize: '13px', cursor: 'pointer', border: 'none',
                 borderRight: i === 0 ? '1px solid var(--border-subtle)' : 'none',
-                background: sortMode === v ? 'var(--bg-elevated)' : 'transparent',
-                color: sortMode === v ? 'var(--text-primary)' : 'var(--text-muted)',
+                background: filters.sort === v ? 'var(--bg-elevated)' : 'transparent',
+                color: filters.sort === v ? 'var(--text-primary)' : 'var(--text-muted)',
               }}
             >
               {v === 'atencion' && <Clock size={14} />}{label}
@@ -510,14 +459,14 @@ export function LeadsClient({
           {(['table', 'kanban'] as const).map((v, i) => (
             <button
               key={v}
-              onClick={() => setView(v)}
+              onClick={() => pushFilters({ view: v })}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 width: '80px', height: '32px', justifyContent: 'center',
                 fontSize: '13px', cursor: 'pointer', border: 'none',
                 borderRight: i === 0 ? '1px solid var(--border-subtle)' : 'none',
-                background: view === v ? 'var(--bg-elevated)' : 'transparent',
-                color: view === v ? 'var(--text-primary)' : 'var(--text-muted)',
+                background: filters.view === v ? 'var(--bg-elevated)' : 'transparent',
+                color: filters.view === v ? 'var(--text-primary)' : 'var(--text-muted)',
               }}
             >
               {v === 'table' ? <List size={16} /> : <LayoutGrid size={16} />}
@@ -538,8 +487,8 @@ export function LeadsClient({
           />
           <input
             type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             placeholder="Buscar por nombre o email..."
             className="filter-input"
             style={{
@@ -557,11 +506,11 @@ export function LeadsClient({
         {/* Filtros primarios — solo desktop; en móvil viven en el panel */}
         {viewerRole !== 'agent' && (
           <div className="max-md:hidden">
-            <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} />
+            <FilterSelect value={filters.agentId} onChange={v => pushFilters({ agentId: v })} options={agentOptions} />
           </div>
         )}
         <div className="max-md:hidden">
-          <FilterSelect value={filterStatus} onChange={setFilterStatus} options={statusOptions} />
+          <FilterSelect value={filters.status} onChange={v => pushFilters({ status: v })} options={statusOptions} />
         </div>
 
         {/* Filtros secundarios (Fuente, Canal, Idioma) viven solo en el panel */}
@@ -581,7 +530,7 @@ export function LeadsClient({
           Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </button>
 
-        {hasActiveFilters && (
+        {hasFilters && (
           <button
             onClick={clearFilters}
             className="clear-btn"
@@ -636,23 +585,23 @@ export function LeadsClient({
             {viewerRole !== 'agent' && (
               <div className="md:hidden">
                 <label style={FILTER_LABEL}>Agente</label>
-                <FilterSelect value={filterAgent} onChange={setFilterAgent} options={agentOptions} fullWidth />
+                <FilterSelect value={filters.agentId} onChange={v => pushFilters({ agentId: v })} options={agentOptions} fullWidth />
               </div>
             )}
             <div className="md:hidden">
               <label style={FILTER_LABEL}>Estado</label>
-              <FilterSelect value={filterStatus} onChange={setFilterStatus} options={statusOptions} fullWidth />
+              <FilterSelect value={filters.status} onChange={v => pushFilters({ status: v })} options={statusOptions} fullWidth />
             </div>
             <div>
               <label style={FILTER_LABEL}>Fuente</label>
-              <FilterSelect value={filterSource} onChange={handleSourceChange} options={sourceOptions} fullWidth />
+              <FilterSelect value={filters.source} onChange={handleSourceChange} options={sourceOptions} fullWidth />
             </div>
             {channelOptions.length > 0 && (
               <div>
                 <label style={FILTER_LABEL}>Canal</label>
                 <FilterSelect
-                  value={filterChannelId}
-                  onChange={setFilterChannelId}
+                  value={filters.channelId}
+                  onChange={v => pushFilters({ channelId: v })}
                   options={[
                     { value: 'all', label: 'Todos los canales' },
                     ...channelOptions.map(c => ({ value: c.id, label: c.name })),
@@ -663,19 +612,19 @@ export function LeadsClient({
             )}
             <div>
               <label style={FILTER_LABEL}>Idioma</label>
-              <FilterSelect value={filterLanguage} onChange={setFilterLanguage} options={languageOptions} fullWidth />
+              <FilterSelect value={filters.language} onChange={v => pushFilters({ language: v })} options={languageOptions} fullWidth />
             </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
             <button
               onClick={clearFilters}
-              disabled={!hasActiveFilters}
+              disabled={!hasFilters}
               style={{
                 padding: '8px 14px', fontSize: '13px', borderRadius: '8px',
                 background: 'transparent', border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)', cursor: hasActiveFilters ? 'pointer' : 'not-allowed',
-                opacity: hasActiveFilters ? 1 : 0.5,
+                color: 'var(--text-muted)', cursor: hasFilters ? 'pointer' : 'not-allowed',
+                opacity: hasFilters ? 1 : 0.5,
               }}
             >
               Limpiar todo
@@ -695,7 +644,7 @@ export function LeadsClient({
       </ModalShell>
 
       {/* ── Barra de selección múltiple (solo tabla) ── */}
-      {view === 'table' && selected.size > 0 && (
+      {filters.view === 'table' && selected.size > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
           background: 'var(--bg-elevated)', border: '1px solid var(--border-accent)',
@@ -739,8 +688,9 @@ export function LeadsClient({
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
           Defensive horizontal scroll on phones so columns stay readable.)
           AnimatePresence mode="wait": crossfade de 150ms al alternar tabla↔kanban. */}
+      <div className="results-zone" style={{ opacity: isPending ? 0.55 : 1 }}>
       <AnimatePresence mode="wait" initial={false}>
-      {view === 'table' ? (
+      {filters.view === 'table' ? (
         <m.div
           key="table"
           initial={{ opacity: 0 }}
@@ -778,7 +728,7 @@ export function LeadsClient({
               </tr>
             </thead>
             <tbody>
-              {pagedLeads.length === 0 ? (
+              {leads.length === 0 ? (
                 <tr>
                   <td colSpan={8}>
                     <div style={{
@@ -794,13 +744,13 @@ export function LeadsClient({
                   </td>
                 </tr>
               ) : (
-                pagedLeads.map((lead, idx) => {
+                leads.map((lead, idx) => {
                   const agent      = agents.find(a => a.id === lead.agentId)
                   const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
                   const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
                   const SrcIcon    = SOURCE_ICON[leadSource.kind]
                   const langCfg    = LANGUAGE_CONFIG[lead.language]
-                  const isLast     = idx === pagedLeads.length - 1
+                  const isLast     = idx === leads.length - 1
 
                   const isSelected = selected.has(lead.id)
                   return (
@@ -817,7 +767,7 @@ export function LeadsClient({
                       {/* Checkbox de selección */}
                       <td style={{ padding: '12px 0 12px 16px', width: '36px' }} onClick={e => e.stopPropagation()}>
                         <button
-                          onClick={() => toggleSelect(lead.id)}
+                          onClick={() => toggleSelect(lead)}
                           aria-label={isSelected ? 'Deseleccionar lead' : 'Seleccionar lead'}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? 'var(--accent-gold)' : 'var(--text-muted)', display: 'flex', padding: 0 }}
                         >
@@ -870,7 +820,7 @@ export function LeadsClient({
                       </td>
                       {/* Temperatura */}
                       <td style={{ padding: '12px 16px', width: '120px' }}>
-                        <TempBar score={lead.temperatureScore ?? 0} segments={8} />
+                        <TempBar score={lead.score ?? 0} segments={8} />
                       </td>
                       {/* Idioma */}
                       <td style={{ padding: '12px 16px', width: '80px' }}>
@@ -892,15 +842,15 @@ export function LeadsClient({
           </table>
           </div>
 
-          {/* Pagination */}
-          {filteredLeads.length > ITEMS_PER_PAGE && (
+          {/* Pagination — la página la resuelve el servidor vía ?page= */}
+          {totalPages > 1 && (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
               padding: '12px 16px', borderTop: '1px solid var(--border-subtle)',
             }}>
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
+                onClick={() => pushFilters({ page: Math.max(1, page - 1) })}
+                disabled={page === 1 || isPending}
                 className="page-btn"
                 style={{
                   padding: '4px 12px', fontSize: '12px', borderRadius: '6px',
@@ -916,8 +866,8 @@ export function LeadsClient({
                 Página {page} de {totalPages}
               </span>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
+                onClick={() => pushFilters({ page: Math.min(totalPages, page + 1) })}
+                disabled={page === totalPages || isPending}
                 className="page-btn"
                 style={{
                   padding: '4px 12px', fontSize: '12px', borderRadius: '6px',
@@ -934,7 +884,8 @@ export function LeadsClient({
         </m.div>
       ) : (
 
-      /* ── ZONA 3B: Kanban view ── */
+      /* ── ZONA 3B: Kanban view ── Cada columna trae sus más recientes desde el
+         servidor; el contador de la cabecera es el total real de la columna. */
         <m.div
           key="kanban"
           initial={{ opacity: 0 }}
@@ -944,7 +895,9 @@ export function LeadsClient({
           style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '12px', minHeight: 'calc(100vh - 280px)' }}
         >
           {KANBAN_COLUMNS.map(col => {
-            const colLeads = getKanbanLeads(col.key, filteredLeads)
+            const data     = (kanban ?? []).find(c => c.key === col.key)
+            const colLeads = data?.items ?? []
+            const colTotal = data?.total ?? 0
 
             return (
               <div
@@ -971,7 +924,7 @@ export function LeadsClient({
                     fontSize: '11px', background: 'var(--bg-overlay)',
                     color: 'var(--text-muted)', padding: '2px 7px', borderRadius: '10px',
                   }}>
-                    {colLeads.length}
+                    {colTotal}
                   </span>
                 </div>
 
@@ -1022,7 +975,7 @@ export function LeadsClient({
                         </div>
                         {/* Row 3: temp bar */}
                         <div style={{ marginBottom: '6px' }}>
-                          <TempBar score={lead.temperatureScore ?? 0} segments={6} />
+                          <TempBar score={lead.score ?? 0} segments={6} />
                         </div>
                         {/* Row 4: language + channel type */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1043,12 +996,19 @@ export function LeadsClient({
                     )
                   })
                 )}
+
+                {colTotal > colLeads.length && (
+                  <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', padding: '6px 0' }}>
+                    Mostrando {KANBAN_COLUMN_LIMIT} de {colTotal} · usa la tabla para ver el resto
+                  </div>
+                )}
               </div>
             )
           })}
         </m.div>
       )}
       </AnimatePresence>
+      </div>
 
       {/* ── Eliminar en lote — Paso 1: primera confirmación ── */}
       <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={460}>

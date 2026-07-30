@@ -5,6 +5,8 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
+import { scopeFor } from '@/lib/auth/visibility'
+import { getEligibleLeadsForSequence, type EligibleLeadsResult } from '@/lib/data/leads'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { EmailContentSchema } from '@/lib/email-content'
@@ -615,4 +617,61 @@ export async function addLeadsToSequence(
   revalidateEmails()
   revalidatePath('/leads')
   return { ok: true, result }
+}
+
+// ─── Picker de leads (secuencias manuales) ────────────────────────────────────
+
+const EligibleLeadsQuerySchema = z.object({
+  sequenceId: z.string().uuid(),
+  q:          z.string().max(120).optional(),
+  status:     z.string().max(40).optional(),
+  agentId:    z.string().max(80).optional(),
+  language:   z.string().max(8).optional(),
+})
+
+// Búsqueda del picker de /emails/[id]. El listado ya no viaja entero al
+// navegador: cada búsqueda o filtro vuelve al servidor y trae como mucho 50.
+export async function searchEligibleLeads(input: {
+  sequenceId: string
+  q?:         string
+  status?:    string
+  agentId?:   string
+  language?:  string
+}): Promise<{ ok: true; data: EligibleLeadsResult } | { ok: false; error: string }> {
+  const parsed = EligibleLeadsQuerySchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: 'Búsqueda inválida' }
+
+  // Es una lectura: se acota por el mismo scope de visibilidad que usa la página
+  // (no por requireWriteAccess — un agente puede buscar entre SUS leads aunque
+  // la inscripción en lote sea de owner/super).
+  const ctx = await getCurrentTenantContext()
+  const scope = scopeFor(ctx)
+  const supabase = createAdminClient()
+
+  // La secuencia debe ser visible para quien pregunta: sin esto la acción sería
+  // una vía para enumerar leads de otro tenant.
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, agent_id, activation_type')
+    .eq('id', parsed.data.sequenceId)
+  if (scope.tenantId) seqQ = seqQ.eq('tenant_id', scope.tenantId)
+
+  const { data: seq } = await seqQ.maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seqRow = seq as any
+  if (!seqRow) return { ok: false, error: 'Secuencia no encontrada' }
+  if (scope.agentId && seqRow.agent_id !== scope.agentId) {
+    return { ok: false, error: 'Secuencia no encontrada' }
+  }
+  if ((seqRow.activation_type as string) !== 'manual') {
+    return { ok: false, error: 'La secuencia no es de tipo manual' }
+  }
+
+  const data = await getEligibleLeadsForSequence(parsed.data.sequenceId, scope, {
+    q:        parsed.data.q,
+    status:   parsed.data.status,
+    agentId:  parsed.data.agentId,
+    language: parsed.data.language,
+  })
+  return { ok: true, data }
 }

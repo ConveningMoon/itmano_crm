@@ -1,25 +1,19 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
 import { Search, X, UserPlus } from 'lucide-react'
-import { addLeadsToSequence } from '../actions'
+import { addLeadsToSequence, searchEligibleLeads } from '../actions'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import type { EligibleLead, EligibleLeadsResult } from '@/lib/data/leads'
 import type { LeadStatus, Language } from '@/lib/types'
 
-export interface PickerLead {
-  id:        string
-  firstName: string
-  lastName:  string
-  email:     string
-  status:    string
-  agentId:   string | null
-  agentName: string | null
-  language:  string | null
-}
+export type PickerLead = EligibleLead
 
 interface Props {
   sequenceId: string
-  leads:      PickerLead[]
+  // Primera página de elegibles resuelta en el servidor. La búsqueda y los
+  // filtros vuelven al servidor: la lista completa nunca viaja al navegador.
+  initial:    EligibleLeadsResult
   agents:     Array<{ id: string; name: string }>
 }
 
@@ -29,30 +23,41 @@ const SELECT_STYLE: React.CSSProperties = {
   fontSize: '12px', cursor: 'pointer', outline: 'none',
 }
 
-export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
+export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
   const [search,   setSearch]   = useState('')
   const [fStatus,  setFStatus]  = useState<string>('all')
   const [fAgent,   setFAgent]   = useState<string>('all')
   const [fLang,    setFLang]    = useState<string>('all')
+  const [result,   setResult]   = useState<EligibleLeadsResult>(initial)
+  const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [toast,    setToast]    = useState<string | null>(null)
   const [pending,  start]       = useTransition()
 
-  // Estados/idiomas presentes en los leads elegibles (para no ofrecer filtros vacíos).
-  const presentStatuses = useMemo(() => [...new Set(leads.map(l => l.status))], [leads])
-  const presentLangs    = useMemo(() => [...new Set(leads.map(l => l.language).filter(Boolean) as string[])], [leads])
+  const leads = result.items
+  const agentName = (id: string | null) => (id ? agents.find(a => a.id === id)?.name ?? null : null)
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return leads.filter(l =>
-      (q === '' ||
-        `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
-        l.email.toLowerCase().includes(q)) &&
-      (fStatus === 'all' || l.status === fStatus) &&
-      (fAgent  === 'all' || (fAgent === 'none' ? !l.agentId : l.agentId === fAgent)) &&
-      (fLang   === 'all' || l.language === fLang)
-    )
-  }, [leads, search, fStatus, fAgent, fLang])
+  const runSearch = useCallback(async () => {
+    setLoading(true)
+    const res = await searchEligibleLeads({
+      sequenceId,
+      q:        search   || undefined,
+      status:   fStatus  !== 'all' ? fStatus : undefined,
+      agentId:  fAgent   !== 'all' ? fAgent  : undefined,
+      language: fLang    !== 'all' ? fLang   : undefined,
+    })
+    setLoading(false)
+    if (res.ok) setResult(res.data)
+    else setToast(`Error: ${res.error}`)
+  }, [sequenceId, search, fStatus, fAgent, fLang])
+
+  // La primera página ya viene del servidor: sólo se consulta al cambiar algo.
+  const firstRun = useRef(true)
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return }
+    const t = setTimeout(() => { void runSearch() }, 300)
+    return () => clearTimeout(t)
+  }, [runSearch])
 
   function toggle(id: string) {
     setSelected(prev => {
@@ -63,7 +68,7 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
   }
 
   function toggleAll() {
-    const visibleIds = filtered.map(l => l.id)
+    const visibleIds = leads.map(l => l.id)
     const allSelected = visibleIds.every(id => selected.has(id))
     setSelected(prev => {
       const next = new Set(prev)
@@ -92,10 +97,12 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
       if (errors.length > 0) parts.push(`${errors.length} error${errors.length > 1 ? 'es' : ''}`)
       setToast(parts.join(' · '))
       setSelected(new Set())
+      // Los recién inscritos ya no son elegibles: se recarga la lista.
+      await runSearch()
     })
   }
 
-  const visibleIds  = filtered.map(l => l.id)
+  const visibleIds  = leads.map(l => l.id)
   const allChecked  = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
   const someChecked = visibleIds.some(id => selected.has(id)) && !allChecked
 
@@ -136,7 +143,7 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={SELECT_STYLE}>
           <option value="all">Todos los estados</option>
-          {presentStatuses.map(s => (
+          {result.statuses.map(s => (
             <option key={s} value={s}>{STATUS_CONFIG[s as LeadStatus]?.label ?? s}</option>
           ))}
         </select>
@@ -145,14 +152,13 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
           <select value={fAgent} onChange={e => setFAgent(e.target.value)} style={SELECT_STYLE}>
             <option value="all">Todos los agentes</option>
             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            <option value="none">Sin agente asignado</option>
           </select>
         )}
 
-        {presentLangs.length > 1 && (
+        {result.languages.length > 1 && (
           <select value={fLang} onChange={e => setFLang(e.target.value)} style={SELECT_STYLE}>
             <option value="all">Todos los idiomas</option>
-            {presentLangs.map(l => (
+            {result.languages.map(l => (
               <option key={l} value={l}>{LANGUAGE_CONFIG[l as Language]?.label ?? l}</option>
             ))}
           </select>
@@ -172,6 +178,7 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
       <div style={{
         background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
         borderRadius: '8px', overflow: 'hidden', maxHeight: '320px', overflowY: 'auto',
+        opacity: loading ? 0.6 : 1, transition: 'opacity var(--dur-fast)',
       }}>
         {/* Header row with select-all */}
         <div style={{
@@ -187,16 +194,17 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
             style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
           />
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
-            {filtered.length} leads disponibles
+            {result.matched} leads disponibles
+            {result.matched > leads.length ? ` · mostrando ${leads.length}` : ''}
           </span>
         </div>
 
-        {filtered.length === 0 ? (
+        {leads.length === 0 ? (
           <div style={{ padding: '24px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
             No se encontraron leads
           </div>
         ) : (
-          filtered.map(lead => (
+          leads.map(lead => (
             <label
               key={lead.id}
               className="picker-row"
@@ -218,7 +226,7 @@ export function ManualLeadPicker({ sequenceId, leads, agents }: Props) {
                   {lead.firstName} {lead.lastName}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {lead.email}{lead.agentName ? ` · ${lead.agentName}` : ''}
+                  {lead.email}{agentName(lead.agentId) ? ` · ${agentName(lead.agentId)}` : ''}
                 </div>
               </div>
               {STATUS_CONFIG[lead.status as LeadStatus] && (
