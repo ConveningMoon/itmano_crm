@@ -324,6 +324,13 @@ scoring de `event_submission` (+20), sin campos adicionales al contrato común.
 - `ChannelActions` (`[slug]/channel-actions.tsx`): nuevo botón "Ver Opciones de
   integración" junto a Editar/Archivar. Al click, llama a
   `getIntegrationInfo(channelId)` y abre el mismo modal.
+- **`page-options.tsx` (bloque "Formulario 100% propio (avanzado)",
+  líneas 177-213):** este bloque es la segunda copia manual del mismo contrato
+  que el hallazgo de §1 señala como desalineada ("sin claves fijas" +
+  reglas obligatorias hardcodeadas, sin la tabla de fit). Se elimina el
+  contrato duplicado y se reemplaza por 1-2 frases que apuntan al botón "Ver
+  Opciones de integración" del header — mismo principio que el resto de este
+  diseño: un solo lugar genera el contrato, todo lo demás apunta ahí.
 
 ---
 
