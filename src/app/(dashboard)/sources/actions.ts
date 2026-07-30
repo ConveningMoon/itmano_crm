@@ -950,3 +950,81 @@ export async function createContactForm(fields: {
 
   return { ok: true, channelId, publicId, slug, integrationPrompt }
 }
+
+// ─── Opciones de integración — siempre disponibles, no solo al crear ─────────────
+
+export async function getIntegrationInfo(
+  channelId: string
+): Promise<{ ok: true; prompt: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  // Puede escribir (backfill perezoso del secret de contact_form más abajo),
+  // igual que updateChannel/archiveChannel/regenerateContactSecret en este
+  // mismo archivo — mismo guard, por consistencia y porque la global
+  // constraint de este plan exige requireWriteAccess en toda mutación.
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const supabase = createAdminClient()
+  let chQ = supabase
+    .from('acquisition_channels')
+    .select('id, tenant_id, channel_type, name, public_id, metadata')
+    .eq('id', channelId)
+  if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
+  const { data: channel } = await chQ.maybeSingle()
+  if (!channel) return { ok: false, error: 'Fuente no encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ch = channel as any
+  const channelType = ch.channel_type as string
+  if (!['lead_magnet', 'event', 'contact_form'].includes(channelType)) {
+    return { ok: false, error: 'Este tipo de fuente no tiene opciones de integración.' }
+  }
+
+  let contactSecret: string | undefined
+  if (channelType === 'contact_form') {
+    contactSecret = (ch.metadata?.contact_secret as string | undefined) || undefined
+    if (!contactSecret) {
+      // Backfill perezoso — canal contact_form creado antes de este cambio.
+      contactSecret = generateContactSecret()
+      await supabase
+        .from('acquisition_channels')
+        .update({ metadata: { ...(ch.metadata ?? {}), contact_secret: contactSecret } })
+        .eq('id', channelId)
+    }
+  }
+
+  const prompt = await buildPromptForChannel(supabase, ch, contactSecret)
+  return { ok: true, prompt }
+}
+
+export async function regenerateContactSecret(
+  channelId: string
+): Promise<{ ok: true; prompt: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const supabase = createAdminClient()
+  let chQ = supabase
+    .from('acquisition_channels')
+    .select('id, tenant_id, channel_type, name, public_id, metadata')
+    .eq('id', channelId)
+    .eq('channel_type', 'contact_form')
+  if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
+  const { data: channel } = await chQ.maybeSingle()
+  if (!channel) return { ok: false, error: 'Fuente no encontrada' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ch = channel as any
+  const contactSecret = generateContactSecret()
+  const { error } = await supabase
+    .from('acquisition_channels')
+    .update({ metadata: { ...(ch.metadata ?? {}), contact_secret: contactSecret } })
+    .eq('id', channelId)
+  if (error) return { ok: false, error: error.message }
+
+  const prompt = await buildPromptForChannel(supabase, ch, contactSecret)
+  return { ok: true, prompt }
+}
