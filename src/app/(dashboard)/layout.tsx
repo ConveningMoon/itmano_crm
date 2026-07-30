@@ -2,7 +2,6 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
 import { SubscriptionBanner } from '@/components/dashboard/subscription-banner'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { createClient } from '@/lib/supabase/server'
 import { getUnreadCount } from '@/lib/data/notifications'
 import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
@@ -15,39 +14,39 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const ctx         = await getCurrentTenantContext()
-  const unreadCount = await getUnreadCount(
-    ctx.tenant_id,
-    ctx.role === 'agent' ? ctx.agent_id : null,
-  )
+  const ctx = await getCurrentTenantContext()
+
   // Modo hub: super_admin sin tenant seleccionado — el nav colapsa a
   // Centro de control + Notificaciones (el resto redirigiría al hub).
   const hubMode = ctx.role === 'super_admin' && !ctx.tenant_id
-  // Switcher del topbar: solo el super_admin carga la lista de tenants.
-  const switcherTenants = ctx.role === 'super_admin' ? await getTenantsForSwitcher() : null
 
-  // Branding del tenant activo (logo del sidebar). En modo hub no hay tenant —
-  // el shell muestra el wordmark de ITMANO.
-  const branding = ctx.tenant_id ? await getTenantBranding(ctx.tenant_id) : null
+  // TODO lo que el shell necesita sale de UNA sola ola de queries. Antes iba
+  // encadenado con await y cada pieza esperaba a la anterior: sobre una base de
+  // datos remota eso son ~8 idas y vueltas en serie que el usuario paga enteras
+  // en cada carga dura. Ninguna depende del resultado de otra, así que la única
+  // razón para serializarlas era la forma del código.
+  const [unreadCount, switcherTenants, branding, aiLimit, subscription, access] = await Promise.all([
+    getUnreadCount(ctx.tenant_id, ctx.role === 'agent' ? ctx.agent_id : null),
+    // Switcher del topbar: solo el super_admin carga la lista de tenants.
+    ctx.role === 'super_admin' ? getTenantsForSwitcher() : null,
+    // Branding del tenant activo (logo del sidebar). En modo hub no hay tenant —
+    // el shell muestra el wordmark de ITMANO.
+    ctx.tenant_id ? getTenantBranding(ctx.tenant_id) : null,
+    // Indicador del límite mensual de IA (topbar) — solo con tenant activo. Para
+    // un rol 'agent' en plan Partner el porcentaje es el de SU parte del límite.
+    getAiLimitIndicatorFor(ctx),
+    // Suscripción del tenant → label bajo el nombre del usuario en el sidebar.
+    ctx.tenant_id ? getSubscription(ctx.tenant_id) : null,
+    // Banner de estado de suscripción — solo con tenant activo. El super_admin
+    // en modo hub (sin tenant_id) no tiene una fila de `subscriptions` que leer;
+    // pedir el acceso con un tenant nulo rompería el panel de administración.
+    ctx.tenant_id ? getTenantAccessFor(ctx.tenant_id) : null,
+  ])
 
-  // Indicador del límite mensual de IA (topbar) — solo con tenant activo. Para
-  // un rol 'agent' en plan Partner el porcentaje es el de SU parte del límite.
-  const aiLimit = await getAiLimitIndicatorFor(ctx)
-
-  // Suscripción del tenant → label bajo el nombre del usuario en el sidebar.
-  const subscription = ctx.tenant_id ? await getSubscription(ctx.tenant_id) : null
   const planLabel = planBadgeLabel(subscription)
-
-  // Banner de estado de suscripción — solo con tenant activo. El super_admin
-  // en modo hub (sin tenant_id) no tiene una fila de `subscriptions` que leer;
-  // pedir el acceso con un tenant nulo rompería el panel de administración.
-  const access = ctx.tenant_id ? await getTenantAccessFor(ctx.tenant_id) : null
-
-  // The auth email isn't on the tenant context; read it from the session for the
-  // sidebar footer (the session is already established — ctx redirected otherwise).
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const userEmail = user?.email ?? ''
+  // El email sale del claim del JWT que ya validó getCurrentTenantContext; pedirlo
+  // otra vez al servidor de auth era un round-trip entero por el pie del sidebar.
+  const userEmail = ctx.email
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>

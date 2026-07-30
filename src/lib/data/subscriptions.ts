@@ -1,9 +1,13 @@
 import 'server-only'
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { SubscriptionPlan, SubscriptionStatus, TenantSubscription } from '@/lib/subscriptions'
 
 // Lectura de la suscripción de un tenant (fila única en `subscriptions`).
-export async function getSubscription(tenantId: string): Promise<TenantSubscription | null> {
+// Deduplicada por request con React cache() — misma razón que getTenantAccessFor.
+export const getSubscription = cache(async function getSubscription(
+  tenantId: string,
+): Promise<TenantSubscription | null> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('subscriptions')
@@ -26,4 +30,4 @@ export async function getSubscription(tenantId: string): Promise<TenantSubscript
     billingExempt:    (s.billing_exempt as boolean | null) ?? false,
     degradedAt:       (s.degraded_at as string | null) ?? null,
   }
-}
+})
