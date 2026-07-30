@@ -987,10 +987,11 @@ export async function getIntegrationInfo(
     if (!contactSecret) {
       // Backfill perezoso — canal contact_form creado antes de este cambio.
       contactSecret = generateContactSecret()
-      await supabase
+      const { error: backfillErr } = await supabase
         .from('acquisition_channels')
         .update({ metadata: { ...(ch.metadata ?? {}), contact_secret: contactSecret } })
         .eq('id', channelId)
+      if (backfillErr) return { ok: false, error: backfillErr.message }
     }
   }
 
