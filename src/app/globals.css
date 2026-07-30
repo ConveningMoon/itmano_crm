@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+/* Inter NO se importa desde fonts.googleapis.com: un @import de CSS obliga al
+   navegador a descargar y parsear globals.css ANTES de descubrir la fuente, y
+   recién ahí abre DNS+TLS contra googleapis y después contra gstatic — dos
+   conexiones a terceros encadenadas en el camino crítico de render. La fuente se
+   autohospeda con next/font en src/app/layout.tsx, que la sirve desde nuestro
+   propio dominio y expone la familia en --font-inter (ver --font-sans abajo). */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -42,7 +47,9 @@
   --status-lost: #C97B6B;
 
   --radius: 8px;
-  --font-sans: 'Inter', system-ui, sans-serif;
+  /* --font-inter lo inyecta next/font desde el layout raíz. El fallback cubre
+     el render de cualquier superficie que no cuelgue de ese layout. */
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
 
   /* shadcn base overrides */
   --background: #0B0C0E;

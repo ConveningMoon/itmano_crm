@@ -12,6 +12,20 @@ const nextConfig: NextConfig = {
     "/admin/carousels": ["./src/lib/carousels/fonts/**"],
   },
   experimental: {
+    // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así
+    // que CADA navegación a una página dinámica —incluido volver atrás a una que
+    // se acaba de ver— dispara un round-trip completo al servidor. Todo el CRM es
+    // dinámico (lee cookies para el contexto de tenant), así que el default deja
+    // el cache apagado en toda la app.
+    //
+    // 30s es la ventana de ida y vuelta típica (lead → volver a la lista → otro
+    // lead) y no arriesga datos viejos: toda mutación pasa por Server Actions que
+    // llaman a revalidatePath, y eso invalida este cache al instante. Lo único
+    // que puede quedar hasta 30s atrás es un cambio hecho FUERA de esta pestaña.
+    staleTimes: {
+      dynamic: 30,
+      static:  300,
+    },
     serverActions: {
       // Default is 1 MB, which silently rejects any Server Action request body
       // above that before our own code runs. Property media uploads validate
