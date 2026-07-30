@@ -27,6 +27,7 @@ const LIMIT_USD = 0.05
 
 const ownerCtx: TenantContext = {
   user_id: '00000000-0000-4000-8000-00000000a1a1',
+  email: 'owner@test.itmano.com',
   role: 'agent_owner',
   tenant_id: TENANT_ID,
   agent_id: null,
@@ -35,6 +36,7 @@ const ownerCtx: TenantContext = {
 
 const superCtx: TenantContext = {
   user_id: '00000000-0000-4000-8000-00000000a2a2',
+  email: 'super@test.itmano.com',
   role: 'super_admin',
   tenant_id: TENANT_ID, // actuando como el tenant
   agent_id: null,

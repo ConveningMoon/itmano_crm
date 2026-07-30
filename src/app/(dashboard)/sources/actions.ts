@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
@@ -102,18 +101,15 @@ export async function requestPageBuild(
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Revisa los campos.' }
 
   const supabase = createAdminClient()
-  const authClient = await createClient()
-  const [{ data: tenant }, { data: { user } }] = await Promise.all([
-    supabase.from('tenants').select('name').eq('id', ctx.tenant_id).maybeSingle(),
-    authClient.auth.getUser(),
-  ])
+  const { data: tenant } = await supabase
+    .from('tenants').select('name').eq('id', ctx.tenant_id).maybeSingle()
 
   return createPlatformRequest({
     kind:            'page',
     tenant_id:       ctx.tenant_id,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tenant_name:     ((tenant as any)?.name as string | undefined) ?? ctx.tenant_id,
-    requester_email: user?.email ?? '(desconocido)',
+    requester_email: ctx.email || '(desconocido)',
     subject:         parsed.data.subject,
     message:         parsed.data.message,
   })

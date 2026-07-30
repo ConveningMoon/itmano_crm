@@ -17,6 +17,7 @@ const mockCtx = getCurrentTenantContext as unknown as ReturnType<typeof vi.fn>
 function asRole(role: TenantContext['role']) {
   mockCtx.mockResolvedValue({
     user_id:   'u-test',
+    email:     'u-test@test.itmano.com',
     role,
     tenant_id: role === 'super_admin' ? null : 'tenant-x',
     agent_id:  null,
