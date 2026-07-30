@@ -30,7 +30,7 @@ const INTENT_ALIASES: Record<string, FitIntent> = {
 
 // Recognized fit dimensions per intent. Must match lead_score_rules.dimension
 // for category='fit' (migration 029 seed).
-const FIT_DIMENSIONS: Record<FitIntent, readonly string[]> = {
+export const FIT_DIMENSIONS: Record<FitIntent, readonly string[]> = {
   buy:    ['timeline', 'financing', 'budget_tier', 'agent_status'],
   invest: ['timeline', 'financing', 'budget_tier', 'agent_status'],
   sell:   ['sell_motivation', 'timeline', 'listing_status'],

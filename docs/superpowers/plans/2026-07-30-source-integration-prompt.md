@@ -1296,6 +1296,12 @@ export async function getIntegrationInfo(
 ): Promise<{ ok: true; prompt: string } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
+  // Puede escribir (backfill perezoso del secret de contact_form más abajo),
+  // igual que updateChannel/archiveChannel/regenerateContactSecret en este
+  // mismo archivo — mismo guard, por consistencia y porque la global
+  // constraint de este plan exige requireWriteAccess en toda mutación.
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   let chQ = supabase
