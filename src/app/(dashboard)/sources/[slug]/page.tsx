@@ -181,7 +181,6 @@ export default async function ChannelDetailPage({
               channelId={channel.id}
               channelType={channel.channelType}
               channelName={channel.name}
-              publicId={channel.publicId}
               tenantSlug={tenantSlug}
               channelSlug={channel.slug}
               initial={hostedConfig}

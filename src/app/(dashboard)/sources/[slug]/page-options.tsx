@@ -48,13 +48,12 @@ function CopyBtn({ text, label = 'Copiar' }: { text: string; label?: string }) {
 }
 
 export function PageOptions({
-  channelId, channelType, channelName, publicId, tenantSlug, channelSlug,
+  channelId, channelType, channelName, tenantSlug, channelSlug,
   initial, managedByItmano, isSuperAdmin, canEdit, tenantName, agentName,
 }: {
   channelId: string
   channelType: string
   channelName: string
-  publicId: string
   tenantSlug: string
   channelSlug: string
   initial: HostedPageConfig | null
