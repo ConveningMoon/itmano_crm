@@ -222,6 +222,18 @@ Estructura común a los 3 tipos:
    `event`, notificación de contacto para `contact_form`).
 8. **Snippet de tracking de vistas** — el mismo beacon para los 3 tipos, para
    que "Vistas"/"Conversión" no queden en 0.
+9. **Solo `contact_form` — nota final de Webflow.** La pantalla que este
+   diseño reemplaza ofrecía Webflow como primera opción, y el comentario de
+   `api/webhooks/webflow/[publicId]/route.ts` ("Exact keys from A&J's Webflow
+   Contact Us form are primary") confirma que es una integración real, no
+   hipotética — no puede desaparecer de la UI solo porque el prompt nuevo está
+   pensado para el escenario "mi IA construye el formulario". Va como nota
+   corta, separada del cuerpo del prompt (Webflow no necesita IA, solo pegar
+   una URL en un ajuste): la URL `{baseUrl}/api/webhooks/webflow/{publicId}`,
+   una frase de que Webflow firma cada envío con HMAC, y que el secret vigente
+   se pide a ITMANO (ese mecanismo sigue con su fallback global sin cambios,
+   §8 Fuera de alcance — aquí solo se documenta, no se le da un valor real
+   porque no existe uno por canal).
 
 ### 4.1 Ejemplo ilustrativo — `contact_form`
 
@@ -300,6 +312,12 @@ cada carga de página (no bloquea, no espera respuesta):
   navigator.sendBeacon('https://app.itmano.com/api/intake/chn_x5yxx15jt7wf/view', JSON.stringify(d));
 })();
 </script>
+
+### ¿Usas Webflow? (sin código, sin IA)
+Si tu sitio está en Webflow y usas su formulario nativo, no necesitas nada de lo
+anterior: en Site Settings → Forms → Webhooks, apunta el formulario "Contact Us" a
+POST https://app.itmano.com/api/webhooks/webflow/chn_x5yxx15jt7wf
+Webflow firma cada envío con HMAC — pide el secret vigente a ITMANO.
 ```
 
 `lead_magnet` agrega, antes de la sección de métricas, el mismo snippet ya
