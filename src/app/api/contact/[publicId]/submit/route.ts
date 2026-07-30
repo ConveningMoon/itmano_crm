@@ -8,14 +8,28 @@ import { handleContactSubmission } from '@/lib/services/handle-contact-submissio
 // alternative to the native Webflow webhook (which validates an HMAC signature).
 // Both endpoints share handleContactSubmission. No CORS: server-to-server only.
 
+// One answer in the form_submissions snapshot (see CLAUDE.md → answers contract).
+// key/value required; question/label optional for robustness. Mirrors the
+// FormAnswerSchema in api/intake/[publicId]/submit/route.ts.
+const FormAnswerSchema = z.object({
+  key:      z.string().min(1).max(200),
+  question: z.string().max(2000).optional(),
+  value:    z.string().max(4000),
+  label:    z.string().max(4000).optional(),
+})
+
 const SubmitSchema = z.object({
-  first_name: z.string().min(1).max(100),
-  last_name:  z.string().max(100).optional().default(''),
-  email:      z.string().email().transform(s => s.toLowerCase().trim()),
-  phone:      z.string().max(30).optional(),
-  reason:     z.enum(['buy', 'sell', 'invest']), // "How can we help?" — required
-  message:    z.string().max(2000).optional(),   // free-text question — optional
-  language:   z.enum(['es', 'en', 'pt']).optional().default('es'),
+  first_name:   z.string().min(1).max(100),
+  last_name:    z.string().max(100).optional().default(''),
+  email:        z.string().email().transform(s => s.toLowerCase().trim()),
+  phone:        z.string().max(30).optional(),
+  reason:       z.enum(['buy', 'sell', 'invest']), // "How can we help?" — required
+  message:      z.string().max(2000).optional(),   // free-text question — optional
+  language:     z.enum(['es', 'en', 'pt']).optional().default('es'),
+  // Preguntas personalizadas del formulario (p.ej. presupuesto, tiempos de compra).
+  // Sin esto, handleContactSubmission nunca las recibe y quedan fuera del
+  // snapshot de form_submissions y del análisis de fit por IA.
+  form_answers: z.array(FormAnswerSchema).max(50).optional(),
 })
 
 function err(message: string, status: number): NextResponse {
@@ -83,6 +97,7 @@ export async function POST(
       reason:     parsed.reason,
       message:    parsed.message,
       language:   parsed.language,
+      form_answers: parsed.form_answers,
     })
     return NextResponse.json(result.duplicate ? { ok: true, duplicate: true } : { ok: true })
   } catch (e) {

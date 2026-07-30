@@ -5,9 +5,15 @@ import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCi
 import type { CarouselBrandProfile, CarouselJob, CarouselJobWithSlides, CarouselSlide } from '@/lib/carousels/types'
 import type { CarouselLogRow } from '@/lib/data/carousels'
 import { PILLAR_LABELS } from '@/lib/carousels/brand'
-import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel, loadCarouselLogs } from './actions'
+import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel, loadCarouselLogs, reportRenderFailure } from './actions'
 
 type Phase = 'idle' | 'researching' | 'rendering' | 'done' | 'error'
+
+// Reintentos ante fallos de TRANSPORTE (la petición al server action muere:
+// timeout de la función, 500 de la plataforma, red). No aplican a un
+// {ok:false} del servidor, que es una respuesta legítima y ya viene logueada.
+const TRANSPORT_RETRIES = 2
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const SLIDE_TYPE_LABEL: Record<string, string> = {
   cover: 'Portada', data: 'Dato', emotional: 'Emocional', text: 'Impacto', cta: 'Cierre',
@@ -36,14 +42,39 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     setJob((j) => (j ? { ...j, slides: j.slides.map((x) => (x.id === s.id ? s : x)) } : j))
   }
 
+  // El badge del historial también es estado del cliente: sin esto se quedaría
+  // congelado en "Imágenes" aunque el carrusel ya esté terminado.
+  function syncJobBadge(jobId: string, slides: CarouselSlide[]) {
+    const done = slides.every((s) => s.status === 'ready')
+    setJobs((xs) => xs.map((j) => (j.id === jobId ? { ...j, status: done ? 'ready' : 'composing' } : j)))
+  }
+
   async function safeRender(id: string, forceImage = false): Promise<CarouselSlide | { error: string }> {
-    try {
-      const r = await renderSlide(id, { forceImage })
-      return r.ok ? r.data : { error: r.error }
-    } catch (e) {
-      // Nunca dejar que un throw rompa el bucle: los demás slides deben seguir.
-      return { error: e instanceof Error ? e.message : 'Error inesperado al renderizar' }
+    let lastErr = 'Error inesperado al renderizar'
+
+    for (let attempt = 0; attempt <= TRANSPORT_RETRIES; attempt++) {
+      try {
+        // forceImage SOLO en el primer intento: si el intento 1 llegó a generar
+        // y guardar la imagen antes de morir, reintentar con force la volvería a
+        // pagar. Sin force se reutiliza lo que haya en el bucket, y si no hay
+        // nada se genera igual — reintentar nunca cuesta una imagen de más.
+        const r = await renderSlide(id, { forceImage: forceImage && attempt === 0 })
+        // Respuesta del servidor: llegó y decidió. No se reintenta — repetirla
+        // solo repetiría el mismo error, y el servidor ya lo registró.
+        return r.ok ? r.data : { error: r.error }
+      } catch (e) {
+        // Un throw aquí no viene del action: es la petición misma la que falló.
+        // Es el fallo transitorio que antes mataba el resto del carrusel y solo
+        // se curaba recargando la página. Ahora se reintenta con backoff.
+        lastErr = e instanceof Error ? e.message : 'Error inesperado al renderizar'
+        if (attempt < TRANSPORT_RETRIES) await sleep(1500 * (attempt + 1))
+      }
     }
+
+    // Agotados los reintentos: el servidor nunca pudo registrar nada (su
+    // invocación murió), así que lo dejamos anotado desde aquí.
+    void reportRenderFailure({ slideId: id, message: lastErr, attempts: TRANSPORT_RETRIES + 1 }).catch(() => {})
+    return { error: lastErr }
   }
 
   async function generate() {
@@ -61,6 +92,13 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
 
     let current = res.data
     setJob(current)
+    // El historial vive en estado del cliente: se sembró una sola vez desde las
+    // props del servidor, así que un revalidatePath NO lo actualiza y el
+    // carrusel recién creado no aparecía hasta recargar. Lo insertamos aquí.
+    // Snapshot en const: el updater de setJobs corre en el render siguiente y
+    // `current` ya habrá sido reasignado por el bucle de abajo.
+    const created = res.data
+    setJobs((xs) => [created, ...xs.filter((j) => j.id !== created.id)])
     setPhase('rendering')
 
     for (let i = 0; i < current.slides.length; i++) {
@@ -77,6 +115,7 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
 
     const failed = current.slides.filter((s) => s.status === 'failed').length
     setPhase('done')
+    syncJobBadge(current.id, current.slides)
     setStatus(failed > 0
       ? `Terminado con ${failed} slide(s) con error — usa "Renderizar pendientes" o "Nueva imagen"`
       : 'Carrusel listo')
@@ -123,6 +162,7 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     }
     const failed = current.slides.filter((s) => s.status === 'failed').length
     setResuming(false); setPhase('done')
+    syncJobBadge(current.id, current.slides)
     setStatus(failed > 0 ? `Terminado con ${failed} slide(s) con error` : 'Pendientes completados')
   }
 
@@ -202,8 +242,16 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
       <style>{`
         .ce-btn:hover:not(:disabled){filter:brightness(1.08)}
         .ce-chip:hover:not(.ce-on){border-color:var(--accent-gold)!important}
-        .ce-slide:hover .ce-regen{opacity:1}
-        .ce-jobrow:hover .ce-del{opacity:1}
+        /* La opacidad de estos controles se declara AQUÍ, no en el style inline
+           del elemento: un estilo inline gana siempre a una regla de hoja de
+           estilos sin !important, así que el inline opacity:0 anulaba el
+           :hover y los botones quedaban invisibles pero clicables. Además ya
+           no parten de 0: en pantallas táctiles no hay hover, y un slide con
+           error es justo donde hace falta encontrar el botón de reintento. */
+        .ce-regen{opacity:.55;transition:opacity var(--dur-fast,.15s)}
+        .ce-slide:hover .ce-regen,.ce-slide:focus-within .ce-regen,.ce-regen[data-show="1"]{opacity:1}
+        .ce-del{opacity:.45;transition:opacity var(--dur-fast,.15s)}
+        .ce-jobrow:hover .ce-del,.ce-jobrow:focus-within .ce-del,.ce-del[data-show="1"]{opacity:1}
         .spin{animation:cespin 1s linear infinite}@keyframes cespin{to{transform:rotate(360deg)}}
       `}</style>
 
@@ -418,9 +466,9 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
                   className="ce-del ce-btn"
                   onClick={() => removeJob(j.id)}
                   disabled={deletingId === j.id}
+                  data-show={deletingId === j.id ? '1' : undefined}
                   title="Eliminar carrusel"
                   style={{
-                    opacity: deletingId === j.id ? 1 : 0, transition: 'opacity var(--dur-fast, .15s)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px',
                     borderRadius: '7px', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
                     color: 'var(--status-lost, #c96b6b)', cursor: deletingId === j.id ? 'default' : 'pointer', flexShrink: 0,
@@ -495,7 +543,7 @@ function SlideCard({ slide, regenerating, onRegen, onNewImage }: { slide: Carous
         {proceduralNote && <span style={{ ...badge(), background: 'rgba(190,154,84,0.85)' }} title={slide.error_message ?? ''}>sin foto</span>}
       </div>
 
-      <div className="ce-regen" style={{ position: 'absolute', bottom: '6px', right: '6px', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end', opacity: rendering ? 1 : 0, transition: 'opacity var(--dur-fast, .15s)' }}>
+      <div className="ce-regen" data-show={rendering || slide.status === 'failed' ? '1' : undefined} style={{ position: 'absolute', bottom: '6px', right: '6px', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
         <button
           className="ce-btn"
           onClick={onRegen}
