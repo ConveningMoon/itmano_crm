@@ -197,13 +197,17 @@ export async function getFitCatalog(
   db: any,
   tenantId: string,
 ): Promise<FitCatalogEntry[]> {
-  const { data } = await db
+  const { data, error } = await db
     .from('lead_score_rules')
     .select('tenant_id, dimension, match_value, label')
     .eq('category', 'fit')
     .eq('is_active', true)
     .not('match_value', 'is', null)
     .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+
+  if (error) {
+    console.error(JSON.stringify({ service: 'integration-prompt', fn: 'getFitCatalog', error: error.message }))
+  }
 
   type Row = { tenant_id: string | null; dimension: string; match_value: string; label: string | null }
   const byKey = new Map<string, FitCatalogEntry & { isTenantSpecific: boolean }>()
