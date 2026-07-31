@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { m } from 'motion/react'
 import { BedDouble, Bath, Maximize, MapPin, SlidersHorizontal, X, ArrowUpRight, Home } from 'lucide-react'
 import type { PublicProperty, PublicTenant } from './shared'
@@ -226,8 +227,18 @@ function PropertyCard({ tenantSlug, property, P, index }: { tenantSlug: string; 
       {/* Media */}
       <Link href={href} style={{ position: 'relative', display: 'block', aspectRatio: '4 / 3', overflow: 'hidden', background: P.paperAlt }}>
         {property.image_url ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img className="pc-img" src={property.image_url} alt={property.name ?? property.address} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          // `fill` sobre el <Link> de arriba, que ya es position:relative con
+          // aspect-ratio 4/3. `sizes` refleja la grilla real (3 / 2 / 1 columnas)
+          // para que Next sirva el ancho que la tarjeta necesita en vez del
+          // original completo — es el ahorro grande de este catálogo.
+          <Image
+            className="pc-img"
+            src={property.image_url}
+            alt={property.name ?? property.address}
+            fill
+            sizes="(max-width: 620px) 100vw, (max-width: 980px) 50vw, 33vw"
+            style={{ objectFit: 'cover' }}
+          />
         ) : (
           <span style={{ display: 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', color: P.textFaint }}>
             <Home size={34} strokeWidth={1.2} />

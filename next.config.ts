@@ -1,6 +1,21 @@
 import type { NextConfig } from "next";
 
+// Host de Supabase Storage, derivado del env en vez de hardcodear el project ref
+// — así un cambio de proyecto no deja las imágenes rotas en silencio.
+const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+  : undefined;
+
 const nextConfig: NextConfig = {
+  images: {
+    // Sin esto, next/image rechaza cualquier URL remota y toca caer a <img>
+    // plano: se sirve el original a tamaño completo, sin WebP ni redimensionado.
+    // Las fotos de propiedades son la superficie más pesada del producto Y las
+    // que ve el visitante del catálogo público, así que es donde más pesa.
+    remotePatterns: supabaseHost
+      ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }]
+      : [],
+  },
   // sharp ships a native binary; keep it as a real require() at runtime instead
   // of letting the bundler trace/link it (Turbopack's Windows junction-point
   // creation for it fails outright on some filesystems).
