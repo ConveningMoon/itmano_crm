@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { m } from 'motion/react'
@@ -68,9 +69,29 @@ export function NavItem({ label, href, icon, badge, indicatorId = 'nav-indicator
   const isActive = computeActive(pathname, href, hrefs)
   const Icon = ICONS[icon]
 
+  // Prefetch POR INTENCIÓN, no al entrar en viewport.
+  //
+  // Con el prefetch por defecto, cada carga de página disparaba ~21 renders
+  // dinámicos en el servidor: el nav tiene ~14 rutas y Sidebar y MobileNav están
+  // MONTADOS a la vez (uno lo esconde CSS, pero sus Link siguen prefetcheando),
+  // así que cada ruta se pedía dos veces. Todas son dinámicas —leen cookies para
+  // el contexto de tenant—, o sea que ninguna se sirve de un cache estático: son
+  // invocaciones reales que compiten con la página que el usuario sí pidió.
+  //
+  // `prefetch={false}` hasta que hay intención; al primer hover/foco/toque pasa a
+  // `null`, que es el valor que restaura el prefetch por defecto de Next. El
+  // hover da 100-300 ms de ventaja, suficiente para que el clic siga sintiéndose
+  // instantáneo, y el nav móvil oculto ya nunca prefetchea nada.
+  const [intent, setIntent] = useState(false)
+  const armPrefetch = () => setIntent(true)
+
   return (
     <Link
       href={href}
+      prefetch={intent ? null : false}
+      onMouseEnter={armPrefetch}
+      onFocus={armPrefetch}
+      onTouchStart={armPrefetch}
       className={isActive ? 'nav-item nav-item-active' : 'nav-item'}
       style={{
         display: 'flex',
