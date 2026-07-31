@@ -20,6 +20,7 @@ import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
 import { getLeadEmailReplies } from '@/lib/data/lead-email-replies'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
+import { getLeadPriorityPosition } from '@/lib/data/leads'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
@@ -62,6 +63,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     emailReplies,
     { data: tenantRow },
     tenantAccess,
+    priority,
   ] = await Promise.all([
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
@@ -79,6 +81,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       .eq('id', leadTenantId)
       .maybeSingle(),
     getTenantAccessFor(leadTenantId),
+    // Los tres ejes + la posicion en la cola. El ranking se resuelve con counts
+    // sobre indice dentro de Postgres, nunca trayendo la cartera a memoria.
+    getLeadPriorityPosition(id, scope),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -184,6 +189,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       manualActions={manualActions}
       statusHistory={statusHistory}
       scoreBreakdown={scoreBreakdown}
+      priority={priority}
       emailSending={emailSending}
       aiFit={aiFit}
     />

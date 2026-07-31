@@ -213,13 +213,20 @@ describe('getLeadPriorityPosition — el ranking sale de Postgres', () => {
     expect(pos!.rank).toBeLessThanOrEqual(pos!.total)
   })
 
-  it('un lead en proceso no tiene posición — no compite por la atención', async () => {
+  it('un lead en proceso conserva sus ejes pero no tiene posición', async () => {
+    // La tarjeta necesita mostrar etapa y calidad incluso fuera de la cola; lo
+    // que NO debe mostrar es un puesto, porque ese lead ya no compite por la
+    // atención del día y darle uno sería mentir.
     const { getLeadPriorityPosition } = await import('@/lib/data/leads')
-    await freshLead({ status: 'process_started' })
+    await freshLead({ status: 'process_started', fit_profile: { financing: 'cash' } })
     await recompute()
 
     const pos = await getLeadPriorityPosition(LEAD_ID, { tenantId: TENANT_A_ID, agentId: null })
-    expect(pos).toBeNull()
+    expect(pos).not.toBeNull()
+    expect(pos!.stage).toBe('en_proceso')
+    expect(pos!.urgency).toBeNull()
+    expect(pos!.rank).toBe(0)
+    expect(pos!.total).toBe(0)
   })
 
   it('respeta el scope de visibilidad del agente', async () => {
