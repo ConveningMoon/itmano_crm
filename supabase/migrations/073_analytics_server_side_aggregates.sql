@@ -11,10 +11,14 @@
 -- mensual, distribución por fuente compuesta, y por agente la matriz de estados
 -- y el score promedio.
 --
--- Se crea una función aparte en vez de ampliar `lead_dashboard_stats` porque el
--- criterio de "caliente" difiere: el dashboard cuenta `score >= 70 OR status =
--- 'hot'` y /analytics cuenta sólo `score >= 70`. Fundirlas cambiaría un KPI ya
--- publicado en una de las dos páginas.
+-- Se crea una función aparte en vez de ampliar `lead_dashboard_stats` porque
+-- devuelve muchos más agregados y solo /analytics los necesita.
+--
+-- "Caliente" = status = 'hot' en TODA la app: es la banda que el trigger de
+-- scoring mantiene (score >= 60) y la que el pipeline muestra en el badge del
+-- lead. Antes cada página usaba su propio umbral (>= 70 aquí, >= 70 OR status
+-- allá) y ninguno coincidía con la banda, así que la tarjeta podía decir 0
+-- mientras el pipeline mostraba leads etiquetados como calientes.
 
 -- ── Índice de cobertura para los agregados ───────────────────────────────────
 -- Los agregados recorren todos los leads del scope. Con estas columnas en el
@@ -74,7 +78,7 @@ as $$
     select
       agent_id,
       count(*)::int                                                              as total,
-      (count(*) filter (where score >= 70))::int                                 as hot,
+      (count(*) filter (where status = 'hot'))::int                               as hot,
       (count(*) filter (where status in ('closed', 'process_completed')))::int   as closed,
       round(avg(score))::int                                                     as avg_score
     from scoped
@@ -94,7 +98,7 @@ as $$
       to_char(s.created_month, 'YYYY-MM')                                        as month,
       count(*)::int                                                              as leads,
       (count(*) filter (where s.status = 'nurturing'))::int                       as nurturing,
-      (count(*) filter (where s.score >= 70))::int                                as hot,
+      (count(*) filter (where s.status = 'hot'))::int                             as hot,
       (count(*) filter (where s.status in ('closed', 'process_completed')))::int  as closed
     from scoped s, bounds b
     where s.created_month >= b.window_start
@@ -102,8 +106,8 @@ as $$
   )
   select jsonb_build_object(
     'total',  (select count(*)::int from scoped),
-    -- Criterio de la tarjeta "Leads Calientes" de /analytics: score >= 70.
-    'hot',    (select count(*)::int from scoped where score >= 70),
+    -- Criterio único de "caliente" en toda la app: la banda del pipeline.
+    'hot',    (select count(*)::int from scoped where status = 'hot'),
     'closed', (select count(*)::int from scoped where status in ('closed', 'process_completed')),
     -- Temperatura promedio: media sobre el pipeline VIVO (los estados congelados
     -- guardan un score viejo, ver FROZEN_STATUSES). null = no hay pipeline vivo.
@@ -113,7 +117,7 @@ as $$
     ),
     'this_month', jsonb_build_object(
       'leads', (select count(*)::int from scoped s, bounds b where s.created_month = b.month_start),
-      'hot',   (select count(*)::int from scoped s, bounds b where s.created_month = b.month_start and s.score >= 70)
+      'hot',   (select count(*)::int from scoped s, bounds b where s.created_month = b.month_start and s.status = 'hot')
     ),
     'by_source', coalesce((
       select jsonb_agg(jsonb_build_object(

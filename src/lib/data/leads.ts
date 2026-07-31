@@ -251,8 +251,7 @@ export const ANALYTICS_MONTHS = 7
 
 export interface LeadAnalyticsStats {
   total:  number
-  // Criterio de /analytics: score >= 70 (distinto del de /dashboard, que además
-  // cuenta el estado 'hot' — ver la migración 073).
+  // "Caliente" = status 'hot' (la banda del pipeline), igual en toda la app.
   hot:    number
   closed: number
   // Media del score sobre el pipeline vivo; null cuando no hay leads vivos.

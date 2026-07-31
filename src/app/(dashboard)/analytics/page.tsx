@@ -333,7 +333,7 @@ export default async function AnalyticsPage() {
             </thead>
             <tbody>
               {tempByAgent.map((row, i) => {
-                const barColor = row.avgTemp >= 70 ? 'var(--status-hot)' : row.avgTemp >= 40 ? 'var(--status-warm)' : 'var(--accent-gold)'
+                const barColor = bandForScore(row.avgTemp).color
                 const barWidth = Math.round((row.avgTemp / 100) * 80)
                 return (
                   <tr
