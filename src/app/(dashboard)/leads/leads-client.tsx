@@ -11,6 +11,7 @@ import {
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import { bandForScore } from '@/lib/scoring/temperature-band'
 import type { Agent, LeadStatus } from '@/lib/types'
 import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/list-filters'
 import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
@@ -45,11 +46,9 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })
 }
 
-function tempColor(score: number): string {
-  if (score >= 70) return '#E04040'
-  if (score >= 40) return '#E07B3A'
-  return '#C9A96E'
-}
+// Las bandas (y sus colores) viven en scoring/temperature-band: mismo corte que
+// usa el trigger para asignar el estado, así el color nunca contradice al badge.
+const tempColor = (score: number) => bandForScore(score).color
 
 function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)

@@ -103,15 +103,18 @@ as $$
   by_agent as (
     select agent_id,
            count(*)::int                                                    as total,
-           (count(*) filter (where score >= 70))::int                       as hot,
+           (count(*) filter (where status = 'hot'))::int                     as hot,
            (count(*) filter (where status in ('closed', 'process_completed')))::int as closed
     from scoped
     group by agent_id
   )
   select jsonb_build_object(
     'total',     (select count(*)::int from scoped),
-    -- Mismo criterio que la tarjeta "Leads Calientes": estado hot o score >= 70.
-    'hot',       (select count(*)::int from scoped where score >= 70 or status = 'hot'),
+    -- "Caliente" = la banda del pipeline, sin excepciones: status = 'hot', que el
+    -- trigger de scoring mantiene en score >= 60. Contar por score sumaria leads que
+    -- el agente ya movio a 'en proceso' (score congelado alto), duplicandolos contra
+    -- la tarjeta de al lado.
+    'hot',       (select count(*)::int from scoped where status = 'hot'),
     'by_status', coalesce((select jsonb_object_agg(status, c) from by_status), '{}'::jsonb),
     'by_agent',  coalesce((
       select jsonb_agg(jsonb_build_object(
