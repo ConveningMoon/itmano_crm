@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import type { ScoreRule } from '@/lib/data/score-rules'
+import { computeScoreReach, type ReachRule } from '@/lib/scoring/reach'
+import { SCORE_BANDS } from '@/lib/scoring/temperature-band'
 import { updateScoreRules } from './actions'
 
 // ─── Style constants ──────────────────────────────────────────────────────────
@@ -170,6 +172,85 @@ function RuleRow({
   )
 }
 
+// ─── Alcance ──────────────────────────────────────────────────────────────────
+// Los puntos son ajustables pero las bandas son fijas. Sin este panel, bajar los
+// puntos lo suficiente deja la banda Caliente inalcanzable y el pipeline plano en
+// "Nuevo" — sin error y sin aviso. Se recalcula con cada tecla, sobre el
+// BORRADOR, así que el efecto se ve antes de guardar.
+function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) {
+  const { reachable, bestFit, engagement, manual, ceiling, warnings } = reach
+
+  const bandas = [
+    { desde: SCORE_BANDS.hot,       label: 'Caliente',  color: 'var(--status-hot)' },
+    { desde: SCORE_BANDS.warm,      label: 'Tibio',     color: 'var(--status-warm)' },
+    { desde: SCORE_BANDS.nurturing, label: 'Nurturing', color: 'var(--status-nurturing)' },
+  ]
+
+  return (
+    <div style={{ ...CARD, borderColor: warnings.length ? 'var(--accent-coral)' : 'var(--border-subtle)' }}>
+      <div style={CARD_HEADER}>
+        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          Alcance de esta configuración
+        </span>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          Hasta dónde puede llegar un lead con los valores de arriba. Las bandas son fijas.
+        </div>
+      </div>
+
+      <div style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '14px' }}>
+          <span style={{ fontSize: '32px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1 }}>
+            {reachable}
+          </span>
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            puntos máximos {ceiling > 100 && `(techo teórico ${ceiling}, el score corta en 100)`}
+          </span>
+        </div>
+
+        {/* Regla 0-100 con los cortes de banda marcados */}
+        <div style={{ position: 'relative', height: '8px', borderRadius: '4px', background: 'var(--bg-elevated)', marginBottom: '6px' }}>
+          <div style={{
+            position: 'absolute', inset: 0, width: `${reachable}%`,
+            borderRadius: '4px', background: 'var(--accent-gold)', opacity: 0.55,
+          }} />
+          {bandas.map(b => (
+            <span key={b.label} style={{
+              position: 'absolute', left: `${b.desde}%`, top: '-3px',
+              width: '2px', height: '14px', background: b.color, borderRadius: '1px',
+            }} />
+          ))}
+        </div>
+        <div style={{ position: 'relative', height: '16px', marginBottom: '14px' }}>
+          {bandas.map(b => (
+            <span key={b.label} style={{
+              position: 'absolute', left: `${b.desde}%`, transform: 'translateX(-50%)',
+              fontSize: '10px', color: b.color, whiteSpace: 'nowrap',
+            }}>
+              {b.label} {b.desde}
+            </span>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <span>Mejor perfil <strong style={{ color: 'var(--text-secondary)' }}>{bestFit}</strong></span>
+          <span>+ Engagement <strong style={{ color: 'var(--text-secondary)' }}>{engagement}</strong></span>
+          <span>+ Manual <strong style={{ color: 'var(--text-secondary)' }}>{manual}</strong></span>
+        </div>
+
+        {warnings.map(w => (
+          <div key={w.code} style={{
+            marginTop: '14px', padding: '10px 12px', borderRadius: '8px',
+            background: 'rgba(201,123,107,0.10)', border: '1px solid rgba(201,123,107,0.28)',
+            fontSize: '12px', color: 'var(--accent-coral)', lineHeight: 1.5,
+          }}>
+            {w.message}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Section ────────────────────────────────────────────────────────────────────
 
 export function ScoringSection({ rules, canEdit, recommended }: {
@@ -208,6 +289,19 @@ export function ScoringSection({ rules, canEdit, recommended }: {
     }))
     return { fitGroups, engagement: engRaw, manual: manRaw }
   }, [rules])
+
+  // Alcance del BORRADOR, no de lo guardado: el usuario ve el efecto de lo que
+  // está escribiendo antes de confirmar. Un valor a medio teclear ("-", "1x")
+  // cae a 0 en vez de romper el cálculo.
+  const reach = useMemo(() => {
+    const draftRules: ReachRule[] = rules.map(r => ({
+      category:  r.category,
+      dimension: r.dimension,
+      points:    parsePoints(draft[r.id]?.points ?? '') ?? 0,
+      isActive:  draft[r.id]?.isActive ?? r.isActive,
+    }))
+    return computeScoreReach(draftRules)
+  }, [rules, draft])
 
   const dirty = rules.some(r => {
     const d = draft[r.id]; const b = baseline[r.id]
@@ -298,6 +392,8 @@ export function ScoringSection({ rules, canEdit, recommended }: {
           Estos valores los administra ITMANO. Para ajustarlos a tu operación, contáctanos.
         </div>
       )}
+
+      <ReachPanel reach={reach} />
 
       {/* AUTOMÁTICO */}
       <div style={CARD}>
