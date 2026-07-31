@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
+import { mapAgent, type AgentRow } from '@/lib/db'
+import { getLeadDashboardStats, getHotLeads } from '@/lib/data/leads'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import { bandForScore } from '@/lib/scoring/temperature-band'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
-import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
+import { scopeFor } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
 import { ActivityRow } from '../activity/activity-ui'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
@@ -31,12 +33,6 @@ function getInitials(firstName: string, lastName: string): string {
   return (f + l).toUpperCase() || f.toUpperCase()
 }
 
-function getTempColor(score: number): string {
-  if (score >= 70) return 'var(--status-hot)'
-  if (score >= 40) return 'var(--status-warm)'
-  return 'var(--accent-gold)'
-}
-
 export default async function DashboardPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
@@ -44,13 +40,13 @@ export default async function DashboardPage() {
   const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
-  const [{ data: rawLeads }, { data: rawAgents }, recentActivity] = await Promise.all([
-    // Leads: tenant-scoped (owner/super) + agent_id (agent). Fixes the prior
-    // cross-tenant leak (this query had no tenant filter at all).
-    applyVisibilityScope(
-      supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
-      scope,
-    ),
+  // Los conteos se agregan en Postgres (RPC lead_dashboard_stats) y los leads
+  // calientes salen por índice: el dashboard ya no trae la tabla de leads entera
+  // para contarla en JS.
+  const [leadStats, hotLeads, { data: rawAgents }, recentActivity] = await Promise.all([
+    // Scope: tenant (owner/super) + agent_id (agent) — mismo criterio que scopeFor.
+    getLeadDashboardStats(scope),
+    getHotLeads(scope, 6),
     tenant_id
       ? supabase.from('agents').select('*').eq('active', true).eq('tenant_id', tenant_id)
       : supabase.from('agents').select('*').eq('active', true),
@@ -58,51 +54,49 @@ export default async function DashboardPage() {
     getRecentActivity(tenant_id, { role, userId: user_id }, 10, scope.agentId),
   ])
 
-  const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+  const totalLeads = leadStats.total
+  const countOf = (status: string) => leadStats.byStatus[status] ?? 0
 
   const stats = {
-    total:     leads.length,
-    hot:       leads.filter(l => l.status === 'hot' || (l.temperatureScore ?? 0) >= 70).length,
-    inProcess: leads.filter(l => l.status === 'process_started').length,
-    closed:    leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+    total:     totalLeads,
+    hot:       leadStats.hot,
+    inProcess: countOf('process_started'),
+    closed:    countOf('closed') + countOf('process_completed'),
   }
 
-  const hotLeads = leads
-    .filter(l => (l.temperatureScore ?? 0) >= 70)
-    .sort((a, b) => (b.temperatureScore ?? 0) - (a.temperatureScore ?? 0))
-    .slice(0, 6)
-
   const statusCounts = {
-    new:               leads.filter(l => l.status === 'new').length,
-    nurturing:         leads.filter(l => l.status === 'nurturing').length,
-    warm:              leads.filter(l => l.status === 'warm').length,
-    hot:               leads.filter(l => l.status === 'hot').length,
-    process_started:   leads.filter(l => l.status === 'process_started').length,
-    process_completed: leads.filter(l => l.status === 'process_completed').length,
-    closed:            leads.filter(l => l.status === 'closed').length,
-    lost:              leads.filter(l => l.status === 'lost').length,
+    new:               countOf('new'),
+    nurturing:         countOf('nurturing'),
+    warm:              countOf('warm'),
+    hot:               countOf('hot'),
+    process_started:   countOf('process_started'),
+    process_completed: countOf('process_completed'),
+    closed:            countOf('closed'),
+    lost:              countOf('lost'),
   }
 
   const mainStages = [
     'new', 'nurturing', 'warm', 'hot', 'process_started', 'process_completed', 'closed',
   ] as const
 
-  const maxCount = Math.max(...mainStages.map(k => statusCounts[k]))
+  // `|| 1` evita dividir por cero en un tenant recién creado (todas las barras al mínimo).
+  const maxCount = Math.max(...mainStages.map(k => statusCounts[k])) || 1
 
   function barHeight(count: number): number {
     return Math.max(4, Math.round((count / maxCount) * 48))
   }
 
   const agentStats: AgentStat[] = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
-    const total = agentLeads.length
-    const hot = agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
-    const percentage = Math.round((total / leads.length) * 100)
-    const closed = agentLeads.filter(
-      l => l.status === 'closed' || l.status === 'process_completed'
-    ).length
-    return { agent, total, hot, percentage, closed }
+    const row = leadStats.byAgent.find(a => a.agentId === agent.id)
+    const total = row?.total ?? 0
+    return {
+      agent,
+      total,
+      hot:        row?.hot    ?? 0,
+      closed:     row?.closed ?? 0,
+      percentage: totalLeads > 0 ? Math.round((total / totalLeads) * 100) : 0,
+    }
   })
 
   const statCards = [
@@ -198,7 +192,7 @@ export default async function DashboardPage() {
             fontSize: '11px', color: 'var(--accent-gold)',
             background: 'rgba(201,169,110,0.12)', padding: '2px 8px', borderRadius: '4px',
           }}>
-            {leads.length} leads
+            {totalLeads} leads
           </span>
         </div>
 
@@ -273,13 +267,10 @@ export default async function DashboardPage() {
           <div>
             {hotLeads.map(lead => {
               const agent  = agents.find(a => a.id === lead.agentId)
-              // reason: Supabase returns untyped join data without generated schema
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-              const channelName = raw?.acquisition_channels?.name ?? '—'
+              const channelName = lead.channelName ?? '—'
               const initials = getInitials(lead.firstName, lead.lastName)
-              const tempColor = getTempColor(lead.temperatureScore ?? 0)
-              const filled = Math.round((lead.temperatureScore ?? 0) / 10)
+              const tempColor = bandForScore(lead.score ?? 0).color
+              const filled = Math.round((lead.score ?? 0) / 10)
               const cfg = STATUS_CONFIG[lead.status]
               const agentBg = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
 
@@ -321,7 +312,7 @@ export default async function DashboardPage() {
                       ))}
                     </div>
                     <span style={{ fontSize: '13px', color: tempColor, fontWeight: 500, width: '26px', textAlign: 'right' }}>
-                      {lead.temperatureScore ?? '—'}
+                      {lead.score ?? '—'}
                     </span>
                   </div>
 
@@ -418,7 +409,7 @@ export default async function DashboardPage() {
 
               {/* Count */}
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                {total}/{leads.length}
+                {total}/{totalLeads}
               </div>
 
               {/* Idiomas + hot */}

@@ -10,6 +10,9 @@ export interface ChannelOption {
   name:        string
   slug:        string
   agentId:     string | null
+  // /leads carga también los canales inactivos (para resolver el nombre y el
+  // filtro de fuente de leads viejos) y sólo ofrece los activos en el desplegable.
+  active:      boolean
 }
 
 export interface TenantOption {
@@ -55,6 +58,7 @@ export default async function NewLeadPage() {
     name:        r.name as string,
     slug:        r.slug as string,
     agentId:     (r.agent_id ?? null) as string | null,
+    active:      true,  // la query ya filtra active = true
   })) as ChannelOption[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenants = (rawTenants ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string })) as TenantOption[]

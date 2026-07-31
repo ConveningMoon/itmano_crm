@@ -48,6 +48,27 @@ export function getLeadSource(
   return { kind: 'other', label: '—' }
 }
 
+// ── Traducción del filtro a condiciones sobre columnas de `leads` ─────────────
+// El filtro de fuente vive en el servidor: `kind` no es una columna, así que hay
+// que resolverlo a los tipos de canal y a los valores de traffic_source que lo
+// producen. Se derivan de los mismos mapas de arriba para que no puedan divergir
+// de getLeadSource().
+
+// Tipos de acquisition_channels.channel_type que producen este kind.
+export function channelTypesForKind(kind: string): string[] {
+  return Object.entries(CHANNEL_SOURCES)
+    .filter(([, src]) => src.kind === kind)
+    .map(([channelType]) => channelType)
+}
+
+// Valores de leads.traffic_source que producen este kind cuando el lead no tiene
+// canal (entrada directa).
+export function trafficSourcesForKind(kind: string): string[] {
+  return Object.entries(DIRECT_ENTRY_SOURCES)
+    .filter(([, src]) => src.kind === kind)
+    .map(([trafficSource]) => trafficSource)
+}
+
 // The 7 filter options shown in /leads (value = kind), in display order.
 export const LEAD_SOURCE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'manual',       label: 'Registro manual' },

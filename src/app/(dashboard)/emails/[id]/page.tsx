@@ -5,10 +5,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
-import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
+import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceDetailActions } from './sequence-detail-actions'
 import { StepManager } from './step-manager'
-import { ManualLeadPicker, type PickerLead } from './manual-lead-picker'
+import { ManualLeadPicker } from './manual-lead-picker'
+import { getEligibleLeadsForSequence } from '@/lib/data/leads'
 import { EmailMetricsCard } from './email-metrics-card'
 import { getStepMetrics } from '@/lib/services/email-metrics'
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus, Send } from 'lucide-react'
@@ -94,47 +95,25 @@ export default async function EmailSequenceDetailPage({
   const isManual = sequence.activationType === 'manual'
 
   // Una sola ola: agentes del tenant, métricas por paso y —solo en secuencias
-  // manuales— los leads elegibles. Nada de esto depende de nada más que de
-  // `sequence`, así que encadenarlas con await solo sumaba latencia. La lista de
-  // agentes se lee UNA vez: el picker manual repetía exactamente la misma query.
-  const [{ data: agentRows }, stepMetrics, leadsRes, activeRunsRes] = await Promise.all([
+  // manuales— la primera página de leads elegibles. Nada de esto depende de nada
+  // más que de `sequence`, así que encadenarlo con await solo sumaba latencia.
+  //
+  // El anti-join contra los runs activos lo resuelve Postgres dentro de
+  // sequence_eligible_leads, así que la página ya no trae la lista completa de
+  // leads para descartarla en JS. La búsqueda posterior vuelve al servidor desde
+  // el picker. Los agentes se leen UNA vez y sirven a los dos consumidores: el
+  // selector de propietario de la secuencia y el picker manual.
+  const [{ data: agentRows }, stepMetrics, eligible] = await Promise.all([
     supabase.from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name'),
     getStepMetrics(sequence.id),
-    isManual
-      ? applyVisibilityScope(
-          supabase.from('leads').select('id, first_name, last_name, email, status, agent_id, language').order('created_at', { ascending: false }),
-          scope,
-        )
-      : null,
-    isManual
-      ? supabase.from('lead_sequence_runs').select('lead_id').eq('sequence_id', id).eq('status', 'active')
-      : null,
+    isManual ? getEligibleLeadsForSequence(sequence.id, scope, { limit: 50 }) : null,
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
+  const pickerAgents: Array<{ id: string; name: string }> = isManual ? agents : []
 
   const totalRuns = sequence.activeRunCount + sequence.completedRunCount + sequence.cancelledRunCount
-
-  // Leads que todavía pueden entrar a la secuencia (sin run activo en ella).
-  let eligibleLeads: PickerLead[] = []
-  const pickerAgents: Array<{ id: string; name: string }> = isManual ? agents : []
-  if (isManual) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const activeLeadIds = new Set((activeRunsRes?.data ?? []).map((r: any) => r.lead_id as string))
-    const agentName = new Map(agents.map(a => [a.id, a.name]))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    eligibleLeads = (leadsRes?.data ?? []).filter((l: any) => !activeLeadIds.has(l.id as string)).map((l: any) => ({
-      id:        l.id as string,
-      firstName: l.first_name as string,
-      lastName:  l.last_name as string,
-      email:     l.email as string,
-      status:    l.status as string,
-      agentId:   (l.agent_id as string | null) ?? null,
-      agentName: l.agent_id ? (agentName.get(l.agent_id as string) ?? null) : null,
-      language:  (l.language as string | null) ?? null,
-    }))
-  }
 
   return (
     <>
@@ -287,16 +266,16 @@ export default async function EmailSequenceDetailPage({
               Agregar leads manualmente
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '4px' }}>
-              {eligibleLeads.length} disponibles
+              {eligible?.total ?? 0} disponibles
             </span>
           </div>
           <div style={{ padding: '16px 20px' }}>
-            {eligibleLeads.length === 0 ? (
+            {!eligible || eligible.total === 0 ? (
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
                 Todos los leads ya tienen un run activo en esta secuencia.
               </p>
             ) : (
-              <ManualLeadPicker sequenceId={sequence.id} leads={eligibleLeads} agents={pickerAgents} />
+              <ManualLeadPicker sequenceId={sequence.id} initial={eligible} agents={pickerAgents} />
             )}
           </div>
         </div>
