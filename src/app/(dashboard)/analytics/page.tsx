@@ -1,10 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
+import { mapAgent, type AgentRow } from '@/lib/db'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { listSequences } from '@/lib/data/email-sequences'
+import { getLeadAnalyticsStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
-import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
-import { bandForScore, averageLiveTemperature } from '@/lib/scoring/temperature-band'
+import { scopeFor } from '@/lib/auth/visibility'
+import { bandForScore } from '@/lib/scoring/temperature-band'
 import { getLeadSource } from '@/lib/leads/source'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
@@ -42,44 +43,38 @@ export default async function AnalyticsPage() {
   const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
-  // Leads scoped to the viewer (tenant + agent_id for role 'agent'). Agents are
-  // tenant-scoped reference data (per-agent blocks are hidden for the agent role).
-  const leadsQ  = applyVisibilityScope(
-    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)'),
-    scope,
-  )
+  // Todos los agregados de leads salen ya calculados de Postgres (RPC
+  // lead_analytics_stats, migración 073) con el scope de visibilidad aplicado en
+  // el servidor: la página ya no trae la tabla de leads del tenant para contarla
+  // en JS. Los agentes son datos de referencia del tenant (los bloques por agente
+  // se ocultan para el rol 'agent').
   const agentsQ = supabase.from('agents').select('*')
 
-  const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
-    leadsQ,
+  const [stats, { data: rawAgents }, channels, sequences] = await Promise.all([
+    getLeadAnalyticsStats(scope),
     tenant_id ? agentsQ.eq('tenant_id', tenant_id) : agentsQ,
     getChannelsWithMetrics(tenant_id, 30, scope.agentId),
     listSequences(tenant_id, scope.agentId),
   ])
 
-  const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 
   // ─── KPIs ───────────────────────────────────────────────────
-  const totalLeads = leads.length
-  const hotLeads = leads.filter(l => (l.temperatureScore ?? 0) >= 70).length
-  const closedLeads = leads.filter(l =>
-    l.status === 'closed' || l.status === 'process_completed'
-  ).length
+  const totalLeads  = stats.total
+  const hotLeads    = stats.hot
+  const closedLeads = stats.closed
   const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
 
-  // Temperatura promedio (KPI): mean current_score over LIVE leads (frozen excluded),
-  // shown as its band + the mean number as backup.
-  const avgLiveTemp = averageLiveTemperature(leads)
+  // Temperatura promedio (KPI): media de current_score sobre los leads VIVOS
+  // (congelados excluidos), mostrada como banda + el número medio de respaldo.
+  const avgLiveTemp = stats.liveAvgScore
   const tempBand = avgLiveTemp !== null ? bandForScore(avgLiveTemp) : null
 
-  // Real current-calendar-month counts (created_at within this month) — replaces the
-  // previously hardcoded "+12 este mes" / "+3 esta semana" trend strings.
+  // Altas del mes calendario en curso — cortadas en UTC igual que en la base, para
+  // que el bucket no dependa de la zona horaria del servidor de Node.
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const inThisMonth = (iso: string) => new Date(iso) >= monthStart
-  const leadsThisMonth = leads.filter(l => inThisMonth(l.createdAt)).length
-  const hotThisMonth   = leads.filter(l => inThisMonth(l.createdAt) && (l.temperatureScore ?? 0) >= 70).length
+  const leadsThisMonth = stats.thisMonth.leads
+  const hotThisMonth   = stats.thisMonth.hot
 
   // ─── Composite-source donut ──────────────────────────────────
   // Same composite-source logic as the /leads column & filter (getLeadSource):
@@ -97,29 +92,34 @@ export default async function AnalyticsPage() {
     manychat:     '💬',
     other:        '📌',
   }
-  const sourceCounts = new Map<string, { label: string; count: number }>()
-  leads.forEach(lead => {
-    // reason: Supabase returns untyped join data without generated schema
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-    const channelType = (raw?.acquisition_channels?.channel_type ?? null) as string | null
-    const src = getLeadSource(channelType, lead.trafficSource ?? null)
+  const sourceCounts = new Map<string, { label: string; count: number; top: number }>()
+  stats.bySource.forEach(row => {
+    const src = getLeadSource(row.channelType, row.trafficSource)
     const prev = sourceCounts.get(src.kind)
-    sourceCounts.set(src.kind, { label: src.label, count: (prev?.count ?? 0) + 1 })
+    sourceCounts.set(src.kind, {
+      // El kind 'other' agrupa varios traffic_source con etiquetas distintas:
+      // nombra el grupo la mayoritaria.
+      label: !prev || row.total > prev.top ? src.label : prev.label,
+      count: (prev?.count ?? 0) + row.total,
+      top:   Math.max(prev?.top ?? 0, row.total),
+    })
   })
   const sourceData = [...sourceCounts.entries()]
     .map(([kind, { label, count }]) => ({ name: label, value: count, emoji: SOURCE_EMOJI[kind] ?? '📌' }))
     .sort((a, b) => b.value - a.value)
 
   // ─── Agents bar ──────────────────────────────────────────────
+  // Un agente sin leads no aparece en el agregado: se muestra en cero.
+  const byAgent = new Map(stats.byAgent.map(a => [a.agentId, a]))
+
   const agentData = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
+    const row = byAgent.get(agent.id)
     return {
       name: agent.name.split(' ')[0],
       fullName: agent.name,
-      total: agentLeads.length,
-      hot: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
-      closed: agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      total: row?.total ?? 0,
+      hot: row?.hot ?? 0,
+      closed: row?.closed ?? 0,
       color: agent.accentColor,
     }
   })
@@ -129,55 +129,54 @@ export default async function AnalyticsPage() {
     0: 'Ene', 1: 'Feb', 2: 'Mar', 3: 'Abr', 4: 'May', 5: 'Jun',
     6: 'Jul', 7: 'Ago', 8: 'Sep', 9: 'Oct', 10: 'Nov', 11: 'Dic',
   }
+  // La base devuelve sólo los meses con leads; aquí se arma el eje completo (los
+  // meses vacíos van en cero). Las claves se construyen en UTC para casar con el
+  // corte de la migración 073.
+  const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  const monthlyByKey = new Map(stats.monthly.map(m => [m.month, m]))
+
   const months: { month: string; leads: number; nurturing: number; hot: number; closed: number }[] = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const y = d.getFullYear()
-    const m = d.getMonth()
-    const monthLeads = leads.filter(l => {
-      const ld = new Date(l.createdAt)
-      return ld.getFullYear() === y && ld.getMonth() === m
-    })
+  for (let i = ANALYTICS_MONTHS - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    const row = monthlyByKey.get(monthKey(d))
     months.push({
-      month:     MONTH_LABELS[m],
-      leads:     monthLeads.length,
-      nurturing: monthLeads.filter(l => l.status === 'nurturing').length,
-      hot:       monthLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
-      closed:    monthLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      month:     MONTH_LABELS[d.getUTCMonth()],
+      leads:     row?.leads     ?? 0,
+      nurturing: row?.nurturing ?? 0,
+      hot:       row?.hot       ?? 0,
+      closed:    row?.closed    ?? 0,
     })
   }
   const enrichedMonthlyData = months
 
   // Dynamic range label for the monthly area chart (was a hardcoded "Oct 2025 – Abr 2026").
-  const rangeStart = new Date(now.getFullYear(), now.getMonth() - 6, 1)
+  const rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (ANALYTICS_MONTHS - 1), 1))
   const monthlyRangeLabel =
-    `${MONTH_LABELS[rangeStart.getMonth()]} ${rangeStart.getFullYear()} – ${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`
+    `${MONTH_LABELS[rangeStart.getUTCMonth()]} ${rangeStart.getUTCFullYear()} – ${MONTH_LABELS[now.getUTCMonth()]} ${now.getUTCFullYear()}`
 
   // ─── Status distribution by agent ────────────────────────────
   const statusData = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
+    const statuses = byAgent.get(agent.id)?.statuses ?? {}
+    const countOf = (status: string) => statuses[status] ?? 0
     return {
       agent: agent.name.split(' ')[0],
-      new:       agentLeads.filter(l => l.status === 'new').length,
-      nurturing: agentLeads.filter(l => l.status === 'nurturing').length,
-      warm:      agentLeads.filter(l => l.status === 'warm').length,
-      hot:       agentLeads.filter(l => l.status === 'hot').length,
-      process:   agentLeads.filter(l => l.status === 'process_started').length,
-      closed:    agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      new:       countOf('new'),
+      nurturing: countOf('nurturing'),
+      warm:      countOf('warm'),
+      hot:       countOf('hot'),
+      process:   countOf('process_started'),
+      closed:    countOf('closed') + countOf('process_completed'),
     }
   })
 
   // ─── Avg temp by agent ───────────────────────────────────────
   const tempByAgent = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
-    const avgTemp = agentLeads.length > 0
-      ? Math.round(agentLeads.reduce((s, l) => s + (l.temperatureScore ?? 0), 0) / agentLeads.length)
-      : 0
+    const row = byAgent.get(agent.id)
     return {
       agent,
-      avgTemp,
-      totalLeads: agentLeads.length,
-      hotLeads: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
+      avgTemp:    row?.avgScore ?? 0,
+      totalLeads: row?.total    ?? 0,
+      hotLeads:   row?.hot      ?? 0,
     }
   }).sort((a, b) => b.avgTemp - a.avgTemp)
 
@@ -334,7 +333,7 @@ export default async function AnalyticsPage() {
             </thead>
             <tbody>
               {tempByAgent.map((row, i) => {
-                const barColor = row.avgTemp >= 70 ? 'var(--status-hot)' : row.avgTemp >= 40 ? 'var(--status-warm)' : 'var(--accent-gold)'
+                const barColor = bandForScore(row.avgTemp).color
                 const barWidth = Math.round((row.avgTemp / 100) * 80)
                 return (
                   <tr

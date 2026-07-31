@@ -244,6 +244,93 @@ export async function getLeadDashboardStats(scope: VisibilityScope): Promise<Lea
   }
 }
 
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+// Ventana de la serie mensual de /analytics, contando el mes en curso.
+export const ANALYTICS_MONTHS = 7
+
+export interface LeadAnalyticsStats {
+  total:  number
+  // "Caliente" = status 'hot' (la banda del pipeline), igual en toda la app.
+  hot:    number
+  closed: number
+  // Media del score sobre el pipeline vivo; null cuando no hay leads vivos.
+  liveAvgScore: number | null
+  thisMonth: { leads: number; hot: number }
+  // Fuente compuesta en crudo: la etiqueta la resuelve getLeadSource().
+  bySource: Array<{ channelType: string | null; trafficSource: string | null; total: number }>
+  byAgent:  Array<{
+    agentId:  string
+    total:    number
+    hot:      number
+    closed:   number
+    avgScore: number
+    statuses: Record<string, number>
+  }>
+  // Sólo los meses con leads, en clave 'YYYY-MM' (UTC). El eje completo lo arma
+  // la página, que es quien conoce las etiquetas.
+  monthly: Array<{ month: string; leads: number; nurturing: number; hot: number; closed: number }>
+}
+
+// Instancia nueva en cada fallo: la página recibe arrays propios, no una
+// constante compartida entre requests.
+function emptyAnalytics(): LeadAnalyticsStats {
+  return {
+    total: 0, hot: 0, closed: 0, liveAvgScore: null,
+    thisMonth: { leads: 0, hot: 0 },
+    bySource: [], byAgent: [], monthly: [],
+  }
+}
+
+// Todos los agregados de /analytics en un solo viaje (RPC lead_analytics_stats,
+// migración 073). Antes la página traía la tabla de leads entera del tenant y
+// calculaba KPIs, donut, serie mensual y matrices por agente con .filter() en JS.
+export async function getLeadAnalyticsStats(
+  scope: VisibilityScope,
+  months = ANALYTICS_MONTHS,
+): Promise<LeadAnalyticsStats> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.rpc('lead_analytics_stats', {
+    p_tenant_id: scope.tenantId,
+    p_agent_id:  scope.agentId,
+    p_months:    months,
+  })
+
+  if (error || !data) return emptyAnalytics()
+
+  const raw = data as any
+  return {
+    total:  (raw.total  ?? 0) as number,
+    hot:    (raw.hot    ?? 0) as number,
+    closed: (raw.closed ?? 0) as number,
+    liveAvgScore: (raw.live_avg_score ?? null) as number | null,
+    thisMonth: {
+      leads: (raw.this_month?.leads ?? 0) as number,
+      hot:   (raw.this_month?.hot   ?? 0) as number,
+    },
+    bySource: ((raw.by_source ?? []) as any[]).map(s => ({
+      channelType:   (s.channel_type   ?? null) as string | null,
+      trafficSource: (s.traffic_source ?? null) as string | null,
+      total:         (s.total ?? 0) as number,
+    })),
+    byAgent: ((raw.by_agent ?? []) as any[]).map(a => ({
+      agentId:  a.agent_id as string,
+      total:    (a.total     ?? 0) as number,
+      hot:      (a.hot       ?? 0) as number,
+      closed:   (a.closed    ?? 0) as number,
+      avgScore: (a.avg_score ?? 0) as number,
+      statuses: (a.statuses  ?? {}) as Record<string, number>,
+    })),
+    monthly: ((raw.monthly ?? []) as any[]).map(m => ({
+      month:     m.month as string,
+      leads:     (m.leads     ?? 0) as number,
+      nurturing: (m.nurturing ?? 0) as number,
+      hot:       (m.hot       ?? 0) as number,
+      closed:    (m.closed    ?? 0) as number,
+    })),
+  }
+}
+
 export interface HotLead {
   id:          string
   firstName:   string
