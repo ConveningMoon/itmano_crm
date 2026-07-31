@@ -8,6 +8,9 @@ export type TenantRole = 'super_admin' | 'agent_owner' | 'agent'
 
 export interface TenantContext {
   user_id:   string
+  // Email de la sesión (claim del JWT). Va aquí para que el shell no tenga que
+  // volver a pedir el usuario al servidor de auth solo para el pie del sidebar.
+  email:     string
   role:      TenantRole
   // null for super_admin WITHOUT a selected tenant (hub mode); the selected
   // tenant id when acting as a tenant; always set for all other roles
@@ -31,16 +34,23 @@ export interface TenantContext {
 export const getCurrentTenantContext = cache(async (): Promise<TenantContext> => {
   const supabase = await createClient()
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  // getClaims() verifica la firma del JWT en local contra el JWKS del proyecto
+  // (claves asimétricas ES256), así que la identidad se resuelve sin ida y vuelta
+  // al servidor de auth. Es igual de confiable que getUser() —la firma se valida,
+  // no se confía en la cookie— y ahorra un round-trip en CADA página y action.
+  const { data: claims, error: authError } = await supabase.auth.getClaims()
 
-  if (authError || !user) {
+  if (authError || !claims) {
     redirect('/login')
   }
+
+  const userId = claims.claims.sub
+  const email  = (claims.claims.email as string | undefined) ?? ''
 
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
     .select('tenant_id, role')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
   if (profileError || !profile) {
@@ -61,14 +71,14 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
     const { data: agent, error: agentError } = await supabase
       .from('agents')
       .select('id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('tenant_id', profile.tenant_id ?? '')
       .single()
 
     if (agentError || !agent) {
       throw new Error(
-        `User ${user.id} has role 'agent' but no linked agents row ` +
-        `(agents.user_id = '${user.id}' in tenant '${profile.tenant_id}'). ` +
+        `User ${userId} has role 'agent' but no linked agents row ` +
+        `(agents.user_id = '${userId}' in tenant '${profile.tenant_id}'). ` +
         `Invalid provisioning: link an agent record before granting the 'agent' role.`
       )
     }
@@ -89,7 +99,8 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
   }
 
   return {
-    user_id: user.id,
+    user_id: userId,
+    email,
     role,
     tenant_id,
     agent_id,

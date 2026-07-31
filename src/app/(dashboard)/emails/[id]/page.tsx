@@ -1,5 +1,7 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { Skeleton } from '@/components/ui/skeleton'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSequenceWithRuns } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
@@ -7,10 +9,10 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceDetailActions } from './sequence-detail-actions'
 import { StepManager } from './step-manager'
 import { ManualLeadPicker } from './manual-lead-picker'
-import { getEligibleLeadsForSequence, type EligibleLeadsResult } from '@/lib/data/leads'
+import { getEligibleLeadsForSequence } from '@/lib/data/leads'
 import { EmailMetricsCard } from './email-metrics-card'
 import { getStepMetrics } from '@/lib/services/email-metrics'
-import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus } from 'lucide-react'
+import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus, Send } from 'lucide-react'
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {
@@ -38,6 +40,42 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
+// Ocupa exactamente la caja de EmailMetricsCard (mismo alto de cabecera y de
+// tira de 5 métricas) para que al llegar por streaming no mueva la página.
+function EmailMetricsSkeleton() {
+  return (
+    <div style={{
+      background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+      borderRadius: '12px', overflow: 'hidden', marginBottom: '20px',
+    }}>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Send size={14} color="var(--accent-gold)" />
+        <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+          Métricas de envío
+        </span>
+      </div>
+      <div className="max-md:overflow-x-auto">
+        <div className="max-md:min-w-[520px]" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', padding: '16px 20px', gap: '0' }}>
+          {[...Array(5)].map((_, i) => (
+            <div
+              key={i}
+              style={{
+                paddingLeft:  i > 0 ? '16px' : undefined,
+                paddingRight: i < 4 ? '16px' : undefined,
+                borderLeft:   i > 0 ? '1px solid var(--border-subtle)' : undefined,
+                display: 'flex', flexDirection: 'column', gap: '6px',
+              }}
+            >
+              <Skeleton w="72px" h={10} r={3} />
+              <Skeleton w="52px" h={22} r={4} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default async function EmailSequenceDetailPage({
   params,
 }: {
@@ -53,31 +91,29 @@ export default async function EmailSequenceDetailPage({
   const sequence = await getSequenceWithRuns(tenant_id, id, scope.agentId)
   if (!sequence) notFound()
 
-  // Active agents of the sequence's tenant for the organizational-owner selector.
-  const { data: agentRows } = await createAdminClient()
-    .from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name')
+  const supabase = createAdminClient()
+  const isManual = sequence.activationType === 'manual'
+
+  // Una sola ola: agentes del tenant, métricas por paso y —solo en secuencias
+  // manuales— la primera página de leads elegibles. Nada de esto depende de nada
+  // más que de `sequence`, así que encadenarlo con await solo sumaba latencia.
+  //
+  // El anti-join contra los runs activos lo resuelve Postgres dentro de
+  // sequence_eligible_leads, así que la página ya no trae la lista completa de
+  // leads para descartarla en JS. La búsqueda posterior vuelve al servidor desde
+  // el picker. Los agentes se leen UNA vez y sirven a los dos consumidores: el
+  // selector de propietario de la secuencia y el picker manual.
+  const [{ data: agentRows }, stepMetrics, eligible] = await Promise.all([
+    supabase.from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name'),
+    getStepMetrics(sequence.id),
+    isManual ? getEligibleLeadsForSequence(sequence.id, scope, { limit: 50 }) : null,
+  ])
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
+  const pickerAgents: Array<{ id: string; name: string }> = isManual ? agents : []
 
   const totalRuns = sequence.activeRunCount + sequence.completedRunCount + sequence.cancelledRunCount
-
-  // For manual sequences: primera página de leads elegibles (el anti-join contra
-  // los runs activos lo resuelve Postgres; la búsqueda posterior vuelve al
-  // servidor desde el picker).
-  let eligible: EligibleLeadsResult | null = null
-  let pickerAgents: Array<{ id: string; name: string }> = []
-  if (sequence.activationType === 'manual') {
-    const [eligibleRes, agentsRes] = await Promise.all([
-      getEligibleLeadsForSequence(sequence.id, scope, { limit: 50 }),
-      createAdminClient()
-        .from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name'),
-    ])
-    eligible = eligibleRes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pickerAgents = (agentsRes.data ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
-  }
-
-  const stepMetrics = await getStepMetrics(sequence.id)
 
   return (
     <>
@@ -178,7 +214,12 @@ export default async function EmailSequenceDetailPage({
         ))}
       </div>
 
-      <EmailMetricsCard sequenceId={sequence.id} tenantId={sequence.tenantId} />
+      {/* Las métricas de email agregan sobre `email_sends` y son lo más lento de
+          la página. En Suspense, el resto del detalle se pinta de inmediato y la
+          tarjeta llega por streaming en vez de retener todo el render. */}
+      <Suspense fallback={<EmailMetricsSkeleton />}>
+        <EmailMetricsCard sequenceId={sequence.id} tenantId={sequence.tenantId} />
+      </Suspense>
 
       {/* Channels */}
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>

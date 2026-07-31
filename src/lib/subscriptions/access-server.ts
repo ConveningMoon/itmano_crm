@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getTenantAccess, type TenantAccess } from '@/lib/subscriptions/access'
 import type { SubscriptionPlan, SubscriptionStatus } from '@/lib/subscriptions'
@@ -11,8 +12,16 @@ import type { SubscriptionPlan, SubscriptionStatus } from '@/lib/subscriptions'
  * que paga es mucho más caro que darle servicio de más a alguien que no. Pero un
  * fallo persistente aquí desactivaría el enforcement entero sin síntoma, así que
  * se registra: este log es la única señal.
+ *
+ * Envuelto en React cache(): media docena de superficies lo llaman por request
+ * (el shell, el detalle de lead, los gates de IA y de envío) y todas quieren la
+ * misma fila. Deduplicar es seguro porque nadie escribe `subscriptions` a través
+ * de este helper — los escritores (webhook de Paddle, cron de ciclo de vida,
+ * acciones de settings/admin) van directo a la tabla.
  */
-export async function getTenantAccessFor(tenantId: string): Promise<TenantAccess> {
+export const getTenantAccessFor = cache(async function getTenantAccessFor(
+  tenantId: string,
+): Promise<TenantAccess> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('subscriptions')
@@ -34,4 +43,4 @@ export async function getTenantAccessFor(tenantId: string): Promise<TenantAccess
     status:        (s?.status as SubscriptionStatus) ?? 'active',
     billingExempt: (s?.billing_exempt as boolean) ?? false,
   })
-}
+})
