@@ -142,27 +142,44 @@ Esto preserva el diferenciador (un CRM que gestiona equipos) y deja abierta la p
 
 El scoring es el corazón operativo del CRM: determina el estado del lead, dirige la atención del agente y dispara notificaciones.
 
-**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. La tabla admite override por tenant (`tenant_id` nullable: `null` = regla global), así que un valor escrito en este archivo se vuelve mentira en cuanto un tenant diverja. Hoy son 33 reglas, todas globales.
+**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. La tabla admite override por tenant (`tenant_id` nullable: `null` = regla global), así que un valor escrito en este archivo se vuelve mentira en cuanto un tenant diverja. Hoy son 34 reglas, todas globales.
 
-**Forma del modelo** — cada regla tiene `category`, `dimension`, `match_value`, `points`, `decays`, `is_active` y `side_effect`. Tres categorías:
+**La fuente de verdad del cálculo es `recompute_lead_score(lead_id)` en Postgres**, no el código TypeScript. Si el motor y este documento se contradicen, gana la función. Se lee con `pg_get_functiondef` por el MCP.
 
-| Categoría | Qué mide |
-|---|---|
-| `fit` | Calificación declarada en formularios: horizonte de compra, presupuesto, financiamiento, motivación de venta, estado del listado |
-| `engagement` | Comportamiento: clics, respuestas, envíos de formulario, descargas, rebotes, bajas, spam |
-| `manual` | Acciones registradas por el agente: cita agendada, visita asistida, propuesta enviada, no-show |
+**La suma:** `current_score = clamp(0..100, fit_score + engagement_score + manual_score)`. Los tres componentes se guardan por separado en `leads`.
+
+| Categoría | De dónde sale | ¿Decae? |
+|---|---|---|
+| `fit` | `leads.fit_profile` — un JSON `{dimensión: bucket}` con lo que el lead declaró. Cada dimensión aporta **una vez** | No |
+| `engagement` | Eventos de `lead_events` que matchean una regla de engagement | **Sí**, los positivos |
+| `manual` | Acciones que el agente registra desde el panel del lead | No |
+
+Cada regla tiene `category`, `dimension`, `match_value`, `points`, `decays`, `is_active` y `side_effect`.
 
 **Reglas que mandan sobre todo lo demás:**
 
 - **Los opens de email no cuentan.** Apple Mail Privacy Protection precarga los píxeles e infla los opens. Se registran para analítica, nunca para scoring ni como métrica. **El clic es la métrica de engagement.**
-- **El score se congela** al entrar en `process_started`, `process_completed`, `closed` o `lost` (constante `FROZEN_STATUSES`). Son estados post-funnel dirigidos por el agente. Un evento nuevo puede reactivar el lead y reanudar el scoring.
-- **Decay:** el score se mantiene en `peak_score` durante 14 días sin actividad y luego cae a la mitad cada 30 días. Cron horario, debe ser idempotente.
+- **El score se congela** al entrar en `process_started`, `process_completed`, `closed` o `lost` (constante `FROZEN_STATUSES`). `recompute_lead_score` **retorna de inmediato** para esos estados: un evento nuevo NO reactiva el lead ni reanuda el scoring. Solo un cambio de estado fuera de esa lista lo descongela.
+- **Decay — no decae el total, decae cada evento por separado.** Solo aplica a reglas con `decays = true` (los positivos de engagement; los negativos como baja, hard bounce o spam **nunca** decaen). Un evento vale el 100% durante 14 días y después se divide a la mitad cada 30. El fit no decae nunca: tener el efectivo en mano no caduca. `peak_score` es solo una marca de máximo histórico — **no** se usa para derivar `current_score`.
+- **El cron de decay es diario** (`0 0 * * *` → `/api/cron/score-decay` → RPC `decay_lead_scores`). No recalcula nada nuevo: recorre los leads sin actividad hace más de 14 días y los vuelve a pasar por `recompute_lead_score` para que el decaimiento se materialice. Idempotente por construcción.
+- **`side_effect = 'force_perdido'` gana sobre la suma.** Si el lead tiene **cualquier** evento que matchee una regla con ese side effect (queja de spam, descalificación manual), el score va a 0 y el estado a `lost`, sin importar el resto. Ojo: mira TODO el historial, así que activar una regla con `force_perdido` puede marcar leads viejos como perdidos en el próximo recálculo.
 - **Topes:** `0 ≤ score ≤ 100`, con clamp en ambos extremos.
 - **Deduplicación:** `lead_events` tiene constraint único en `(lead_id, dedup_key)`. Sin esto, un reenvío o un reintento de webhook infla el score.
 
-**Bandas de temperatura** (`src/lib/scoring/temperature-band.ts`, fuente de verdad): ≥60 Caliente · 35–59 Templado · 15–34 Nurturing · <15 Nuevo. Promoción y descenso son automáticos.
+**Bandas de temperatura:** ≥60 Caliente · 35–59 Templado · 15–34 Nurturing · <15 Nuevo. **Los cortes viven en `recompute_lead_score`**, que asigna `leads.status`; `src/lib/scoring/temperature-band.ts` los espeja para que la UI pinte el mismo umbral. Cambiarlos exige tocar los dos lados **y** recalcular todos los leads vivos.
 
-**Arquitectura:** scores almacenados en `leads`, actualizados por triggers de Postgres sobre `lead_events` (append-only), más el cron de decay. La UI lee `current_score` directo — sin joins ni agregados. Toda transición de estado escribe en `lead_status_history`: no hay cambios silenciosos. Existe `recalc_lead_score(lead_id)` para depurar y corregir a mano.
+**Para contar leads calientes usa `status = 'hot'`, nunca un umbral de score.** Es lo que el pipeline etiqueta y lo que el badge del lead muestra, y excluye a los que el agente ya movió a un estado post-embudo con un score congelado alto (esos ya se cuentan en "En proceso"). Un literal `>= 70` regado por la UI fue exactamente el bug que hacía que la tarjeta dijera 5 y la lista mostrara 2.
+
+**Tensión conocida (aún sin resolver):** los puntos son ajustables por tenant, pero las bandas son globales y están fijas en el trigger. Un tenant que baje mucho sus puntos deja a todos en "Nuevo"; uno que los infle deja a todos en "Caliente". Mientras las bandas no sean por tenant, la guía al ajustar puntos es mantener el máximo alcanzable cerca de 100.
+
+**Arquitectura:** scores almacenados en `leads`, actualizados por un trigger sobre `lead_events` (append-only) que llama a `recompute_lead_score`, más el cron de decay. La UI lee `current_score` directo — sin joins ni agregados. Toda transición de estado escribe en `lead_status_history`: no hay cambios silenciosos. Existe `recalc_lead_score(lead_id)` (alias fino de `recompute_lead_score`) para depurar y corregir a mano.
+
+**Dónde entra la IA — interpreta, no puntúa.** Con `tenants.ai_lead_scoring_enabled` en true, tras el intake corre `src/lib/services/ai-lead-fit.ts` (Claude Haiku) y hace dos cosas separadas:
+
+1. **Reinterpreta** las respuestas del formulario en los buckets de `fit_profile` adecuados al mercado de esa agencia (un presupuesto "premium" en Hampton Roads no es el de Barcelona) y luego llama a `recompute_lead_score`. **No suma ni resta puntos**: los buckets los sigue valorando `lead_score_rules`. Los buckets válidos están fijos en `BUCKETS` y deben coincidir con la tabla.
+2. Escribe un **briefing** para el agente en `leads.metadata.ai_fit` (lectura, próxima acción, premura, temas, alertas). Eso **no toca el score** — es la tarjeta del detalle del lead y el criterio del orden "Atención" en la lista.
+
+Es best-effort y con gate: si el toggle está apagado, falta la API key o el presupuesto de IA se agotó, no hace nada y nunca lanza al llamador.
 
 **Notificaciones:** bell in-app + Telegram, vía `/api/notifications/dispatch`. Disparan en el flanco de subida de score ≥80 (una sola vez), en preguntas de formulario de contacto, en envíos de formularios de evento y en respuestas de email.
 
