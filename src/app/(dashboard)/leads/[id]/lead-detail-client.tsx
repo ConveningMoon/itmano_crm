@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
@@ -137,15 +136,9 @@ function ScoreBreakdownPanel({ breakdown }: { breakdown: ScoreBreakdown }) {
         </div>
       )}
 
-      <Link
-        href="/settings?tab=scoring"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px',
-          fontSize: '11.5px', fontWeight: 600, color: 'var(--accent-gold)', textDecoration: 'none',
-        }}
-      >
-        Ver o ajustar los puntajes en Ajustes → Scoring
-      </Link>
+      {/* El enlace a Ajustes → Scoring se retiró: esa pestaña ya solo existe para
+          super_admin, así que para el agente prometía una pantalla a la que no
+          puede llegar. El modelo lo administra ITMANO. */}
     </div>
   )
 }
