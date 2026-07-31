@@ -51,11 +51,19 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: use getUser() (not getSession()); it refreshes the session. Do not
-  // run logic between createServerClient and getUser() (avoids random logouts).
-  const { data: { user } } = await supabase.auth.getUser()
+  // getClaims() en vez de getUser(): el proyecto firma los JWT con clave
+  // asimétrica (ES256), así que la firma se verifica LOCALMENTE con la clave
+  // pública del JWKS — cero llamadas de red por request, contra la ida y vuelta
+  // a /auth/v1/user que hacía getUser(). Sigue refrescando la sesión cuando el
+  // token está por vencer, que es lo único que este guard necesitaba de getUser.
+  // Si algún día se volviera a una clave simétrica, getClaims cae solo al mismo
+  // request remoto: se pierde la mejora, no la seguridad.
+  //
+  // No corras lógica entre createServerClient y esta llamada (evita logouts
+  // aleatorios).
+  const { data: claims } = await supabase.auth.getClaims()
 
-  if (!user) {
+  if (!claims) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', request.nextUrl.pathname)
     return NextResponse.redirect(loginUrl)

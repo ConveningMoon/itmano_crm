@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, configDefaults } from 'vitest/config'
 import { config as dotenvConfig } from 'dotenv'
 import path from 'node:path'
 
@@ -16,6 +16,9 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Git worktrees carry full copies of tests/; without excluding them every
+    // suite gets discovered once per worktree and runs several times.
+    exclude: [...configDefaults.exclude, '.claude/worktrees/**', '**/.next/**'],
     testTimeout: 30000,
     hookTimeout: 60000,
     // Run RLS test files sequentially — they share a remote Supabase database.

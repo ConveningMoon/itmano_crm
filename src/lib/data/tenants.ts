@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface SwitcherTenant {
@@ -26,8 +27,11 @@ export interface TenantBranding {
   logoUrl: string | null
 }
 
-// Branding del tenant activo para el shell (logo del sidebar). Una sola fila.
-export async function getTenantBranding(tenantId: string): Promise<TenantBranding | null> {
+// Branding del tenant activo para el shell (logo del sidebar). Una sola fila,
+// deduplicada por request.
+export const getTenantBranding = cache(async function getTenantBranding(
+  tenantId: string,
+): Promise<TenantBranding | null> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('tenants')
@@ -37,7 +41,7 @@ export async function getTenantBranding(tenantId: string): Promise<TenantBrandin
   if (!data) return null
   const t = data as { name: string; logo_url: string | null }
   return { name: t.name, logoUrl: t.logo_url ?? null }
-}
+})
 
 export interface TenantWithOwner {
   id:           string

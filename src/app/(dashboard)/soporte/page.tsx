@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/server'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SupportForm } from './support-form'
 
@@ -7,10 +6,9 @@ import { SupportForm } from './support-form'
 // del super_admin, con aviso por Telegram) con la identidad del solicitante
 // adjuntada automáticamente.
 export default async function SoportePage() {
-  await getCurrentTenantContext() // guard (redirige a /login sin sesión)
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const userEmail = user?.email ?? ''
+  // Guard (redirige a /login sin sesión) y, de paso, el email del solicitante:
+  // sale del claim ya validado, sin pedírselo otra vez al servidor de auth.
+  const { email: userEmail } = await getCurrentTenantContext()
 
   return (
     <>

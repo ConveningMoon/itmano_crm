@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getEffectiveScoreRules, getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
@@ -11,9 +10,8 @@ import { PLANS } from '@/lib/plans'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
-  const ctx        = await requireTenantContext()
-  const supabase   = createAdminClient()
-  const authClient = await createClient()
+  const ctx      = await requireTenantContext()
+  const supabase = createAdminClient()
 
   // Settings es "la configuración de este tenant": owner/agent → su tenant;
   // super_admin → el tenant seleccionado (requireTenantContext garantiza que
@@ -26,7 +24,9 @@ export default async function SettingsPage() {
   // el resumen del equipo con desglose por agente.
   const isAgentViewer = ctx.role === 'agent'
 
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, globalRules, accessCountRes, userRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
+  // Identidad (id + email) sale del contexto: ya validó el JWT, así que pedirle
+  // el usuario otra vez al servidor de auth solo sumaba una ida y vuelta.
+  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getEffectiveScoreRules(tenantId),
@@ -34,7 +34,6 @@ export default async function SettingsPage() {
     // Honest "active accesses" = every login profile in this tenant (owner + any
     // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
     supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-    authClient.auth.getUser(),
     getAiUsageSummary(tenantId, isAgentViewer && ctx.agent_id ? { agentId: ctx.agent_id } : undefined),
     getAiLimitIndicatorFor(ctx),
     getSubscription(tenantId),
@@ -56,7 +55,7 @@ export default async function SettingsPage() {
   // Access status per agent (user_id present) — kept off the global Agent type.
   const agentAccess: Record<string, boolean> = {}
   let ownerLinked = false
-  const myUserId = userRes.data.user?.id
+  const myUserId = ctx.user_id
   for (const r of rawAgents ?? []) {
     const row = r as AgentRow & { user_id: string | null }
     agentAccess[row.id] = !!row.user_id
@@ -124,7 +123,7 @@ export default async function SettingsPage() {
         myAgentId={ctx.agent_id}
         ownerAgentId={ownerAgentId}
         canDeleteAgents={canDeleteAgents}
-        userEmail={userRes.data.user?.email ?? ''}
+        userEmail={ctx.email}
         userRole={ctx.role}
         aiUsage={aiUsage}
         aiShowCosts={showAiCosts}

@@ -1,7 +1,6 @@
 'use server'
 
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { createPlatformRequest } from '@/lib/services/platform-requests'
@@ -14,9 +13,7 @@ import { ROLE_LABELS } from '@/components/layout/nav-items'
 // para que soporte sepa quién escribe sin pedírselo en el formulario.
 async function requesterContext() {
   const ctx = await getCurrentTenantContext()
-  const authClient = await createClient()
-  const { data: { user } } = await authClient.auth.getUser()
-  const email = user?.email ?? '(desconocido)'
+  const email = ctx.email || '(desconocido)'
 
   let tenantName = ctx.tenant_id ?? 'ITMANO (sin tenant)'
   if (ctx.tenant_id) {

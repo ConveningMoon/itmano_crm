@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getLeadDashboardStats, getHotLeads } from '@/lib/data/leads'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import { bandForScore } from '@/lib/scoring/temperature-band'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
@@ -30,12 +31,6 @@ function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)
   const l = lastName.charAt(0)
   return (f + l).toUpperCase() || f.toUpperCase()
-}
-
-function getTempColor(score: number): string {
-  if (score >= 70) return 'var(--status-hot)'
-  if (score >= 40) return 'var(--status-warm)'
-  return 'var(--accent-gold)'
 }
 
 export default async function DashboardPage() {
@@ -274,7 +269,7 @@ export default async function DashboardPage() {
               const agent  = agents.find(a => a.id === lead.agentId)
               const channelName = lead.channelName ?? '—'
               const initials = getInitials(lead.firstName, lead.lastName)
-              const tempColor = getTempColor(lead.score ?? 0)
+              const tempColor = bandForScore(lead.score ?? 0).color
               const filled = Math.round((lead.score ?? 0) / 10)
               const cfg = STATUS_CONFIG[lead.status]
               const agentBg = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'

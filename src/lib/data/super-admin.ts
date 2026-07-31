@@ -23,9 +23,10 @@ export interface TenantOverview extends TenantWithOwner {
 /**
  * Datos del centro de control: KPIs de plataforma + overview por tenant.
  *
- * Un solo fetch de leads agregado en memoria (mismo criterio de "caliente" que
- * el dashboard: status 'hot' o temperatura >= 70). Volumen actual ~cientos de
- * filas — trivial. TODO: migrar a una RPC agregada cuando leads > ~5k.
+ * Un solo fetch de leads agregado en memoria. "Caliente" = status 'hot', el
+ * mismo criterio que el dashboard, /analytics y la banda del pipeline. Volumen
+ * actual ~cientos de filas — trivial. TODO: migrar a una RPC agregada cuando
+ * leads > ~5k.
  */
 export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: TenantOverview[] }> {
   const supabase = createAdminClient()
@@ -43,7 +44,7 @@ export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: Tenan
   }[]) {
     const agg = byTenant.get(l.tenant_id) ?? { total: 0, hot: 0, new30d: 0 }
     agg.total += 1
-    if (l.status === 'hot' || (l.temperature_score ?? 0) >= 70) agg.hot += 1
+    if (l.status === 'hot') agg.hot += 1
     if (l.created_at >= cutoff30d) agg.new30d += 1
     byTenant.set(l.tenant_id, agg)
   }

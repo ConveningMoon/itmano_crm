@@ -5,17 +5,17 @@ import type { TenantContext } from '@/lib/auth/tenant-context'
 // ─── Context factories ────────────────────────────────────────────────────────
 
 const superAdmin: TenantContext = {
-  user_id: 'u-super', role: 'super_admin', tenant_id: null, agent_id: null, acting_as_tenant: false,
+  user_id: 'u-super', email: 'super@test.itmano.com', role: 'super_admin', tenant_id: null, agent_id: null, acting_as_tenant: false,
 }
 const ownerA: TenantContext = {
-  user_id: 'u-owner-a', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: false,
+  user_id: 'u-owner-a', email: 'owner-a@test.itmano.com', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: false,
 }
 const agentA1: TenantContext = {
-  user_id: 'u-agent-a1', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1', acting_as_tenant: false,
+  user_id: 'u-agent-a1', email: 'agent-a1@test.itmano.com', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1', acting_as_tenant: false,
 }
 // super_admin con un tenant seleccionado vía cookie (actuando como tenant)
 const superActingAsA: TenantContext = {
-  user_id: 'u-super', role: 'super_admin', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: true,
+  user_id: 'u-super', email: 'super@test.itmano.com', role: 'super_admin', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: true,
 }
 
 // ─── requireWriteAccess (sources / email / settings / agents) ─────────────────

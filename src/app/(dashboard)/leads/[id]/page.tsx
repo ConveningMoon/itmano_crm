@@ -47,6 +47,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   let eventsQ = supabase.from('lead_events').select('*').eq('lead_id', id).order('created_at', { ascending: false })
   if (role === 'agent') eventsQ = eventsQ.or(`actor_user_id.is.null,actor_user_id.eq.${user_id}`)
 
+  // Una sola ola para todo lo que cuelga del lead. Las lecturas del tenant y del
+  // acceso de facturación entran acá también: antes iban en dos awaits sueltos al
+  // final del archivo, encadenados detrás de esta ola y de la de autores, y sobre
+  // una base remota cada eslabón de esa cadena se paga entero al abrir el lead.
   const [
     { data: rawAgents },
     { data: rawEvents },
@@ -56,6 +60,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     scoreRules,
     statusHistory,
     emailReplies,
+    { data: tenantRow },
+    tenantAccess,
   ] = await Promise.all([
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
@@ -65,6 +71,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     getGlobalScoreRules(),
     getLeadStatusHistory(id, tenant_id),
     getLeadEmailReplies(id, tenant_id),
+    // Identidad de envío + flag de análisis con IA salen de la MISMA fila de
+    // `tenants`; eran dos queries separadas a la misma fila.
+    supabase
+      .from('tenants')
+      .select('name, slug, email_from_address, resend_account, domain_status, sending_domain, ai_lead_scoring_enabled')
+      .eq('id', leadTenantId)
+      .maybeSingle(),
+    getTenantAccessFor(leadTenantId),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -109,14 +123,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // el envío ya sale por el dominio compartido y el badge no puede seguir
   // mostrando el dominio propio del tenant — le mentiría al usuario justo
   // cuando más necesita saber la verdad.
-  const [{ data: tenantRow }, tenantAccess] = await Promise.all([
-    supabase
-      .from('tenants')
-      .select('name, slug, email_from_address, resend_account, domain_status, sending_domain')
-      .eq('id', leadTenantId)
-      .maybeSingle(),
-    getTenantAccessFor(leadTenantId),
-  ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tRow = tenantRow as any
   const identity = tRow
@@ -132,7 +138,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   }
 
   // Estado del análisis de fit con IA (064) — se muestra en el detalle del lead.
-  const { data: tenantAi } = await supabase.from('tenants').select('ai_lead_scoring_enabled').eq('id', leadTenantId).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const aiFitMeta = ((lr.metadata as any)?.ai_fit ?? null) as {
     read?: string; next_action?: string; next_action_when?: string
@@ -152,8 +157,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       }
     : null
   const aiFit = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    enabled:  ((tenantAi as any)?.ai_lead_scoring_enabled as boolean) ?? false,
+    enabled:  (tRow?.ai_lead_scoring_enabled as boolean) ?? false,
     briefing,
     at:       aiFitMeta?.at ?? null,
   }
