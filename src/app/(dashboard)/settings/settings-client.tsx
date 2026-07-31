@@ -1341,15 +1341,21 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'contexto' | 'ia' | 'cuenta'
 
-const TABS: Array<{ value: Tab; label: string }> = [
-  { value: 'perfil',   label: 'Perfil del equipo' },
-  { value: 'agentes',  label: 'Agentes' },
-  { value: 'email',    label: 'Email' },
-  { value: 'scoring',  label: 'Scoring' },
-  { value: 'contexto', label: 'Contexto IA' },
-  { value: 'ia',       label: 'Uso de IA' },
-  { value: 'cuenta',   label: 'Cuenta y acceso' },
-]
+// El modelo de scoring lo administra ITMANO, así que su pestaña solo existe para
+// super_admin. Dejarla visible en modo lectura era peor que quitarla: una sección
+// dentro de "Configuración" que muestra inputs deshabilitados invita a intentar
+// tocarlos y genera la pregunta "¿por qué no puedo cambiar esto?".
+function tabsForRole(role: TenantRole): Array<{ value: Tab; label: string }> {
+  return [
+    { value: 'perfil',   label: 'Perfil del equipo' },
+    { value: 'agentes',  label: 'Agentes' },
+    { value: 'email',    label: 'Email' },
+    ...(role === 'super_admin' ? [{ value: 'scoring' as Tab, label: 'Scoring' }] : []),
+    { value: 'contexto', label: 'Contexto IA' },
+    { value: 'ia',       label: 'Uso de IA' },
+    { value: 'cuenta',   label: 'Cuenta y acceso' },
+  ]
+}
 
 interface Props {
   tenant: { id: string; name: string; slug: string; primaryColor: string; logoUrl: string | null; description: string | null }
@@ -1383,12 +1389,15 @@ export function SettingsClient({
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
   const searchParams = useSearchParams()
-  const initialTab = TABS.some(t => t.value === searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'perfil'
+  // La lista depende del rol, así que un `?tab=scoring` de un enlace viejo (o
+  // escrito a mano) cae a 'perfil' en vez de abrir una pestaña inexistente.
+  const tabs = tabsForRole(userRole)
+  const initialTab = tabs.some(t => t.value === searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'perfil'
   const [tab, setTab] = useState<Tab>(initialTab)
 
   return (
     <Tabs
-      items={TABS.map(t => ({ key: t.value, label: t.label }))}
+      items={tabs.map(t => ({ key: t.value, label: t.label }))}
       value={tab}
       onChange={k => setTab(k as Tab)}
       content={{
