@@ -12,10 +12,20 @@ export interface TemperatureBand {
   color: string
 }
 
+// Los cortes, como constante nombrada: los consume bandForScore y también el
+// cálculo de alcance de Ajustes (scoring/reach.ts), que avisa cuando una
+// configuración de puntos deja una banda inalcanzable. Deben coincidir con el
+// CASE de recompute_lead_score en Postgres, que es quien asigna leads.status.
+export const SCORE_BANDS = {
+  hot:       60,
+  warm:      35,
+  nurturing: 15,
+} as const
+
 export function bandForScore(score: number): TemperatureBand {
-  if (score >= 60) return { key: 'caliente',  label: 'Caliente',  color: '#E04040' }
-  if (score >= 35) return { key: 'templado',  label: 'Templado',  color: '#E07B3A' }
-  if (score >= 15) return { key: 'nurturing', label: 'Nurturing', color: '#C9A96E' }
+  if (score >= SCORE_BANDS.hot)       return { key: 'caliente',  label: 'Caliente',  color: '#E04040' }
+  if (score >= SCORE_BANDS.warm)      return { key: 'templado',  label: 'Templado',  color: '#E07B3A' }
+  if (score >= SCORE_BANDS.nurturing) return { key: 'nurturing', label: 'Nurturing', color: '#C9A96E' }
   return { key: 'nuevo', label: 'Nuevo', color: 'var(--text-muted)' }
 }
 

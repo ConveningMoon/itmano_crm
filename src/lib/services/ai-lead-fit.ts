@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { getAiLimitStatus } from '@/lib/services/ai-limit'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { BUCKETS, BUY_DIMS, SELL_DIMS, DIM_LABEL, type Dimension } from '@/lib/scoring/vocabulary'
 
 // ── Análisis de fit de leads con IA (fase de prueba, apagado por tenant) ──────
 //
@@ -19,30 +20,9 @@ import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 const MODEL = 'claude-haiku-4-5'
 
-// Buckets válidos por dimensión — deben coincidir con lead_score_rules
-// (migración 029). La IA solo puede elegir de estos valores.
-const BUCKETS = {
-  timeline:        ['under_3_months', '3_6_months', '6_12_months', 'over_12_explorando'],
-  financing:       ['cash', 'preapproved', 'in_process', 'not_started'],
-  budget_tier:     ['premium', 'mid', 'entry', 'undefined'],
-  agent_status:    ['sin_agente', 'con_agente'],
-  sell_motivation: ['alta', 'media', 'baja'],
-  listing_status:  ['no_listado_sin_agente', 'ya_listado_con_agente'],
-} as const
-
-type Dimension = keyof typeof BUCKETS
-
-const BUY_DIMS:  Dimension[] = ['timeline', 'financing', 'budget_tier', 'agent_status']
-const SELL_DIMS: Dimension[] = ['sell_motivation', 'timeline', 'listing_status']
-
-const DIM_LABEL: Record<Dimension, string> = {
-  timeline:        'Horizonte de compra/venta',
-  financing:       'Situación de financiamiento',
-  budget_tier:     'Nivel de presupuesto RELATIVO al mercado de la agencia',
-  agent_status:    '¿Ya trabaja con otro agente?',
-  sell_motivation: 'Motivación de venta',
-  listing_status:  'Estado del listado',
-}
+// El vocabulario de fit (buckets, dimensiones de compra/venta y etiquetas) vive
+// en scoring/vocabulary.ts — lo comparte el cálculo de alcance de Ajustes, que
+// corre en el cliente. Una sola fuente de verdad para los dos.
 
 // Momento sugerido para la próxima acción — NO es un score que compita con la
 // temperatura (esa mide qué tan bueno es el lead). El `when` es la premura de la
