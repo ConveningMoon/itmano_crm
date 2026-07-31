@@ -178,8 +178,12 @@ function RuleRow({
 // "Nuevo" — sin error y sin aviso. Se recalcula con cada tecla, sobre el
 // BORRADOR, así que el efecto se ve antes de guardar.
 function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) {
-  const { reachable, bestFit, engagement, manual, ceiling, warnings } = reach
+  const { reachable, bestFit, engagement, manual, warnings } = reach
 
+  // La pregunta útil no es "cuántos puntos suma la configuración" sino "¿puede
+  // un lead llegar a cada banda?". Eso es lo que se rompe al bajar los puntos, y
+  // es lo que se responde de un vistazo. El techo teórico sin tope (que podía dar
+  // 240) no le dice nada a nadie: se omite.
   const bandas = [
     { desde: SCORE_BANDS.hot,       label: 'Caliente',  color: 'var(--status-hot)' },
     { desde: SCORE_BANDS.warm,      label: 'Tibio',     color: 'var(--status-warm)' },
@@ -193,22 +197,41 @@ function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) 
           Alcance de esta configuración
         </span>
         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-          Hasta dónde puede llegar un lead con los valores de arriba. Las bandas son fijas.
+          Las bandas del pipeline son fijas. Esto comprueba que un lead pueda llegar a ellas.
         </div>
       </div>
 
       <div style={{ padding: '18px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '14px' }}>
-          <span style={{ fontSize: '32px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1 }}>
-            {reachable}
-          </span>
-          <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            puntos máximos {ceiling > 100 && `(techo teórico ${ceiling}, el score corta en 100)`}
-          </span>
+        {/* Alcanzabilidad por banda — la respuesta directa */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
+          {bandas.map(b => {
+            const ok = reachable >= b.desde
+            return (
+              <span key={b.label} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                fontSize: '12px', padding: '5px 11px', borderRadius: '999px',
+                border: `1px solid ${ok ? 'var(--border-subtle)' : 'rgba(201,123,107,0.35)'}`,
+                background: ok ? 'var(--bg-elevated)' : 'rgba(201,123,107,0.10)',
+                color: ok ? 'var(--text-secondary)' : 'var(--accent-coral)',
+              }}>
+                <span style={{
+                  width: '6px', height: '6px', borderRadius: '50%',
+                  background: ok ? b.color : 'var(--accent-coral)',
+                }} />
+                {b.label} {ok ? 'alcanzable' : 'fuera de alcance'}
+              </span>
+            )
+          })}
+        </div>
+
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+          El mejor lead posible llega a{' '}
+          <strong style={{ color: 'var(--text-primary)', fontSize: '14px' }}>{reachable}</strong>
+          {' '}de 100
         </div>
 
         {/* Regla 0-100 con los cortes de banda marcados */}
-        <div style={{ position: 'relative', height: '8px', borderRadius: '4px', background: 'var(--bg-elevated)', marginBottom: '6px' }}>
+        <div style={{ position: 'relative', height: '8px', borderRadius: '4px', background: 'var(--bg-elevated)', marginBottom: '20px' }}>
           <div style={{
             position: 'absolute', inset: 0, width: `${reachable}%`,
             borderRadius: '4px', background: 'var(--accent-gold)', opacity: 0.55,
@@ -220,21 +243,11 @@ function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) 
             }} />
           ))}
         </div>
-        <div style={{ position: 'relative', height: '16px', marginBottom: '14px' }}>
-          {bandas.map(b => (
-            <span key={b.label} style={{
-              position: 'absolute', left: `${b.desde}%`, transform: 'translateX(-50%)',
-              fontSize: '10px', color: b.color, whiteSpace: 'nowrap',
-            }}>
-              {b.label} {b.desde}
-            </span>
-          ))}
-        </div>
 
         <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-muted)' }}>
           <span>Mejor perfil <strong style={{ color: 'var(--text-secondary)' }}>{bestFit}</strong></span>
-          <span>+ Engagement <strong style={{ color: 'var(--text-secondary)' }}>{engagement}</strong></span>
-          <span>+ Manual <strong style={{ color: 'var(--text-secondary)' }}>{manual}</strong></span>
+          <span>+ Actividad <strong style={{ color: 'var(--text-secondary)' }}>{engagement}</strong></span>
+          <span>+ Acciones del agente <strong style={{ color: 'var(--text-secondary)' }}>{manual}</strong></span>
         </div>
 
         {warnings.map(w => (
@@ -379,21 +392,29 @@ export function ScoringSection({ rules, canEdit, recommended }: {
 
   return (
     <div>
-      {/* Intro */}
+      {/* Intro — el copy cambia según quién mira. Para el cliente esto no es una
+          pantalla de configuración: es la explicación de cómo se califican sus
+          leads, que es parte de lo que está comprando. */}
       <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
-        Los valores mostrados son los recomendados, pero puedes ajustarlos según tu operación.
+        {canEdit
+          ? 'Estos son los valores globales del modelo. Aplican a todos los tenants.'
+          : 'Así calificamos tus leads. Cada señal suma o resta puntos, y el total determina la temperatura que ves en el pipeline.'}
       </p>
 
       {!canEdit && (
         <div style={{
           fontSize: '12px', color: 'var(--text-muted)', padding: '10px 12px', marginBottom: '16px',
           background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px',
+          lineHeight: 1.5,
         }}>
-          Estos valores los administra ITMANO. Para ajustarlos a tu operación, contáctanos.
+          El modelo lo mantiene ITMANO y se calibra con lo que aprendemos de todas las
+          operaciones. Si tu equipo necesita un ajuste, escríbenos y lo evaluamos.
         </div>
       )}
 
-      <ReachPanel reach={reach} />
+      {/* Solo para quien puede editar: es una red de seguridad de ajuste,
+          no información que el cliente necesite ver. */}
+      {canEdit && <ReachPanel reach={reach} />}
 
       {/* AUTOMÁTICO */}
       <div style={CARD}>

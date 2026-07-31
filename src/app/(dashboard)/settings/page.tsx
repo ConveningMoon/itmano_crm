@@ -116,7 +116,8 @@ export default async function SettingsPage() {
         accessCount={accessCountRes.count ?? 0}
         scoringRules={scoringRules}
         recommendedRules={recommendedRules}
-        canEditScoring={ctx.role === 'super_admin' || ctx.role === 'agent_owner'}
+        // El modelo de scoring lo administra ITMANO — ver updateScoreRules.
+        canEditScoring={ctx.role === 'super_admin'}
         canManageAgents={ctx.role !== 'agent'}
         multiAgent={multiAgent}
         canLinkSelf={canLinkSelf}
