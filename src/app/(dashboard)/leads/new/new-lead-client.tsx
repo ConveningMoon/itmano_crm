@@ -2,8 +2,6 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
 import type { Agent, Language } from '@/lib/types'
 import type { ChannelOption, TenantOption } from './page'
 import { createLead, createLeadsBulk, getExistingLeadEmails } from './actions'
@@ -317,8 +315,9 @@ export function NewLeadClient({
 
   // Exports the normalized, insert-ready dataset (already-existing rows excluded) in
   // the same format as the uploaded file.
-  function downloadFinal(rows: NormalizedLead[]) {
+  async function downloadFinal(rows: NormalizedLead[]) {
     if (fileFormat === 'xlsx') {
+      const XLSX = await import('xlsx')
       const aoa = [TEMPLATE_HEADERS, ...rows.map(leadToRow)]
       const ws  = XLSX.utils.aoa_to_sheet(aoa)
       const wb  = XLSX.utils.book_new()
@@ -354,6 +353,7 @@ export function NewLeadClient({
 
       if (extension === 'csv') {
         setFileFormat('csv')
+        const { default: Papa } = await import('papaparse')
         await new Promise<void>((resolve, reject) => {
           Papa.parse<Record<string, string>>(file, {
             header: true, skipEmptyLines: true, comments: '#',
@@ -367,6 +367,7 @@ export function NewLeadClient({
         })
       } else if (extension === 'xlsx') {
         setFileFormat('xlsx')
+        const XLSX = await import('xlsx')
         const buffer = await file.arrayBuffer()
         const workbook = XLSX.read(buffer, { type: 'array' })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]

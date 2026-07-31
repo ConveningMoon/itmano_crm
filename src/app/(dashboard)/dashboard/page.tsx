@@ -114,7 +114,11 @@ export default async function DashboardPage() {
       icon: <Flame size={16} />,
       iconColor: 'var(--status-hot)',
       iconBg:    'color-mix(in srgb, var(--status-hot) 12%, transparent)',
-      desc: 'temperatura ≥ 70',
+      // La leyenda no cita un número: el umbral de la banda lo fija el motor de
+      // scoring y los puntos son ajustables por tenant, así que un literal aquí
+      // se vuelve mentira en cuanto alguien toca Ajustes → Scoring. Ya pasó: decía
+      // "≥ 70" mientras el contador contaba la banda (≥ 60).
+      desc: 'en la banda caliente',
     },
     {
       label: 'En Proceso',

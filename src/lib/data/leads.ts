@@ -351,7 +351,11 @@ export async function getHotLeads(scope: VisibilityScope, limit = 6): Promise<Ho
       .select('id, first_name, last_name, agent_id, status, current_score, acquisition_channels!acquisition_channel_id(name)'),
     scope,
   )
-    .gte('current_score', 70)
+    // "Caliente" = la banda del pipeline (status 'hot', que el trigger mantiene
+    // en score >= 60). Antes filtraba por score >= 70, así que esta lista podía
+    // mostrar 2 leads mientras el contador de al lado —que ya cuenta la banda—
+    // decía 5. El número y la lista tienen que salir del mismo criterio.
+    .eq('status', 'hot')
     .order('current_score', { ascending: false, nullsFirst: false })
     .order('id',            { ascending: false })
     .limit(limit)

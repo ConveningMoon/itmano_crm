@@ -34,13 +34,21 @@ export function BrandLogo({ logoUrl, tenantName, hubMode = false }: {
 
   if (logoUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
+      // width/height son la CAJA máxima, no el tamaño intrínseco: el objectFit
+      // 'contain' mantiene la proporción real del logo dentro de ella. `priority`
+      // porque está en el encabezado del shell, visible en la primera pantalla de
+      // todas las páginas.
+      <Image
         src={logoUrl}
         alt={tenantName ?? 'Logo del equipo'}
+        width={120}
+        height={44}
+        priority
         style={{
           maxWidth: '120px',
           maxHeight: '44px',
+          width: 'auto',
+          height: 'auto',
           objectFit: 'contain',
           objectPosition: 'left center',
           display: 'block',
