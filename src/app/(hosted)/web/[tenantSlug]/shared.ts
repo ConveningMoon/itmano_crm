@@ -93,3 +93,40 @@ export function bathroomsLabel(full: number | null, half: number | null): string
   const h = half ?? 0
   return h > 0 ? `${f} + ${h} medio${h === 1 ? '' : 's'}` : String(f)
 }
+
+// ── Parámetros para el prerender (ISR) ───────────────────────────────────────
+// Sin generateStaticParams, un segmento dinámico NO entra al manifiesto de
+// prerender y `export const revalidate` se ignora: la ruta se renderiza entera
+// en cada visita. Verificado — con revalidate solo, prerender-manifest quedaba
+// vacío y el catálogo tardaba ~1s por request.
+//
+// Ambas devuelven [] si la lectura falla: un build no debe caerse porque la base
+// no responda. Con dynamicParams (default true) las rutas que no estén en la
+// lista se renderizan bajo demanda y a partir de ahí se cachean igual.
+
+export async function getPublicTenantSlugs(): Promise<string[]> {
+  const db = createAdminClient()
+  const { data, error } = await db.from('tenants').select('slug')
+  if (error || !data) return []
+  return (data as { slug: string | null }[])
+    .map(t => t.slug)
+    .filter((s): s is string => !!s)
+}
+
+export async function getPublishedPropertyPaths(): Promise<
+  { tenantSlug: string; propertySlug: string }[]
+> {
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from('properties')
+    .select('slug, tenants!inner(slug)')
+    .eq('published_to_web', true)
+  if (error || !data) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[])
+    .map(r => ({
+      tenantSlug:   r.tenants?.slug as string | undefined,
+      propertySlug: r.slug as string | undefined,
+    }))
+    .filter((p): p is { tenantSlug: string; propertySlug: string } => !!p.tenantSlug && !!p.propertySlug)
+}
