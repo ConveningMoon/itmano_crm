@@ -142,7 +142,9 @@ Esto preserva el diferenciador (un CRM que gestiona equipos) y deja abierta la p
 
 El scoring es el corazón operativo del CRM: determina el estado del lead, dirige la atención del agente y dispara notificaciones.
 
-**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. La tabla admite override por tenant (`tenant_id` nullable: `null` = regla global), así que un valor escrito en este archivo se vuelve mentira en cuanto un tenant diverja. Hoy son 34 reglas, todas globales.
+**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. Hoy son 34 reglas, todas globales.
+
+**El modelo es de ITMANO, no del tenant.** Solo `super_admin` edita los puntos (`updateScoreRules`); para el cliente la pantalla de Ajustes → Scoring es explicativa, no configurable — es parte de lo que está comprando. La columna `tenant_id` sigue existiendo y `recompute_lead_score` prefiere un override del tenant sobre la regla global, así que ITMANO puede sembrar una excepción a mano para un cliente que lo justifique; lo que se retiró es que el cliente se la escriba a sí mismo. La diferencia entre mercados no se resuelve con puntos: la resuelve el fit con IA (más abajo).
 
 **La fuente de verdad del cálculo es `recompute_lead_score(lead_id)` en Postgres**, no el código TypeScript. Si el motor y este documento se contradicen, gana la función. Se lee con `pg_get_functiondef` por el MCP.
 
@@ -170,7 +172,9 @@ Cada regla tiene `category`, `dimension`, `match_value`, `points`, `decays`, `is
 
 **Para contar leads calientes usa `status = 'hot'`, nunca un umbral de score.** Es lo que el pipeline etiqueta y lo que el badge del lead muestra, y excluye a los que el agente ya movió a un estado post-embudo con un score congelado alto (esos ya se cuentan en "En proceso"). Un literal `>= 70` regado por la UI fue exactamente el bug que hacía que la tarjeta dijera 5 y la lista mostrara 2.
 
-**Tensión conocida (aún sin resolver):** los puntos son ajustables por tenant, pero las bandas son globales y están fijas en el trigger. Un tenant que baje mucho sus puntos deja a todos en "Nuevo"; uno que los infle deja a todos en "Caliente". Mientras las bandas no sean por tenant, la guía al ajustar puntos es mantener el máximo alcanzable cerca de 100.
+**Al ajustar puntos, mira el panel de alcance** (Ajustes → Scoring, solo visible para quien puede editar). Las bandas están fijas en el trigger, así que unos puntos demasiado bajos dejan una banda inalcanzable — sin error y sin síntoma — y unos demasiado altos saturan el tope de 100 y el orden por temperatura pierde resolución. El panel avisa de los dos casos y se recalcula mientras escribes. La lógica es pura y está en `src/lib/scoring/reach.ts`.
+
+Si algún día se abre la personalización por tenant, el arreglo correcto NO es hacer las bandas por tenant: es **normalizar** el score contra el alcance de ese tenant, para que "Caliente" signifique siempre "llegó al 60% del mejor lead posible". `computeScoreReach` ya calcula ese denominador.
 
 **Arquitectura:** scores almacenados en `leads`, actualizados por un trigger sobre `lead_events` (append-only) que llama a `recompute_lead_score`, más el cron de decay. La UI lee `current_score` directo — sin joins ni agregados. Toda transición de estado escribe en `lead_status_history`: no hay cambios silenciosos. Existe `recalc_lead_score(lead_id)` (alias fino de `recompute_lead_score`) para depurar y corregir a mano.
 

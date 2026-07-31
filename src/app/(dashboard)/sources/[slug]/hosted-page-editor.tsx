@@ -485,7 +485,7 @@ export function HostedPageEditor({
       {hasDraft && !open && (
         <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Hay un borrador guardado sin publicar.</span>
-          <a href={`/hp/${tenantSlug}/${channelSlug}?draft=1`} target="_blank" rel="noopener noreferrer"
+          <a href={`/hp/vista-previa/${tenantSlug}/${channelSlug}`} target="_blank" rel="noopener noreferrer"
             style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', textDecoration: 'none' }}>
             <ExternalLink size={12} /> Ver borrador
           </a>
