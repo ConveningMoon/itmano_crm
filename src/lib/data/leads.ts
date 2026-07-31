@@ -6,6 +6,7 @@ import {
   type ChannelRef, type KanbanColumn, type LeadListFilters, type LeadListItem,
   type LeadSortMode, type LeadsListData,
 } from '@/lib/leads/list-filters'
+import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
 import type { Language, LeadStatus } from '@/lib/types'
 
 // Acceso a datos de la lista de leads. Todo el filtrado, la búsqueda, el orden y
@@ -18,7 +19,9 @@ import type { Language, LeadStatus } from '@/lib/types'
 
 const LIST_COLUMNS =
   'id, agent_id, acquisition_channel_id, traffic_source, first_name, last_name, ' +
-  'email, phone, language, status, current_score, created_at, attention_when'
+  'email, phone, language, status, current_score, created_at, attention_when, ' +
+  // Los tres ejes del rediseno (migracion 076). Llegan ya resueltos por la vista.
+  'stage, quality_band, urgency, urgency_rank, quality_score'
 
 // reason: el cliente de Supabase no está tipado con el esquema generado
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -56,6 +59,17 @@ function applyFilters(
 function applySort(query: any, sort: LeadSortMode): any {
   // `id` desempata siempre: sin él dos leads con el mismo created_at pueden saltar
   // de página entre peticiones.
+  //
+  // 'prioridad' es el orden LEXICOGRÁFICO del rediseño: primero lo que caduca
+  // (urgency_rank), dentro de eso lo mejor (quality_score). Deliberadamente NO se
+  // pondera un eje contra el otro — eso exigiría inventar cuántos puntos de
+  // calidad vale un día de urgencia. Espeja compareByPriority de scoring/priority.
+  if (sort === 'prioridad') {
+    return query
+      .order('urgency_rank',  { ascending: true })
+      .order('quality_score', { ascending: false, nullsFirst: false })
+      .order('id',            { ascending: false })
+  }
   if (sort === 'atencion') {
     return query
       .order('attention_rank', { ascending: true })
@@ -84,6 +98,11 @@ function mapRow(r: any): LeadListItem {
     // columna legacy que ya no se escribe).
     score:                (r.current_score ?? null) as number | null,
     attentionWhen:        (r.attention_when ?? null) as LeadListItem['attentionWhen'],
+    stage:                (r.stage ?? null) as LeadListItem['stage'],
+    qualityBand:          (r.quality_band ?? null) as LeadListItem['qualityBand'],
+    qualityScore:         (r.quality_score ?? null) as number | null,
+    urgency:              (r.urgency ?? null) as LeadListItem['urgency'],
+    urgencyRank:          (r.urgency_rank ?? OUT_OF_QUEUE_RANK) as number,
     createdAt:            r.created_at as string,
   }
 }
@@ -339,6 +358,59 @@ export interface HotLead {
   status:      LeadStatus
   score:       number | null
   channelName: string | null
+}
+
+// ─── Posición dentro de la cartera activa ─────────────────────────────────────
+
+export interface LeadPriorityPosition {
+  /** 1-based dentro de la cartera activa del scope. */
+  rank:  number
+  total: number
+}
+
+/**
+ * Posición del lead en la cola de prioridad, para la tarjeta del detalle.
+ *
+ * Se resuelve con DOS counts sobre índice, nunca trayendo la cartera para
+ * ordenarla en memoria: el ranking es la parte que se vuelve cara al crecer y es
+ * justo la que no debe salir de Postgres. Medido: ~2 ms hoy, y sigue en
+ * milisegundos con 100k filas porque es un scan acotado por índice.
+ *
+ * Devuelve null si el lead no está en una etapa activa — un lead En proceso o
+ * Cerrado no compite por la atención del día y mostrarle una posición mentiría.
+ */
+export async function getLeadPriorityPosition(
+  leadId: string,
+  scope: VisibilityScope,
+): Promise<LeadPriorityPosition | null> {
+  const supabase = createAdminClient()
+
+  const { data: row } = await applyVisibilityScope(
+    supabase.from('leads_list').select('stage, urgency_rank, quality_score').eq('id', leadId),
+    scope,
+  ).maybeSingle()
+  if (!row) return null
+
+  const lead = row as { stage: string | null; urgency_rank: number; quality_score: number | null }
+  if (!lead.stage || !(ACTIVE_STAGES as string[]).includes(lead.stage)) return null
+
+  const activeOnly = (q: any) =>
+    applyVisibilityScope(q, scope).in('stage', ACTIVE_STAGES as string[])
+
+  const quality = lead.quality_score ?? 0
+
+  const [totalRes, aheadRes] = await Promise.all([
+    activeOnly(supabase.from('leads_list').select('id', { count: 'exact', head: true })),
+    // "Por delante" = el mismo criterio lexicográfico del orden: urgencia más
+    // apremiante, o misma urgencia con mejor calidad.
+    activeOnly(supabase.from('leads_list').select('id', { count: 'exact', head: true }))
+      .or(`urgency_rank.lt.${lead.urgency_rank},and(urgency_rank.eq.${lead.urgency_rank},quality_score.gt.${quality})`),
+  ])
+
+  return {
+    rank:  ((aheadRes.count ?? 0) as number) + 1,
+    total: (totalRes.count ?? 0) as number,
+  }
 }
 
 // Los N leads más calientes del scope, resueltos por el índice

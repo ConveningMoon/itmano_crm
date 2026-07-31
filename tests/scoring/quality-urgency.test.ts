@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import ws from 'ws'
 import {
   adminClient,
   TENANT_A_ID,
@@ -15,6 +16,12 @@ import {
   createFixtures,
   cleanupFixtures,
 } from '../rls/setup'
+
+// Node 21 no trae WebSocket nativo y supabase-js lo exige al construir el cliente
+// de Realtime. La app corre en Node 24 (Vercel) y no le afecta; aquí se rellena
+// para poder importar src/lib/data/leads y probar la función real, no una copia.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (!(globalThis as any).WebSocket) (globalThis as any).WebSocket = ws
 
 const LEAD_ID = 'lead-quality-urgency-01'
 
@@ -191,5 +198,37 @@ describe('Vista — etapa, banda y urgencia', () => {
 
     const v = await getView()
     expect(v.quality_band).toBe('media')   // 55 cae en [35, 60)
+  })
+})
+
+describe('getLeadPriorityPosition — el ranking sale de Postgres', () => {
+  it('devuelve la posición dentro de la cartera activa', async () => {
+    const { getLeadPriorityPosition } = await import('@/lib/data/leads')
+    await freshLead({ fit_profile: { financing: 'cash', timeline: 'under_3_months' } })
+    await recompute()
+
+    const pos = await getLeadPriorityPosition(LEAD_ID, { tenantId: TENANT_A_ID, agentId: null })
+    expect(pos).not.toBeNull()
+    expect(pos!.rank).toBeGreaterThanOrEqual(1)
+    expect(pos!.rank).toBeLessThanOrEqual(pos!.total)
+  })
+
+  it('un lead en proceso no tiene posición — no compite por la atención', async () => {
+    const { getLeadPriorityPosition } = await import('@/lib/data/leads')
+    await freshLead({ status: 'process_started' })
+    await recompute()
+
+    const pos = await getLeadPriorityPosition(LEAD_ID, { tenantId: TENANT_A_ID, agentId: null })
+    expect(pos).toBeNull()
+  })
+
+  it('respeta el scope de visibilidad del agente', async () => {
+    const { getLeadPriorityPosition } = await import('@/lib/data/leads')
+    await freshLead({ fit_profile: { financing: 'cash' } })
+    await recompute()
+
+    // Un agente que no es dueño del lead no lo ve, así que no hay posición.
+    const ajeno = await getLeadPriorityPosition(LEAD_ID, { tenantId: TENANT_A_ID, agentId: 'agent-que-no-existe' })
+    expect(ajeno).toBeNull()
   })
 })

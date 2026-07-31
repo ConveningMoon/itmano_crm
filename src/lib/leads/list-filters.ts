@@ -1,4 +1,5 @@
 import { channelTypesForKind, trafficSourcesForKind } from './source'
+import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Language, LeadStatus } from '@/lib/types'
 
 // Contrato de la lista de leads: tipos, parseo de searchParams y traducción del
@@ -13,7 +14,7 @@ export const LEADS_PAGE_SIZE = 20
 // el tope acota el payload, no la verdad.
 export const KANBAN_COLUMN_LIMIT = 50
 
-export type LeadSortMode = 'recientes' | 'atencion'
+export type LeadSortMode = 'recientes' | 'atencion' | 'prioridad'
 export type LeadsView    = 'table' | 'kanban'
 
 // Fila de la lista — sólo lo que la tabla, el kanban y el CSV renderizan.
@@ -31,6 +32,13 @@ export interface LeadListItem {
   status:               LeadStatus
   score:                number | null
   attentionWhen:        'hoy' | 'esta_semana' | 'sin_apuro' | null
+  // Los tres ejes del rediseno (migracion 076). `null` solo en filas heredadas
+  // que aun no pasaron por el trigger.
+  stage:                Stage | null
+  qualityBand:          QualityBand | null
+  qualityScore:         number | null
+  urgency:              Urgency | null
+  urgencyRank:          number
   createdAt:            string
 }
 
@@ -87,8 +95,11 @@ function one(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v
 }
 
+const SORT_MODES: LeadSortMode[] = ['recientes', 'atencion', 'prioridad']
+
 export function parseLeadListFilters(params: RawParams): LeadListFilters {
-  const sort = one(params.sort) === 'atencion' ? 'atencion' : 'recientes'
+  const rawSort = one(params.sort) as LeadSortMode | undefined
+  const sort: LeadSortMode = rawSort && SORT_MODES.includes(rawSort) ? rawSort : 'recientes'
   const view = one(params.view) === 'kanban'   ? 'kanban'   : 'table'
   const rawPage = Number.parseInt(one(params.page) ?? '1', 10)
 
