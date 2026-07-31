@@ -1,9 +1,19 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { getPublicTenant, getPublishedProperty } from '../shared'
+import { getPublicTenant, getPublishedProperty, getPublishedPropertyPaths } from '../shared'
 import { PublicPropertyView } from './public-property-view'
 
 // Detalle público de una propiedad publicada — properties.itmano.com/<t>/<slug>.
+
+// ISR — mismo razonamiento que el catálogo: sin cookies ni searchParams, y las
+// actions de propiedades revalidan esta ruta al guardar.
+export const revalidate = 300
+
+// Igual que el catálogo: sin esto `revalidate` no aplica. Solo las publicadas —
+// una propiedad despublicada no debe prerenderizarse.
+export async function generateStaticParams() {
+  return getPublishedPropertyPaths()
+}
 
 type Params = Promise<{ tenantSlug: string; propertySlug: string }>
 

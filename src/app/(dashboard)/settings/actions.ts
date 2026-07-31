@@ -154,11 +154,24 @@ export async function updateScoreRules(
   updates: { id: string; points: number; isActive: boolean }[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  // super_admin edita las reglas GLOBALES (afectan a todos los tenants);
-  // agent_owner edita OVERRIDES de SU tenant (nunca toca las globales ni otros
-  // tenants). recompute_lead_score prefiere la regla del tenant (migración 029).
-  if (ctx.role !== 'super_admin' && ctx.role !== 'agent_owner') {
-    return { ok: false, error: 'No tienes permiso para ajustar el scoring.' }
+
+  // SOLO ITMANO. El modelo de scoring es el diferenciador del producto y es
+  // GLOBAL a propósito: las bandas (Caliente/Tibio/Nurturing) están fijas en el
+  // trigger de Postgres, así que unos puntos ajustables por tenant las
+  // desincronizan en silencio — bajarlos lo suficiente deja la banda Caliente
+  // inalcanzable sin ningún error visible.
+  //
+  // La diferencia entre mercados (qué cuenta como "premium" en Hampton Roads vs
+  // Barcelona) NO se resuelve aquí: la resuelve ai-lead-fit, que interpreta las
+  // respuestas del formulario en los buckets de ESE mercado. Lo que se valora es
+  // el bucket, y eso sí es universal.
+  //
+  // La columna `tenant_id` de lead_score_rules se queda: recompute_lead_score
+  // sigue prefiriendo un override del tenant sobre la regla global, así que
+  // ITMANO puede sembrar una excepción para un cliente que lo justifique. Lo que
+  // se retira es que el cliente se la escriba a sí mismo desde Ajustes.
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'El modelo de scoring lo administra ITMANO.' }
   }
 
   const parsed = ScoreRuleUpdateSchema.safeParse(updates)
@@ -168,68 +181,13 @@ export async function updateScoreRules(
 
   const supabase = createAdminClient()
 
-  if (ctx.role === 'super_admin') {
-    for (const u of parsed.data) {
-      const { error } = await supabase
-        .from('lead_score_rules')
-        .update({ points: u.points, is_active: u.isActive })
-        .eq('id', u.id)
-        .is('tenant_id', null) // global rules only — never touch a per-tenant override
-      if (error) return { ok: false, error: error.message }
-    }
-    revalidatePath('/settings')
-    return { ok: true }
-  }
-
-  // ── agent_owner → override por tenant ──────────────────────────────────────
-  const tenantId = ctx.tenant_id
-  if (!tenantId) return { ok: false, error: 'Selecciona un tenant.' }
-
-  // Identidad de cada regla editada (siempre por su id GLOBAL).
-  const ids = parsed.data.map(u => u.id)
-  const { data: globals } = await supabase
-    .from('lead_score_rules')
-    .select('id, category, dimension, match_value, event_type, decays, side_effect, label')
-    .in('id', ids)
-    .is('tenant_id', null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const byId = new Map<string, any>(((globals ?? []) as any[]).map(r => [r.id as string, r]))
-
   for (const u of parsed.data) {
-    const g = byId.get(u.id)
-    if (!g) continue // solo se pueden overridear reglas globales existentes
-
-    // ¿Ya existe un override de este tenant para la misma regla?
-    let q = supabase
+    const { error } = await supabase
       .from('lead_score_rules')
-      .select('id')
-      .eq('tenant_id', tenantId)
-      .eq('category', g.category)
-      .eq('dimension', g.dimension)
-    q = g.match_value === null ? q.is('match_value', null) : q.eq('match_value', g.match_value)
-    const { data: existing } = await q.maybeSingle()
-
-    if (existing) {
-      const { error } = await supabase
-        .from('lead_score_rules')
-        .update({ points: u.points, is_active: u.isActive })
-        .eq('id', (existing as { id: string }).id)
-      if (error) return { ok: false, error: error.message }
-    } else {
-      const { error } = await supabase.from('lead_score_rules').insert({
-        tenant_id:   tenantId,
-        category:    g.category,
-        dimension:   g.dimension,
-        match_value: g.match_value,
-        event_type:  g.event_type,
-        points:      u.points,
-        decays:      g.decays,
-        is_active:   u.isActive,
-        side_effect: g.side_effect,
-        label:       g.label,
-      })
-      if (error) return { ok: false, error: error.message }
-    }
+      .update({ points: u.points, is_active: u.isActive })
+      .eq('id', u.id)
+      .is('tenant_id', null) // solo reglas globales — nunca un override de tenant
+    if (error) return { ok: false, error: error.message }
   }
 
   revalidatePath('/settings')

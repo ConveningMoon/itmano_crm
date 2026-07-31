@@ -156,6 +156,28 @@ function toColumns(data: ParsedProperty) {
   }
 }
 
+// ── Invalidación del catálogo público ────────────────────────────────────────
+// /web/<tenant> y sus detalles se sirven con ISR (revalidate 300). Sin esta
+// llamada, el cliente publica o corrige una propiedad y no la ve en su web hasta
+// que expire la ventana — y eso destruye la confianza mucho más de lo que gana
+// en velocidad. Aquí el revalidate deja de ser el mecanismo de frescura y pasa a
+// ser solo el techo para lo que cambie fuera de la app.
+//
+// Se invalida por slug del tenant para no tirar el cache de los demás. Es
+// best-effort: si la lectura del slug falla, la página se refresca sola al
+// expirar la ventana; no tiene sentido abortar un guardado ya commiteado.
+async function revalidatePublicCatalog(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  propertySlug?: string | null,
+) {
+  const { data } = await db.from('tenants').select('slug').eq('id', tenantId).maybeSingle()
+  const slug = (data as { slug: string } | null)?.slug
+  if (!slug) return
+  revalidatePath(`/web/${slug}`)
+  if (propertySlug) revalidatePath(`/web/${slug}/${propertySlug}`)
+}
+
 export async function createProperty(
   input: PropertyInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
@@ -214,6 +236,7 @@ export async function createProperty(
   if (error) return { ok: false, error: slugError(error.message) }
 
   revalidatePath('/properties')
+  await revalidatePublicCatalog(db, targetTenant, parsed.data.slug)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { ok: true, id: (data as any).id as string }
 }
@@ -268,6 +291,7 @@ export async function updateProperty(
   if (error) return { ok: false, error: slugError(error.message) }
 
   revalidatePath('/properties')
+  await revalidatePublicCatalog(db, existingRow.tenant_id as string, parsed.data.slug)
   return { ok: true }
 }
 
@@ -311,6 +335,7 @@ export async function deleteProperty(
   )
 
   revalidatePath('/properties')
+  await revalidatePublicCatalog(db, existingRow.tenant_id as string, existingRow.slug as string | null)
   return { ok: true }
 }
 

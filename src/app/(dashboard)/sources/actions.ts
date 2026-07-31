@@ -35,7 +35,7 @@ export async function updateHostedPage(
   const supabase = createAdminClient()
   let q = supabase
     .from('acquisition_channels')
-    .select('id, channel_type')
+    .select('id, channel_type, slug, tenants!inner(slug)')
     .eq('id', channelId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
   const { data: channel } = await q.maybeSingle()
@@ -52,6 +52,11 @@ export async function updateHostedPage(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/sources')
+  // La página pública se sirve con ISR (revalidate 300): sin esta invalidación el
+  // constructor guardaría y el cambio no se vería hasta que expire la ventana.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ch = channel as any
+  if (ch.tenants?.slug && ch.slug) revalidatePath(`/hp/${ch.tenants.slug}/${ch.slug}`)
   return { ok: true }
 }
 

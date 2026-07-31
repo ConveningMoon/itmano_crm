@@ -92,11 +92,13 @@ export function computeScoreReach(rules: ReachRule[]): ScoreReach {
   }
 
   // Con el tope en 100, un techo muy por encima aplasta a leads muy distintos en
-  // el mismo número y el orden por temperatura deja de discriminar.
+  // el mismo número y el orden por temperatura deja de discriminar. El aviso NO
+  // lidera con el techo crudo: ese número (que puede pasar de 200) no le dice
+  // nada a nadie. Lo que importa es la consecuencia.
   if (ceiling >= 150) {
     warnings.push({
       code: 'saturated',
-      message: `El techo teórico es ${ceiling} y el score corta en 100: leads bastante distintos van a empatar arriba y el orden por temperatura perderá resolución.`,
+      message: 'Un lead que acumule varias señales desborda el tope de 100 con holgura, así que leads bastante distintos van a empatar arriba y el orden por temperatura perderá resolución. Considera bajar los puntos de las señales acumulativas.',
     })
   }
 
