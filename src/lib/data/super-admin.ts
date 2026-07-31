@@ -20,58 +20,47 @@ export interface TenantOverview extends TenantWithOwner {
   lastActivityAt: string | null
 }
 
+// Fila que devuelve tenant_hub_stats por cada tenant con datos.
+interface HubAgg {
+  total:            number
+  hot:              number
+  new30d:           number
+  last_activity_at: string | null
+}
+
+const VENTANA_DIAS = 30
+
 /**
  * Datos del centro de control: KPIs de plataforma + overview por tenant.
  *
- * Un solo fetch de leads agregado en memoria. "Caliente" = status 'hot', el
- * mismo criterio que el dashboard, /analytics y la banda del pipeline. Volumen
- * actual ~cientos de filas — trivial. TODO: migrar a una RPC agregada cuando
- * leads > ~5k.
+ * Los agregados los calcula Postgres (`tenant_hub_stats`, migración 075). Antes
+ * esta función traía la tabla `leads` ENTERA de todos los tenants para contarla
+ * en memoria, más una query de última actividad por tenant: con veinte clientes
+ * de a miles de leads, cada carga del hub habría arrastrado todo por la red.
+ *
+ * "Caliente" = status 'hot', el mismo criterio que el dashboard, /analytics y la
+ * banda del pipeline.
  */
 export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: TenantOverview[] }> {
   const supabase = createAdminClient()
-  const cutoff30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
 
-  const [tenantRows, { data: leadRows }] = await Promise.all([
+  const [tenantRows, { data: statsRaw }] = await Promise.all([
     getTenantsWithOwners(),
-    supabase.from('leads').select('tenant_id, status, temperature_score, created_at'),
+    supabase.rpc('tenant_hub_stats', { p_days: VENTANA_DIAS }),
   ])
 
-  interface Agg { total: number; hot: number; new30d: number }
-  const byTenant = new Map<string, Agg>()
-  for (const l of (leadRows ?? []) as {
-    tenant_id: string; status: string; temperature_score: number | null; created_at: string
-  }[]) {
-    const agg = byTenant.get(l.tenant_id) ?? { total: 0, hot: 0, new30d: 0 }
-    agg.total += 1
-    if (l.status === 'hot') agg.hot += 1
-    if (l.created_at >= cutoff30d) agg.new30d += 1
-    byTenant.set(l.tenant_id, agg)
-  }
+  // La RPC solo devuelve tenants CON leads o CON actividad; los recién creados
+  // no aparecen y caen al cero de abajo, igual que con el conteo en memoria.
+  const byTenant = (statsRaw ?? {}) as Record<string, HubAgg | undefined>
 
-  // Última actividad por tenant — una query limit 1 por tenant, acotado por el
-  // número de tenants (2-5 hoy), mismo trade-off que getTenantsWithOwners.
-  const lastActivity = await Promise.all(
-    tenantRows.map(async t => {
-      const { data } = await supabase
-        .from('lead_events')
-        .select('created_at')
-        .eq('tenant_id', t.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      return (data?.created_at as string | undefined) ?? null
-    }),
-  )
-
-  const tenants: TenantOverview[] = tenantRows.map((t, i) => {
-    const agg = byTenant.get(t.id) ?? { total: 0, hot: 0, new30d: 0 }
+  const tenants: TenantOverview[] = tenantRows.map(t => {
+    const agg = byTenant[t.id]
     return {
       ...t,
-      totalLeads: agg.total,
-      hotLeads: agg.hot,
-      newLeads30d: agg.new30d,
-      lastActivityAt: lastActivity[i],
+      totalLeads:     agg?.total  ?? 0,
+      hotLeads:       agg?.hot    ?? 0,
+      newLeads30d:    agg?.new30d ?? 0,
+      lastActivityAt: agg?.last_activity_at ?? null,
     }
   })
 

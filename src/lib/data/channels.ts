@@ -73,7 +73,6 @@ async function fetchChannelsWithMetrics(
   if (tenantId === '') return []
 
   const supabase = createAdminClient()
-  const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
 
   let channelQ = supabase
     .from('acquisition_channels')
@@ -107,62 +106,30 @@ async function fetchChannelsWithMetrics(
     for (const a of (agentRows ?? []) as any[]) agentNameMap.set(a.id, a.name)
   }
 
-  const [{ data: windowLeads }, { data: windowViews }, { data: allLeads }] = await Promise.all([
-    supabase
-      .from('leads')
-      .select('acquisition_channel_id, current_score')
-      .in('acquisition_channel_id', channelIds)
-      .gte('created_at', windowStart),
-    supabase
-      .from('channel_page_views')
-      .select('channel_id, visitor_fingerprint')
-      .in('channel_id', channelIds)
-      .gte('created_at', windowStart),
-    supabase
-      .from('leads')
-      .select('acquisition_channel_id')
-      .in('acquisition_channel_id', channelIds),
-  ])
+  // Las métricas las agrega Postgres (`channel_metrics`, migración 075). Antes
+  // esta función traía TODOS los leads de estos canales —sin filtro de fecha— y
+  // los recorría una vez por canal para contarlos en memoria: O(canales × leads)
+  // sobre filas que ya venían enteras por la red.
+  const { data: metricsRaw } = await supabase.rpc('channel_metrics', {
+    p_channel_ids:  channelIds,
+    p_window_days:  windowDays,
+  })
+  const metricsById = (metricsRaw ?? {}) as Record<string, {
+    leads_total: number
+    leads_in_window: number
+    page_views_in_window: number
+    conversion_rate: number
+    avg_temp_score: number | null
+  } | undefined>
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return channels.map((c: any) => { // reason: Supabase returns untyped rows
-    const wLeads = (windowLeads ?? []).filter(
-      (l: { acquisition_channel_id: string }) => l.acquisition_channel_id === c.id
-    )
-    const totalLeads = (allLeads ?? []).filter(
-      (l: { acquisition_channel_id: string }) => l.acquisition_channel_id === c.id
-    )
-    // Vistas ÚNICAS: distintos visitantes (visitor_fingerprint) en la ventana.
-    // Abrir el mismo link varias veces en el mismo navegador cuenta una sola vez
-    // (el fingerprint es estable en localStorage). Filas sin fingerprint (legacy)
-    // se cuentan como una vista cada una para no perderlas.
-    const viewRows = (windowViews ?? []).filter(
-      (pv: { channel_id: string }) => pv.channel_id === c.id
-    ) as { channel_id: string; visitor_fingerprint: string | null }[]
-    const uniqueVisitors = new Set<string>()
-    let anonViews = 0
-    for (const v of viewRows) {
-      if (v.visitor_fingerprint) uniqueVisitors.add(v.visitor_fingerprint)
-      else anonViews++
-    }
-
-    const leadsInWindow = wLeads.length
-    const pageViewsInWindow = uniqueVisitors.size + anonViews
-    const conversionRate = pageViewsInWindow > 0
-      ? Math.round((leadsInWindow / pageViewsInWindow) * 100)
-      : 0
-
-    const scoredLeads = wLeads.filter(
-      (l: { current_score: number | null }) => l.current_score !== null
-    )
-    const avgTempScore = scoredLeads.length > 0
-      ? Math.round(
-          scoredLeads.reduce(
-            (sum: number, l: { current_score: number | null }) => sum + (l.current_score ?? 0),
-            0
-          ) / scoredLeads.length
-        )
-      : null
+    const m = metricsById[c.id as string]
+    const leadsInWindow     = m?.leads_in_window ?? 0
+    const pageViewsInWindow = m?.page_views_in_window ?? 0
+    const conversionRate    = m?.conversion_rate ?? 0
+    const avgTempScore      = m?.avg_temp_score ?? null
+    const totalLeadsCount   = m?.leads_total ?? 0
 
     return {
       id:              c.id,
@@ -179,7 +146,7 @@ async function fetchChannelsWithMetrics(
       createdAt:       c.created_at,
       archivedAt:      c.archived_at,
       metrics: {
-        leadsTotal:       totalLeads.length,
+        leadsTotal:       totalLeadsCount,
         leadsInWindow,
         pageViewsInWindow,
         conversionRate,
