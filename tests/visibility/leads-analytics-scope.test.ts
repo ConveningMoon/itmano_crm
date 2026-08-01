@@ -70,10 +70,11 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
   it('traduce el jsonb del RPC a la forma que consume la página', async () => {
     mockData = {
       total: 120,
-      hot: 14,
+      hot: 14,               // el RPC lo sigue devolviendo; el mapeo lo ignora
       closed: 9,
-      live_avg_score: 41,
-      this_month: { leads: 7, hot: 2 },
+      active: 40,
+      live_avg_score: 41,    // idem
+      this_month: { leads: 7, hot: 2, high_quality: 3 },
       by_source: [
         { channel_type: 'lead_magnet', traffic_source: null,        total: 60 },
         { channel_type: null,          traffic_source: 'instagram', total: 60 },
@@ -81,39 +82,30 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
       by_agent: [
         { agent_id: 'agent-dylan', total: 100, hot: 12, closed: 8, avg_score: 44, statuses: { new: 90, hot: 10 } },
       ],
-      monthly: [{ month: '2026-07', leads: 7, nurturing: 1, hot: 2, closed: 0 }],
+      monthly: [{ month: '2026-07', leads: 7, nuevo: 4, nutricion: 2, en_proceso: 1, cerrado: 0, perdido: 0 }],
     }
 
     const stats = await getLeadAnalyticsStats(OWNER)
 
     expect(stats.total).toBe(120)
-    expect(stats.hot).toBe(14)
     expect(stats.closed).toBe(9)
-    expect(stats.liveAvgScore).toBe(41)
-    expect(stats.thisMonth).toEqual({ leads: 7, hot: 2 })
+    expect(stats.active).toBe(40)
+    expect(stats.thisMonth).toEqual({ leads: 7, highQuality: 3 })
     // avg_quality llega null en este fixture: el RPC lo omite cuando no hay
     // leads con calidad, y el mapeo debe respetarlo sin inventar un 0.
     expect(stats.bySource).toEqual([
       { channelType: 'lead_magnet', trafficSource: null,        total: 60, avgQuality: null },
       { channelType: null,          trafficSource: 'instagram', total: 60, avgQuality: null },
     ])
+    // Las claves de temperatura del RPC (hot, avg_score, statuses) NO se mapean:
+    // ninguna pantalla las lee y dejarlas invitaba a darlas por vivas.
     expect(stats.byAgent[0]).toEqual({
-      agentId: 'agent-dylan', total: 100, hot: 12, closed: 8, avgScore: 44,
-      highQuality: 0, avgQuality: 0,
-      statuses: { new: 90, hot: 10 }, stages: {},
+      agentId: 'agent-dylan', total: 100, closed: 8,
+      highQuality: 0, avgQuality: 0, stages: {},
     })
-    expect(stats.monthly).toEqual([{ month: '2026-07', leads: 7, nurturing: 1, hot: 2, closed: 0 }])
-  })
-
-  it('sin pipeline vivo la temperatura media queda en null (la página muestra “—”)', async () => {
-    mockData = { total: 3, hot: 0, closed: 3, live_avg_score: null, this_month: { leads: 0, hot: 0 } }
-
-    const stats = await getLeadAnalyticsStats(OWNER)
-
-    expect(stats.liveAvgScore).toBeNull()
-    expect(stats.bySource).toEqual([])
-    expect(stats.byAgent).toEqual([])
-    expect(stats.monthly).toEqual([])
+    expect(stats.monthly).toEqual([
+      { month: '2026-07', leads: 7, nuevo: 4, nutricion: 2, enProceso: 1, cerrado: 0, perdido: 0 },
+    ])
   })
 
   it('un error del RPC devuelve ceros, no revienta la página', async () => {
@@ -122,8 +114,8 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
     const stats = await getLeadAnalyticsStats(OWNER)
 
     expect(stats).toEqual({
-      total: 0, hot: 0, closed: 0, liveAvgScore: null,
-      thisMonth: { leads: 0, hot: 0 },
+      total: 0, closed: 0, active: 0,
+      thisMonth: { leads: 0, highQuality: 0 },
       qualityDistribution: {}, byStage: {},
       bySource: [], byAgent: [], monthly: [],
     })

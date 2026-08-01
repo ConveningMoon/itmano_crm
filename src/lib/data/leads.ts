@@ -244,9 +244,12 @@ export interface LeadDashboardStats {
   highQuality: number
   urgentToday: number
   closedThisMonth: number
+  /** Traídos de otro CRM: nunca recorrieron el embudo aquí, así que el bloque
+   *  de etapas los excluye y los reporta aparte. */
+  imported: number
   byStatus: Record<string, number>
   byStage:  Record<string, number>
-  byAgent:  Array<{ agentId: string; total: number; hot: number; highQuality: number; closed: number }>
+  byAgent:  Array<{ agentId: string; total: number; highQuality: number; closed: number }>
 }
 
 // Conteos agregados en Postgres (RPC lead_dashboard_stats, migración 072). Antes
@@ -261,7 +264,7 @@ export async function getLeadDashboardStats(scope: VisibilityScope): Promise<Lea
   if (error || !data) {
     return {
       total: 0, hot: 0, active: 0, highQuality: 0, urgentToday: 0,
-      closedThisMonth: 0, byStatus: {}, byStage: {}, byAgent: [],
+      closedThisMonth: 0, imported: 0, byStatus: {}, byStage: {}, byAgent: [],
     }
   }
 
@@ -273,12 +276,12 @@ export async function getLeadDashboardStats(scope: VisibilityScope): Promise<Lea
     highQuality:     (raw.high_quality ?? 0) as number,
     urgentToday:     (raw.urgent_today ?? 0) as number,
     closedThisMonth: (raw.closed_this_month ?? 0) as number,
+    imported:        (raw.imported ?? 0) as number,
     byStatus:        (raw.by_status ?? {}) as Record<string, number>,
     byStage:         (raw.by_stage  ?? {}) as Record<string, number>,
     byAgent:  ((raw.by_agent ?? []) as any[]).map(a => ({
       agentId:     a.agent_id as string,
       total:       (a.total  ?? 0) as number,
-      hot:         (a.hot    ?? 0) as number,
       highQuality: (a.high_quality ?? 0) as number,
       closed:      (a.closed ?? 0) as number,
     })),
@@ -290,14 +293,15 @@ export async function getLeadDashboardStats(scope: VisibilityScope): Promise<Lea
 // Ventana de la serie mensual de /analytics, contando el mes en curso.
 export const ANALYTICS_MONTHS = 7
 
+// El RPC sigue devolviendo las claves de temperatura (hot, live_avg_score,
+// statuses, avg_score) por compatibilidad, pero ninguna pantalla las lee ya:
+// se dejan sin mapear a propósito para que nadie las dé por vivas.
 export interface LeadAnalyticsStats {
   total:  number
-  // "Caliente" = status 'hot' (la banda del pipeline), igual en toda la app.
-  hot:    number
   closed: number
-  // Media del score sobre el pipeline vivo; null cuando no hay leads vivos.
-  liveAvgScore: number | null
-  thisMonth: { leads: number; hot: number }
+  /** Cartera viva: etapas nuevo + nutrición. Es lo que el agente puede trabajar. */
+  active: number
+  thisMonth: { leads: number; highQuality: number }
   // Fuente compuesta en crudo: la etiqueta la resuelve getLeadSource().
   /** Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos:
    *  sin ellos no se ve si los buenos leads terminan cerrando. */
@@ -307,26 +311,29 @@ export interface LeadAnalyticsStats {
   byAgent:  Array<{
     agentId:     string
     total:       number
-    hot:         number
     highQuality: number
     closed:      number
-    avgScore:    number
     /** Calidad media — a diferencia del score, no la mueve el paso del tiempo. */
     avgQuality:  number
-    statuses:    Record<string, number>
     stages:      Record<string, number>
   }>
   // Sólo los meses con leads, en clave 'YYYY-MM' (UTC). El eje completo lo arma
   // la página, que es quien conoce las etiquetas.
-  monthly: Array<{ month: string; leads: number; nurturing: number; hot: number; closed: number }>
+  //
+  // Es una serie de COHORTES: el mes es el de alta y las etapas son las de HOY.
+  // Por eso las cinco suman `leads` — un lead está en exactamente una etapa.
+  monthly: Array<{
+    month: string; leads: number
+    nuevo: number; nutricion: number; enProceso: number; cerrado: number; perdido: number
+  }>
 }
 
 // Instancia nueva en cada fallo: la página recibe arrays propios, no una
 // constante compartida entre requests.
 function emptyAnalytics(): LeadAnalyticsStats {
   return {
-    total: 0, hot: 0, closed: 0, liveAvgScore: null,
-    thisMonth: { leads: 0, hot: 0 },
+    total: 0, closed: 0, active: 0,
+    thisMonth: { leads: 0, highQuality: 0 },
     qualityDistribution: {}, byStage: {}, bySource: [], byAgent: [], monthly: [],
   }
 }
@@ -350,12 +357,11 @@ export async function getLeadAnalyticsStats(
   const raw = data as any
   return {
     total:  (raw.total  ?? 0) as number,
-    hot:    (raw.hot    ?? 0) as number,
     closed: (raw.closed ?? 0) as number,
-    liveAvgScore: (raw.live_avg_score ?? null) as number | null,
+    active: (raw.active ?? 0) as number,
     thisMonth: {
-      leads: (raw.this_month?.leads ?? 0) as number,
-      hot:   (raw.this_month?.hot   ?? 0) as number,
+      leads:       (raw.this_month?.leads ?? 0) as number,
+      highQuality: (raw.this_month?.high_quality ?? 0) as number,
     },
     qualityDistribution: (raw.quality_distribution ?? {}) as Record<string, number>,
     byStage:             (raw.by_stage ?? {}) as Record<string, number>,
@@ -368,22 +374,21 @@ export async function getLeadAnalyticsStats(
       avgQuality:    (s.avg_quality ?? null) as number | null,
     })),
     byAgent: ((raw.by_agent ?? []) as any[]).map(a => ({
-      agentId:  a.agent_id as string,
-      total:    (a.total     ?? 0) as number,
-      hot:      (a.hot       ?? 0) as number,
-      closed:   (a.closed    ?? 0) as number,
-      avgScore: (a.avg_score ?? 0) as number,
+      agentId:     a.agent_id as string,
+      total:       (a.total  ?? 0) as number,
+      closed:      (a.closed ?? 0) as number,
       highQuality: (a.high_quality ?? 0) as number,
       avgQuality:  (a.avg_quality  ?? 0) as number,
-      statuses: (a.statuses  ?? {}) as Record<string, number>,
-      stages:   (a.stages    ?? {}) as Record<string, number>,
+      stages:      (a.stages ?? {}) as Record<string, number>,
     })),
     monthly: ((raw.monthly ?? []) as any[]).map(m => ({
       month:     m.month as string,
-      leads:     (m.leads     ?? 0) as number,
-      nurturing: (m.nurturing ?? 0) as number,
-      hot:       (m.hot       ?? 0) as number,
-      closed:    (m.closed    ?? 0) as number,
+      leads:     (m.leads      ?? 0) as number,
+      nuevo:     (m.nuevo      ?? 0) as number,
+      nutricion: (m.nutricion  ?? 0) as number,
+      enProceso: (m.en_proceso ?? 0) as number,
+      cerrado:   (m.cerrado    ?? 0) as number,
+      perdido:   (m.perdido    ?? 0) as number,
     })),
   }
 }

@@ -3,18 +3,21 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
 
-interface StatusDataPoint {
-  agent: string
-  new: number
-  nurturing: number
-  warm: number
-  hot: number
-  process: number
-  closed: number
+// Por ETAPA, no por status. Las bandas de temperatura (nuevo/nurturing/tibio/
+// caliente) mezclaban medición con embudo: un agente con muchos "tibios" no
+// estaba peor ni mejor, sólo tenía leads de calidad media. Las etapas sí dicen
+// dónde está el trabajo.
+interface StageDataPoint {
+  agent:     string
+  nuevo:     number
+  nutricion: number
+  enProceso: number
+  cerrado:   number
+  perdido:   number
 }
 
 interface Props {
-  data: StatusDataPoint[]
+  data: StageDataPoint[]
 }
 
 const tooltipStyle: React.CSSProperties = {
@@ -25,7 +28,7 @@ const tooltipStyle: React.CSSProperties = {
   fontSize: '12px',
 }
 
-export function StatusDistributionChart({ data }: Props) {
+export function StageDistributionChart({ data }: Props) {
   const reduced = usePrefersReducedMotion()
   const anim = {
     isAnimationActive: !reduced,
@@ -53,12 +56,11 @@ export function StatusDistributionChart({ data }: Props) {
           iconSize={8}
           iconType="square"
         />
-        <Bar {...anim} dataKey="new"       stackId="a" fill="#5B8EC9" name="Nuevo"      radius={[0, 0, 0, 0]} />
-        <Bar {...anim} dataKey="nurturing" stackId="a" fill="#C9A96E" name="Nurturing"  />
-        <Bar {...anim} dataKey="warm"      stackId="a" fill="#E07B3A" name="Tibio"      />
-        <Bar {...anim} dataKey="hot"       stackId="a" fill="#E04040" name="Caliente"   />
-        <Bar {...anim} dataKey="process"   stackId="a" fill="#9B72CF" name="En Proceso" />
-        <Bar {...anim} dataKey="closed"    stackId="a" fill="#6BA368" name="Cerrado"    radius={[4, 4, 0, 0]} />
+        <Bar {...anim} dataKey="nuevo"     stackId="a" fill="#5B8EC9" name="Nuevo"        radius={[0, 0, 0, 0]} />
+        <Bar {...anim} dataKey="nutricion" stackId="a" fill="#C9A96E" name="En nutrición" />
+        <Bar {...anim} dataKey="enProceso" stackId="a" fill="#9B72CF" name="En proceso"   />
+        <Bar {...anim} dataKey="cerrado"   stackId="a" fill="#6BA368" name="Cerrado"      />
+        <Bar {...anim} dataKey="perdido"   stackId="a" fill="#6B6860" name="Perdido"      radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )

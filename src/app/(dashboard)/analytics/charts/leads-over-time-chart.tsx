@@ -12,12 +12,17 @@ import {
 } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
 
+// Cohortes: el mes es el de ALTA del lead, la etapa es la de HOY. Las cinco
+// series suman el total del mes porque un lead está en exactamente una etapa —
+// por eso van apiladas de verdad (un solo stackId). Antes cada área tenía el
+// suyo, así que se superponían y el eje no significaba nada.
 interface MonthDataPoint {
-  month: string
-  leads: number
-  nurturing: number
-  hot: number
-  closed: number
+  month:     string
+  nuevo:     number
+  nutricion: number
+  enProceso: number
+  cerrado:   number
+  perdido:   number
 }
 
 interface Props {
@@ -40,6 +45,14 @@ export function LeadsOverTimeChart({ data }: Props) {
     animationDuration: 700,
     animationEasing: 'ease-out' as const,
   }
+  // Hex literal como en el resto de charts: recharts no resuelve CSS variables.
+  const series = [
+    { key: 'nuevo',     name: 'Nuevo',        color: '#5B8EC9' },
+    { key: 'nutricion', name: 'En nutrición', color: '#C9A96E' },
+    { key: 'enProceso', name: 'En proceso',   color: '#9B72CF' },
+    { key: 'cerrado',   name: 'Cerrado',      color: '#6BA368' },
+    { key: 'perdido',   name: 'Perdido',      color: '#6B6860' },
+  ]
   return (
     <ResponsiveContainer width="100%" height={280}>
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
@@ -61,39 +74,20 @@ export function LeadsOverTimeChart({ data }: Props) {
           iconSize={8}
           iconType="circle"
         />
-        <Area
-          {...anim}
-          type="monotone"
-          dataKey="leads"
-          stackId="1"
-          stroke="#C9A96E"
-          fill="#C9A96E"
-          fillOpacity={0.15}
-          strokeWidth={2}
-          name="Nuevos leads"
-        />
-        <Area
-          {...anim}
-          type="monotone"
-          dataKey="nurturing"
-          stackId="2"
-          stroke="#5B8EC9"
-          fill="#5B8EC9"
-          fillOpacity={0.1}
-          strokeWidth={2}
-          name="En nurturing"
-        />
-        <Area
-          {...anim}
-          type="monotone"
-          dataKey="hot"
-          stackId="3"
-          stroke="#E04040"
-          fill="#E04040"
-          fillOpacity={0.1}
-          strokeWidth={2}
-          name="Calientes"
-        />
+        {series.map(s => (
+          <Area
+            key={s.key}
+            {...anim}
+            type="monotone"
+            dataKey={s.key}
+            stackId="a"
+            stroke={s.color}
+            fill={s.color}
+            fillOpacity={0.18}
+            strokeWidth={2}
+            name={s.name}
+          />
+        ))}
       </AreaChart>
     </ResponsiveContainer>
   )
