@@ -23,6 +23,7 @@ import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getLeadPriorityPosition } from '@/lib/data/leads'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
+import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import type { ManualActionItem } from './manual-actions-panel'
@@ -115,6 +116,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     currentScore:    (lr.current_score as number | null) ?? 0,
     rules:           scoreRules,
   })
+  const opportunities = opportunitiesFor(lr.fit_profile as Record<string, unknown> | null)
   const purchaseProcess: PurchaseProcess | null = rawProcess ? mapPurchaseProcess(rawProcess as PurchaseProcessRow) : null
 
   // Identidad de envío del tenant (065) — el popup de correo muestra desde qué
@@ -186,6 +188,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       manualActions={manualActions}
       statusHistory={statusHistory}
       scoreBreakdown={scoreBreakdown}
+      opportunities={opportunities}
       priority={priority}
       emailSending={emailSending}
       aiFit={aiFit}
