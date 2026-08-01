@@ -7,6 +7,7 @@ import {
   type Stage, type QualityBand, type Urgency,
 } from '@/lib/scoring/priority'
 import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
+import type { LeadOpportunity } from '@/lib/scoring/opportunities'
 
 // Reemplaza "Desglose del score" y "Temperatura del lead".
 //
@@ -71,9 +72,10 @@ function FactRow({ label, items, negative = false }: {
   )
 }
 
-export function PriorityCard({ priority, breakdown }: {
-  priority: LeadPriority | null
-  breakdown: ScoreBreakdown
+export function PriorityCard({ priority, breakdown, opportunities }: {
+  priority:      LeadPriority | null
+  breakdown:     ScoreBreakdown
+  opportunities: LeadOpportunity[]
 }) {
   const [open, setOpen] = useState(false)
 
@@ -139,6 +141,22 @@ export function PriorityCard({ priority, breakdown }: {
         <>
           <FactRow label="A favor"   items={aFavor} />
           <FactRow label="En contra" items={enContra} negative />
+          {/* Una oportunidad NO es un punto a favor: no hace mejor a este lead,
+              abre otra operacion. Por eso va aparte y no suma al score. */}
+          {opportunities.map(o => (
+            <div key={o.key} style={{
+              marginTop: '12px', padding: '10px 12px', borderRadius: '8px',
+              background: 'color-mix(in srgb, var(--accent-green) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent-green) 22%, transparent)',
+            }}>
+              <div style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--accent-green)' }}>
+                {o.label}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.5 }}>
+                {o.hint}
+              </div>
+            </div>
+          ))}
         </>
       ) : (
         <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '10px', fontStyle: 'italic' }}>

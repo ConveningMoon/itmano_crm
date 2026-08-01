@@ -1,14 +1,15 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getAgentActionTypes } from '@/lib/scoring/agent-actions'
 
 // Cierra el loop del análisis de fit con IA: mide si SEGUIR la recomendación
 // correlaciona con que el lead avance en el embudo. Sin ML — correlación directa
 // sobre el log ai_briefings (069) más el estado actual del lead.
 //
 // "Siguió" = el agente registró una acción sobre el lead dentro de la ventana de
-// la premura del briefing (una acción manual, un correo one-off, una llamada o
-// consulta). "Avanzó" = el estado actual del lead está más adelante en el embudo
-// que el estado que tenía cuando se hizo el briefing.
+// la premura del briefing (una acción del panel manual, un correo one-off o un
+// cambio de etapa). "Avanzó" = la etapa actual del lead está más adelante en el
+// embudo que la que tenía cuando se hizo el briefing.
 
 export interface BriefingOutcomes {
   windowDays:          number
@@ -25,8 +26,10 @@ export interface BriefingOutcomes {
   followRate:          number | null // % de briefings donde el agente actuó
 }
 
-// Eventos que representan una ACCIÓN del agente sobre el lead (no automáticos).
-const FOLLOW_EVENT_TYPES = ['manual_email_sent', 'score_manual', 'phone_call', 'consultation_scheduled', 'consultation_attended']
+// Los tipos que cuentan como accion del agente se resuelven contra
+// lead_score_rules (ver scoring/agent-actions.ts). Antes eran una lista fija que
+// se quedo con los nombres de la migracion 009: la analitica daba por "no
+// seguido" todo lo que el agente registraba desde el panel manual.
 
 // Rango de la etapa en el embudo (mayor = más avanzado). 'perdido' es terminal
 // negativo. Se incluyen los valores del viejo leads.status porque
@@ -80,10 +83,12 @@ export async function getBriefingOutcomes(
     const leadIds = [...new Set(briefings.map(b => b.lead_id))]
     const earliest = briefings[0].created_at
 
+    const followTypes = await getAgentActionTypes(db, tenantId)
+
     const [{ data: leadsRaw }, { data: eventsRaw }] = await Promise.all([
       db.from('leads').select('id, stage').in('id', leadIds),
       db.from('lead_events').select('lead_id, created_at')
-        .in('lead_id', leadIds).in('type', FOLLOW_EVENT_TYPES).gte('created_at', earliest),
+        .in('lead_id', leadIds).in('type', followTypes).gte('created_at', earliest),
     ])
 
     const stageNow = new Map<string, string>()
