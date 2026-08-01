@@ -2,7 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { listSequences } from '@/lib/data/email-sequences'
-import { getLeadAnalyticsStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
+import { getLeadAnalyticsStats, getResponseTimeStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
+import { formatResponseTime, responseTimeTone } from '@/lib/leads/response-time'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { QUALITY_BANDS, QUALITY_CONFIG } from '@/lib/scoring/priority'
@@ -15,6 +16,15 @@ import { Users, Inbox, TrendingUp, Activity, GitBranch, Mail } from 'lucide-reac
 import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { Tabs } from '@/components/ui/tabs'
+
+// Colorea el tiempo, no lo puntua: responder en la primera hora es el estandar
+// que cita todo el sector, pero no entra en ningun score.
+const RESPONSE_TONE_COLOR: Record<string, string> = {
+  bueno:  'var(--accent-green)',
+  medio:  'var(--accent-gold)',
+  malo:   'var(--accent-coral)',
+  neutro: 'var(--text-muted)',
+}
 
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -50,8 +60,9 @@ export default async function AnalyticsPage() {
   // se ocultan para el rol 'agent').
   const agentsQ = supabase.from('agents').select('*')
 
-  const [stats, { data: rawAgents }, channels, sequences] = await Promise.all([
+  const [stats, responseTime, { data: rawAgents }, channels, sequences] = await Promise.all([
     getLeadAnalyticsStats(scope),
+    getResponseTimeStats(scope),
     tenant_id ? agentsQ.eq('tenant_id', tenant_id) : agentsQ,
     getChannelsWithMetrics(tenant_id, 30, scope.agentId),
     listSequences(tenant_id, scope.agentId),
@@ -365,6 +376,64 @@ export default async function AnalyticsPage() {
             ? {
                 agentes: (
             <>
+              {/* Tiempo de respuesta — la metrica operativa que faltaba. Mediana,
+                  no promedio: un solo lead contestado tres semanas tarde arrastra
+                  la media a un numero que no describe a nadie. */}
+              <div style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={CARD_HEADER}>Tiempo de Respuesta</div>
+                    <div style={CARD_SUBTITLE}>
+                      Cuanto se tarda en tocar un lead que llego solo. Los registrados a mano no cuentan: no hay nada que responder.
+                    </div>
+                  </div>
+                  {responseTime.respondidos > 0 && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '26px', fontWeight: 600, lineHeight: 1,
+                        color: RESPONSE_TONE_COLOR[responseTimeTone(responseTime.medianHours)],
+                      }}>
+                        {formatResponseTime(responseTime.medianHours)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        mediana de {responseTime.respondidos} respondidos
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {responseTime.total === 0 ? (
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '10px' }}>
+                    Todavia no han entrado leads por formulario en la ventana. La metrica empieza a contar en cuanto llegue el primero.
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {agents.map(agent => {
+                      const row = responseTime.byAgent.find(a => a.agentId === agent.id)
+                      if (!row || row.total === 0) return null
+                      return (
+                        <div key={agent.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{agent.name}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>
+                              {row.respondidos}/{row.total} respondidos
+                            </span>
+                            <strong style={{ color: RESPONSE_TONE_COLOR[responseTimeTone(row.medianHours)], minWidth: '52px', textAlign: 'right' }}>
+                              {formatResponseTime(row.medianHours)}
+                            </strong>
+                          </span>
+                        </div>
+                      )
+                    })}
+                    {responseTime.sinResponder > 0 && (
+                      <div style={{ fontSize: '11.5px', color: 'var(--accent-coral)', marginTop: '4px' }}>
+                        {responseTime.sinResponder} lead(s) sin una sola respuesta todavia.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div style={{ ...CARD, marginBottom: '24px' }}>
                 <div style={CARD_HEADER}>Leads por Agente</div>
                 <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
