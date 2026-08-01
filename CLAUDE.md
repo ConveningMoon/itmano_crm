@@ -312,6 +312,7 @@ npm run dev       # servidor de desarrollo
 npm run build     # build de producción — debe pasar antes de pushear
 npm run lint      # ESLint
 npx tsc --noEmit  # chequeo de tipos
+npm run types:db  # regenera src/lib/supabase/database.types.ts desde la BD
 ```
 
 Suites de tests (Vitest) — corre la que cubre lo que tocaste:
@@ -335,6 +336,24 @@ Si cambias el matcher de `src/proxy.ts`, actualiza `tests/auth/middleware-matche
 
 ---
 
+## Columnas de la base en el código
+
+**Tras cualquier migración que cambie columnas, corre `npm run types:db`.** Regenera `src/lib/supabase/database.types.ts`, que es el espejo del esquema real.
+
+**Toda lista de columnas de un `.select()` se arma con `columns()`** (`src/lib/supabase/columns.ts`), nunca con un string suelto:
+
+```ts
+const LIST_COLUMNS = columns('leads_list', ['id', 'stage', 'urgency_rank'])
+```
+
+Un nombre que no exista en esa tabla o vista es error de `tsc`, señalando el literal exacto.
+
+Por qué así y no tipando el cliente: `createClient<Database>` codifica el fallo en el **tipo del resultado** (`SelectQueryError<"column ... does not exist">`), así que sólo salta si ese resultado se asigna a algo tipado — y aquí casi todos los resultados se castean a `any` porque el cliente no está tipado. Se comprobó: con el cliente tipado, pedir una columna inexistente **compilaba igual**. `columns()` valida la lista como dato, un paso antes, y el cast posterior ya no puede esconder nada.
+
+Esto existe porque la migración 082 quitó `attention_when` de `leads_list`, el `.select()` siguió pidiéndola y `/leads` dejó de cargar en producción. Ni `tsc` ni los tests (que mockean el cliente) podían verlo.
+
+---
+
 ## Antes de tocar cada dominio
 
 | Si trabajas en… | Consulta primero |
@@ -347,6 +366,7 @@ Si cambias el matcher de `src/proxy.ts`, actualiza `tests/auth/middleware-matche
 | Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
 | Auth o el proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs de Supabase SSR |
 | Migraciones o RLS | La migración más reciente en `supabase/migrations/` |
+| Un `.select()` con lista de columnas | `columns()` de `src/lib/supabase/columns.ts` |
 | Routing, layouts, server actions | La guía de Next.js 16 en `node_modules/next/dist/docs/` |
 | Landing o páginas legales | `src/app/(marketing)/`, `src/components/motion/README.md` |
 | Un gráfico nuevo | Un gráfico existente en `analytics/charts/` |
