@@ -301,6 +301,11 @@ export interface LeadAnalyticsStats {
   closed: number
   /** Cartera viva: etapas nuevo + nutrición. Es lo que el agente puede trabajar. */
   active: number
+  /** Leads captados por ITMANO — los importados de otro CRM quedan fuera. Es el
+   *  par sobre el que se mide la conversión: incluirlos daba un 98% prestado. */
+  attributedTotal:  number
+  attributedClosed: number
+  imported: number
   thisMonth: { leads: number; highQuality: number }
   // Fuente compuesta en crudo: la etiqueta la resuelve getLeadSource().
   /** Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos:
@@ -333,6 +338,7 @@ export interface LeadAnalyticsStats {
 function emptyAnalytics(): LeadAnalyticsStats {
   return {
     total: 0, closed: 0, active: 0,
+    attributedTotal: 0, attributedClosed: 0, imported: 0,
     thisMonth: { leads: 0, highQuality: 0 },
     qualityDistribution: {}, byStage: {}, bySource: [], byAgent: [], monthly: [],
   }
@@ -359,6 +365,9 @@ export async function getLeadAnalyticsStats(
     total:  (raw.total  ?? 0) as number,
     closed: (raw.closed ?? 0) as number,
     active: (raw.active ?? 0) as number,
+    attributedTotal:  (raw.attributed_total  ?? 0) as number,
+    attributedClosed: (raw.attributed_closed ?? 0) as number,
+    imported:         (raw.imported ?? 0) as number,
     thisMonth: {
       leads:       (raw.this_month?.leads ?? 0) as number,
       highQuality: (raw.this_month?.high_quality ?? 0) as number,

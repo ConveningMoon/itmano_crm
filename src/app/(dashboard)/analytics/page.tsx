@@ -62,8 +62,11 @@ export default async function AnalyticsPage() {
   // ─── KPIs ───────────────────────────────────────────────────
   const totalLeads  = stats.total
   const activeLeads = stats.active
-  const closedLeads = stats.closed
-  const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
+  // La conversión se mide SÓLO sobre lo que captó ITMANO. Con los importados
+  // dentro, A&J mostraba un 98% que describía el trabajo hecho en otro CRM.
+  const conversionRate = stats.attributedTotal > 0
+    ? Math.round((stats.attributedClosed / stats.attributedTotal) * 100)
+    : 0
 
   // Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos: sin
   // ellos no se puede ver si los buenos leads terminan cerrando.
@@ -228,7 +231,9 @@ export default async function AnalyticsPage() {
     {
       label: 'Tasa de Conversión',
       value: `${conversionRate}%`,
-      sub: 'sobre el total de leads',
+      sub: stats.imported > 0
+        ? `sobre ${stats.attributedTotal} leads captados aquí`
+        : 'sobre el total de leads',
       tone: 'neutral',
       icon: <TrendingUp size={18} />,
       color: 'var(--accent-green)',

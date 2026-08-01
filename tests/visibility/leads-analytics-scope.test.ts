@@ -73,6 +73,9 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
       hot: 14,               // el RPC lo sigue devolviendo; el mapeo lo ignora
       closed: 9,
       active: 40,
+      attributed_total: 90,
+      attributed_closed: 3,
+      imported: 30,
       live_avg_score: 41,    // idem
       this_month: { leads: 7, hot: 2, high_quality: 3 },
       by_source: [
@@ -90,6 +93,10 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
     expect(stats.total).toBe(120)
     expect(stats.closed).toBe(9)
     expect(stats.active).toBe(40)
+    // El par de la conversión llega aparte: 3/90, no 9/120.
+    expect(stats.attributedTotal).toBe(90)
+    expect(stats.attributedClosed).toBe(3)
+    expect(stats.imported).toBe(30)
     expect(stats.thisMonth).toEqual({ leads: 7, highQuality: 3 })
     // avg_quality llega null en este fixture: el RPC lo omite cuando no hay
     // leads con calidad, y el mapeo debe respetarlo sin inventar un 0.
@@ -115,6 +122,7 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
 
     expect(stats).toEqual({
       total: 0, closed: 0, active: 0,
+      attributedTotal: 0, attributedClosed: 0, imported: 0,
       thisMonth: { leads: 0, highQuality: 0 },
       qualityDistribution: {}, byStage: {},
       bySource: [], byAgent: [], monthly: [],
