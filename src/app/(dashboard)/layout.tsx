@@ -62,8 +62,13 @@ export default async function DashboardLayout({
           rules in globals.css (a layered utility would lose to the unlayered
           `* { margin:0; padding:0 }` reset). ≥768px = 220px offset + 24px gutter
           (byte-identical to pre-responsive); <768px = no offset + 16px gutter. */}
+      {/* min-w-0 va en TODOS los anchos: por defecto un flex item usa
+          min-width:auto, así que el contenido ancho (el tablero kanban, la tabla
+          de leads) empujaba la página entera en vez de scrollear dentro de su
+          propio contenedor — y los botones Tabla/Kanban acababan fuera de
+          pantalla. Estaba puesto sólo en móvil. */}
       <div
-        className="app-shell-content max-md:min-w-0"
+        className="app-shell-content min-w-0"
         style={{
           flex: 1,
           display: 'flex',
