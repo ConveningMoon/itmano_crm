@@ -238,8 +238,15 @@ export async function getAttentionTodayCount(scope: VisibilityScope): Promise<nu
 export interface LeadDashboardStats {
   total:    number
   hot:      number
+  /** Cartera VIVA: etapas Nuevo y En Nutrición. Lo único que compite por la atención. */
+  active:   number
+  /** Calidad alta DENTRO de la cartera viva — un cerrado excelente ya no es trabajo. */
+  highQuality: number
+  urgentToday: number
+  closedThisMonth: number
   byStatus: Record<string, number>
-  byAgent:  Array<{ agentId: string; total: number; hot: number; closed: number }>
+  byStage:  Record<string, number>
+  byAgent:  Array<{ agentId: string; total: number; hot: number; highQuality: number; closed: number }>
 }
 
 // Conteos agregados en Postgres (RPC lead_dashboard_stats, migración 072). Antes
@@ -251,18 +258,29 @@ export async function getLeadDashboardStats(scope: VisibilityScope): Promise<Lea
     p_agent_id:  scope.agentId,
   })
 
-  if (error || !data) return { total: 0, hot: 0, byStatus: {}, byAgent: [] }
+  if (error || !data) {
+    return {
+      total: 0, hot: 0, active: 0, highQuality: 0, urgentToday: 0,
+      closedThisMonth: 0, byStatus: {}, byStage: {}, byAgent: [],
+    }
+  }
 
   const raw = data as any
   return {
-    total:    (raw.total ?? 0) as number,
-    hot:      (raw.hot   ?? 0) as number,
-    byStatus: (raw.by_status ?? {}) as Record<string, number>,
+    total:           (raw.total ?? 0) as number,
+    hot:             (raw.hot   ?? 0) as number,
+    active:          (raw.active ?? 0) as number,
+    highQuality:     (raw.high_quality ?? 0) as number,
+    urgentToday:     (raw.urgent_today ?? 0) as number,
+    closedThisMonth: (raw.closed_this_month ?? 0) as number,
+    byStatus:        (raw.by_status ?? {}) as Record<string, number>,
+    byStage:         (raw.by_stage  ?? {}) as Record<string, number>,
     byAgent:  ((raw.by_agent ?? []) as any[]).map(a => ({
-      agentId: a.agent_id as string,
-      total:   (a.total  ?? 0) as number,
-      hot:     (a.hot    ?? 0) as number,
-      closed:  (a.closed ?? 0) as number,
+      agentId:     a.agent_id as string,
+      total:       (a.total  ?? 0) as number,
+      hot:         (a.hot    ?? 0) as number,
+      highQuality: (a.high_quality ?? 0) as number,
+      closed:      (a.closed ?? 0) as number,
     })),
   }
 }
@@ -281,14 +299,22 @@ export interface LeadAnalyticsStats {
   liveAvgScore: number | null
   thisMonth: { leads: number; hot: number }
   // Fuente compuesta en crudo: la etiqueta la resuelve getLeadSource().
-  bySource: Array<{ channelType: string | null; trafficSource: string | null; total: number }>
+  /** Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos:
+   *  sin ellos no se ve si los buenos leads terminan cerrando. */
+  qualityDistribution: Record<string, number>
+  byStage: Record<string, number>
+  bySource: Array<{ channelType: string | null; trafficSource: string | null; total: number; avgQuality: number | null }>
   byAgent:  Array<{
-    agentId:  string
-    total:    number
-    hot:      number
-    closed:   number
-    avgScore: number
-    statuses: Record<string, number>
+    agentId:     string
+    total:       number
+    hot:         number
+    highQuality: number
+    closed:      number
+    avgScore:    number
+    /** Calidad media — a diferencia del score, no la mueve el paso del tiempo. */
+    avgQuality:  number
+    statuses:    Record<string, number>
+    stages:      Record<string, number>
   }>
   // Sólo los meses con leads, en clave 'YYYY-MM' (UTC). El eje completo lo arma
   // la página, que es quien conoce las etiquetas.
@@ -301,7 +327,7 @@ function emptyAnalytics(): LeadAnalyticsStats {
   return {
     total: 0, hot: 0, closed: 0, liveAvgScore: null,
     thisMonth: { leads: 0, hot: 0 },
-    bySource: [], byAgent: [], monthly: [],
+    qualityDistribution: {}, byStage: {}, bySource: [], byAgent: [], monthly: [],
   }
 }
 
@@ -331,10 +357,15 @@ export async function getLeadAnalyticsStats(
       leads: (raw.this_month?.leads ?? 0) as number,
       hot:   (raw.this_month?.hot   ?? 0) as number,
     },
+    qualityDistribution: (raw.quality_distribution ?? {}) as Record<string, number>,
+    byStage:             (raw.by_stage ?? {}) as Record<string, number>,
     bySource: ((raw.by_source ?? []) as any[]).map(s => ({
       channelType:   (s.channel_type   ?? null) as string | null,
       trafficSource: (s.traffic_source ?? null) as string | null,
       total:         (s.total ?? 0) as number,
+      // Calidad media del canal: responde "¿qué fuente trae MEJORES leads?", que
+      // hasta ahora no se podía saber — solo cuál traía más.
+      avgQuality:    (s.avg_quality ?? null) as number | null,
     })),
     byAgent: ((raw.by_agent ?? []) as any[]).map(a => ({
       agentId:  a.agent_id as string,
@@ -342,7 +373,10 @@ export async function getLeadAnalyticsStats(
       hot:      (a.hot       ?? 0) as number,
       closed:   (a.closed    ?? 0) as number,
       avgScore: (a.avg_score ?? 0) as number,
+      highQuality: (a.high_quality ?? 0) as number,
+      avgQuality:  (a.avg_quality  ?? 0) as number,
       statuses: (a.statuses  ?? {}) as Record<string, number>,
+      stages:   (a.stages    ?? {}) as Record<string, number>,
     })),
     monthly: ((raw.monthly ?? []) as any[]).map(m => ({
       month:     m.month as string,
@@ -446,6 +480,51 @@ export async function getLeadPriorityPosition(
     rank:        ((aheadRes.count ?? 0) as number) + 1,
     total:       (totalRes.count ?? 0) as number,
   }
+}
+
+export interface QueueLead {
+  id:          string
+  firstName:   string
+  lastName:    string
+  agentId:     string
+  qualityBand: QualityBand
+  urgency:     Urgency | null
+  channelName: string | null
+}
+
+/**
+ * La cola de hoy: los N primeros por PRIORIDAD dentro de la cartera activa.
+ *
+ * Es lo que reemplaza a "Leads Calientes" en el dashboard. Un lead caliente que
+ * ya está en proceso no es trabajo pendiente, y uno mediocre que acaba de
+ * responder sí — ordenar por score no distinguía ninguno de los dos casos.
+ *
+ * Mismo orden lexicográfico que la lista: urgencia, luego calidad. Se resuelve
+ * en Postgres con el índice, no ordenando en memoria.
+ */
+export async function getPriorityQueue(scope: VisibilityScope, limit = 6): Promise<QueueLead[]> {
+  const supabase = createAdminClient()
+  const { data } = await applyVisibilityScope(
+    supabase
+      .from('leads_list')
+      .select('id, first_name, last_name, agent_id, quality_band, urgency, urgency_rank, quality_score, acquisition_channels!acquisition_channel_id(name)'),
+    scope,
+  )
+    .in('stage', ACTIVE_STAGES as string[])
+    .order('urgency_rank',  { ascending: true })
+    .order('quality_score', { ascending: false, nullsFirst: false })
+    .order('id',            { ascending: false })
+    .limit(limit)
+
+  return ((data ?? []) as any[]).map(r => ({
+    id:          r.id as string,
+    firstName:   r.first_name as string,
+    lastName:    r.last_name as string,
+    agentId:     r.agent_id as string,
+    qualityBand: (r.quality_band ?? 'baja') as QualityBand,
+    urgency:     (r.urgency ?? null) as Urgency | null,
+    channelName: (r.acquisition_channels?.name ?? null) as string | null,
+  }))
 }
 
 // Los N leads más calientes del scope, resueltos por el índice

@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
-import { getLeadDashboardStats, getHotLeads } from '@/lib/data/leads'
-import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import { bandForScore } from '@/lib/scoring/temperature-band'
+import { getLeadDashboardStats, getPriorityQueue } from '@/lib/data/leads'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import { QUALITY_CONFIG, URGENCY_CONFIG } from '@/lib/scoring/priority'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
@@ -27,6 +27,15 @@ type AgentStat = {
   closed: number
 }
 
+// Hex (no var(--...)) porque las barras concatenan el alfa: '#RRGGBB' + 'CC'.
+const STAGE_COLORS: Record<string, string> = {
+  nuevo:      '#5B8EC9',
+  nutricion:  '#C9A96E',
+  en_proceso: '#9B72CF',
+  cerrado:    '#4A9B6B',
+  perdido:    '#C97B6B',
+}
+
 function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)
   const l = lastName.charAt(0)
@@ -43,10 +52,10 @@ export default async function DashboardPage() {
   // Los conteos se agregan en Postgres (RPC lead_dashboard_stats) y los leads
   // calientes salen por índice: el dashboard ya no trae la tabla de leads entera
   // para contarla en JS.
-  const [leadStats, hotLeads, { data: rawAgents }, recentActivity] = await Promise.all([
+  const [leadStats, queue, { data: rawAgents }, recentActivity] = await Promise.all([
     // Scope: tenant (owner/super) + agent_id (agent) — mismo criterio que scopeFor.
     getLeadDashboardStats(scope),
-    getHotLeads(scope, 6),
+    getPriorityQueue(scope, 6),
     tenant_id
       ? supabase.from('agents').select('*').eq('active', true).eq('tenant_id', tenant_id)
       : supabase.from('agents').select('*').eq('active', true),
@@ -56,36 +65,31 @@ export default async function DashboardPage() {
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
   const totalLeads = leadStats.total
-  const countOf = (status: string) => leadStats.byStatus[status] ?? 0
 
   const stats = {
-    total:     totalLeads,
-    hot:       leadStats.hot,
-    inProcess: countOf('process_started'),
-    closed:    countOf('closed') + countOf('process_completed'),
+    active:      leadStats.active,
+    highQuality: leadStats.highQuality,
+    urgentToday: leadStats.urgentToday,
+    closedMonth: leadStats.closedThisMonth,
   }
 
-  const statusCounts = {
-    new:               countOf('new'),
-    nurturing:         countOf('nurturing'),
-    warm:              countOf('warm'),
-    hot:               countOf('hot'),
-    process_started:   countOf('process_started'),
-    process_completed: countOf('process_completed'),
-    closed:            countOf('closed'),
-    lost:              countOf('lost'),
-  }
-
-  const mainStages = [
-    'new', 'nurturing', 'warm', 'hot', 'process_started', 'process_completed', 'closed',
-  ] as const
-
-  // `|| 1` evita dividir por cero en un tenant recién creado (todas las barras al mínimo).
-  const maxCount = Math.max(...mainStages.map(k => statusCounts[k])) || 1
-
-  function barHeight(count: number): number {
-    return Math.max(4, Math.round((count / maxCount) * 48))
-  }
+  // Embudo por ETAPA (4 columnas reales) en vez de barras por los 8 `status`.
+  // La tasa de paso entre etapas es lo que una agencia quiere saber de su
+  // operación y hoy no existía en ninguna pantalla.
+  const stageOf = (k: string) => leadStats.byStage[k] ?? 0
+  const funnel = [
+    { key: 'nuevo',      label: 'Nuevo',        count: stageOf('nuevo') },
+    { key: 'nutricion',  label: 'En Nutrición', count: stageOf('nutricion') },
+    { key: 'en_proceso', label: 'En proceso',   count: stageOf('en_proceso') },
+    { key: 'cerrado',    label: 'Cerrado',      count: stageOf('cerrado') },
+  ]
+  // Tasa de paso: qué fracción de los que ENTRARON a una etapa llegó a la
+  // siguiente. Se acumula hacia atrás porque un lead cerrado también pasó por
+  // nuevo — contar sólo los que están AHORA en cada etapa daría tasas absurdas.
+  const reachedFrom = funnel.map((_, i) =>
+    funnel.slice(i).reduce((sum, f) => sum + f.count, 0),
+  )
+  const funnelMax = Math.max(...reachedFrom, 1)
 
   const agentStats: AgentStat[] = agents.map(agent => {
     const row = leadStats.byAgent.find(a => a.agentId === agent.id)
@@ -101,40 +105,36 @@ export default async function DashboardPage() {
 
   const statCards = [
     {
-      label: 'Total Leads',
-      value: stats.total,
+      label: 'Cartera activa',
+      value: stats.active,
       icon: <Users size={16} />,
       iconColor: 'var(--accent-gold)',
       iconBg:    'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
-      desc: 'en el sistema',
+      desc: 'nuevos y en nutrición',
     },
     {
-      label: 'Leads Calientes',
-      value: stats.hot,
+      label: 'Calidad alta',
+      value: stats.highQuality,
       icon: <Flame size={16} />,
       iconColor: 'var(--status-hot)',
       iconBg:    'color-mix(in srgb, var(--status-hot) 12%, transparent)',
-      // La leyenda no cita un número: el umbral de la banda lo fija el motor de
-      // scoring y los puntos son ajustables por tenant, así que un literal aquí
-      // se vuelve mentira en cuanto alguien toca Ajustes → Scoring. Ya pasó: decía
-      // "≥ 70" mientras el contador contaba la banda (≥ 60).
-      desc: 'en la banda caliente',
+      desc: 'lo mejor de tu cartera',
     },
     {
-      label: 'En Proceso',
-      value: stats.inProcess,
+      label: 'Para hoy',
+      value: stats.urgentToday,
       icon: <ArrowRightCircle size={16} />,
-      iconColor: 'var(--status-process-started)',
-      iconBg:    'color-mix(in srgb, var(--status-process-started) 12%, transparent)',
-      desc: 'comprando actualmente',
+      iconColor: 'var(--accent-coral)',
+      iconBg:    'color-mix(in srgb, var(--accent-coral) 12%, transparent)',
+      desc: 'necesitan acción hoy',
     },
     {
       label: 'Cerrados',
-      value: stats.closed,
+      value: stats.closedMonth,
       icon: <CheckCircle2 size={16} />,
       iconColor: 'var(--accent-green)',
       iconBg:    'color-mix(in srgb, var(--accent-green) 12%, transparent)',
-      desc: 'este ciclo',
+      desc: 'este mes',
     },
   ]
 
@@ -191,7 +191,12 @@ export default async function DashboardPage() {
         marginBottom: '24px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Pipeline de Leads</span>
+          <div>
+            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Embudo</span>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Cuántos leads llegaron a cada etapa, y qué porcentaje pasó a la siguiente
+            </div>
+          </div>
           <span style={{
             fontSize: '11px', color: 'var(--accent-gold)',
             background: 'rgba(201,169,110,0.12)', padding: '2px 8px', borderRadius: '4px',
@@ -200,53 +205,62 @@ export default async function DashboardPage() {
           </span>
         </div>
 
-        {/* Pipeline is horizontal by nature — on phones the lane scrolls sideways
-            (max-md:) rather than breaking to a vertical list. Desktop unchanged. */}
+        {/* Cuatro etapas reales en vez de ocho `status`. Ahora sí es un embudo:
+            cada barra son los que LLEGARON a esa etapa (acumulado hacia atrás,
+            porque un cerrado también pasó por nuevo) y entre barras va la tasa
+            de paso — el número que una agencia quiere de su operación. */}
         <div className="max-md:overflow-x-auto" style={{ display: 'flex', alignItems: 'flex-end' }}>
-          {mainStages.map((key, idx) => {
-            const cfg = STATUS_CONFIG[key]
-            const count = statusCounts[key]
-            const h = barHeight(count)
+          {funnel.map((stage, idx) => {
+            const reached = reachedFrom[idx]
+            const h = Math.max(4, Math.round((reached / funnelMax) * 48))
+            const color = STAGE_COLORS[stage.key]
+            // Tasa de paso hacia la etapa siguiente.
+            const next = reachedFrom[idx + 1]
+            const rate = idx < funnel.length - 1 && reached > 0
+              ? Math.round((next / reached) * 100)
+              : null
             return (
-              <div key={key} style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '76px' }}>
-                  <span style={{ fontSize: '22px', fontWeight: 500, color: cfg.color, lineHeight: 1 }}>{count}</span>
-                  {/* La altura queda reservada por el div externo: cero layout shift */}
+              <div key={stage.key} style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '92px' }}>
+                  <span style={{ fontSize: '22px', fontWeight: 500, color, lineHeight: 1 }}>{reached}</span>
                   <GrowBar
                     axis="y"
                     delay={idx * 0.05}
-                    style={{ width: '100%', height: `${h}px`, background: cfg.color + 'CC', borderRadius: '4px' }}
+                    style={{ width: '100%', height: `${h}px`, background: color + 'CC', borderRadius: '4px' }}
                   />
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
-                    {cfg.label}
+                    {stage.label}
                   </span>
                 </div>
-                {idx < mainStages.length - 1 && (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '14px', margin: '0 2px', paddingBottom: '28px' }}>→</span>
+                {rate !== null && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0 4px', paddingBottom: '24px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>{rate}%</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>→</span>
+                  </div>
                 )}
               </div>
             )
           })}
 
-          {/* Lost — exit from flow */}
+          {/* Perdidos — salida del embudo, no una etapa más */}
           <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
             <span style={{ color: 'var(--border-subtle)', fontSize: '24px', paddingBottom: '28px', margin: '0 8px' }}>|</span>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '60px' }}>
-              <span style={{ fontSize: '22px', fontWeight: 500, color: STATUS_CONFIG.lost.color, lineHeight: 1 }}>
-                {statusCounts.lost}
+              <span style={{ fontSize: '22px', fontWeight: 500, color: STAGE_COLORS.perdido, lineHeight: 1 }}>
+                {stageOf('perdido')}
               </span>
               <GrowBar
                 axis="y"
-                delay={mainStages.length * 0.05}
+                delay={funnel.length * 0.05}
                 style={{
                   width: '100%',
-                  height: `${barHeight(statusCounts.lost)}px`,
-                  background: STATUS_CONFIG.lost.color + 'CC',
+                  height: `${Math.max(4, Math.round((stageOf('perdido') / funnelMax) * 48))}px`,
+                  background: STAGE_COLORS.perdido + 'CC',
                   borderRadius: '4px',
                 }}
               />
               <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
-                {STATUS_CONFIG.lost.label}
+                Perdido
               </span>
             </div>
           </div>
@@ -256,35 +270,44 @@ export default async function DashboardPage() {
       {/* ── BLOQUE 3: Hot Leads + Actividad ── */}
       <FadeIn delay={0.1} className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
 
-        {/* Leads Calientes */}
+        {/* Tu cola de hoy — reemplaza "Leads Calientes". Un lead caliente que ya
+            está en proceso no es trabajo pendiente, y uno mediocre que acaba de
+            responder sí; ordenar por score no distinguía ninguno de los dos. */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Leads Calientes</span>
-              <span style={{ fontSize: '10px', color: 'var(--status-hot)', background: 'color-mix(in srgb, var(--status-hot) 12%, transparent)', padding: '1px 6px', borderRadius: '4px' }}>
-                {hotLeads.length}
+              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Tu cola de hoy</span>
+              <span style={{ fontSize: '10px', color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)', padding: '1px 6px', borderRadius: '4px' }}>
+                {queue.length}
               </span>
             </div>
-            <span style={{ fontSize: '12px', color: 'var(--accent-gold)', cursor: 'pointer' }}>Ver todos →</span>
+            <Link href="/leads?sort=prioridad" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
+              Ver todos →
+            </Link>
           </div>
 
           <div>
-            {hotLeads.map(lead => {
-              const agent  = agents.find(a => a.id === lead.agentId)
-              const channelName = lead.channelName ?? '—'
+            {queue.length === 0 && (
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px' }}>
+                No hay leads activos en tu cartera.
+              </div>
+            )}
+            {queue.map(lead => {
+              const agent    = agents.find(a => a.id === lead.agentId)
               const initials = getInitials(lead.firstName, lead.lastName)
-              const tempColor = bandForScore(lead.score ?? 0).color
-              const filled = Math.round((lead.score ?? 0) / 10)
-              const cfg = STATUS_CONFIG[lead.status]
-              const agentBg = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
+              const agentBg  = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
+              const q        = QUALITY_CONFIG[lead.qualityBand]
 
               return (
-                <div
+                <Link
                   key={lead.id}
+                  href={`/leads/${lead.id}`}
                   className="row-hover"
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'default' }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '10px 12px', borderRadius: '8px', textDecoration: 'none',
+                  }}
                 >
-                  {/* Avatar */}
                   <div style={{
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: agentBg,
@@ -295,40 +318,35 @@ export default async function DashboardPage() {
                     {initials}
                   </div>
 
-                  {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {lead.firstName} {lead.lastName}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {agent?.name ?? '—'} · {channelName}
+                      {agent?.name ?? '—'} · {lead.channelName ?? '—'}
                     </div>
                   </div>
 
-                  {/* Temperature bar + score */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', gap: '2px' }}>
-                      {Array.from({ length: 10 }, (_, i) => (
-                        <div key={i} style={{
-                          width: '6px', height: '6px', borderRadius: '2px',
-                          background: i < filled ? tempColor : 'var(--bg-overlay)',
-                        }} />
-                      ))}
-                    </div>
-                    <span style={{ fontSize: '13px', color: tempColor, fontWeight: 500, width: '26px', textAlign: 'right' }}>
-                      {lead.score ?? '—'}
+                  {/* Urgencia — sólo cuando hay algo que hacer */}
+                  {lead.urgency && lead.urgency !== 'sin_apuro' && (
+                    <span style={{
+                      fontSize: '10px', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
+                      color: URGENCY_CONFIG[lead.urgency].color,
+                      background: `color-mix(in srgb, ${URGENCY_CONFIG[lead.urgency].color} 14%, transparent)`,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {URGENCY_CONFIG[lead.urgency].label}
                     </span>
-                  </div>
+                  )}
 
-                  {/* Status badge */}
-                  <div style={{
-                    fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
-                    background: cfg.bgColor, color: cfg.color,
-                    flexShrink: 0, whiteSpace: 'nowrap',
+                  <span style={{
+                    fontSize: '10px', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
+                    color: q.color, background: `color-mix(in srgb, ${q.color} 14%, transparent)`,
+                    whiteSpace: 'nowrap',
                   }}>
-                    {cfg.label}
-                  </div>
-                </div>
+                    {q.label}
+                  </span>
+                </Link>
               )
             })}
           </div>
