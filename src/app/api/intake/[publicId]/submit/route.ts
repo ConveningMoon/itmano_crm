@@ -170,7 +170,7 @@ export async function POST(
 
   const { data: existingLead } = await db
     .from('leads')
-    .select('id, status, first_name, last_name, phone, language, fit_profile, metadata')
+    .select('id, stage, first_name, last_name, phone, language, fit_profile, metadata')
     .eq('tenant_id', tenantId)
     .eq('email', parsed.email)
     .maybeSingle()
@@ -226,7 +226,7 @@ export async function POST(
       email:                parsed.email,
       phone:                parsed.phone ?? null,
       language:             parsed.language,
-      status:               'new',
+      stage:                'nuevo',
       acquisition_channel_id: channelId,
       traffic_source:       resolveTrafficSource(utms),
       traffic_source_detail: Object.keys(utms).length > 0 ? utms : null,
@@ -409,7 +409,7 @@ export async function POST(
   // ── FASE 3: recompute score from fit_profile + events (idempotent) ────────────
   // Engagement-event inserts above already trigger recompute, but this final call
   // also covers fit-only submissions (no event fired) and guarantees a consistent end
-  // state. recompute_lead_score is a no-op for frozen (post-funnel) leads.
+  // state. Desde la 082 recompute_lead_score ya no se salta ningun lead.
   const { error: recomputeErr } = await db.rpc('recompute_lead_score', { p_lead_id: leadId })
   if (recomputeErr) {
     console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'recompute_failed', detail: recomputeErr.message }))

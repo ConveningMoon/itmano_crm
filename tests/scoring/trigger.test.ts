@@ -36,7 +36,7 @@ async function freshLead(overrides: Record<string, unknown> = {}) {
     last_name: 'TestLead',
     email: 'score-test@test.invalid',
     language: 'es',
-    status: 'new',
+    stage: 'nuevo',
     current_score: 0,
     peak_score: 0,
     fit_profile: {},
@@ -64,7 +64,7 @@ async function recompute() {
 async function getLead() {
   const { data } = await adminClient
     .from('leads')
-    .select('fit_score, engagement_score, manual_score, current_score, peak_score, status, last_event_at')
+    .select('fit_score, engagement_score, manual_score, current_score, peak_score, quality_score, stage, last_event_at')
     .eq('id', SCORING_LEAD_ID)
     .single()
   return data!
@@ -92,27 +92,27 @@ describe('Scoring engine: three components', () => {
     const lead = await getLead()
     expect(lead.fit_score).toBe(25)        // cash, counted once (not 50)
     expect(lead.current_score).toBe(25)
-    expect(lead.status).toBe('nurturing')
+    // La etapa NO la mueve el scoring (migracion 082): sigue donde la dejo el agente.
+    expect(lead.stage).toBe('nuevo')
   })
 
-  it('engagement event promotes via trigger and writes status_history (source trigger)', async () => {
+  it('un evento de engagement puntua pero NO mueve la etapa', async () => {
+    // Antes esto "promovia" el lead de new a nurturing y escribia una fila de
+    // historial. Ese ascenso automatico era el choque que obligo a inventar el
+    // congelado: el trigger pisaba la etapa que ponia el agente.
     await freshLead()
     const { error } = await insertEvent('contact_us_question')   // +20 engagement
     expect(error).toBeNull()
     const lead = await getLead()
     expect(lead.engagement_score).toBe(20)
     expect(lead.current_score).toBe(20)
-    expect(lead.status).toBe('nurturing')
+    expect(lead.stage).toBe('nuevo')
 
     const { data } = await adminClient
       .from('lead_status_history')
       .select('from_status, to_status, source')
       .eq('lead_id', SCORING_LEAD_ID)
-      .order('changed_at', { ascending: false })
-      .limit(1)
-    expect(data![0].from_status).toBe('new')
-    expect(data![0].to_status).toBe('nurturing')
-    expect(data![0].source).toBe('trigger')
+    expect(data).toHaveLength(0)
   })
 
   it('engagement accumulates across events', async () => {
@@ -155,7 +155,7 @@ describe('Scoring engine: three components', () => {
     await recompute()   // fit 80
     let lead = await getLead()
     expect(lead.current_score).toBe(80)
-    expect(lead.status).toBe('hot')
+    expect(lead.stage).toBe('nuevo')
 
     await recompute()   // second pass — must not double-notify
     lead = await getLead()
@@ -178,20 +178,22 @@ describe('Scoring engine: three components', () => {
     expect(lead.peak_score).toBe(80)
   })
 
-  it('manual_disqualify forces score 0 / status lost', async () => {
+  // force_perdido es la UNICA excepcion a "la etapa es del agente": una queja de
+  // spam o una descalificacion son hechos, no una opinion que se pueda discutir.
+  it('manual_disqualify fuerza score 0 y etapa perdido', async () => {
     await freshLead({ fit_profile: { financing: 'cash' } })
     await insertEvent('manual_disqualify')
     const lead = await getLead()
     expect(lead.current_score).toBe(0)
-    expect(lead.status).toBe('lost')
+    expect(lead.stage).toBe('perdido')
   })
 
-  it('email_spam_complaint forces score 0 / status lost', async () => {
+  it('email_spam_complaint fuerza score 0 y etapa perdido', async () => {
     await freshLead({ fit_profile: { financing: 'cash', budget_tier: 'premium' } })
     await insertEvent('email_spam_complaint')
     const lead = await getLead()
     expect(lead.current_score).toBe(0)
-    expect(lead.status).toBe('lost')
+    expect(lead.stage).toBe('perdido')
   })
 
   it('dedup guard rejects a duplicate dedup_key', async () => {
@@ -201,12 +203,24 @@ describe('Scoring engine: three components', () => {
     expect(error).not.toBeNull()
   })
 
-  it('frozen lead (process_started) is not scored', async () => {
-    await freshLead({ status: 'process_started', current_score: 60, peak_score: 60 })
-    await insertEvent('contact_us_question')
+  it('un lead en proceso SI se sigue midiendo', async () => {
+    // Lo contrario de lo que hacia el congelado. Sin esto, "calidad media por
+    // fuente" ignoraba justo los leads que llegaron mas lejos.
+    await freshLead({ stage: 'en_proceso', current_score: 0, peak_score: 0 })
+    await insertEvent('contact_us_question')   // +20
     const lead = await getLead()
-    expect(lead.current_score).toBe(60)
-    expect(lead.status).toBe('process_started')
+    expect(lead.current_score).toBe(20)
+    expect(lead.quality_score).toBe(20)
+    // Y la etapa sigue siendo la que puso el agente.
+    expect(lead.stage).toBe('en_proceso')
+  })
+
+  it('un lead cerrado tampoco deja de medirse', async () => {
+    await freshLead({ stage: 'cerrado', fit_profile: { financing: 'cash' } })
+    await recompute()
+    const lead = await getLead()
+    expect(lead.quality_score).toBe(25)
+    expect(lead.stage).toBe('cerrado')
   })
 
   it('event without a matching rule is a no-op for score', async () => {
@@ -227,7 +241,6 @@ describe('Scoring engine: three components', () => {
     const lead = await getLead()
     expect(lead.engagement_score).toBe(20)
     expect(lead.current_score).toBe(20)
-    expect(lead.status).toBe('nurturing')
   })
 
   it('form_baseline + event_submission = 30 (no fit)', async () => {
@@ -237,6 +250,5 @@ describe('Scoring engine: three components', () => {
     const lead = await getLead()
     expect(lead.engagement_score).toBe(30)
     expect(lead.current_score).toBe(30)
-    expect(lead.status).toBe('nurturing')
   })
 })

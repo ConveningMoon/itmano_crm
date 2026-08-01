@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import { STAGE_CONFIG, type Stage } from '@/lib/scoring/priority'
+import type { Lead, Agent, LeadEvent, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
-import { updateLeadStatus, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
+import { updateLeadStage, completePurchaseProcess, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
 import {
   ArrowLeft, MoreHorizontal, X, Trash2,
   Mail, XCircle,
@@ -137,7 +138,7 @@ interface LeadDetailProps {
 export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, priority, emailSending, aiFit }: LeadDetailProps) {
   const router = useRouter()
 
-  const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
+  const [currentStage, setCurrentStage] = useState<Stage>(lead.stage)
   const [notes, setNotes]                 = useState(lead.notes ?? '')
   const [savedNotes, setSavedNotes]       = useState(lead.notes ?? '')
   const [showProcessModal, setShowProcessModal] = useState(false)
@@ -179,14 +180,16 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   }
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server-prop to local state after router.refresh()
-  useEffect(() => { setCurrentStatus(lead.status) }, [lead.status])
+  useEffect(() => { setCurrentStage(lead.stage) }, [lead.stage])
 
   const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
   const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
   const langCfg    = LANGUAGE_CONFIG[lead.language]
   const initials  = getInitials(lead.firstName, lead.lastName)
 
-  const isProcessActive = currentStatus === 'process_started' || currentStatus === 'process_completed'
+  // El proceso de compra sigue vivo mientras no se haya marcado completado. Su
+  // estado ya no se deduce de la etapa del lead: vive en purchase_processes.
+  const isProcessActive = currentStage === 'en_proceso' || purchaseProcess?.completedAt != null
 
   const infoRows: { label: string; value: string; copy?: string }[] = [
     { label: 'Nombre',      value: `${lead.firstName} ${lead.lastName}` },
@@ -242,11 +245,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 <span style={{
                   display: 'inline-flex', alignItems: 'center',
                   padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
-                  background: STATUS_CONFIG[currentStatus].bgColor,
-                  color:      STATUS_CONFIG[currentStatus].color,
-                  border:     `1px solid ${STATUS_CONFIG[currentStatus].color}40`,
+                  background: STAGE_CONFIG[currentStage].bg,
+                  color:      STAGE_CONFIG[currentStage].color,
+                  border:     `1px solid color-mix(in srgb, ${STAGE_CONFIG[currentStage].color} 40%, transparent)`,
                 }}>
-                  {STATUS_CONFIG[currentStatus].label}
+                  {STAGE_CONFIG[currentStage].label}
                 </span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -392,15 +395,15 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               {isProcessActive && (
                 <span style={{
                   fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-                  background: STATUS_CONFIG[currentStatus].bgColor,
-                  color: STATUS_CONFIG[currentStatus].color,
+                  background: STAGE_CONFIG[currentStage].bg,
+                  color: STAGE_CONFIG[currentStage].color,
                 }}>
-                  {STATUS_CONFIG[currentStatus].label}
+                  {STAGE_CONFIG[currentStage].label}
                 </span>
               )}
             </div>
 
-            {(currentStatus === 'closed' || currentStatus === 'lost') && (
+            {(currentStage === 'cerrado' || currentStage === 'perdido') && (
               <div style={{
                 marginBottom: '12px', padding: '8px 12px', borderRadius: '6px',
                 background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
@@ -410,8 +413,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </div>
             )}
             <div style={{
-              opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
-              pointerEvents: currentStatus === 'closed' || currentStatus === 'lost' ? 'none' : 'auto',
+              opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
+              pointerEvents: currentStage === 'cerrado' || currentStage === 'perdido' ? 'none' : 'auto',
             }}>
               {isProcessActive ? (
                 <>
@@ -433,13 +436,13 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                     </div>
                   ))}
 
-                  {currentStatus === 'process_started' && (
+                  {currentStage === 'en_proceso' && (
                     <button
                       onClick={() => {
                         startTransition(async () => {
                           setActionError(null)
-                          const res = await updateLeadStatus(lead.id, 'process_completed')
-                          if (res.ok) setCurrentStatus('process_completed')
+                          const res = await completePurchaseProcess(lead.id)
+                          if (res.ok) setCurrentStage('cerrado')
                           else setActionError(res.error)
                         })
                       }}
@@ -551,8 +554,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                       setConfirmClose(false)
                       startTransition(async () => {
                         setActionError(null)
-                        const res = await updateLeadStatus(lead.id, 'closed')
-                        if (res.ok) setCurrentStatus('closed')
+                        const res = await updateLeadStage(lead.id, 'cerrado')
+                        if (res.ok) setCurrentStage('cerrado')
                         else setActionError(res.error)
                       })
                     }}
@@ -578,12 +581,12 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               ) : (
                 <button
                   onClick={() => setConfirmClose(true)}
-                  disabled={currentStatus === 'closed' || currentStatus === 'lost'}
+                  disabled={currentStage === 'cerrado' || currentStage === 'perdido'}
                   className="action-btn"
                   style={{
                     ...ACTION_BTN_STYLE,
-                    opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
-                    cursor: currentStatus === 'closed' || currentStatus === 'lost' ? 'not-allowed' : 'pointer',
+                    opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
+                    cursor: currentStage === 'cerrado' || currentStage === 'perdido' ? 'not-allowed' : 'pointer',
                   }}
                 >
                   <XCircle size={14} style={{ color: '#4A9B6B' }} /> Marcar como Cerrado
@@ -598,8 +601,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                       setConfirmLost(false)
                       startTransition(async () => {
                         setActionError(null)
-                        const res = await updateLeadStatus(lead.id, 'lost')
-                        if (res.ok) setCurrentStatus('lost')
+                        const res = await updateLeadStage(lead.id, 'perdido')
+                        if (res.ok) setCurrentStage('perdido')
                         else setActionError(res.error)
                       })
                     }}
@@ -625,12 +628,12 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               ) : (
                 <button
                   onClick={() => setConfirmLost(true)}
-                  disabled={currentStatus === 'closed' || currentStatus === 'lost'}
+                  disabled={currentStage === 'cerrado' || currentStage === 'perdido'}
                   className="action-btn"
                   style={{
                     ...ACTION_BTN_STYLE, color: 'rgba(201,123,107,0.7)',
-                    opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
-                    cursor: currentStatus === 'closed' || currentStatus === 'lost' ? 'not-allowed' : 'pointer',
+                    opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
+                    cursor: currentStage === 'cerrado' || currentStage === 'perdido' ? 'not-allowed' : 'pointer',
                   }}
                 >
                   <XCircle size={14} /> Marcar como Perdido
@@ -648,7 +651,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       {/* ── Manual actions panel ── */}
       <ManualActionsPanel
         leadId={lead.id}
-        currentStatus={currentStatus}
+        currentStage={currentStage}
         actions={manualActions}
       />
 

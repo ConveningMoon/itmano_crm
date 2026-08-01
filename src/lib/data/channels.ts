@@ -35,7 +35,7 @@ export interface ChannelLead {
   firstName: string
   lastName: string
   email: string
-  status: string
+  stage: string
   temperatureScore: number | null
   trafficSource: string | null
   createdAt: string
@@ -174,7 +174,7 @@ export async function getChannelLeads(
 
   const { data, error } = await supabase
     .from('leads')
-    .select('id, first_name, last_name, email, status, current_score, traffic_source, created_at')
+    .select('id, first_name, last_name, email, stage, current_score, traffic_source, created_at')
     .eq('tenant_id', tenantId)
     .eq('acquisition_channel_id', channelId)
     .order('created_at', { ascending: false })
@@ -187,7 +187,7 @@ export async function getChannelLeads(
     firstName:        r.first_name,
     lastName:         r.last_name,
     email:            r.email,
-    status:           r.status,
+    stage:            r.stage,
     temperatureScore: r.current_score,
     trafficSource:    r.traffic_source,
     createdAt:        r.created_at,

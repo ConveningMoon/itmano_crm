@@ -1,6 +1,6 @@
 import { channelTypesForKind, trafficSourcesForKind } from './source'
-import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
-import type { Language, LeadStatus } from '@/lib/types'
+import { STAGES, type Stage, type QualityBand, type Urgency } from '@/lib/scoring/priority'
+import type { Language } from '@/lib/types'
 
 // Contrato de la lista de leads: tipos, parseo de searchParams y traducción del
 // filtro de fuente a condiciones sobre columnas.
@@ -29,12 +29,11 @@ export interface LeadListItem {
   email:                string
   phone:                string | null
   language:             Language
-  status:               LeadStatus
   score:                number | null
   attentionWhen:        'hoy' | 'esta_semana' | 'sin_apuro' | null
-  // Los tres ejes del rediseno (migracion 076). `null` solo en filas heredadas
-  // que aun no pasaron por el trigger.
-  stage:                Stage | null
+  // Los tres ejes del rediseño. `stage` es columna propia desde la 082, así que
+  // ya no puede venir nula.
+  stage:                Stage
   qualityBand:          QualityBand | null
   qualityScore:         number | null
   urgency:              Urgency | null
@@ -45,7 +44,7 @@ export interface LeadListItem {
 export interface LeadListFilters {
   q:         string
   agentId:   string  // 'all' | agents.id
-  status:    string  // 'all' | LeadStatus
+  stage:     string  // 'all' | Stage
   source:    string  // 'all' | kind de getLeadSource
   channelId: string  // 'all' | acquisition_channels.id
   language:  string  // 'all' | es | en | pt
@@ -79,16 +78,11 @@ export interface LeadsListData {
   totalPages:          number
 }
 
-// Columnas del kanban → estados que agrupa cada una. Compartido con la UI para
-// que el conteo del servidor y las tarjetas no puedan divergir.
-export const KANBAN_COLUMN_STATUSES: Record<string, LeadStatus[]> = {
-  new:             ['new'],
-  nurturing:       ['nurturing'],
-  warm:            ['warm'],
-  hot:             ['hot'],
-  process_started: ['process_started'],
-  finished:        ['closed', 'process_completed', 'lost'],
-}
+// Columnas del kanban: una por etapa, en orden del embudo. Antes eran seis
+// columnas donde cuatro (nuevo/nurturing/tibio/caliente) eran en realidad
+// bandas de temperatura del MISMO punto del embudo — arrastrar una tarjeta
+// entre ellas no significaba nada porque las movía el trigger, no el agente.
+export const KANBAN_COLUMNS: readonly Stage[] = STAGES
 
 // ─── searchParams → filtros ───────────────────────────────────────────────────
 
@@ -109,7 +103,9 @@ export function parseLeadListFilters(params: RawParams): LeadListFilters {
   return {
     q:         (one(params.q) ?? '').trim(),
     agentId:   one(params.agent)     || 'all',
-    status:    one(params.status)    || 'all',
+    // `status` se acepta como alias para que los enlaces guardados de antes de
+    // la 082 sigan abriendo la lista en vez de caer en un filtro vacío.
+    stage:     one(params.stage) || one(params.status) || 'all',
     source:    one(params.source)    || 'all',
     channelId: one(params.channelId) || 'all',
     language:  one(params.lang)      || 'all',
@@ -126,7 +122,7 @@ export function leadListFiltersToQuery(filters: LeadListFilters): string {
   const p = new URLSearchParams()
   if (filters.q)                         p.set('q',         filters.q)
   if (filters.agentId   !== 'all')       p.set('agent',     filters.agentId)
-  if (filters.status    !== 'all')       p.set('status',    filters.status)
+  if (filters.stage     !== 'all')       p.set('stage',     filters.stage)
   if (filters.source    !== 'all')       p.set('source',    filters.source)
   if (filters.channelId !== 'all')       p.set('channelId', filters.channelId)
   if (filters.language  !== 'all')       p.set('lang',      filters.language)
@@ -140,7 +136,7 @@ export function leadListFiltersToQuery(filters: LeadListFilters): string {
 export function hasActiveLeadFilters(f: LeadListFilters): boolean {
   return f.q !== '' ||
     f.agentId   !== 'all' ||
-    f.status    !== 'all' ||
+    f.stage     !== 'all' ||
     f.source    !== 'all' ||
     f.channelId !== 'all' ||
     f.language  !== 'all' ||

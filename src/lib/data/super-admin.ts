@@ -8,13 +8,13 @@ import { getTenantsWithOwners, type TenantWithOwner } from './tenants'
 export interface PlatformKpis {
   tenants: number
   totalLeads: number
-  hotLeads: number
+  highQualityLeads: number
   newLeads30d: number
 }
 
 export interface TenantOverview extends TenantWithOwner {
   totalLeads: number
-  hotLeads: number
+  highQualityLeads: number
   newLeads30d: number
   // max(created_at) de lead_events del tenant, o null si nunca hubo actividad
   lastActivityAt: string | null
@@ -23,7 +23,7 @@ export interface TenantOverview extends TenantWithOwner {
 // Fila que devuelve tenant_hub_stats por cada tenant con datos.
 interface HubAgg {
   total:            number
-  hot:              number
+  high_quality:     number
   new30d:           number
   last_activity_at: string | null
 }
@@ -38,8 +38,8 @@ const VENTANA_DIAS = 30
  * en memoria, más una query de última actividad por tenant: con veinte clientes
  * de a miles de leads, cada carga del hub habría arrastrado todo por la red.
  *
- * "Caliente" = status 'hot', el mismo criterio que el dashboard, /analytics y la
- * banda del pipeline.
+ * "Calidad alta" = la banda del modelo, el mismo criterio que el dashboard y
+ * /analytics. Antes contaba status 'hot', una banda que ya no existe.
  */
 export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: TenantOverview[] }> {
   const supabase = createAdminClient()
@@ -58,7 +58,7 @@ export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: Tenan
     return {
       ...t,
       totalLeads:     agg?.total  ?? 0,
-      hotLeads:       agg?.hot    ?? 0,
+      highQualityLeads: agg?.high_quality ?? 0,
       newLeads30d:    agg?.new30d ?? 0,
       lastActivityAt: agg?.last_activity_at ?? null,
     }
@@ -67,7 +67,7 @@ export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: Tenan
   const kpis: PlatformKpis = {
     tenants: tenants.length,
     totalLeads: tenants.reduce((s, t) => s + t.totalLeads, 0),
-    hotLeads: tenants.reduce((s, t) => s + t.hotLeads, 0),
+    highQualityLeads: tenants.reduce((s, t) => s + t.highQualityLeads, 0),
     newLeads30d: tenants.reduce((s, t) => s + t.newLeads30d, 0),
   }
 

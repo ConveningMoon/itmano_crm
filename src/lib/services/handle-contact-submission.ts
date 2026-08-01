@@ -113,7 +113,7 @@ export async function handleContactSubmission(
       email,
       phone,
       language,
-      status:                 'new',
+      stage:                  'nuevo',
       acquisition_channel_id: channel.id,
       // traffic_source is the *arrival* source (constrained set), not the channel
       // type. A contact submission has no UTM context → 'direct'.

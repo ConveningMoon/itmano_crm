@@ -118,7 +118,7 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     // Lead + intent + estado + scoring actual.
     const { data: leadRow } = await db
       .from('leads')
-      .select('id, first_name, last_name, email, phone, language, status, agent_id, fit_profile, metadata, fit_score, engagement_score, manual_score, current_score')
+      .select('id, first_name, last_name, email, phone, language, stage, agent_id, fit_profile, metadata, fit_score, engagement_score, manual_score, current_score')
       .eq('id', input.leadId)
       .maybeSingle()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,7 +127,9 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     // Los estados post-funnel están congelados: recompute no cambia su score,
     // pero igual analizamos y guardamos el razonamiento (el usuario pidió que
     // TODA acción del lead se analice).
-    const frozen = ['process_started', 'process_completed', 'closed', 'lost'].includes(lead.status as string)
+    // Ya no hay congelado (migracion 082); lo que importa para el briefing es si
+    // el lead sigue en la cartera viva o ya salió del embudo.
+    const outOfFunnel = !['nuevo', 'nutricion'].includes(lead.stage as string)
 
     const intent = (lead.metadata?.intent as string | undefined) ?? null
     const dims: Dimension[] = intent === 'sell' ? SELL_DIMS : BUY_DIMS
@@ -186,7 +188,7 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
       agentName ? `Agente asignado: ${agentName}.${agentDesc ? ' ' + agentDesc : ''}` : null,
       '',
       `Lead: ${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() + '.',
-      `Estado actual: ${lead.status}${frozen ? ' (congelado / post-embudo)' : ''}. Idioma: ${lead.language ?? 'es'}.${lead.phone ? ' Tiene teléfono.' : ' Sin teléfono.'}`,
+      `Etapa actual: ${lead.stage}${outOfFunnel ? ' (fuera del embudo activo)' : ''}. Idioma: ${lead.language ?? 'es'}.${lead.phone ? ' Tiene teléfono.' : ' Sin teléfono.'}`,
       intent ? `Intención declarada: ${intent}.` : null,
       `Scoring actual — total ${lead.current_score ?? 0}/100 (fit ${lead.fit_score ?? 0}, engagement ${lead.engagement_score ?? 0}, manual ${lead.manual_score ?? 0}).`,
       '',
@@ -276,7 +278,8 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
       next_action:      briefing.nextAction || null,
       talking_points:   briefing.talkingPoints,
       watch_out:        briefing.watchOut || null,
-      status_at:        (lead.status as string | null) ?? null,
+      // La columna conserva su nombre; lo que guarda ahora es la ETAPA.
+      status_at:        (lead.stage as string | null) ?? null,
       score_at:         (lead.current_score as number | null) ?? null,
     })
     if (logErr) {

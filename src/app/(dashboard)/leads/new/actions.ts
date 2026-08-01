@@ -62,7 +62,7 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
     email:                 input.email,
     phone:                 input.phone,
     language:              input.language,
-    status:                'new',
+    stage:                 'nuevo',
     current_score:         0,
     peak_score:            0,
     lender:                input.lender,
@@ -128,7 +128,7 @@ export interface BulkLeadInput {
   email:     string
   phone:     string | null
   language:  Language
-  status:    'new' | 'closed'
+  stage:     'nuevo' | 'cerrado'
   lender:    string | null
   notes:     string | null
 }
@@ -192,7 +192,7 @@ export async function createLeadsBulk(
       email:                 input.email.trim(),
       phone:                 input.phone,
       language:              input.language,
-      status:                input.status,
+      stage:                 input.stage,
       current_score:         0,
       peak_score:            0,
       lender:                input.lender,
@@ -203,7 +203,7 @@ export async function createLeadsBulk(
     return { ok: true, result: { inserted: 0, skippedExisting } }
   }
 
-  const { data: inserted, error } = await supabase.from('leads').insert(rows).select('id, status')
+  const { data: inserted, error } = await supabase.from('leads').insert(rows).select('id, stage')
   if (error) return { ok: false, error: error.message }
 
   // Lifecycle log (one per lead) attributed to the importer.
@@ -221,8 +221,8 @@ export async function createLeadsBulk(
   // Canonical scoring. 'closed' leads are frozen (recompute early-returns); only
   // 'new' leads need it, and with no events they resolve to 0 — applied for
   // correctness/consistency with the model. No enrollment is triggered.
-  for (const r of (inserted ?? []) as { id: string; status: string }[]) {
-    if (r.status === 'new') {
+  for (const r of (inserted ?? []) as { id: string; stage: string }[]) {
+    if (r.stage === 'nuevo') {
       await supabase.rpc('recompute_lead_score', { p_lead_id: r.id })
     }
   }

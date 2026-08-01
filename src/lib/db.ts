@@ -29,10 +29,11 @@ export interface LeadRow {
   email: string
   phone: string | null
   language: string
-  status: string
+  stage: string
   temperature_score: number | null
   peak_score: number | null
   current_score: number | null
+  quality_score: number | null
   fit_score: number | null
   engagement_score: number | null
   manual_score: number | null
@@ -78,6 +79,7 @@ export interface PurchaseProcessRow {
   loan_type: string
   closing_date: string | null
   notes: string | null
+  completed_at: string | null
   created_at: string
 }
 
@@ -112,12 +114,13 @@ export function mapLead(r: LeadRow): Lead {
     email: r.email,
     phone: r.phone ?? undefined,
     language: r.language as Lead['language'],
-    status: r.status as Lead['status'],
+    stage: r.stage as Lead['stage'],
     // current_score is the canonical engine score; temperatureScore (legacy column,
     // no longer written) is repointed to it so all UI surfaces show the real score.
     temperatureScore: r.current_score ?? null,
     peakScore: r.peak_score ?? null,
     currentScore: r.current_score ?? null,
+    qualityScore: r.quality_score ?? null,
     fitScore: r.fit_score ?? null,
     engagementScore: r.engagement_score ?? null,
     manualScore: r.manual_score ?? null,
@@ -145,6 +148,7 @@ export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
     loanType: r.loan_type,
     closingDate: r.closing_date ?? undefined,
     notes: r.notes ?? undefined,
+    completedAt: r.completed_at ?? null,
     createdAt: r.created_at,
   }
 }

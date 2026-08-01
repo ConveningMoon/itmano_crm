@@ -16,13 +16,19 @@
 export const STAGES = ['nuevo', 'nutricion', 'en_proceso', 'cerrado', 'perdido'] as const
 export type Stage = typeof STAGES[number]
 
-export const STAGE_CONFIG: Record<Stage, { label: string; color: string }> = {
-  nuevo:      { label: 'Nuevo',        color: 'var(--status-new)' },
-  nutricion:  { label: 'En Nutrición', color: 'var(--status-nurturing)' },
-  en_proceso: { label: 'En proceso',   color: 'var(--status-process-started)' },
-  cerrado:    { label: 'Cerrado',      color: 'var(--status-closed)' },
-  perdido:    { label: 'Perdido',      color: 'var(--status-lost)' },
+// `bg` se deriva del color con color-mix en vez de guardar un rgba() aparte:
+// así el fondo del badge no puede quedar desfasado del color del texto.
+export const STAGE_CONFIG: Record<Stage, { label: string; color: string; bg: string }> = {
+  nuevo:      { label: 'Nuevo',        color: 'var(--status-new)',             bg: 'color-mix(in srgb, var(--status-new) 12%, transparent)' },
+  nutricion:  { label: 'En Nutrición', color: 'var(--status-nurturing)',       bg: 'color-mix(in srgb, var(--status-nurturing) 12%, transparent)' },
+  en_proceso: { label: 'En proceso',   color: 'var(--status-process-started)', bg: 'color-mix(in srgb, var(--status-process-started) 12%, transparent)' },
+  cerrado:    { label: 'Cerrado',      color: 'var(--status-closed)',          bg: 'color-mix(in srgb, var(--status-closed) 12%, transparent)' },
+  perdido:    { label: 'Perdido',      color: 'var(--status-lost)',            bg: 'color-mix(in srgb, var(--status-lost) 12%, transparent)' },
 }
+
+/** Opciones del filtro de etapa en /leads, en orden del embudo. */
+export const STAGE_FILTER_OPTIONS: { value: Stage; label: string }[] =
+  STAGES.map(s => ({ value: s, label: STAGE_CONFIG[s].label }))
 
 /** Etapas que siguen compitiendo por la atención del agente. */
 export const ACTIVE_STAGES: Stage[] = ['nuevo', 'nutricion']

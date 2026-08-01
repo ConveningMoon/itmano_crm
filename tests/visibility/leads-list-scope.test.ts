@@ -44,7 +44,7 @@ const OWNER: VisibilityScope = { tenantId: 'tenant-aj', agentId: null }
 const AGENT: VisibilityScope = { tenantId: 'tenant-aj', agentId: 'agent-dylan' }
 
 const BASE: LeadListFilters = {
-  q: '', agentId: 'all', status: 'all', source: 'all', channelId: 'all',
+  q: '', agentId: 'all', stage: 'all', source: 'all', channelId: 'all',
   language: 'all', quality: 'all', sort: 'recientes', view: 'table', page: 1,
 }
 
@@ -139,11 +139,11 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
     }
   })
 
-  it('el filtro de estado va a la query, no a un .filter() en JS', async () => {
-    await getLeadsListData(OWNER, { ...BASE, status: 'hot' }, CHANNELS)
+  it('el filtro de etapa va a la query, no a un .filter() en JS', async () => {
+    await getLeadsListData(OWNER, { ...BASE, stage: 'cerrado' }, CHANNELS)
 
     for (const q of queries.slice(0, 2)) {
-      expect(eqCalls(q)).toContainEqual(['status', 'hot'])
+      expect(eqCalls(q)).toContainEqual(['stage', 'cerrado'])
     }
   })
 
@@ -181,27 +181,33 @@ describe('getLeadsListData — kanban', () => {
     mockCount = 7
     const data = await getLeadsListData(OWNER, { ...BASE, view: 'kanban' }, CHANNELS)
 
-    const columnQueries = queries.filter(q => callsOf(q, 'in').length > 0)
-    expect(columnQueries).toHaveLength(6)
+    // Una columna por etapa (5), cada una filtrando por .eq('stage', ...).
+    const columnQueries = queries.filter(q =>
+      eqCalls(q).some(([col]) => col === 'stage'),
+    )
+    expect(columnQueries).toHaveLength(5)
 
-    const finished = columnQueries.find(q => {
-      const statuses = callsOf(q, 'in')[0].args[1] as string[]
-      return statuses.includes('closed')
-    })
-    expect(finished).toBeDefined()
-    expect(callsOf(finished!, 'in')[0].args[1]).toEqual(['closed', 'process_completed', 'lost'])
-    expect(callsOf(finished!, 'limit')[0].args).toEqual([50])
-    expect(eqCalls(finished!)).toContainEqual(['tenant_id', 'tenant-aj'])
+    const cerrado = columnQueries.find(q =>
+      eqCalls(q).some(([col, val]) => col === 'stage' && val === 'cerrado'),
+    )
+    expect(cerrado).toBeDefined()
+    expect(callsOf(cerrado!, 'limit')[0].args).toEqual([50])
+    expect(eqCalls(cerrado!)).toContainEqual(['tenant_id', 'tenant-aj'])
 
-    expect(data.kanban).toHaveLength(6)
+    expect(data.kanban).toHaveLength(5)
     expect(data.kanban?.every(c => c.total === 7)).toBe(true)
   })
 
-  it('un filtro de estado deja vacías las columnas que no lo contienen', async () => {
-    const data = await getLeadsListData(OWNER, { ...BASE, view: 'kanban', status: 'hot' }, CHANNELS)
+  it('un filtro de etapa deja vacías las demás columnas', async () => {
+    const data = await getLeadsListData(OWNER, { ...BASE, view: 'kanban', stage: 'cerrado' }, CHANNELS)
 
-    // Sólo la columna 'hot' consulta; el resto se resuelve sin ir a la base.
-    expect(queries.filter(q => callsOf(q, 'in').length > 0)).toHaveLength(1)
-    expect(data.kanban?.filter(c => c.key !== 'hot').every(c => c.total === 0 && c.items.length === 0)).toBe(true)
+    // Sólo la columna 'cerrado' consulta; el resto se resuelve sin ir a la base.
+    // Se identifican por el .limit() del tope de tarjetas: los dos conteos de la
+    // cabecera también filtran por etapa, pero no paginan.
+    const columnQueries = queries.filter(q =>
+      eqCalls(q).some(([col]) => col === 'stage') && callsOf(q, 'limit').length > 0,
+    )
+    expect(columnQueries).toHaveLength(1)
+    expect(data.kanban?.filter(c => c.key !== 'cerrado').every(c => c.total === 0 && c.items.length === 0)).toBe(true)
   })
 })

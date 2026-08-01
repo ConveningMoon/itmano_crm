@@ -15,10 +15,10 @@ describe('parseLeadRows — column recognition', () => {
     const rows = [{ Nombre: 'Ana', Apellido: 'Ruiz', Correo: 'ana@x.com', 'Teléfono': '123', Idioma: 'es', Estatus: 'Nuevo', Prestamista: 'NFCU', Notas: 'hola' }]
     const r = parseLeadRows(rows, headers)
     expect(Object.keys(r.recognizedColumns).sort()).toEqual(
-      ['email', 'firstName', 'language', 'lastName', 'lender', 'notes', 'phone', 'status'].sort()
+      ['email', 'firstName', 'language', 'lastName', 'lender', 'notes', 'phone', 'stage'].sort()
     )
     expect(r.ignoredColumns).toEqual([])
-    expect(r.rows[0]).toMatchObject({ firstName: 'Ana', lastName: 'Ruiz', email: 'ana@x.com', phone: '123', language: 'es', status: 'new', lender: 'NFCU', notes: 'hola' })
+    expect(r.rows[0]).toMatchObject({ firstName: 'Ana', lastName: 'Ruiz', email: 'ana@x.com', phone: '123', language: 'es', stage: 'nuevo', lender: 'NFCU', notes: 'hola' })
   })
 
   it('reports unrecognized columns as ignored', () => {
@@ -41,8 +41,8 @@ describe('parseLeadRows — status mapping', () => {
       [{ email: 'a@b.com', estatus: 'nuevo' }, { email: 'c@d.com', estatus: 'CERRADO' }],
       headers,
     )
-    expect(r.rows.map(x => x.status)).toEqual(['new', 'closed'])
-    expect(r.statusDefaulted).toBe(0)
+    expect(r.rows.map(x => x.stage)).toEqual(['nuevo', 'cerrado'])
+    expect(r.stageDefaulted).toBe(0)
   })
 
   it('defaults missing/invalid status to closed and counts it', () => {
@@ -50,8 +50,8 @@ describe('parseLeadRows — status mapping', () => {
       [{ email: 'a@b.com', estatus: '' }, { email: 'c@d.com', estatus: 'pendiente' }, { email: 'e@f.com' } as Record<string, string>],
       headers,
     )
-    expect(r.rows.every(x => x.status === 'closed')).toBe(true)
-    expect(r.statusDefaulted).toBe(3)
+    expect(r.rows.every(x => x.stage === 'cerrado')).toBe(true)
+    expect(r.stageDefaulted).toBe(3)
   })
 })
 
