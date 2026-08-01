@@ -7,6 +7,7 @@ import {
   type LeadSortMode, type LeadsListData,
 } from '@/lib/leads/list-filters'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
+import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Language, LeadStatus } from '@/lib/types'
 
 // Acceso a datos de la lista de leads. Todo el filtrado, la búsqueda, el orden y
@@ -363,9 +364,19 @@ export interface HotLead {
 // ─── Posición dentro de la cartera activa ─────────────────────────────────────
 
 export interface LeadPriorityPosition {
+  stage:       Stage
+  qualityBand: QualityBand
+  urgency:     Urgency | null
   /** 1-based dentro de la cartera activa del scope. */
-  rank:  number
-  total: number
+  rank:        number
+  total:       number
+}
+
+/** Los tres ejes de un lead que NO está en la cola (etapa post-embudo). */
+export interface LeadAxesOnly {
+  stage:       Stage
+  qualityBand: QualityBand
+  urgency:     null
 }
 
 /**
@@ -386,13 +397,31 @@ export async function getLeadPriorityPosition(
   const supabase = createAdminClient()
 
   const { data: row } = await applyVisibilityScope(
-    supabase.from('leads_list').select('stage, urgency_rank, quality_score').eq('id', leadId),
+    supabase.from('leads_list')
+      .select('stage, quality_band, urgency, urgency_rank, quality_score')
+      .eq('id', leadId),
     scope,
   ).maybeSingle()
   if (!row) return null
 
-  const lead = row as { stage: string | null; urgency_rank: number; quality_score: number | null }
-  if (!lead.stage || !(ACTIVE_STAGES as string[]).includes(lead.stage)) return null
+  const lead = row as {
+    stage: Stage | null; quality_band: QualityBand | null
+    urgency: Urgency | null; urgency_rank: number; quality_score: number | null
+  }
+  if (!lead.stage) return null
+
+  // Fuera de la cola (En proceso / Cerrado / Perdido): se devuelven los ejes pero
+  // sin posición. Un lead que el agente ya sacó del embudo no compite por la
+  // atención del día, y darle un puesto en la cola sería mentir.
+  if (!(ACTIVE_STAGES as string[]).includes(lead.stage)) {
+    return {
+      stage:       lead.stage,
+      qualityBand: lead.quality_band ?? 'baja',
+      urgency:     null,
+      rank:        0,
+      total:       0,
+    }
+  }
 
   const activeOnly = (q: any) =>
     applyVisibilityScope(q, scope).in('stage', ACTIVE_STAGES as string[])
@@ -408,8 +437,11 @@ export async function getLeadPriorityPosition(
   ])
 
   return {
-    rank:  ((aheadRes.count ?? 0) as number) + 1,
-    total: (totalRes.count ?? 0) as number,
+    stage:       lead.stage,
+    qualityBand: lead.quality_band ?? 'baja',
+    urgency:     lead.urgency,
+    rank:        ((aheadRes.count ?? 0) as number) + 1,
+    total:       (totalRes.count ?? 0) as number,
   }
 }
 
