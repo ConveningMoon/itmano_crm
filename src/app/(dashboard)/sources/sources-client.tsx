@@ -176,8 +176,10 @@ function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
+        {/* El parámetro es `channelId`: con `channel` la lista lo ignoraba y el
+            enlace abría /leads sin filtrar, sin ninguna señal de que fallara. */}
         <Link
-          href={`/leads?channel=${ch.id}`}
+          href={`/leads?channelId=${ch.id}`}
           onClick={e => e.stopPropagation()}
           style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}
         >
