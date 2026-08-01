@@ -204,7 +204,7 @@ interface LeadsClientProps {
   kanban:   KanbanColumn[] | null
   total:               number
   highQualityCount:    number
-  attentionTodayCount: number
+  urgentTodayCount:    number
   page:                number
   totalPages:          number
   filters:             LeadListFilters
@@ -230,7 +230,7 @@ function TodayChip() {
 }
 
 export function LeadsClient({
-  leads, kanban, total, highQualityCount, attentionTodayCount, page, totalPages,
+  leads, kanban, total, highQualityCount, urgentTodayCount, page, totalPages,
   filters, agents, channels, viewerRole, viewerAgentId,
 }: LeadsClientProps) {
   const router = useRouter()
@@ -443,7 +443,7 @@ export function LeadsClient({
         <div>
           <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Leads</div>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {total} leads · {highQualityCount} de calidad alta{attentionTodayCount > 0 ? ` · ${attentionTodayCount} para hoy` : ''}
+            {total} leads · {highQualityCount} de calidad alta{urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}
           </div>
         </div>
 
@@ -804,7 +804,7 @@ export function LeadsClient({
                               <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
                                 {lead.firstName} {lead.lastName}
                               </span>
-                              {lead.attentionWhen === 'hoy' && <TodayChip />}
+                              {lead.urgency === 'hoy' && <TodayChip />}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lead.email}</div>
                           </div>
@@ -985,7 +985,7 @@ export function LeadsClient({
                               {lead.firstName} {lead.lastName}
                             </div>
                           </div>
-                          {lead.attentionWhen === 'hoy' && <TodayChip />}
+                          {lead.urgency === 'hoy' && <TodayChip />}
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
                             {formatDate(lead.createdAt)}
                           </span>

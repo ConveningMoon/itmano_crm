@@ -19,10 +19,10 @@ describe('parseLeadListFilters', () => {
   it('lee cada filtro de la URL', () => {
     expect(parseLeadListFilters({
       q: '  juan ', agent: 'agent-dylan', stage: 'nutricion', source: 'lead_magnet',
-      channelId: 'ch-1', lang: 'es', sort: 'atencion', view: 'kanban', page: '3',
+      channelId: 'ch-1', lang: 'es', sort: 'prioridad', view: 'kanban', page: '3',
     })).toEqual({
       q: 'juan', agentId: 'agent-dylan', stage: 'nutricion', source: 'lead_magnet',
-      channelId: 'ch-1', language: 'es', quality: 'all', sort: 'atencion', view: 'kanban', page: 3,
+      channelId: 'ch-1', language: 'es', quality: 'all', sort: 'prioridad', view: 'kanban', page: 3,
     })
   })
 
@@ -51,7 +51,7 @@ describe('leadListFiltersToQuery', () => {
   it('parse ∘ toQuery es ida y vuelta', () => {
     const filters: LeadListFilters = {
       q: 'ana', agentId: 'agent-adriana', stage: 'nutricion', source: 'event',
-      channelId: 'ch-9', language: 'pt', quality: 'all', sort: 'atencion', view: 'kanban', page: 5,
+      channelId: 'ch-9', language: 'pt', quality: 'all', sort: 'prioridad', view: 'kanban', page: 5,
     }
     const params = Object.fromEntries(new URLSearchParams(leadListFiltersToQuery(filters)))
     expect(parseLeadListFilters(params)).toEqual(filters)
@@ -60,7 +60,7 @@ describe('leadListFiltersToQuery', () => {
 
 describe('hasActiveLeadFilters', () => {
   it('el orden y la vista no cuentan como filtro activo', () => {
-    expect(hasActiveLeadFilters({ ...DEFAULTS, sort: 'atencion', view: 'kanban', page: 4 })).toBe(false)
+    expect(hasActiveLeadFilters({ ...DEFAULTS, sort: 'prioridad', view: 'kanban', page: 4 })).toBe(false)
   })
 
   it('cualquier filtro real cuenta', () => {

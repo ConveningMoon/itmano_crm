@@ -167,12 +167,31 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
     expect(queries.length).toBe(1)
   })
 
-  it('el orden "atención" ordena en la base, no en el cliente', async () => {
-    await getLeadsListData(OWNER, { ...BASE, sort: 'atencion' }, CHANNELS)
+  it('el orden "prioridad" ordena en la base, no en el cliente', async () => {
+    await getLeadsListData(OWNER, { ...BASE, sort: 'prioridad' }, CHANNELS)
 
     const orders = queries.flatMap(q => callsOf(q, 'order')).map(c => c.args[0] as string)
-    expect(orders).toContain('attention_rank')
-    expect(orders).toContain('current_score')
+    expect(orders).toContain('urgency_rank')
+    expect(orders).toContain('quality_score')
+  })
+
+  it('sólo pide columnas que la vista expone de verdad', async () => {
+    // El fallo que esto habría atrapado: la 082 quitó attention_when de
+    // leads_list y el select siguió pidiéndola, asi que /leads dejó de cargar.
+    // tsc no ve nombres de columnas SQL y el resto de tests mockea el cliente.
+    await getLeadsListData(OWNER, BASE, CHANNELS)
+
+    const cols = queries
+      .flatMap(q => callsOf(q, 'select'))
+      .map(c => c.args[0] as string)
+      .filter(c => c && c !== 'id')
+      .flatMap(c => c.split(',').map(x => x.trim()))
+    const EXPUESTAS = new Set([
+      'id', 'agent_id', 'acquisition_channel_id', 'traffic_source', 'first_name',
+      'last_name', 'email', 'phone', 'language', 'current_score', 'created_at',
+      'stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score',
+    ])
+    for (const c of cols) expect(EXPUESTAS.has(c)).toBe(true)
   })
 })
 
