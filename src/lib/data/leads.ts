@@ -6,6 +6,7 @@ import {
   type ChannelRef, type KanbanColumn, type LeadListFilters, type LeadListItem,
   type LeadSortMode, type LeadsListData,
 } from '@/lib/leads/list-filters'
+import { columns } from '@/lib/supabase/columns'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
 import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Language } from '@/lib/types'
@@ -18,12 +19,16 @@ import type { Language } from '@/lib/types'
 // `stage`, `quality_band` y `urgency` ya resueltos, lo que permite ordenar por
 // premura en el servidor sin mandar la columna `metadata` completa al cliente.
 
-const LIST_COLUMNS =
-  'id, agent_id, acquisition_channel_id, traffic_source, first_name, last_name, ' +
-  'email, phone, language, current_score, created_at, ' +
+// Verificadas contra el esquema generado: pedir una columna que la vista no
+// expone es error de tsc, no una pagina en blanco en produccion.
+const LIST_COLUMNS = columns('leads_list', [
+  'id', 'agent_id', 'acquisition_channel_id', 'traffic_source',
+  'first_name', 'last_name', 'email', 'phone', 'language',
+  'current_score', 'created_at',
   // Los tres ejes. `stage` es columna propia desde la 082; calidad y urgencia
   // las sigue resolviendo la vista.
-  'stage, quality_band, urgency, urgency_rank, quality_score'
+  'stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score',
+])
 
 // reason: el cliente de Supabase no está tipado con el esquema generado
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -423,13 +428,16 @@ export async function getLeadPriorityPosition(
 
   const { data: row } = await applyVisibilityScope(
     supabase.from('leads_list')
-      .select('stage, quality_band, urgency, urgency_rank, quality_score')
+      .select(columns('leads_list', ['stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score']))
       .eq('id', leadId),
     scope,
   ).maybeSingle()
   if (!row) return null
 
-  const lead = row as {
+  // `as unknown` primero: con la lista de columnas armada por `columns()` el
+  // cliente sin tipar no puede inferir la fila y la da por GenericStringError.
+  // La garantía real está en la lista, que sí se valida contra el esquema.
+  const lead = row as unknown as {
     stage: Stage | null; quality_band: QualityBand | null
     urgency: Urgency | null; urgency_rank: number; quality_score: number | null
   }
@@ -495,7 +503,12 @@ export async function getPriorityQueue(scope: VisibilityScope, limit = 6): Promi
   const { data } = await applyVisibilityScope(
     supabase
       .from('leads_list')
-      .select('id, first_name, last_name, agent_id, quality_band, urgency, urgency_rank, quality_score, acquisition_channels!acquisition_channel_id(name)'),
+      // El embed del canal va aparte: `columns` valida columnas propias de la
+      // relacion, no joins de PostgREST.
+      .select(columns('leads_list', [
+        'id', 'first_name', 'last_name', 'agent_id',
+        'quality_band', 'urgency', 'urgency_rank', 'quality_score',
+      ]) + ', acquisition_channels!acquisition_channel_id(name)'),
     scope,
   )
     .in('stage', ACTIVE_STAGES as string[])

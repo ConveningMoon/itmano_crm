@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,7 +175,10 @@ export async function getChannelLeads(
 
   const { data, error } = await supabase
     .from('leads')
-    .select('id, first_name, last_name, email, stage, current_score, traffic_source, created_at')
+    .select(columns('leads', [
+      'id', 'first_name', 'last_name', 'email', 'stage',
+      'current_score', 'traffic_source', 'created_at',
+    ]))
     .eq('tenant_id', tenantId)
     .eq('acquisition_channel_id', channelId)
     .order('created_at', { ascending: false })

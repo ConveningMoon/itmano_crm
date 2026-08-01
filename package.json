@@ -17,7 +17,8 @@
     "test:ai-limits": "vitest run tests/ai-limits",
     "test:carousels": "vitest run tests/carousels",
     "test:billing": "vitest run tests/billing",
-    "test:sources": "vitest run tests/sources"
+    "test:sources": "vitest run tests/sources",
+    "types:db": "supabase gen types typescript --project-id kvmjlrvlnhiarrqxulkr > src/lib/supabase/database.types.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
