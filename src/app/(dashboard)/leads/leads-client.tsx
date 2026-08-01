@@ -11,7 +11,8 @@ import {
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import { bandForScore } from '@/lib/scoring/temperature-band'
+import { QUALITY_BANDS, QUALITY_CONFIG, URGENCY_CONFIG } from '@/lib/scoring/priority'
+import type { QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Agent, LeadStatus } from '@/lib/types'
 import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/list-filters'
 import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
@@ -48,7 +49,6 @@ function formatDate(dateStr: string): string {
 
 // Las bandas (y sus colores) viven en scoring/temperature-band: mismo corte que
 // usa el trigger para asignar el estado, así el color nunca contradice al badge.
-const tempColor = (score: number) => bandForScore(score).color
 
 function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)
@@ -58,23 +58,25 @@ function getInitials(firstName: string, lastName: string): string {
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
-function TempBar({ score, segments = 8 }: { score: number; segments?: number }) {
-  const color = tempColor(score)
-  const filled = Math.round((score / 100) * segments)
+// Calidad + urgencia en una celda. Reemplaza la barra de temperatura: el score
+// numerico mezclaba los dos ejes y por eso un lead excelente que se quedaba
+// callado "bajaba". Aqui la calidad no se mueve; lo que cambia es la urgencia.
+function QualityCell({ band, urgency }: {
+  band: QualityBand | null
+  urgency: Urgency | null
+}) {
+  if (!band) return <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
+  const q = QUALITY_CONFIG[band]
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <div style={{ display: 'flex', gap: '2px' }}>
-        {Array.from({ length: segments }, (_, i) => (
-          <div
-            key={i}
-            style={{
-              width: '5px', height: '5px', borderRadius: '1px',
-              background: i < filled ? color : 'var(--bg-overlay)',
-            }}
-          />
-        ))}
-      </div>
-      <span style={{ fontSize: '12px', color, fontWeight: 500, minWidth: '22px' }}>{score}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+      <span style={{ fontSize: '12px', color: q.color, fontWeight: 500, whiteSpace: 'nowrap' }}>
+        {q.label}
+      </span>
+      {urgency && urgency !== 'sin_apuro' && (
+        <span style={{ fontSize: '10.5px', color: URGENCY_CONFIG[urgency].color, whiteSpace: 'nowrap' }}>
+          {URGENCY_CONFIG[urgency].label}
+        </span>
+      )}
     </div>
   )
 }
@@ -197,7 +199,7 @@ interface LeadsClientProps {
   // Columnas ya agrupadas por el servidor (vista kanban); null en vista tabla.
   kanban:   KanbanColumn[] | null
   total:               number
-  hotCount:            number
+  highQualityCount:    number
   attentionTodayCount: number
   page:                number
   totalPages:          number
@@ -224,7 +226,7 @@ function TodayChip() {
 }
 
 export function LeadsClient({
-  leads, kanban, total, hotCount, attentionTodayCount, page, totalPages,
+  leads, kanban, total, highQualityCount, attentionTodayCount, page, totalPages,
   filters, agents, channels, viewerRole, viewerAgentId,
 }: LeadsClientProps) {
   const router = useRouter()
@@ -377,6 +379,12 @@ export function LeadsClient({
     { value: 'all', label: 'Todas las fuentes' },
     ...LEAD_SOURCE_FILTER_OPTIONS,
   ]
+  // Las bandas salen del vocabulario compartido: si algún día cambian, el filtro
+  // no puede quedarse atrás.
+  const qualityOptions = [
+    { value: 'all', label: 'Toda la calidad' },
+    ...QUALITY_BANDS.map(b => ({ value: b, label: QUALITY_CONFIG[b].label })),
+  ]
   const languageOptions = [
     { value: 'all', label: 'Todos los idiomas' },
     { value: 'es',  label: '🇪🇸 Español' },
@@ -406,6 +414,10 @@ export function LeadsClient({
     const opt = languageOptions.find(o => o.value === filters.language)
     if (opt) activeChips.push({ label: opt.label, onRemove: () => pushFilters({ language: 'all' }) })
   }
+  if (filters.quality !== 'all') {
+    const opt = qualityOptions.find(o => o.value === filters.quality)
+    if (opt) activeChips.push({ label: `Calidad ${opt.label.toLowerCase()}`, onRemove: () => pushFilters({ quality: 'all' }) })
+  }
   if (filters.q !== '') {
     activeChips.push({ label: `"${filters.q}"`, onRemove: () => pushFilters({ q: '' }) })
   }
@@ -427,18 +439,20 @@ export function LeadsClient({
         <div>
           <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Leads</div>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {total} leads · {hotCount} calientes{attentionTodayCount > 0 ? ` · ${attentionTodayCount} para hoy` : ''}
+            {total} leads · {highQualityCount} de calidad alta{attentionTodayCount > 0 ? ` · ${attentionTodayCount} para hoy` : ''}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         {/* Sort: recientes / atención */}
         <div style={{ display: 'flex', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-          {([['recientes', 'Recientes'], ['atencion', 'Atención']] as const).map(([v, label], i) => (
+          {([['recientes', 'Recientes'], ['prioridad', 'Prioridad']] as const).map(([v, label], i) => (
             <button
               key={v}
               onClick={() => pushFilters({ sort: v })}
-              title={v === 'atencion' ? 'Ordena por premura de la próxima acción (no por temperatura)' : 'Orden por fecha de registro'}
+              title={v === 'prioridad'
+                ? 'Primero lo que caduca, y dentro de eso lo de mejor calidad'
+                : 'Orden por fecha de registro'}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 height: '32px', padding: '0 14px', justifyContent: 'center',
@@ -448,7 +462,7 @@ export function LeadsClient({
                 color: filters.sort === v ? 'var(--text-primary)' : 'var(--text-muted)',
               }}
             >
-              {v === 'atencion' && <Clock size={14} />}{label}
+              {v === 'prioridad' && <Clock size={14} />}{label}
             </button>
           ))}
         </div>
@@ -610,6 +624,10 @@ export function LeadsClient({
               </div>
             )}
             <div>
+              <label style={FILTER_LABEL}>Calidad</label>
+              <FilterSelect value={filters.quality} onChange={v => pushFilters({ quality: v })} options={qualityOptions} fullWidth />
+            </div>
+            <div>
               <label style={FILTER_LABEL}>Idioma</label>
               <FilterSelect value={filters.language} onChange={v => pushFilters({ language: v })} options={languageOptions} fullWidth />
             </div>
@@ -711,7 +729,7 @@ export function LeadsClient({
                     {allPagedSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                   </button>
                 </th>
-                {['Lead', 'Agente', 'Estado', 'Fuente', 'Temperatura', 'Idioma', 'Fecha'].map(h => (
+                {['Lead', 'Agente', 'Estado', 'Fuente', 'Calidad', 'Idioma', 'Fecha'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -817,9 +835,9 @@ export function LeadsClient({
                           </div>
                         </div>
                       </td>
-                      {/* Temperatura */}
+                      {/* Calidad + urgencia */}
                       <td style={{ padding: '12px 16px', width: '120px' }}>
-                        <TempBar score={lead.score ?? 0} segments={8} />
+                        <QualityCell band={lead.qualityBand} urgency={lead.urgency} />
                       </td>
                       {/* Idioma */}
                       <td style={{ padding: '12px 16px', width: '80px' }}>
@@ -972,9 +990,11 @@ export function LeadsClient({
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                           {agent?.name.split(' ')[0] ?? '—'}
                         </div>
-                        {/* Row 3: temp bar */}
+                        {/* Row 3: calidad + urgencia — mismo criterio que la tabla,
+                            para que las dos vistas no digan cosas distintas del
+                            mismo lead. */}
                         <div style={{ marginBottom: '6px' }}>
-                          <TempBar score={lead.score ?? 0} segments={6} />
+                          <QualityCell band={lead.qualityBand} urgency={lead.urgency} />
                         </div>
                         {/* Row 4: language + channel type */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

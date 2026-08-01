@@ -65,7 +65,8 @@ const BTN_PRIMARY: React.CSSProperties = {
 // ─── Vocabulary labels (display only — never editable) ──────────────────────────
 
 const FIT_DIMENSION_ORDER = [
-  'timeline', 'financing', 'budget_tier', 'agent_status', 'sell_motivation', 'listing_status',
+  'timeline', 'financing', 'budget_tier', 'agent_status', 'contingency', 'geo_fit',
+  'property_use', 'sell_motivation', 'listing_status',
 ]
 
 const DIMENSION_LABELS: Record<string, string> = {
@@ -75,6 +76,9 @@ const DIMENSION_LABELS: Record<string, string> = {
   agent_status:    'Relación con agente',
   sell_motivation: 'Motivación de venta',
   listing_status:  'Estado del listado',
+  contingency:     'Contingencia de venta',
+  geo_fit:         'Encaje de zona',
+  property_use:    'Uso de la propiedad',
 }
 
 const SIDE_EFFECT_LABELS: Record<string, string> = {

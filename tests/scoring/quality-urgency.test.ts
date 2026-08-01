@@ -239,3 +239,46 @@ describe('getLeadPriorityPosition — el ranking sale de Postgres', () => {
     expect(ajeno).toBeNull()
   })
 })
+
+describe('Dimensiones nuevas del formulario (077)', () => {
+  it('la contingencia de venta resta calidad', async () => {
+    await freshLead({ fit_profile: { financing: 'cash', contingency: 'con_contingencia' } })
+    await recompute()
+    // 25 (efectivo) - 10 (debe vender primero)
+    expect((await getLead()).quality_score).toBe(15)
+  })
+
+  it('no tener contingencia suma', async () => {
+    await freshLead({ fit_profile: { financing: 'cash', contingency: 'sin_contingencia' } })
+    await recompute()
+    expect((await getLead()).quality_score).toBe(30)
+  })
+
+  it('fuera de la zona de la agencia resta', async () => {
+    await freshLead({ fit_profile: { financing: 'cash', geo_fit: 'fuera_de_zona' } })
+    await recompute()
+    expect((await getLead()).quality_score).toBe(15)
+  })
+
+  it('el uso de la propiedad se captura pero NO puntúa', async () => {
+    // Se registra para el briefing y para analytics; ordenarlo por intuición
+    // sería volver a los números inventados. Se calibrará con datos reales.
+    await freshLead({ fit_profile: { financing: 'cash', property_use: 'inversion' } })
+    await recompute()
+    expect((await getLead()).quality_score).toBe(25)
+
+    await freshLead({ fit_profile: { financing: 'cash', property_use: 'vivienda_principal' } })
+    await recompute()
+    expect((await getLead()).quality_score).toBe(25)
+  })
+
+  it('cada dimensión aporta una sola vez y se suman entre sí', async () => {
+    await freshLead({ fit_profile: {
+      financing: 'cash', timeline: 'under_3_months',
+      contingency: 'sin_contingencia', geo_fit: 'zona_principal',
+    } })
+    await recompute()
+    // 25 + 30 + 5 + 5
+    expect((await getLead()).quality_score).toBe(65)
+  })
+})

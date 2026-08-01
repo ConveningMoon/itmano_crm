@@ -56,7 +56,7 @@ export default async function LeadsPage({
       leads={data.items}
       kanban={data.kanban}
       total={data.total}
-      hotCount={data.hotCount}
+      highQualityCount={data.highQualityCount}
       attentionTodayCount={data.attentionTodayCount}
       page={data.page}
       totalPages={data.totalPages}

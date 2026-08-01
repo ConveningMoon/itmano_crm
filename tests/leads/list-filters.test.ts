@@ -8,7 +8,7 @@ import { STATUS_CONFIG } from '@/lib/config'
 
 const DEFAULTS: LeadListFilters = {
   q: '', agentId: 'all', status: 'all', source: 'all', channelId: 'all',
-  language: 'all', sort: 'recientes', view: 'table', page: 1,
+  language: 'all', quality: 'all', sort: 'recientes', view: 'table', page: 1,
 }
 
 describe('parseLeadListFilters', () => {
@@ -22,7 +22,7 @@ describe('parseLeadListFilters', () => {
       channelId: 'ch-1', lang: 'es', sort: 'atencion', view: 'kanban', page: '3',
     })).toEqual({
       q: 'juan', agentId: 'agent-dylan', status: 'hot', source: 'lead_magnet',
-      channelId: 'ch-1', language: 'es', sort: 'atencion', view: 'kanban', page: 3,
+      channelId: 'ch-1', language: 'es', quality: 'all', sort: 'atencion', view: 'kanban', page: 3,
     })
   })
 
@@ -51,7 +51,7 @@ describe('leadListFiltersToQuery', () => {
   it('parse ∘ toQuery es ida y vuelta', () => {
     const filters: LeadListFilters = {
       q: 'ana', agentId: 'agent-adriana', status: 'nurturing', source: 'event',
-      channelId: 'ch-9', language: 'pt', sort: 'atencion', view: 'kanban', page: 5,
+      channelId: 'ch-9', language: 'pt', quality: 'all', sort: 'atencion', view: 'kanban', page: 5,
     }
     const params = Object.fromEntries(new URLSearchParams(leadListFiltersToQuery(filters)))
     expect(parseLeadListFilters(params)).toEqual(filters)

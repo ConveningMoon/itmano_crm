@@ -17,6 +17,12 @@ export const BUCKETS = {
   agent_status:    ['sin_agente', 'con_agente'],
   sell_motivation: ['alta', 'media', 'baja'],
   listing_status:  ['no_listado_sin_agente', 'ya_listado_con_agente'],
+  // Añadidas en la 077 — el formulario ya preguntaba estas tres y el modelo las
+  // descartaba. Ver la migración para el porqué de sus pesos (y de por qué
+  // `property_use` no puntúa).
+  contingency:     ['sin_contingencia', 'con_contingencia'],
+  geo_fit:         ['zona_principal', 'zona_secundaria', 'fuera_de_zona'],
+  property_use:    ['vivienda_principal', 'segunda_vivienda', 'inversion'],
 } as const
 
 export type Dimension = keyof typeof BUCKETS
@@ -24,8 +30,13 @@ export type Dimension = keyof typeof BUCKETS
 // Un lead es comprador O vendedor, nunca ambos: los dos conjuntos son excluyentes
 // y comparten `timeline`. Por eso el mejor fit posible es el MAYOR de los dos
 // caminos, no la suma de todas las dimensiones.
-export const BUY_DIMS:  Dimension[] = ['timeline', 'financing', 'budget_tier', 'agent_status']
-export const SELL_DIMS: Dimension[] = ['sell_motivation', 'timeline', 'listing_status']
+export const BUY_DIMS:  Dimension[] = [
+  'timeline', 'financing', 'budget_tier', 'agent_status',
+  'contingency', 'geo_fit', 'property_use',
+]
+// `geo_fit` aplica también a la venta: si la propiedad está fuera de la zona, el
+// agente puede no poder listarla — pesa igual o más que en la compra.
+export const SELL_DIMS: Dimension[] = ['sell_motivation', 'timeline', 'listing_status', 'geo_fit']
 
 export const DIM_LABEL: Record<Dimension, string> = {
   timeline:        'Horizonte de compra/venta',
@@ -34,4 +45,7 @@ export const DIM_LABEL: Record<Dimension, string> = {
   agent_status:    '¿Ya trabaja con otro agente?',
   sell_motivation: 'Motivación de venta',
   listing_status:  'Estado del listado',
+  contingency:     '¿Necesita vender otra propiedad antes de comprar?',
+  geo_fit:         'Encaje con las zonas donde opera la agencia',
+  property_use:    '¿Para qué usaría la propiedad?',
 }
