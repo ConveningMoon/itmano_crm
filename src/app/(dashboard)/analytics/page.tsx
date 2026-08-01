@@ -10,8 +10,8 @@ import { getLeadSource } from '@/lib/leads/source'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
-import { StatusDistributionChart } from './charts/status-distribution-chart'
-import { Users, Flame, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
+import { StageDistributionChart } from './charts/stage-distribution-chart'
+import { Users, Inbox, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
 import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { Tabs } from '@/components/ui/tabs'
@@ -61,12 +61,13 @@ export default async function AnalyticsPage() {
 
   // ─── KPIs ───────────────────────────────────────────────────
   const totalLeads  = stats.total
-  const hotLeads    = stats.hot
-  const closedLeads = stats.closed
-  const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
+  const activeLeads = stats.active
+  // La conversión se mide SÓLO sobre lo que captó ITMANO. Con los importados
+  // dentro, A&J mostraba un 98% que describía el trabajo hecho en otro CRM.
+  const conversionRate = stats.attributedTotal > 0
+    ? Math.round((stats.attributedClosed / stats.attributedTotal) * 100)
+    : 0
 
-  // Temperatura promedio (KPI): media de current_score sobre los leads VIVOS
-  // (congelados excluidos), mostrada como banda + el número medio de respaldo.
   // Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos: sin
   // ellos no se puede ver si los buenos leads terminan cerrando.
   const qualityDist = stats.qualityDistribution
@@ -81,8 +82,8 @@ export default async function AnalyticsPage() {
   // Altas del mes calendario en curso — cortadas en UTC igual que en la base, para
   // que el bucket no dependa de la zona horaria del servidor de Node.
   const now = new Date()
-  const leadsThisMonth = stats.thisMonth.leads
-  const hotThisMonth   = stats.thisMonth.hot
+  const leadsThisMonth       = stats.thisMonth.leads
+  const highQualityThisMonth = stats.thisMonth.highQuality
 
   // ─── Composite-source donut ──────────────────────────────────
   // Same composite-source logic as the /leads column & filter (getLeadSource):
@@ -134,7 +135,7 @@ export default async function AnalyticsPage() {
       name: agent.name.split(' ')[0],
       fullName: agent.name,
       total: row?.total ?? 0,
-      hot: row?.hot ?? 0,
+      highQuality: row?.highQuality ?? 0,
       closed: row?.closed ?? 0,
       color: agent.accentColor,
     }
@@ -151,16 +152,20 @@ export default async function AnalyticsPage() {
   const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
   const monthlyByKey = new Map(stats.monthly.map(m => [m.month, m]))
 
-  const months: { month: string; leads: number; nurturing: number; hot: number; closed: number }[] = []
+  const months: {
+    month: string; nuevo: number; nutricion: number
+    enProceso: number; cerrado: number; perdido: number
+  }[] = []
   for (let i = ANALYTICS_MONTHS - 1; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
     const row = monthlyByKey.get(monthKey(d))
     months.push({
       month:     MONTH_LABELS[d.getUTCMonth()],
-      leads:     row?.leads     ?? 0,
-      nurturing: row?.nurturing ?? 0,
-      hot:       row?.hot       ?? 0,
-      closed:    row?.closed    ?? 0,
+      nuevo:     row?.nuevo     ?? 0,
+      nutricion: row?.nutricion ?? 0,
+      enProceso: row?.enProceso ?? 0,
+      cerrado:   row?.cerrado   ?? 0,
+      perdido:   row?.perdido   ?? 0,
     })
   }
   const enrichedMonthlyData = months
@@ -170,18 +175,17 @@ export default async function AnalyticsPage() {
   const monthlyRangeLabel =
     `${MONTH_LABELS[rangeStart.getUTCMonth()]} ${rangeStart.getUTCFullYear()} – ${MONTH_LABELS[now.getUTCMonth()]} ${now.getUTCFullYear()}`
 
-  // ─── Status distribution by agent ────────────────────────────
-  const statusData = agents.map(agent => {
-    const statuses = byAgent.get(agent.id)?.statuses ?? {}
-    const countOf = (status: string) => statuses[status] ?? 0
+  // ─── Etapas por agente ───────────────────────────────────────
+  const stageData = agents.map(agent => {
+    const stages = byAgent.get(agent.id)?.stages ?? {}
+    const countOf = (stage: string) => stages[stage] ?? 0
     return {
-      agent: agent.name.split(' ')[0],
-      new:       countOf('new'),
-      nurturing: countOf('nurturing'),
-      warm:      countOf('warm'),
-      hot:       countOf('hot'),
-      process:   countOf('process_started'),
-      closed:    countOf('closed') + countOf('process_completed'),
+      agent:     agent.name.split(' ')[0],
+      nuevo:     countOf('nuevo'),
+      nutricion: countOf('nutricion'),
+      enProceso: countOf('en_proceso'),
+      cerrado:   countOf('cerrado'),
+      perdido:   countOf('perdido'),
     }
   })
 
@@ -214,17 +218,22 @@ export default async function AnalyticsPage() {
       color: 'var(--accent-gold)',
     },
     {
-      label: 'Leads Calientes',
-      value: String(hotLeads),
-      sub: `+${hotThisMonth} este mes`,
-      tone: 'pos',
-      icon: <Flame size={18} />,
-      color: 'var(--status-hot)',
+      // Sustituye a "Leads Calientes". "Caliente" era una banda de temperatura
+      // que ya no se usa en ninguna otra pantalla; lo que el equipo puede
+      // trabajar hoy es la cartera viva (nuevos + en nutrición).
+      label: 'Cartera Activa',
+      value: String(activeLeads),
+      sub: 'nuevos y en nutrición',
+      tone: 'neutral',
+      icon: <Inbox size={18} />,
+      color: 'var(--accent-blue)',
     },
     {
       label: 'Tasa de Conversión',
       value: `${conversionRate}%`,
-      sub: 'sobre el total de leads',
+      sub: stats.imported > 0
+        ? `sobre ${stats.attributedTotal} leads captados aquí`
+        : 'sobre el total de leads',
       tone: 'neutral',
       icon: <TrendingUp size={18} />,
       color: 'var(--accent-green)',
@@ -235,10 +244,12 @@ export default async function AnalyticsPage() {
       // completa está debajo.
       label: 'Calidad Alta',
       value: String(qualityDist.alta ?? 0),
-      sub: stats.total > 0
-        ? `${Math.round(((qualityDist.alta ?? 0) / stats.total) * 100)}% de la cartera`
-        : 'sin leads',
-      tone: 'neutral',
+      sub: highQualityThisMonth > 0
+        ? `+${highQualityThisMonth} este mes`
+        : stats.total > 0
+          ? `${Math.round(((qualityDist.alta ?? 0) / stats.total) * 100)}% de la cartera`
+          : 'sin leads',
+      tone: highQualityThisMonth > 0 ? 'pos' : 'neutral',
       icon: <Activity size={18} />,
       color: QUALITY_CONFIG.alta.color,
     },
@@ -342,7 +353,9 @@ export default async function AnalyticsPage() {
               </FadeIn>
               <FadeIn delay={0.1} style={CARD}>
                 <div style={CARD_HEADER}>Evolución de Leads</div>
-                <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · {monthlyRangeLabel}</div>
+                <div style={CARD_SUBTITLE}>
+                  Leads por mes de alta y la etapa en la que están hoy · {monthlyRangeLabel}
+                </div>
                 <LeadsOverTimeChart data={enrichedMonthlyData} />
               </FadeIn>
             </>
@@ -359,9 +372,9 @@ export default async function AnalyticsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div style={CARD}>
-          <div style={CARD_HEADER}>Estados por Agente</div>
-          <div style={CARD_SUBTITLE}>Distribución de pipeline por agente</div>
-          <StatusDistributionChart data={statusData} />
+          <div style={CARD_HEADER}>Etapas por Agente</div>
+          <div style={CARD_SUBTITLE}>En qué punto del embudo tiene su cartera cada agente</div>
+          <StageDistributionChart data={stageData} />
         </div>
 
         {/* Dense table — out of redesign scope; defensive horizontal scroll on phones only. */}

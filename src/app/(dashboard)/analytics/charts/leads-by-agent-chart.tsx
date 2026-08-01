@@ -7,7 +7,9 @@ interface AgentDataPoint {
   name: string
   fullName: string
   total: number
-  hot: number
+  // Calidad alta en vez de "calientes": la temperatura ya no se muestra en
+  // ninguna otra pantalla, y el score que la alimentaba decae con el tiempo.
+  highQuality: number
   closed: number
   color: string
 }
@@ -36,7 +38,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
     <div style={{ ...tooltipStyle, padding: '8px 12px' }}>
       <div style={{ fontWeight: 500, marginBottom: '4px', color: 'var(--text-primary)' }}>{d.fullName}</div>
       <div style={{ color: 'var(--text-secondary)' }}>Total: {d.total}</div>
-      <div style={{ color: '#E04040' }}>Calientes: {d.hot}</div>
+      <div style={{ color: '#E04040' }}>Calidad alta: {d.highQuality}</div>
       <div style={{ color: '#6BA368' }}>Cerrados: {d.closed}</div>
     </div>
   )

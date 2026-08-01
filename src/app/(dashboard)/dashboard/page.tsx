@@ -22,7 +22,9 @@ import {
 type AgentStat = {
   agent: Agent
   total: number
-  hot: number
+  // Calidad alta, no "calientes": la temperatura salía del score, que decae, así
+  // que un agente con leads antiguos parecía peor sin que sus leads lo fueran.
+  highQuality: number
   percentage: number
   closed: number
 }
@@ -90,6 +92,11 @@ export default async function DashboardPage() {
     funnel.slice(i).reduce((sum, f) => sum + f.count, 0),
   )
   const funnelMax = Math.max(...reachedFrom, 1)
+  // Los leads traídos de otro CRM quedan FUERA del embudo (migración 080): no
+  // recorrieron estas etapas aquí, y contarlos daba un 100% de paso inventado.
+  // Se dicen aparte para que el total del embudo no parezca un lead perdido.
+  const importedLeads = leadStats.imported
+  const funnelTotal   = reachedFrom[0] + stageOf('perdido')
 
   const agentStats: AgentStat[] = agents.map(agent => {
     const row = leadStats.byAgent.find(a => a.agentId === agent.id)
@@ -97,8 +104,8 @@ export default async function DashboardPage() {
     return {
       agent,
       total,
-      hot:        row?.hot    ?? 0,
-      closed:     row?.closed ?? 0,
+      highQuality: row?.highQuality ?? 0,
+      closed:      row?.closed      ?? 0,
       percentage: totalLeads > 0 ? Math.round((total / totalLeads) * 100) : 0,
     }
   })
@@ -195,13 +202,16 @@ export default async function DashboardPage() {
             <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Embudo</span>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
               Cuántos leads llegaron a cada etapa, y qué porcentaje pasó a la siguiente
+              {importedLeads > 0 && (
+                <> · {importedLeads} importados de otro CRM quedan fuera</>
+              )}
             </div>
           </div>
           <span style={{
             fontSize: '11px', color: 'var(--accent-gold)',
             background: 'rgba(201,169,110,0.12)', padding: '2px 8px', borderRadius: '4px',
           }}>
-            {totalLeads} leads
+            {funnelTotal} leads
           </span>
         </div>
 
@@ -388,7 +398,7 @@ export default async function DashboardPage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {agentStats.map(({ agent, total, hot, percentage }) => (
+          {agentStats.map(({ agent, total, highQuality, percentage }) => (
             <div
               key={agent.id}
               className="row-hover"
@@ -434,12 +444,12 @@ export default async function DashboardPage() {
                 {total}/{totalLeads}
               </div>
 
-              {/* Idiomas + hot */}
+              {/* Idiomas + calidad alta */}
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                   {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--status-hot)' }}>{hot} calientes</div>
+                <div style={{ fontSize: '11px', color: 'var(--status-hot)' }}>{highQuality} de calidad alta</div>
               </div>
             </div>
           ))}
