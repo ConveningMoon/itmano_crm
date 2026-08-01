@@ -336,6 +336,38 @@ describe('Cerrados del mes — por fecha de cierre, no de alta (079)', () => {
   })
 })
 
+describe('Importados: fuera del embudo, dentro del total (080)', () => {
+  async function stats() {
+    const { data } = await adminClient.rpc('lead_dashboard_stats', {
+      p_tenant_id: TENANT_A_ID, p_agent_id: null,
+    })
+    return data as { imported: number; total: number; by_stage: Record<string, number> }
+  }
+
+  it('un lead marcado como importado no cuenta en el embudo', async () => {
+    // Nació cerrado en otro CRM: nunca pasó por "nuevo" aquí, y contarlo daba
+    // una tasa de paso del 100% que no describía ninguna operación real.
+    await freshLead({ status: 'closed', metadata: { imported: { system: 'hubspot' } } })
+
+    const s = await stats()
+    expect(s.imported).toBeGreaterThanOrEqual(1)
+    expect(s.by_stage.cerrado ?? 0).toBe(0)
+  })
+
+  it('pero sí cuenta en el total de la cartera', async () => {
+    await freshLead({ status: 'closed', metadata: { imported: { system: 'hubspot' } } })
+    expect((await stats()).total).toBeGreaterThanOrEqual(1)
+  })
+
+  it('sin la marca, el lead entra al embudo con normalidad', async () => {
+    await freshLead({ status: 'closed' })
+
+    const s = await stats()
+    expect(s.imported).toBe(0)
+    expect(s.by_stage.cerrado ?? 0).toBeGreaterThanOrEqual(1)
+  })
+})
+
 describe('Dimensiones nuevas del formulario (077)', () => {
   it('la contingencia de venta resta calidad', async () => {
     await freshLead({ fit_profile: { financing: 'cash', contingency: 'con_contingencia' } })

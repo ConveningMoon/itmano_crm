@@ -19,8 +19,14 @@ const CHANNEL_SOURCES: Record<string, LeadSource> = {
 }
 
 // Direct-entry sources (no channel) keyed by traffic_source.
+//
+// 'import' son leads traídos de otro CRM: no los captó ningún canal de ITMANO.
+// Tienen fuente propia para que no se cuelen en la analítica de canales — si van
+// como 'direct', "Registro manual" aparece como el canal que más cierra, cuando
+// en realidad esos cierres ocurrieron fuera del sistema.
 const DIRECT_ENTRY_SOURCES: Record<string, LeadSource> = {
   direct:    { kind: 'manual',    label: 'Registro manual' },
+  import:    { kind: 'import',    label: 'Importación' },
   instagram: { kind: 'instagram', label: 'Instagram' },
   facebook:  { kind: 'facebook',  label: 'Facebook' },
   whatsapp:  { kind: 'whatsapp',  label: 'WhatsApp' },
@@ -69,9 +75,10 @@ export function trafficSourcesForKind(kind: string): string[] {
     .map(([trafficSource]) => trafficSource)
 }
 
-// The 7 filter options shown in /leads (value = kind), in display order.
+// Las opciones del filtro de /leads (value = kind), en orden de aparición.
 export const LEAD_SOURCE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'manual',       label: 'Registro manual' },
+  { value: 'import',       label: 'Importación' },
   { value: 'instagram',    label: 'Instagram' },
   { value: 'facebook',     label: 'Facebook' },
   { value: 'whatsapp',     label: 'WhatsApp' },

@@ -43,10 +43,29 @@ describe('getLeadSource — matches the 3 real combos in the DB', () => {
   })
 })
 
+describe('Importados de otro CRM', () => {
+  // Fuente propia (migración 080). Si fueran 'direct' se contarían como
+  // "Registro manual" y ese canal aparecería como el que más cierra, cuando esos
+  // cierres ocurrieron fuera de ITMANO.
+  it('traffic_source import tiene su propio kind y etiqueta', () => {
+    expect(getLeadSource(null, 'import')).toEqual({ kind: 'import', label: 'Importación' })
+  })
+
+  it('no se confunde con el registro manual', () => {
+    expect(getLeadSource(null, 'import').kind).not.toBe(getLeadSource(null, 'direct').kind)
+  })
+
+  it('un canal real gana sobre la marca de importación', () => {
+    // Si alguien importa leads y además los ata a un canal, manda el canal.
+    expect(getLeadSource('lead_magnet', 'import').kind).toBe('lead_magnet')
+  })
+})
+
 describe('LEAD_SOURCE_FILTER_OPTIONS', () => {
-  it('has exactly the 7 source options', () => {
+  it('has exactly the 8 source options', () => {
     expect(LEAD_SOURCE_FILTER_OPTIONS.map(o => o.value)).toEqual([
-      'manual', 'instagram', 'facebook', 'whatsapp', 'lead_magnet', 'event', 'contact_form',
+      'manual', 'import', 'instagram', 'facebook', 'whatsapp',
+      'lead_magnet', 'event', 'contact_form',
     ])
   })
 })
