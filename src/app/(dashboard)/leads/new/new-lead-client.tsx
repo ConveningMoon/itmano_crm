@@ -288,7 +288,7 @@ export function NewLeadClient({
   function leadToRow(l: NormalizedLead): string[] {
     return [
       l.firstName, l.lastName, l.email, l.phone, l.language,
-      l.status === 'new' ? 'Nuevo' : 'Cerrado', l.lender, l.notes,
+      l.stage === 'nuevo' ? 'Nuevo' : 'Cerrado', l.lender, l.notes,
     ]
   }
 
@@ -405,7 +405,7 @@ export function NewLeadClient({
         email:     r.email,
         phone:     r.phone || null,
         language:  r.language as Language,
-        status:    r.status,
+        stage:     r.stage,
         lender:    r.lender || null,
         notes:     r.notes || null,
       })),
@@ -518,8 +518,8 @@ export function NewLeadClient({
   const importRows  = parseResult?.rows ?? []
   const finalRows   = importRows.filter(r => !existingEmails.has(r.email.toLowerCase()))
   const existingCount = importRows.length - finalRows.length
-  const newCount    = finalRows.filter(r => r.status === 'new').length
-  const closedCount = finalRows.filter(r => r.status === 'closed').length
+  const newCount    = finalRows.filter(r => r.stage === 'nuevo').length
+  const closedCount = finalRows.filter(r => r.stage === 'cerrado').length
   // Attribution: the linked agent if any, else the (mandatory) selector value.
   const attributionAgentId   = myAgentId ?? importAgentId
   const attributionAgentName = AGENT_DISPLAY_NAMES[attributionAgentId] || '—'
@@ -1089,7 +1089,7 @@ export function NewLeadClient({
                   if (parseResult.excludedNoEmail > 0)         warns.push(`${parseResult.excludedNoEmail} fila(s) sin email válido — omitidas`)
                   if (parseResult.excludedDuplicateInFile > 0) warns.push(`${parseResult.excludedDuplicateInFile} email(s) duplicado(s) en el archivo — se conserva la primera`)
                   if (existingCount > 0)                       warns.push(`${existingCount} ya existen en este tenant — omitidas`)
-                  if (parseResult.statusDefaulted > 0)         warns.push(`${parseResult.statusDefaulted} fila(s) sin estatus válido — asignadas a "Cerrado"`)
+                  if (parseResult.stageDefaulted > 0)          warns.push(`${parseResult.stageDefaulted} fila(s) sin etapa válida — asignadas a "Cerrado"`)
                   if (parseResult.ignoredColumns.length > 0)   warns.push(`Columnas ignoradas: ${parseResult.ignoredColumns.join(', ')}`)
                   if (warns.length === 0) return null
                   return (
@@ -1151,8 +1151,8 @@ export function NewLeadClient({
                             <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.language.toUpperCase()}</td>
                             <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.lender || '—'}</td>
                             <td style={{ padding: '8px 10px' }}>
-                              <span style={{ fontSize: '11px', color: r.status === 'new' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
-                                {r.status === 'new' ? 'Nuevo' : 'Cerrado'}
+                              <span style={{ fontSize: '11px', color: r.stage === 'nuevo' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+                                {r.stage === 'nuevo' ? 'Nuevo' : 'Cerrado'}
                               </span>
                             </td>
                           </tr>

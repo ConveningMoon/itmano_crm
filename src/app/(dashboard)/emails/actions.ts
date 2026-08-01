@@ -624,7 +624,7 @@ export async function addLeadsToSequence(
 const EligibleLeadsQuerySchema = z.object({
   sequenceId: z.string().uuid(),
   q:          z.string().max(120).optional(),
-  status:     z.string().max(40).optional(),
+  stage:      z.string().max(40).optional(),
   agentId:    z.string().max(80).optional(),
   language:   z.string().max(8).optional(),
 })
@@ -634,7 +634,7 @@ const EligibleLeadsQuerySchema = z.object({
 export async function searchEligibleLeads(input: {
   sequenceId: string
   q?:         string
-  status?:    string
+  stage?:     string
   agentId?:   string
   language?:  string
 }): Promise<{ ok: true; data: EligibleLeadsResult } | { ok: false; error: string }> {
@@ -669,7 +669,7 @@ export async function searchEligibleLeads(input: {
 
   const data = await getEligibleLeadsForSequence(parsed.data.sequenceId, scope, {
     q:        parsed.data.q,
-    status:   parsed.data.status,
+    stage:    parsed.data.stage,
     agentId:  parsed.data.agentId,
     language: parsed.data.language,
   })

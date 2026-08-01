@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
 import { Search, X, UserPlus } from 'lucide-react'
 import { addLeadsToSequence, searchEligibleLeads } from '../actions'
-import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import { STAGE_CONFIG, type Stage } from '@/lib/scoring/priority'
 import type { EligibleLead, EligibleLeadsResult } from '@/lib/data/leads'
-import type { LeadStatus, Language } from '@/lib/types'
+import type { Language } from '@/lib/types'
 
 export type PickerLead = EligibleLead
 
@@ -25,7 +26,7 @@ const SELECT_STYLE: React.CSSProperties = {
 
 export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
   const [search,   setSearch]   = useState('')
-  const [fStatus,  setFStatus]  = useState<string>('all')
+  const [fStage,   setFStage]   = useState<string>('all')
   const [fAgent,   setFAgent]   = useState<string>('all')
   const [fLang,    setFLang]    = useState<string>('all')
   const [result,   setResult]   = useState<EligibleLeadsResult>(initial)
@@ -42,14 +43,14 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
     const res = await searchEligibleLeads({
       sequenceId,
       q:        search   || undefined,
-      status:   fStatus  !== 'all' ? fStatus : undefined,
+      stage:    fStage   !== 'all' ? fStage  : undefined,
       agentId:  fAgent   !== 'all' ? fAgent  : undefined,
       language: fLang    !== 'all' ? fLang   : undefined,
     })
     setLoading(false)
     if (res.ok) setResult(res.data)
     else setToast(`Error: ${res.error}`)
-  }, [sequenceId, search, fStatus, fAgent, fLang])
+  }, [sequenceId, search, fStage, fAgent, fLang])
 
   // La primera página ya viene del servidor: sólo se consulta al cambiar algo.
   const firstRun = useRef(true)
@@ -141,10 +142,10 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
 
       {/* Filtros — permiten seleccionar grupos (p. ej. todos los "tibio" de un agente) */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-        <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={SELECT_STYLE}>
-          <option value="all">Todos los estados</option>
-          {result.statuses.map(s => (
-            <option key={s} value={s}>{STATUS_CONFIG[s as LeadStatus]?.label ?? s}</option>
+        <select value={fStage} onChange={e => setFStage(e.target.value)} style={SELECT_STYLE}>
+          <option value="all">Todas las etapas</option>
+          {result.stages.map(s => (
+            <option key={s} value={s}>{STAGE_CONFIG[s as Stage]?.label ?? s}</option>
           ))}
         </select>
 
@@ -164,9 +165,9 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
           </select>
         )}
 
-        {(fStatus !== 'all' || fAgent !== 'all' || fLang !== 'all') && (
+        {(fStage !== 'all' || fAgent !== 'all' || fLang !== 'all') && (
           <button
-            onClick={() => { setFStatus('all'); setFAgent('all'); setFLang('all') }}
+            onClick={() => { setFStage('all'); setFAgent('all'); setFLang('all') }}
             style={{ ...SELECT_STYLE, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
             <X size={11} /> Limpiar filtros
@@ -229,14 +230,14 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
                   {lead.email}{agentName(lead.agentId) ? ` · ${agentName(lead.agentId)}` : ''}
                 </div>
               </div>
-              {STATUS_CONFIG[lead.status as LeadStatus] && (
+              {STAGE_CONFIG[lead.stage] && (
                 <span style={{
                   flexShrink: 0, fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
                   letterSpacing: '0.04em',
-                  color: STATUS_CONFIG[lead.status as LeadStatus].color,
-                  background: STATUS_CONFIG[lead.status as LeadStatus].bgColor,
+                  color: STAGE_CONFIG[lead.stage].color,
+                  background: STAGE_CONFIG[lead.stage].bg,
                 }}>
-                  {STATUS_CONFIG[lead.status as LeadStatus].label}
+                  {STAGE_CONFIG[lead.stage].label}
                 </span>
               )}
             </label>

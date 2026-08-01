@@ -1,7 +1,6 @@
 import { ArrowRight } from 'lucide-react'
-import { STATUS_CONFIG } from '@/lib/config'
+import { STAGE_CONFIG, type Stage } from '@/lib/scoring/priority'
 import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
-import type { LeadStatus } from '@/lib/types'
 import type { StatusChange } from '@/lib/data/lead-status-history'
 
 // Who/what drove the transition (lead_status_history.source).
@@ -18,16 +17,19 @@ function formatDateTime(dateStr: string): string {
   })
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg   = STATUS_CONFIG[status as LeadStatus]
-  const color = cfg?.color   ?? 'var(--text-muted)'
-  const bg    = cfg?.bgColor ?? 'var(--bg-overlay)'
+// Las filas anteriores a la migracion 082 guardan los valores del viejo
+// leads.status ('hot', 'closed', ...). No se traducen a proposito: eran un
+// vocabulario distinto y reetiquetarlas contaria una historia que no paso.
+function StageBadge({ stage }: { stage: string }) {
+  const cfg   = STAGE_CONFIG[stage as Stage]
+  const color = cfg?.color ?? 'var(--text-muted)'
+  const bg    = cfg?.bg    ?? 'var(--bg-overlay)'
   return (
     <span style={{
       fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '6px',
       background: bg, color, border: `1px solid ${color}33`, whiteSpace: 'nowrap',
     }}>
-      {cfg?.label ?? status}
+      {cfg?.label ?? stage}
     </span>
   )
 }
@@ -40,20 +42,20 @@ export function StatusHistoryTimeline({ changes }: { changes: StatusChange[] }) 
     }}>
       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
         <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-          Historial de estados · {changes.length}
+          Historial de etapas · {changes.length}
         </span>
       </div>
 
       {changes.length === 0 ? (
         <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-          Sin cambios de estado aún
+          Sin cambios de etapa aún
         </div>
       ) : (
         <StaggerGroup stagger={0.04} style={{ padding: '18px 20px' }}>
           {changes.map((c, i) => {
-            const cfg      = STATUS_CONFIG[c.toStatus as LeadStatus]
-            const dotColor = cfg?.color   ?? 'var(--text-muted)'
-            const dotRing  = cfg?.bgColor ?? 'transparent'
+            const cfg      = STAGE_CONFIG[c.toStatus as Stage]
+            const dotColor = cfg?.color ?? 'var(--text-muted)'
+            const dotRing  = cfg?.bg    ?? 'transparent'
             const isLast   = i === changes.length - 1
             return (
               <StaggerItem key={c.id} style={{ display: 'flex', gap: '14px' }}>
@@ -71,11 +73,11 @@ export function StatusHistoryTimeline({ changes }: { changes: StatusChange[] }) 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     {c.fromStatus && (
                       <>
-                        <StatusBadge status={c.fromStatus} />
+                        <StageBadge stage={c.fromStatus} />
                         <ArrowRight size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                       </>
                     )}
-                    <StatusBadge status={c.toStatus} />
+                    <StageBadge stage={c.toStatus} />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
                     <span>{formatDateTime(c.changedAt)}</span>

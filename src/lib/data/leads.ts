@@ -1,14 +1,14 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { applyVisibilityScope, type VisibilityScope } from '@/lib/auth/visibility'
 import {
-  KANBAN_COLUMN_LIMIT, KANBAN_COLUMN_STATUSES, LEADS_PAGE_SIZE,
+  KANBAN_COLUMN_LIMIT, KANBAN_COLUMNS, LEADS_PAGE_SIZE,
   escapeLike, planSourceFilter,
   type ChannelRef, type KanbanColumn, type LeadListFilters, type LeadListItem,
   type LeadSortMode, type LeadsListData,
 } from '@/lib/leads/list-filters'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
 import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
-import type { Language, LeadStatus } from '@/lib/types'
+import type { Language } from '@/lib/types'
 
 // Acceso a datos de la lista de leads. Todo el filtrado, la búsqueda, el orden y
 // la paginación ocurren en Postgres: la página sólo serializa la página pedida,
@@ -20,8 +20,9 @@ import type { Language, LeadStatus } from '@/lib/types'
 
 const LIST_COLUMNS =
   'id, agent_id, acquisition_channel_id, traffic_source, first_name, last_name, ' +
-  'email, phone, language, status, current_score, created_at, attention_when, ' +
-  // Los tres ejes del rediseno (migracion 076). Llegan ya resueltos por la vista.
+  'email, phone, language, current_score, created_at, attention_when, ' +
+  // Los tres ejes. `stage` es columna propia desde la 082; calidad y urgencia
+  // las sigue resolviendo la vista.
   'stage, quality_band, urgency, urgency_rank, quality_score'
 
 // reason: el cliente de Supabase no está tipado con el esquema generado
@@ -95,12 +96,11 @@ function mapRow(r: any): LeadListItem {
     email:                r.email as string,
     phone:                (r.phone ?? null) as string | null,
     language:             r.language as Language,
-    status:               r.status as LeadStatus,
     // current_score es el score canónico del motor (temperature_score es la
     // columna legacy que ya no se escribe).
     score:                (r.current_score ?? null) as number | null,
     attentionWhen:        (r.attention_when ?? null) as LeadListItem['attentionWhen'],
-    stage:                (r.stage ?? null) as LeadListItem['stage'],
+    stage:                r.stage as Stage,
     qualityBand:          (r.quality_band ?? null) as LeadListItem['qualityBand'],
     qualityScore:         (r.quality_score ?? null) as number | null,
     urgency:              (r.urgency ?? null) as LeadListItem['urgency'],
@@ -135,10 +135,10 @@ export async function getLeadsListData(
     }
   }
 
-  const statusFiltered = (q: any) =>
-    filters.status !== 'all' ? q.eq('status', filters.status) : q
+  const stageFiltered = (q: any) =>
+    filters.stage !== 'all' ? q.eq('stage', filters.stage) : q
 
-  const countQuery = () => statusFiltered(applyFilters(
+  const countQuery = () => stageFiltered(applyFilters(
     supabase.from('leads_list').select('id', { count: 'exact', head: true }),
     scope, filters, channels,
   ))
@@ -166,7 +166,7 @@ export async function getLeadsListData(
   const from = (page - 1) * LEADS_PAGE_SIZE
 
   const { data } = await applySort(
-    statusFiltered(applyFilters(
+    stageFiltered(applyFilters(
       supabase.from('leads_list').select(LIST_COLUMNS),
       scope, filters, channels,
     )),
@@ -185,7 +185,7 @@ export async function getLeadsListData(
 }
 
 function emptyKanban(): KanbanColumn[] {
-  return Object.keys(KANBAN_COLUMN_STATUSES).map(key => ({ key, total: 0, items: [] }))
+  return KANBAN_COLUMNS.map(key => ({ key, total: 0, items: [] }))
 }
 
 async function fetchKanbanColumns(
@@ -194,28 +194,24 @@ async function fetchKanbanColumns(
   filters: LeadListFilters,
   channels: ChannelRef[],
 ): Promise<KanbanColumn[]> {
-  const entries = Object.entries(KANBAN_COLUMN_STATUSES)
-
-  return Promise.all(entries.map(async ([key, statuses]) => {
-    // El filtro de estado de la barra superior intersecta con los estados de la
-    // columna: si no se cruzan, la columna queda vacía (igual que antes en JS).
-    const effective = filters.status === 'all'
-      ? statuses
-      : statuses.filter(s => s === filters.status)
-
-    if (effective.length === 0) return { key, total: 0, items: [] }
+  return Promise.all(KANBAN_COLUMNS.map(async stage => {
+    // El filtro de etapa de la barra superior deja fuera al resto de columnas:
+    // filtrar por "Cerrado" y ver la columna "Nuevo" llena sería incoherente.
+    if (filters.stage !== 'all' && filters.stage !== stage) {
+      return { key: stage, total: 0, items: [] }
+    }
 
     const { data, count } = await applyFilters(
       supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
       scope, filters, channels,
     )
-      .in('status', effective)
+      .eq('stage', stage)
       .order('created_at', { ascending: false })
       .order('id',         { ascending: false })
       .limit(KANBAN_COLUMN_LIMIT)
 
     return {
-      key,
+      key: stage,
       total: (count ?? 0) as number,
       items: ((data ?? []) as any[]).map(mapRow),
     }
@@ -237,7 +233,6 @@ export async function getAttentionTodayCount(scope: VisibilityScope): Promise<nu
 
 export interface LeadDashboardStats {
   total:    number
-  hot:      number
   /** Cartera VIVA: etapas Nuevo y En Nutrición. Lo único que compite por la atención. */
   active:   number
   /** Calidad alta DENTRO de la cartera viva — un cerrado excelente ya no es trabajo. */
@@ -247,7 +242,6 @@ export interface LeadDashboardStats {
   /** Traídos de otro CRM: nunca recorrieron el embudo aquí, así que el bloque
    *  de etapas los excluye y los reporta aparte. */
   imported: number
-  byStatus: Record<string, number>
   byStage:  Record<string, number>
   byAgent:  Array<{ agentId: string; total: number; highQuality: number; closed: number }>
 }
@@ -263,21 +257,19 @@ export async function getLeadDashboardStats(scope: VisibilityScope): Promise<Lea
 
   if (error || !data) {
     return {
-      total: 0, hot: 0, active: 0, highQuality: 0, urgentToday: 0,
-      closedThisMonth: 0, imported: 0, byStatus: {}, byStage: {}, byAgent: [],
+      total: 0, active: 0, highQuality: 0, urgentToday: 0,
+      closedThisMonth: 0, imported: 0, byStage: {}, byAgent: [],
     }
   }
 
   const raw = data as any
   return {
     total:           (raw.total ?? 0) as number,
-    hot:             (raw.hot   ?? 0) as number,
     active:          (raw.active ?? 0) as number,
     highQuality:     (raw.high_quality ?? 0) as number,
     urgentToday:     (raw.urgent_today ?? 0) as number,
     closedThisMonth: (raw.closed_this_month ?? 0) as number,
     imported:        (raw.imported ?? 0) as number,
-    byStatus:        (raw.by_status ?? {}) as Record<string, number>,
     byStage:         (raw.by_stage  ?? {}) as Record<string, number>,
     byAgent:  ((raw.by_agent ?? []) as any[]).map(a => ({
       agentId:     a.agent_id as string,
@@ -400,16 +392,6 @@ export async function getLeadAnalyticsStats(
       perdido:   (m.perdido    ?? 0) as number,
     })),
   }
-}
-
-export interface HotLead {
-  id:          string
-  firstName:   string
-  lastName:    string
-  agentId:     string
-  status:      LeadStatus
-  score:       number | null
-  channelName: string | null
 }
 
 // ─── Posición dentro de la cartera activa ─────────────────────────────────────
@@ -541,35 +523,9 @@ export async function getPriorityQueue(scope: VisibilityScope, limit = 6): Promi
   }))
 }
 
-// Los N leads más calientes del scope, resueltos por el índice
-// (tenant_id, current_score desc) en vez de ordenando la tabla entera en JS.
-export async function getHotLeads(scope: VisibilityScope, limit = 6): Promise<HotLead[]> {
-  const supabase = createAdminClient()
-  const { data } = await applyVisibilityScope(
-    supabase
-      .from('leads')
-      .select('id, first_name, last_name, agent_id, status, current_score, acquisition_channels!acquisition_channel_id(name)'),
-    scope,
-  )
-    // "Caliente" = la banda del pipeline (status 'hot', que el trigger mantiene
-    // en score >= 60). Antes filtraba por score >= 70, así que esta lista podía
-    // mostrar 2 leads mientras el contador de al lado —que ya cuenta la banda—
-    // decía 5. El número y la lista tienen que salir del mismo criterio.
-    .eq('status', 'hot')
-    .order('current_score', { ascending: false, nullsFirst: false })
-    .order('id',            { ascending: false })
-    .limit(limit)
-
-  return ((data ?? []) as any[]).map(r => ({
-    id:          r.id as string,
-    firstName:   r.first_name as string,
-    lastName:    r.last_name as string,
-    agentId:     r.agent_id as string,
-    status:      r.status as LeadStatus,
-    score:       (r.current_score ?? null) as number | null,
-    channelName: (r.acquisition_channels?.name ?? null) as string | null,
-  }))
-}
+// getHotLeads() se retiró con la 082: era la lista de "leads calientes" del
+// dashboard, que getPriorityQueue() reemplazó por la cola del día. Filtraba por
+// una banda de temperatura que ya no existe.
 
 // ─── Picker de secuencias manuales ────────────────────────────────────────────
 
@@ -578,7 +534,7 @@ export interface EligibleLead {
   firstName: string
   lastName:  string
   email:     string
-  status:    string
+  stage:     Stage
   agentId:   string | null
   language:  string | null
 }
@@ -589,13 +545,13 @@ export interface EligibleLeadsResult {
   total:     number
   // Elegibles que casan con la búsqueda y los filtros actuales.
   matched:   number
-  statuses:  string[]
+  stages:    string[]
   languages: string[]
 }
 
 export interface EligibleLeadsFilters {
   q?:        string
-  status?:   string
+  stage?:    string
   language?: string
   // Filtro del desplegable del picker — distinto del scope de visibilidad.
   agentId?:  string
@@ -616,26 +572,26 @@ export async function getEligibleLeadsForSequence(
     p_tenant_id:   scope.tenantId,
     p_agent_id:    scope.agentId,
     p_search:      filters.q?.trim() || null,
-    p_status:       filters.status   && filters.status   !== 'all' ? filters.status   : null,
+    p_stage:        filters.stage    && filters.stage    !== 'all' ? filters.stage    : null,
     p_language:     filters.language && filters.language !== 'all' ? filters.language : null,
     p_agent_filter: filters.agentId  && filters.agentId  !== 'all' ? filters.agentId  : null,
     p_limit:        filters.limit ?? 50,
   })
 
-  if (error || !data) return { items: [], total: 0, matched: 0, statuses: [], languages: [] }
+  if (error || !data) return { items: [], total: 0, matched: 0, stages: [], languages: [] }
 
   const raw = data as any
   return {
     total:     (raw.total   ?? 0) as number,
     matched:   (raw.matched ?? 0) as number,
-    statuses:  ((raw.statuses  ?? []) as string[]).slice().sort(),
+    stages:    ((raw.stages    ?? []) as string[]).slice().sort(),
     languages: ((raw.languages ?? []) as string[]).slice().sort(),
     items: ((raw.items ?? []) as any[]).map(l => ({
       id:        l.id as string,
       firstName: l.first_name as string,
       lastName:  l.last_name as string,
       email:     l.email as string,
-      status:    l.status as string,
+      stage:     l.stage as Stage,
       agentId:   (l.agent_id ?? null) as string | null,
       language:  (l.language ?? null) as string | null,
     })),

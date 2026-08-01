@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (error) throw error
 
     const rows = data ?? []
-    const changed = rows.filter((r: { status_changed: boolean }) => r.status_changed)
+    const changed = rows.filter((r: { stage_changed: boolean }) => r.stage_changed)
 
     // Cortes de banda de calidad (migración 076). Van en este cron y no en uno
     // propio porque comparten cadencia: los quintiles se recalculan 1×/día para
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       dry_run: dryRun,
       affected: rows.length,
-      status_changes: changed.length,
+      stage_changes: changed.length,
       quality_bands_refreshed: bandsRefreshed,
       ts: new Date().toISOString(),
     })

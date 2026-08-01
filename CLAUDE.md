@@ -161,22 +161,32 @@ Cada regla tiene `category`, `dimension`, `match_value`, `points`, `decays`, `is
 **Reglas que mandan sobre todo lo demás:**
 
 - **Los opens de email no cuentan.** Apple Mail Privacy Protection precarga los píxeles e infla los opens. Se registran para analítica, nunca para scoring ni como métrica. **El clic es la métrica de engagement.**
-- **El score se congela** al entrar en `process_started`, `process_completed`, `closed` o `lost` (constante `FROZEN_STATUSES`). `recompute_lead_score` **retorna de inmediato** para esos estados: un evento nuevo NO reactiva el lead ni reanuda el scoring. Solo un cambio de estado fuera de esa lista lo descongela.
+- **Ya no hay congelado.** Existía porque el trigger escribía `leads.status` y pisaba la etapa que ponía el agente; apagar la medición era la forma de evitar el choque. Desde la **migración 082** la etapa vive en `leads.stage` y el scoring no la toca, así que un lead en proceso o cerrado **se sigue midiendo** — que es lo que permite comparar calidad por fuente incluyendo los que cerraron.
 - **Decay — no decae el total, decae cada evento por separado.** Solo aplica a reglas con `decays = true` (los positivos de engagement; los negativos como baja, hard bounce o spam **nunca** decaen). Un evento vale el 100% durante 14 días y después se divide a la mitad cada 30. El fit no decae nunca: tener el efectivo en mano no caduca. `peak_score` es solo una marca de máximo histórico — **no** se usa para derivar `current_score`.
 - **El cron de decay es diario** (`0 0 * * *` → `/api/cron/score-decay` → RPC `decay_lead_scores`). No recalcula nada nuevo: recorre los leads sin actividad hace más de 14 días y los vuelve a pasar por `recompute_lead_score` para que el decaimiento se materialice. Idempotente por construcción.
-- **`side_effect = 'force_perdido'` gana sobre la suma.** Si el lead tiene **cualquier** evento que matchee una regla con ese side effect (queja de spam, descalificación manual), el score va a 0 y el estado a `lost`, sin importar el resto. Ojo: mira TODO el historial, así que activar una regla con `force_perdido` puede marcar leads viejos como perdidos en el próximo recálculo.
+- **`side_effect = 'force_perdido'` gana sobre la suma.** Si el lead tiene **cualquier** evento que matchee una regla con ese side effect (queja de spam, descalificación manual), el score va a 0 y la etapa a `perdido`, sin importar el resto. Es la **única** vez que el sistema mueve la etapa: son hechos, no una opinión del agente. Ojo: mira TODO el historial, así que activar una regla con `force_perdido` puede marcar leads viejos como perdidos en el próximo recálculo.
 - **Topes:** `0 ≤ score ≤ 100`, con clamp en ambos extremos.
 - **Deduplicación:** `lead_events` tiene constraint único en `(lead_id, dedup_key)`. Sin esto, un reenvío o un reintento de webhook infla el score.
 
-**Bandas de temperatura:** ≥60 Caliente · 35–59 Templado · 15–34 Nurturing · <15 Nuevo. **Los cortes viven en `recompute_lead_score`**, que asigna `leads.status`; `src/lib/scoring/temperature-band.ts` los espeja para que la UI pinte el mismo umbral. Cambiarlos exige tocar los dos lados **y** recalcular todos los leads vivos.
+**Los tres ejes (migraciones 076–082).** El lead ya no tiene "un estado": tiene tres cosas distintas que antes se aplastaban en `leads.status`.
 
-**Para contar leads calientes usa `status = 'hot'`, nunca un umbral de score.** Es lo que el pipeline etiqueta y lo que el badge del lead muestra, y excluye a los que el agente ya movió a un estado post-embudo con un score congelado alto (esos ya se cuentan en "En proceso"). Un literal `>= 70` regado por la UI fue exactamente el bug que hacía que la tarjeta dijera 5 y la lista mostrara 2.
+| Eje | Qué responde | Quién lo mueve | ¿Decae? |
+|---|---|---|---|
+| **Etapa** (`leads.stage`) | Dónde está en el embudo | El **agente** | No |
+| **Calidad** (`leads.quality_score` → banda) | Qué tan bueno es | El sistema | **No** |
+| **Urgencia** (derivada al leer) | Si hay que actuar hoy | El sistema | **Sí** |
 
-**Al ajustar puntos, mira el panel de alcance** (Ajustes → Scoring, solo visible para quien puede editar). Las bandas están fijas en el trigger, así que unos puntos demasiado bajos dejan una banda inalcanzable — sin error y sin síntoma — y unos demasiado altos saturan el tope de 100 y el orden por temperatura pierde resolución. El panel avisa de los dos casos y se recalcula mientras escribes. La lógica es pura y está en `src/lib/scoring/reach.ts`.
+Etapas: `nuevo` · `nutricion` · `en_proceso` · `cerrado` · `perdido`. Vocabulario y etiquetas en `src/lib/scoring/priority.ts`.
 
-Si algún día se abre la personalización por tenant, el arreglo correcto NO es hacer las bandas por tenant: es **normalizar** el score contra el alcance de ese tenant, para que "Caliente" signifique siempre "llegó al 60% del mejor lead posible". `computeScoreReach` ya calcula ese denominador.
+**La banda de calidad son QUINTILES de la cartera activa del tenant**, no umbrales fijos: "Alta" = el 20% mejor de lo que ese tenant tiene ahora. Se recalculan 1×/día en `tenant_quality_bands` (dentro del cron de decay). Por debajo de 20 leads activos los quintiles no significan nada y se cae a cortes fijos (80/60/35/15), espejados en `src/lib/scoring/score-bands.ts`.
 
-**Arquitectura:** scores almacenados en `leads`, actualizados por un trigger sobre `lead_events` (append-only) que llama a `recompute_lead_score`, más el cron de decay. La UI lee `current_score` directo — sin joins ni agregados. Toda transición de estado escribe en `lead_status_history`: no hay cambios silenciosos. Existe `recalc_lead_score(lead_id)` (alias fino de `recompute_lead_score`) para depurar y corregir a mano.
+**Para contar leads buenos usa la banda (`quality_band = 'alta'`), nunca un umbral de score.** Un literal `>= 70` regado por la UI fue exactamente el bug que hacía que la tarjeta dijera 5 y la lista mostrara 2.
+
+**Al ajustar puntos, mira el panel de alcance** (Ajustes → Scoring, solo visible para quien puede editar). Los cortes fijos no se mueven, así que unos puntos demasiado bajos dejan una banda inalcanzable — sin error y sin síntoma — y unos demasiado altos saturan el tope de 100 y el orden por calidad pierde resolución. El panel avisa de los dos casos y se recalcula mientras escribes. La lógica es pura y está en `src/lib/scoring/reach.ts`.
+
+Si algún día se abre la personalización de puntos por tenant, el arreglo correcto NO es mover los cortes por tenant: es **normalizar** el score contra el alcance de ese tenant. `computeScoreReach` ya calcula ese denominador — y los quintiles ya resuelven el problema por otra vía para los tenants con cartera suficiente.
+
+**Arquitectura:** scores almacenados en `leads`, actualizados por un trigger sobre `lead_events` (append-only) que llama a `recompute_lead_score`, más el cron de decay. La UI lee `current_score` directo — sin joins ni agregados. Toda transición de **etapa** escribe en `lead_status_history` (la tabla conserva el nombre; sus filas anteriores a la 082 guardan el vocabulario viejo): no hay cambios silenciosos. Existe `recalc_lead_score(lead_id)` (alias fino de `recompute_lead_score`) para depurar y corregir a mano.
 
 **Dónde entra la IA — interpreta, no puntúa.** Con `tenants.ai_lead_scoring_enabled` en true, tras el intake corre `src/lib/services/ai-lead-fit.ts` (Claude Haiku) y hace dos cosas separadas:
 

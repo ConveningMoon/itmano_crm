@@ -40,7 +40,7 @@ async function freshLead(overrides: Record<string, unknown> = {}) {
     last_name: 'TestLead',
     email: 'calidad-test@test.invalid',
     language: 'es',
-    status: 'new',
+    stage: 'nuevo',
     current_score: 0,
     peak_score: 0,
     fit_profile: {},
@@ -66,12 +66,12 @@ async function recompute() {
 async function getLead() {
   const { data } = await adminClient
     .from('leads')
-    .select('quality_score, current_score, engagement_score, fit_score, last_signal_at, last_signal_type, status')
+    .select('quality_score, current_score, engagement_score, fit_score, last_signal_at, last_signal_type, stage')
     .eq('id', LEAD_ID).single()
   return data as unknown as {
     quality_score: number; current_score: number; engagement_score: number
     fit_score: number; last_signal_at: string | null; last_signal_type: string | null
-    status: string
+    stage: string
   }
 }
 
@@ -114,14 +114,15 @@ describe('Calidad — no decae', () => {
     expect(lead.quality_score).toBe(25)
   })
 
-  it('se calcula también en estados congelados', async () => {
-    // El congelado protege la decisión del AGENTE sobre status; no es razón para
-    // dejar de medir al lead. Analytics necesita la calidad de los cerrados.
-    await freshLead({ fit_profile: { financing: 'cash' }, status: 'closed' })
+  it('se calcula tambien fuera del embudo activo', async () => {
+    // Ya no existe el congelado (082), pero la propiedad que importaba sigue en
+    // pie: un lead cerrado se mide igual. Analytics necesita su calidad para
+    // poder comparar que fuente trae leads que cierran.
+    await freshLead({ fit_profile: { financing: 'cash' }, stage: 'cerrado' })
     await recompute()
 
     const lead = await getLead()
-    expect(lead.status).toBe('closed')
+    expect(lead.stage).toBe('cerrado')
     expect(lead.quality_score).toBe(25)
   })
 })
@@ -174,7 +175,7 @@ describe('Vista — etapa, banda y urgencia', () => {
   })
 
   it('un lead en proceso sale de la cola de urgencia', async () => {
-    await freshLead({ status: 'process_started' })
+    await freshLead({ stage: 'en_proceso' })
     await insertEvent('email_replied')
     await recompute()
 
@@ -184,13 +185,23 @@ describe('Vista — etapa, banda y urgencia', () => {
     expect(v.urgency_rank).toBe(9)
   })
 
-  it('las bandas de score se agrupan bajo la etapa nutrición', async () => {
-    // financing cash (25) + timeline <3m (30) = 55 → status 'warm' → etapa nutrición
+  it('un fit alto sube la calidad pero NO mueve la etapa', async () => {
+    // Es la propiedad que hace innecesario el congelado: si el scoring no toca
+    // la etapa, no hay nada que proteger apagando la medición.
     await freshLead({ fit_profile: { financing: 'cash', timeline: 'under_3_months' } })
     await recompute()
 
     const v = await getView()
-    expect(v.stage).toBe('nutricion')
+    expect(v.stage).toBe('nuevo')          // donde lo dejó el agente
+    expect(v.quality_band).toBe('media')   // 55, la calidad sí se movió
+  })
+
+  it('la etapa que pone el agente sobrevive a un recálculo', async () => {
+    await freshLead({ stage: 'nutricion', fit_profile: { financing: 'cash' } })
+    await insertEvent('email_clicked')
+    await recompute()
+
+    expect((await getView()).stage).toBe('nutricion')
   })
 
   it('con pocos leads activos la banda usa los cortes fijos', async () => {
@@ -219,7 +230,7 @@ describe('getLeadPriorityPosition — el ranking sale de Postgres', () => {
     // que NO debe mostrar es un puesto, porque ese lead ya no compite por la
     // atención del día y darle uno sería mentir.
     const { getLeadPriorityPosition } = await import('@/lib/data/leads')
-    await freshLead({ status: 'process_started', fit_profile: { financing: 'cash' } })
+    await freshLead({ stage: 'en_proceso', fit_profile: { financing: 'cash' } })
     await recompute()
 
     const pos = await getLeadPriorityPosition(LEAD_ID, { tenantId: TENANT_A_ID, agentId: null })
@@ -307,7 +318,7 @@ describe('Cerrados del mes — por fecha de cierre, no de alta (079)', () => {
     await adminClient.from('lead_status_history').delete().eq('lead_id', LEAD_ID)
     const { error } = await adminClient.from('lead_status_history').insert({
       lead_id: LEAD_ID, tenant_id: TENANT_A_ID,
-      from_status: 'hot', to_status: 'closed', source: 'agent',
+      from_status: 'nutricion', to_status: 'cerrado', source: 'agent',
       changed_at: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
     })
     // Sin esto, un insert rechazado deja el test en verde por la razón contraria.
@@ -316,13 +327,13 @@ describe('Cerrados del mes — por fecha de cierre, no de alta (079)', () => {
 
   it('un lead viejo cerrado hoy sí cuenta', async () => {
     // Justo el caso que el conteo por created_at perdía.
-    await freshLead({ status: 'closed', created_at: new Date('2026-01-15').toISOString() })
+    await freshLead({ stage: 'cerrado', created_at: new Date('2026-01-15').toISOString() })
     await setHistory(0)
     expect(await closedStats()).toBeGreaterThanOrEqual(1)
   })
 
   it('un cierre de hace medio año no cuenta', async () => {
-    await freshLead({ status: 'closed', created_at: new Date().toISOString() })
+    await freshLead({ stage: 'cerrado', created_at: new Date().toISOString() })
     await setHistory(180)
     expect(await closedStats()).toBe(0)
   })
@@ -330,7 +341,7 @@ describe('Cerrados del mes — por fecha de cierre, no de alta (079)', () => {
   it('un cerrado sin historial no cuenta', async () => {
     // Los leads importados entraron ya cerrados: no sabemos cuándo fue, y
     // decir que fue este mes sería inventarlo.
-    await freshLead({ status: 'closed' })
+    await freshLead({ stage: 'cerrado' })
     await adminClient.from('lead_status_history').delete().eq('lead_id', LEAD_ID)
     expect(await closedStats()).toBe(0)
   })
@@ -347,7 +358,7 @@ describe('Importados: fuera del embudo, dentro del total (080)', () => {
   it('un lead marcado como importado no cuenta en el embudo', async () => {
     // Nació cerrado en otro CRM: nunca pasó por "nuevo" aquí, y contarlo daba
     // una tasa de paso del 100% que no describía ninguna operación real.
-    await freshLead({ status: 'closed', metadata: { imported: { system: 'hubspot' } } })
+    await freshLead({ stage: 'cerrado', metadata: { imported: { system: 'hubspot' } } })
 
     const s = await stats()
     expect(s.imported).toBeGreaterThanOrEqual(1)
@@ -355,12 +366,12 @@ describe('Importados: fuera del embudo, dentro del total (080)', () => {
   })
 
   it('pero sí cuenta en el total de la cartera', async () => {
-    await freshLead({ status: 'closed', metadata: { imported: { system: 'hubspot' } } })
+    await freshLead({ stage: 'cerrado', metadata: { imported: { system: 'hubspot' } } })
     expect((await stats()).total).toBeGreaterThanOrEqual(1)
   })
 
   it('sin la marca, el lead entra al embudo con normalidad', async () => {
-    await freshLead({ status: 'closed' })
+    await freshLead({ stage: 'cerrado' })
 
     const s = await stats()
     expect(s.imported).toBe(0)

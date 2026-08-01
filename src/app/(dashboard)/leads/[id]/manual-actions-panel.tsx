@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import type { LeadStatus } from '@/lib/types'
+import { ACTIVE_STAGES, type Stage } from '@/lib/scoring/priority'
 import { applyManualAction } from './actions'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -15,23 +15,23 @@ export interface ManualActionItem {
 }
 
 interface ManualActionsPanelProps {
-  leadId:        string
-  currentStatus: LeadStatus
-  actions:       ManualActionItem[]
+  leadId:       string
+  currentStage: Stage
+  actions:      ManualActionItem[]
 }
-
-const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost'] as const
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ManualActionsPanel({ leadId, currentStatus, actions }: ManualActionsPanelProps) {
+export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActionsPanelProps) {
   const router = useRouter()
   const [error, setError]       = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null) // dimension awaiting confirm
   const [isPending, startTransition] = useTransition()
 
-  const isFrozen = (FROZEN_STATUSES as readonly string[]).includes(currentStatus)
+  // Registrar una visita o una propuesta sobre un lead que ya cerro o se perdio
+  // no describe nada: el panel se apaga fuera de la cartera viva.
+  const isOutOfFunnel = !(ACTIVE_STAGES as string[]).includes(currentStage)
 
   const positive = actions.filter(a => !a.isDisqualify)
   const disqualify = actions.find(a => a.isDisqualify)
@@ -66,7 +66,7 @@ export function ManualActionsPanel({ leadId, currentStatus, actions }: ManualAct
       </p>
 
       {/* Frozen banner */}
-      {isFrozen && (
+      {isOutOfFunnel && (
         <div style={{
           marginBottom: '12px',
           padding:      '8px 12px',
@@ -80,7 +80,7 @@ export function ManualActionsPanel({ leadId, currentStatus, actions }: ManualAct
         </div>
       )}
 
-      <div style={{ opacity: isFrozen ? 0.5 : 1, pointerEvents: isFrozen ? 'none' : 'auto' }}>
+      <div style={{ opacity: isOutOfFunnel ? 0.5 : 1, pointerEvents: isOutOfFunnel ? 'none' : 'auto' }}>
         {/* Positive / neutral actions */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {positive.map(a => (

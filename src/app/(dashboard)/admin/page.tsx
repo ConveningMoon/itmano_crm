@@ -35,7 +35,7 @@ export default async function AdminPage() {
   const kpiCards = [
     { label: 'Tenants', value: kpis.tenants, icon: <Building2 size={16} />, color: 'var(--accent-gold)' },
     { label: 'Leads totales', value: kpis.totalLeads, icon: <Users size={16} />, color: 'var(--accent-blue)' },
-    { label: 'Calientes', value: kpis.hotLeads, icon: <Flame size={16} />, color: 'var(--status-hot)' },
+    { label: 'Calidad alta', value: kpis.highQualityLeads, icon: <Flame size={16} />, color: 'var(--status-hot)' },
     { label: 'Nuevos · 30 días', value: kpis.newLeads30d, icon: <TrendingUp size={16} />, color: 'var(--accent-green)' },
   ]
 

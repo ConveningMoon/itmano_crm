@@ -1,16 +1,15 @@
 import { BUY_DIMS, SELL_DIMS } from './vocabulary'
-import { SCORE_BANDS } from './temperature-band'
+import { QUALITY_CUTS } from './score-bands'
 
 // ── Alcance del scoring ───────────────────────────────────────────────────────
 //
 // Responde una pregunta que hoy nadie puede contestar mirando la pantalla de
 // Ajustes: con ESTA configuración de puntos, ¿hasta dónde puede llegar un lead?
 //
-// Importa porque los puntos son ajustables por tenant pero las bandas
-// (Caliente/Tibio/Nurturing) son globales y están fijas en el trigger de
-// Postgres. Si alguien baja los puntos lo suficiente, la banda Caliente se
-// vuelve inalcanzable y el pipeline se queda plano en "Nuevo" — sin ningún
-// error, sin ninguna alerta. Este cálculo es esa alerta.
+// Importa porque los puntos son ajustables pero los cortes de banda están fijos.
+// Si alguien baja los puntos lo suficiente, la banda Alta se vuelve inalcanzable
+// y toda la cartera se aplasta abajo — sin ningún error, sin ninguna alerta.
+// Este cálculo es esa alerta.
 //
 // Módulo PURO: lo llama el cliente en cada tecleo para dar feedback inmediato.
 
@@ -22,7 +21,7 @@ export interface ReachRule {
   isActive:  boolean
 }
 
-export type ReachWarningCode = 'hot_unreachable' | 'warm_unreachable' | 'saturated'
+export type ReachWarningCode = 'alta_unreachable' | 'media_unreachable' | 'saturated'
 
 export interface ReachWarning {
   code:    ReachWarningCode
@@ -79,26 +78,26 @@ export function computeScoreReach(rules: ReachRule[]): ScoreReach {
 
   const warnings: ReachWarning[] = []
 
-  if (reachable < SCORE_BANDS.warm) {
+  if (reachable < QUALITY_CUTS.media) {
     warnings.push({
-      code: 'warm_unreachable',
-      message: `Ningún lead puede pasar de ${reachable} puntos, así que ni siquiera llegará a Tibio. Todo el pipeline se quedará en Nurturing o Nuevo.`,
+      code: 'media_unreachable',
+      message: `Ningún lead puede pasar de ${reachable} puntos, así que ninguno llegará siquiera a calidad Media. Toda la cartera se verá igual de mala.`,
     })
-  } else if (reachable < SCORE_BANDS.hot) {
+  } else if (reachable < QUALITY_CUTS.alta) {
     warnings.push({
-      code: 'hot_unreachable',
-      message: `Ningún lead puede pasar de ${reachable} puntos, así que la banda Caliente queda inalcanzable y esa tarjeta siempre marcará cero.`,
+      code: 'alta_unreachable',
+      message: `Ningún lead puede pasar de ${reachable} puntos, así que la banda Alta queda inalcanzable y la tarjeta de calidad alta siempre marcará cero.`,
     })
   }
 
   // Con el tope en 100, un techo muy por encima aplasta a leads muy distintos en
-  // el mismo número y el orden por temperatura deja de discriminar. El aviso NO
+  // el mismo número y el orden por calidad deja de discriminar. El aviso NO
   // lidera con el techo crudo: ese número (que puede pasar de 200) no le dice
   // nada a nadie. Lo que importa es la consecuencia.
   if (ceiling >= 150) {
     warnings.push({
       code: 'saturated',
-      message: 'Un lead que acumule varias señales desborda el tope de 100 con holgura, así que leads bastante distintos van a empatar arriba y el orden por temperatura perderá resolución. Considera bajar los puntos de las señales acumulativas.',
+      message: 'Un lead que acumule varias señales desborda el tope de 100 con holgura, así que leads bastante distintos van a empatar arriba y el orden por calidad perderá resolución. Considera bajar los puntos de las señales acumulativas.',
     })
   }
 

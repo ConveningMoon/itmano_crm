@@ -92,6 +92,7 @@ export default async function AnalyticsPage() {
   // channel-less as "Manual". Categories with 0 leads are omitted.
   const SOURCE_EMOJI: Record<string, string> = {
     manual:       '✍️',
+    import:       '📥',
     instagram:    '📸',
     facebook:     '👍',
     whatsapp:     '💬',

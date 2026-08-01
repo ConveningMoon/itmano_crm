@@ -10,10 +10,13 @@ import {
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
-import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import { QUALITY_BANDS, QUALITY_CONFIG, URGENCY_CONFIG } from '@/lib/scoring/priority'
-import type { QualityBand, Urgency } from '@/lib/scoring/priority'
-import type { Agent, LeadStatus } from '@/lib/types'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import {
+  QUALITY_BANDS, QUALITY_CONFIG, URGENCY_CONFIG,
+  STAGES, STAGE_CONFIG, STAGE_FILTER_OPTIONS,
+} from '@/lib/scoring/priority'
+import type { QualityBand, Urgency, Stage } from '@/lib/scoring/priority'
+import type { Agent } from '@/lib/types'
 import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/list-filters'
 import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
 import type { ChannelOption } from './new/page'
@@ -81,12 +84,12 @@ function QualityCell({ band, urgency }: {
   )
 }
 
-function StatusBadge({ status }: { status: LeadStatus }) {
-  const cfg = STATUS_CONFIG[status]
+function StageBadge({ stage }: { stage: Stage }) {
+  const cfg = STAGE_CONFIG[stage]
   return (
     <span style={{
       fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-      background: cfg.bgColor, color: cfg.color, whiteSpace: 'nowrap',
+      background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap',
     }}>
       {cfg.label}
     </span>
@@ -182,14 +185,15 @@ const FILTER_LABEL: React.CSSProperties = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const KANBAN_COLUMNS = [
-  { key: 'new',             label: 'Nuevo',       color: STATUS_CONFIG.new.color },
-  { key: 'nurturing',       label: 'Nurturing',   color: STATUS_CONFIG.nurturing.color },
-  { key: 'warm',            label: 'Tibio',        color: STATUS_CONFIG.warm.color },
-  { key: 'hot',             label: 'Caliente',    color: STATUS_CONFIG.hot.color },
-  { key: 'process_started', label: 'En Proceso',  color: STATUS_CONFIG.process_started.color },
-  { key: 'finished',        label: 'Finalizados', color: '#6BA368' },
-]
+// Una columna por etapa, en orden del embudo. Antes eran seis y cuatro de ellas
+// (Nuevo/Nurturing/Tibio/Caliente) eran bandas de temperatura del mismo punto
+// del embudo: mover una tarjeta entre ellas no significaba nada porque quien las
+// movía era el trigger de scoring, no el agente.
+const KANBAN_COLUMNS = STAGES.map(key => ({
+  key,
+  label: STAGE_CONFIG[key].label,
+  color: STAGE_CONFIG[key].color,
+}))
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
@@ -290,7 +294,7 @@ export function LeadsClient({
 
   // Dropdowns activos (los 5) — alimenta el contador del botón "Filtros".
   const activeFilterCount = [
-    filters.agentId, filters.status, filters.source, filters.channelId, filters.language,
+    filters.agentId, filters.stage, filters.source, filters.channelId, filters.language,
   ].filter(v => v !== 'all').length
 
   // When source changes, always reset the channel sub-filter.
@@ -312,7 +316,7 @@ export function LeadsClient({
 
   function clearFilters() {
     pushFilters({
-      q: '', agentId: 'all', status: 'all', source: 'all', channelId: 'all', language: 'all',
+      q: '', agentId: 'all', stage: 'all', source: 'all', channelId: 'all', language: 'all',
     })
   }
 
@@ -331,7 +335,7 @@ export function LeadsClient({
 
   function exportCsv() {
     if (selectedLeads.length === 0) return
-    const cols = ['Nombre', 'Apellido', 'Email', 'Teléfono', 'Estado', 'Agente', 'Fuente', 'Temperatura', 'Idioma', 'Fecha']
+    const cols = ['Nombre', 'Apellido', 'Email', 'Teléfono', 'Etapa', 'Agente', 'Fuente', 'Score', 'Idioma', 'Fecha']
     const esc = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [cols.join(',')]
     for (const l of selectedLeads) {
@@ -340,7 +344,7 @@ export function LeadsClient({
       const src     = getLeadSource(channel?.channelType ?? null, l.trafficSource ?? null)
       lines.push([
         esc(l.firstName), esc(l.lastName), esc(l.email), esc(l.phone ?? ''),
-        esc(STATUS_CONFIG[l.status]?.label ?? l.status), esc(agent?.name ?? ''),
+        esc(STAGE_CONFIG[l.stage]?.label ?? l.stage), esc(agent?.name ?? ''),
         esc(channel?.name ?? src.label), esc(String(l.score ?? '')),
         esc(l.language.toUpperCase()), esc(new Date(l.createdAt).toISOString().slice(0, 10)),
       ].join(','))
@@ -371,9 +375,9 @@ export function LeadsClient({
     { value: 'all', label: 'Todos los agentes' },
     ...agents.map(a => ({ value: a.id, label: a.name })),
   ]
-  const statusOptions = [
-    { value: 'all', label: 'Todos los estados' },
-    ...Object.entries(STATUS_CONFIG).map(([k, v]) => ({ value: k, label: v.label })),
+  const stageOptions = [
+    { value: 'all', label: 'Todas las etapas' },
+    ...STAGE_FILTER_OPTIONS,
   ]
   const sourceOptions = [
     { value: 'all', label: 'Todas las fuentes' },
@@ -398,9 +402,9 @@ export function LeadsClient({
     const a = agents.find(ag => ag.id === filters.agentId)
     if (a) activeChips.push({ label: a.name, onRemove: () => pushFilters({ agentId: 'all' }) })
   }
-  if (filters.status !== 'all') {
-    const cfg = STATUS_CONFIG[filters.status as LeadStatus]
-    if (cfg) activeChips.push({ label: cfg.label, onRemove: () => pushFilters({ status: 'all' }) })
+  if (filters.stage !== 'all') {
+    const cfg = STAGE_CONFIG[filters.stage as Stage]
+    if (cfg) activeChips.push({ label: cfg.label, onRemove: () => pushFilters({ stage: 'all' }) })
   }
   if (filters.source !== 'all') {
     const opt = sourceOptions.find(o => o.value === filters.source)
@@ -523,7 +527,7 @@ export function LeadsClient({
           </div>
         )}
         <div className="max-md:hidden">
-          <FilterSelect value={filters.status} onChange={v => pushFilters({ status: v })} options={statusOptions} />
+          <FilterSelect value={filters.stage} onChange={v => pushFilters({ stage: v })} options={stageOptions} />
         </div>
 
         {/* Filtros secundarios (Fuente, Canal, Idioma) viven solo en el panel */}
@@ -578,7 +582,7 @@ export function LeadsClient({
         </div>
       )}
 
-      {/* ── Panel de filtros ── Fuente/Canal/Idioma viven aquí; Estado y Agente se
+      {/* ── Panel de filtros ── Fuente/Canal/Idioma viven aquí; Etapa y Agente se
           duplican solo en móvil (mismo estado — cero desincronización). Los filtros
           aplican en vivo; "Aplicar" solo cierra. */}
       <ModalShell open={showFilters} onClose={() => setShowFilters(false)} maxWidth={400}>
@@ -602,8 +606,8 @@ export function LeadsClient({
               </div>
             )}
             <div className="md:hidden">
-              <label style={FILTER_LABEL}>Estado</label>
-              <FilterSelect value={filters.status} onChange={v => pushFilters({ status: v })} options={statusOptions} fullWidth />
+              <label style={FILTER_LABEL}>Etapa</label>
+              <FilterSelect value={filters.stage} onChange={v => pushFilters({ stage: v })} options={stageOptions} fullWidth />
             </div>
             <div>
               <label style={FILTER_LABEL}>Fuente</label>
@@ -729,7 +733,7 @@ export function LeadsClient({
                     {allPagedSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                   </button>
                 </th>
-                {['Lead', 'Agente', 'Estado', 'Fuente', 'Calidad', 'Idioma', 'Fecha'].map(h => (
+                {['Lead', 'Agente', 'Etapa', 'Fuente', 'Calidad', 'Idioma', 'Fecha'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -815,9 +819,9 @@ export function LeadsClient({
                           </span>
                         </div>
                       </td>
-                      {/* Estado */}
+                      {/* Etapa */}
                       <td style={{ padding: '12px 16px', width: '140px' }}>
-                        <StatusBadge status={lead.status} />
+                        <StageBadge stage={lead.stage} />
                       </td>
                       {/* Fuente (composite: channel type / traffic source) */}
                       <td style={{ padding: '12px 16px', width: '160px' }}>
@@ -1005,12 +1009,10 @@ export function LeadsClient({
                             </span>
                           )}
                         </div>
-                        {/* Status badge only in 'finished' column */}
-                        {col.key === 'finished' && (
-                          <div style={{ marginTop: '6px' }}>
-                            <StatusBadge status={lead.status} />
-                          </div>
-                        )}
+                        {/* Ya no va el badge de etapa: antes la columna
+                            "Finalizados" mezclaba cerrado, completado y perdido
+                            y hacía falta distinguirlos. Ahora cada columna ES
+                            una etapa, así que repetirla sería ruido. */}
                       </m.div>
                     )
                   })

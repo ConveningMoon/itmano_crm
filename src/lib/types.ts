@@ -1,6 +1,7 @@
-export type LeadStatus =
-  | 'new' | 'nurturing' | 'warm' | 'hot'
-  | 'process_started' | 'process_completed' | 'closed' | 'lost'
+// La etapa vive en src/lib/scoring/priority.ts junto a las otras dos dimensiones
+// (calidad y urgencia); aquí sólo se reexporta para no obligar a cada consumidor
+// de Lead a importar de dos sitios.
+export type { Stage } from './scoring/priority'
 
 // Idiomas soportados (migración 062). Fuente única: LANGUAGE_CONFIG en
 // src/lib/config.ts refleja exactamente este set y el CHECK de la base.
@@ -64,10 +65,13 @@ export interface Lead {
   email: string
   phone?: string
   language: Language
-  status: LeadStatus
+  /** Dónde está en el embudo. La mueve el agente, no el scoring (migración 082). */
+  stage: import('./scoring/priority').Stage
   temperatureScore: number | null
   peakScore: number | null
   currentScore: number | null
+  /** Qué tan bueno es. Lo calcula el sistema y NO decae. */
+  qualityScore: number | null
   fitScore: number | null
   engagementScore: number | null
   manualScore: number | null
@@ -102,6 +106,8 @@ export interface PurchaseProcess {
   loanType: string
   closingDate?: string   // ISO date string "YYYY-MM-DD" from Postgres date column
   notes?: string
+  /** Cuándo se completó el proceso. Null = sigue abierto (migración 082). */
+  completedAt: string | null
   createdAt: string
 }
 

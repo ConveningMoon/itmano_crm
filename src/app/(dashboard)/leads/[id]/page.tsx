@@ -27,8 +27,6 @@ import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import type { ManualActionItem } from './manual-actions-panel'
 
-const FROZEN_STATUSES = ['process_started', 'process_completed', 'closed', 'lost']
-
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireTenantContext()
@@ -115,7 +113,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     engagementScore: (lr.engagement_score as number | null) ?? 0,
     manualScore:     (lr.manual_score as number | null) ?? 0,
     currentScore:    (lr.current_score as number | null) ?? 0,
-    frozen:          FROZEN_STATUSES.includes(lr.status as string),
     rules:           scoreRules,
   })
   const purchaseProcess: PurchaseProcess | null = rawProcess ? mapPurchaseProcess(rawProcess as PurchaseProcessRow) : null

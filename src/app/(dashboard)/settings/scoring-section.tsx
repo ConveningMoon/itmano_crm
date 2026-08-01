@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from 'react'
 import type { ScoreRule } from '@/lib/data/score-rules'
 import { computeScoreReach, type ReachRule } from '@/lib/scoring/reach'
-import { SCORE_BANDS } from '@/lib/scoring/temperature-band'
+import { QUALITY_CUTS } from '@/lib/scoring/score-bands'
+import { QUALITY_CONFIG } from '@/lib/scoring/priority'
 import { updateScoreRules } from './actions'
 
 // ─── Style constants ──────────────────────────────────────────────────────────
@@ -189,9 +190,9 @@ function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) 
   // es lo que se responde de un vistazo. El techo teórico sin tope (que podía dar
   // 240) no le dice nada a nadie: se omite.
   const bandas = [
-    { desde: SCORE_BANDS.hot,       label: 'Caliente',  color: 'var(--status-hot)' },
-    { desde: SCORE_BANDS.warm,      label: 'Tibio',     color: 'var(--status-warm)' },
-    { desde: SCORE_BANDS.nurturing, label: 'Nurturing', color: 'var(--status-nurturing)' },
+    { desde: QUALITY_CUTS.alta,       label: QUALITY_CONFIG.alta.label,       color: QUALITY_CONFIG.alta.color },
+    { desde: QUALITY_CUTS.media_alta, label: QUALITY_CONFIG.media_alta.label, color: QUALITY_CONFIG.media_alta.color },
+    { desde: QUALITY_CUTS.media,      label: QUALITY_CONFIG.media.label,      color: QUALITY_CONFIG.media.color },
   ]
 
   return (
@@ -201,7 +202,7 @@ function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) 
           Alcance de esta configuración
         </span>
         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-          Las bandas del pipeline son fijas. Esto comprueba que un lead pueda llegar a ellas.
+          Con pocos leads activos las bandas de calidad usan cortes fijos. Esto comprueba que un lead pueda llegar a ellas.
         </div>
       </div>
 

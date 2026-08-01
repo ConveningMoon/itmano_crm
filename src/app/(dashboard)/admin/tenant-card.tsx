@@ -75,7 +75,7 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
           <strong style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{tenant.totalLeads}</strong> leads
         </span>
         <span style={{ color: 'var(--text-secondary)' }}>
-          <strong style={{ color: 'var(--status-hot)', fontWeight: 500 }}>{tenant.hotLeads}</strong> calientes
+          <strong style={{ color: 'var(--status-hot)', fontWeight: 500 }}>{tenant.highQualityLeads}</strong> de calidad alta
         </span>
         <span style={{ color: 'var(--text-secondary)' }}>
           <strong style={{ color: 'var(--accent-green)', fontWeight: 500 }}>+{tenant.newLeads30d}</strong> 30d

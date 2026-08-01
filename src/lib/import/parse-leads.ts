@@ -1,9 +1,9 @@
 // Pure, framework-free core of the lead CSV/XLSX import: tolerant column
-// recognition + row normalization + status mapping + intra-file dedup. The browser
+// recognition + row normalization + stage mapping + intra-file dedup. The browser
 // (new-lead-client) handles the actual file parsing (papaparse / xlsx) and the
 // tenant-level "already exists" check (server action); everything here is unit-tested.
 
-export type ImportLeadStatus = 'new' | 'closed'
+export type ImportLeadStage = 'nuevo' | 'cerrado'
 
 export interface NormalizedLead {
   firstName: string
@@ -11,7 +11,7 @@ export interface NormalizedLead {
   email:     string
   phone:     string
   language:  string
-  status:    ImportLeadStatus
+  stage:     ImportLeadStage
   lender:    string
   notes:     string
 }
@@ -21,7 +21,7 @@ export interface ParseLeadsResult {
   totalRows:               number
   excludedNoEmail:         number
   excludedDuplicateInFile: number
-  statusDefaulted:         number           // rows whose status was missing/invalid → 'closed'
+  stageDefaulted:          number           // filas sin etapa reconocible → 'cerrado'
   recognizedColumns:       Record<string, string> // canonical field → actual header
   ignoredColumns:          string[]
 }
@@ -34,7 +34,7 @@ const FIELD_ALIASES: Record<keyof Omit<NormalizedLead, never>, string[]> = {
   email:     ['email', 'mail', 'correo', 'correoelectronico'],
   phone:     ['phone', 'tel', 'telefono', 'celular', 'movil', 'whatsapp', 'numero'],
   language:  ['language', 'lang', 'idioma', 'lengua'],
-  status:    ['status', 'estatus', 'estado'],
+  stage:     ['stage', 'etapa', 'status', 'estatus', 'estado'],
   lender:    ['lender', 'prestamista'],
   notes:     ['notes', 'note', 'notas', 'observaciones', 'comentarios'],
 }
@@ -48,12 +48,12 @@ export function normalizeHeader(h: string): string {
 
 const VALID_LANGUAGES = new Set(['es', 'en', 'pt'])
 
-function mapStatus(raw: string | undefined): { status: ImportLeadStatus; defaulted: boolean } {
+function mapStage(raw: string | undefined): { stage: ImportLeadStage; defaulted: boolean } {
   const v = (raw ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
-  if (v === 'nuevo' || v === 'new')    return { status: 'new',    defaulted: false }
-  if (v === 'cerrado' || v === 'closed') return { status: 'closed', defaulted: false }
-  // Missing or unrecognized → Cerrado (historical contacts default), flagged.
-  return { status: 'closed', defaulted: true }
+  if (v === 'nuevo' || v === 'new')      return { stage: 'nuevo',   defaulted: false }
+  if (v === 'cerrado' || v === 'closed') return { stage: 'cerrado', defaulted: false }
+  // Sin valor o irreconocible → Cerrado (el caso típico: contactos históricos).
+  return { stage: 'cerrado', defaulted: true }
 }
 
 function isValidEmail(e: string): boolean {
@@ -90,7 +90,7 @@ export function parseLeadRows(
   const seenEmails = new Set<string>()
   let excludedNoEmail = 0
   let excludedDuplicateInFile = 0
-  let statusDefaulted = 0
+  let stageDefaulted = 0
 
   for (const raw of rawRows) {
     const email = get(raw, 'email')
@@ -100,8 +100,8 @@ export function parseLeadRows(
     if (seenEmails.has(key)) { excludedDuplicateInFile++; continue }
     seenEmails.add(key)
 
-    const { status, defaulted } = mapStatus(get(raw, 'status'))
-    if (defaulted) statusDefaulted++
+    const { stage, defaulted } = mapStage(get(raw, 'stage'))
+    if (defaulted) stageDefaulted++
 
     const langRaw = get(raw, 'language').toLowerCase()
     const language = VALID_LANGUAGES.has(langRaw) ? langRaw : 'es' // NOT NULL + CHECK → default
@@ -112,7 +112,7 @@ export function parseLeadRows(
       email,
       phone:     get(raw, 'phone'),
       language,
-      status,
+      stage,
       lender:    get(raw, 'lender'),
       notes:     get(raw, 'notes'),
     })
@@ -123,7 +123,7 @@ export function parseLeadRows(
     totalRows: rawRows.length,
     excludedNoEmail,
     excludedDuplicateInFile,
-    statusDefaulted,
+    stageDefaulted,
     recognizedColumns,
     ignoredColumns,
   }

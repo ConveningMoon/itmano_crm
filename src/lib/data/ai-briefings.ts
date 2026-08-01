@@ -28,10 +28,16 @@ export interface BriefingOutcomes {
 // Eventos que representan una ACCIÓN del agente sobre el lead (no automáticos).
 const FOLLOW_EVENT_TYPES = ['manual_email_sent', 'score_manual', 'phone_call', 'consultation_scheduled', 'consultation_attended']
 
-// Rango del estado en el embudo (mayor = más avanzado). 'lost' es terminal negativo.
-const STATUS_RANK: Record<string, number> = {
-  new: 0, nurturing: 1, warm: 2, hot: 3,
-  process_started: 4, process_completed: 5, closed: 6, lost: -1,
+// Rango de la etapa en el embudo (mayor = más avanzado). 'perdido' es terminal
+// negativo. Se incluyen los valores del viejo leads.status porque
+// ai_briefings.status_at es un SNAPSHOT histórico: las filas anteriores a la
+// migración 082 guardan el vocabulario de entonces, y sin estas entradas
+// cualquier briefing viejo contaría como "no avanzó" por comparar contra 0.
+const STAGE_RANK: Record<string, number> = {
+  nuevo: 0, nutricion: 1, en_proceso: 2, cerrado: 3, perdido: -1,
+  // Legado (pre-082)
+  new: 0, nurturing: 1, warm: 1, hot: 1,
+  process_started: 2, process_completed: 3, closed: 3, lost: -1,
 }
 
 // Días de ventana para considerar "siguió" según la premura del briefing.
@@ -75,13 +81,13 @@ export async function getBriefingOutcomes(
     const earliest = briefings[0].created_at
 
     const [{ data: leadsRaw }, { data: eventsRaw }] = await Promise.all([
-      db.from('leads').select('id, status').in('id', leadIds),
+      db.from('leads').select('id, stage').in('id', leadIds),
       db.from('lead_events').select('lead_id, created_at')
         .in('lead_id', leadIds).in('type', FOLLOW_EVENT_TYPES).gte('created_at', earliest),
     ])
 
-    const statusNow = new Map<string, string>()
-    for (const l of (leadsRaw ?? []) as { id: string; status: string }[]) statusNow.set(l.id, l.status)
+    const stageNow = new Map<string, string>()
+    for (const l of (leadsRaw ?? []) as { id: string; stage: string }[]) stageNow.set(l.id, l.stage)
 
     // Tiempos de acción del agente por lead (ordenados ascendente por lead).
     const actionsByLead = new Map<string, number[]>()
@@ -99,9 +105,9 @@ export async function getBriefingOutcomes(
       const acts  = actionsByLead.get(b.lead_id) ?? []
       const followed = acts.some(t => t > start && t <= end)
 
-      const curr = statusNow.get(b.lead_id) ?? null
-      const advanced = !!b.status_at && !!curr && curr !== 'lost' &&
-        (STATUS_RANK[curr] ?? 0) > (STATUS_RANK[b.status_at] ?? 0)
+      const curr = stageNow.get(b.lead_id) ?? null
+      const advanced = !!b.status_at && !!curr && curr !== 'perdido' &&
+        (STAGE_RANK[curr] ?? 0) > (STAGE_RANK[b.status_at] ?? 0)
 
       if (followed) { out.followed++; if (advanced) out.advancedFollowed++ }
       else          { out.notFollowed++; if (advanced) out.advancedNotFollowed++ }

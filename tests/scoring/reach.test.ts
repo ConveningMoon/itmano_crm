@@ -75,14 +75,14 @@ describe('computeScoreReach — configuración global', () => {
   })
 
   it('no avisa de bandas inalcanzables con la configuración recomendada', () => {
-    expect(r.warnings.map(w => w.code)).not.toContain('hot_unreachable')
-    expect(r.warnings.map(w => w.code)).not.toContain('warm_unreachable')
+    expect(r.warnings.map(w => w.code)).not.toContain('alta_unreachable')
+    expect(r.warnings.map(w => w.code)).not.toContain('media_unreachable')
   })
 })
 
 describe('computeScoreReach — configuraciones que rompen las bandas', () => {
-  it('avisa cuando Caliente queda fuera de alcance', () => {
-    // Alcance 45: pasa Tibio (35) pero nunca llega a Caliente (60).
+  it('avisa cuando la calidad Alta queda fuera de alcance', () => {
+    // Alcance 45: pasa Media (35) pero nunca llega a Alta (80).
     const bajos: ReachRule[] = [
       { category: 'fit', dimension: 'timeline',  points: 20, isActive: true },
       { category: 'fit', dimension: 'financing', points: 15, isActive: true },
@@ -90,18 +90,18 @@ describe('computeScoreReach — configuraciones que rompen las bandas', () => {
     ]
     const r = computeScoreReach(bajos)
     expect(r.reachable).toBe(45)
-    expect(r.warnings.map(w => w.code)).toContain('hot_unreachable')
-    expect(r.warnings.map(w => w.code)).not.toContain('warm_unreachable')
+    expect(r.warnings.map(w => w.code)).toContain('alta_unreachable')
+    expect(r.warnings.map(w => w.code)).not.toContain('media_unreachable')
   })
 
-  it('avisa del caso peor cuando ni Tibio se alcanza', () => {
+  it('avisa del caso peor cuando ni Media se alcanza', () => {
     const r = computeScoreReach([
       { category: 'fit', dimension: 'timeline', points: 10, isActive: true },
     ])
     expect(r.reachable).toBe(10)
-    expect(r.warnings.map(w => w.code)).toContain('warm_unreachable')
+    expect(r.warnings.map(w => w.code)).toContain('media_unreachable')
     // El aviso grave reemplaza al leve, no se duplican.
-    expect(r.warnings.map(w => w.code)).not.toContain('hot_unreachable')
+    expect(r.warnings.map(w => w.code)).not.toContain('alta_unreachable')
   })
 
   it('una regla desactivada no cuenta para el alcance', () => {
@@ -124,6 +124,6 @@ describe('computeScoreReach — configuraciones que rompen las bandas', () => {
   it('sin reglas el alcance es 0 y avisa', () => {
     const r = computeScoreReach([])
     expect(r.reachable).toBe(0)
-    expect(r.warnings.map(w => w.code)).toContain('warm_unreachable')
+    expect(r.warnings.map(w => w.code)).toContain('media_unreachable')
   })
 })

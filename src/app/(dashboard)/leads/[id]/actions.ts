@@ -7,11 +7,11 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteLead } from '@/lib/auth/guards'
 import { EmailContentSchema } from '@/lib/email-content'
 import { assessLeadFit, type LeadBriefing } from '@/lib/services/ai-lead-fit'
-import type { LeadStatus } from '@/lib/types'
+import { ACTIVE_STAGES, type Stage } from '@/lib/scoring/priority'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
+// FROZEN_STATUSES desapareció con la migración 082: el congelado existía sólo
+// para que el trigger de scoring no pisara la etapa que ponía el agente, y con
+// `stage` en su propia columna ese choque ya no ocurre.
 
 // Minimal lead shape needed to gate a write (tenant + assigned agent).
 type LeadGuardRow = { tenant_id: string; agent_id: string }
@@ -35,11 +35,11 @@ async function loadGuardedLead(
   return { tenant_id: row.tenant_id }
 }
 
-// ─── Update status (process_completed / closed / lost only) ──────────────────
+// ─── Mover la etapa ──────────────────────────────────────────────────────────
 
-export async function updateLeadStatus(
+export async function updateLeadStage(
   leadId: string,
-  status: 'process_completed' | 'closed' | 'lost'
+  stage: 'cerrado' | 'perdido'
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx      = await getCurrentTenantContext()
   const supabase = createAdminClient()
@@ -47,36 +47,10 @@ export async function updateLeadStatus(
   const guard = await loadGuardedLead(supabase, ctx, leadId)
   if ('ok' in guard) return guard
 
-  // Freezing happens via the status itself (recompute_lead_score early-returns on
-  // frozen statuses). temperature_score is deprecated and no longer written.
-  const { error } = await supabase.from('leads').update({ status }).eq('id', leadId)
+  // Ya no hay congelado que activar: la etapa es del agente y el scoring no la
+  // pisa, así que mover el lead aquí no apaga la medición (migración 082).
+  const { error } = await supabase.from('leads').update({ stage }).eq('id', leadId)
   if (error) return { ok: false, error: error.message }
-
-  if (status === 'process_completed') {
-    await supabase.from('lead_events').insert({
-      lead_id:       leadId,
-      tenant_id:     guard.tenant_id,
-      type:          'status_changed',
-      description:   'Proceso de compra completado.',
-      points:        0,
-      actor_user_id: ctx.user_id,
-    })
-
-    // Fire the 'completed' lifecycle email. Load process id for this lead.
-    const { data: proc } = await supabase
-      .from('purchase_processes')
-      .select('id, closing_date')
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (proc) {
-      const { sendPurchaseEmail } = await import('@/lib/services/send-purchase-email')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const p = proc as any
-      await sendPurchaseEmail(supabase, p.id as string, 'completed', p.closing_date as string | null)
-    }
-  }
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
@@ -208,7 +182,7 @@ export async function updateLeadNotes(
 export async function applyManualAction(
   leadId: string,
   dimension: string
-): Promise<{ ok: true; score: number; status: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; score: number; stage: Stage } | { ok: false; error: string }> {
   if (typeof dimension !== 'string' || !dimension) {
     return { ok: false, error: 'Acción inválida' }
   }
@@ -219,7 +193,7 @@ export async function applyManualAction(
   // Fetch the lead, scoped by tenant (super_admin: ctx.tenant_id null → any tenant).
   let leadQ = supabase
     .from('leads')
-    .select('id, tenant_id, agent_id, status')
+    .select('id, tenant_id, agent_id, stage')
     .eq('id', leadId)
   if (ctx.tenant_id) leadQ = leadQ.eq('tenant_id', ctx.tenant_id)
   const { data: lead } = await leadQ.maybeSingle()
@@ -232,7 +206,7 @@ export async function applyManualAction(
   const denied = assertCanWriteLead(ctx, { tenant_id: l.tenant_id, agent_id: l.agent_id })
   if (denied) return denied
 
-  if (FROZEN_STATUSES.includes(l.status as LeadStatus)) {
+  if (!(ACTIVE_STAGES as string[]).includes(l.stage as string)) {
     return { ok: false, error: 'Las acciones manuales no aplican a un lead fuera del funnel activo.' }
   }
 
@@ -271,7 +245,7 @@ export async function applyManualAction(
 
   const { data: after } = await supabase
     .from('leads')
-    .select('current_score, status')
+    .select('current_score, stage')
     .eq('id', leadId)
     .single()
 
@@ -283,7 +257,7 @@ export async function applyManualAction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     score:  ((after as any)?.current_score as number | null) ?? 0,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    status: ((after as any)?.status as string) ?? l.status,
+    stage: ((after as any)?.stage as Stage) ?? (l.stage as Stage),
   }
 }
 
@@ -358,7 +332,7 @@ export async function startPurchaseProcess(
 
   const { error: updateErr } = await supabase
     .from('leads')
-    .update({ status: 'process_started' })
+    .update({ stage: 'en_proceso' })
     .eq('id', leadId)
 
   if (updateErr) return { ok: false, error: updateErr.message }
@@ -377,6 +351,67 @@ export async function startPurchaseProcess(
   const { sendPurchaseEmail } = await import('@/lib/services/send-purchase-email')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await sendPurchaseEmail(supabase, (process as any).id as string, 'start', data.closingDate)
+
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/leads')
+  revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+// ─── Completar el proceso de compra ──────────────────────────────────────────
+
+/**
+ * Antes esto era `updateLeadStatus(id, 'process_completed')`: el hecho de que el
+ * proceso hubiera terminado vivía en el estado del LEAD, que además no guardaba
+ * la fecha. Ahora se marca donde corresponde —`purchase_processes.completed_at`—
+ * y la etapa del lead pasa a Cerrado, que es lo que significa para el embudo.
+ */
+export async function completePurchaseProcess(
+  leadId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx      = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  const guard = await loadGuardedLead(supabase, ctx, leadId)
+  if ('ok' in guard) return guard
+
+  const { data: proc } = await supabase
+    .from('purchase_processes')
+    .select('id, closing_date, completed_at')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!proc) return { ok: false, error: 'Este lead no tiene un proceso de compra abierto.' }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = proc as any
+  if (p.completed_at) return { ok: false, error: 'El proceso ya estaba completado.' }
+
+  const { error: procErr } = await supabase
+    .from('purchase_processes')
+    .update({ completed_at: new Date().toISOString() })
+    .eq('id', p.id as string)
+  if (procErr) return { ok: false, error: procErr.message }
+
+  const { error: stageErr } = await supabase
+    .from('leads')
+    .update({ stage: 'cerrado' })
+    .eq('id', leadId)
+  if (stageErr) return { ok: false, error: stageErr.message }
+
+  await supabase.from('lead_events').insert({
+    lead_id:       leadId,
+    tenant_id:     guard.tenant_id,
+    type:          'status_changed',
+    description:   'Proceso de compra completado.',
+    points:        0,
+    actor_user_id: ctx.user_id,
+  })
+
+  // Email de cierre del hito. Best-effort: no tumba la acción.
+  const { sendPurchaseEmail } = await import('@/lib/services/send-purchase-email')
+  await sendPurchaseEmail(supabase, p.id as string, 'completed', p.closing_date as string | null)
 
   revalidatePath(`/leads/${leadId}`)
   revalidatePath('/leads')
