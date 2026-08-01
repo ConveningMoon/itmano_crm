@@ -49,6 +49,7 @@ export interface LeadListFilters {
   source:    string  // 'all' | kind de getLeadSource
   channelId: string  // 'all' | acquisition_channels.id
   language:  string  // 'all' | es | en | pt
+  quality:   string  // 'all' | QualityBand
   sort:      LeadSortMode
   view:      LeadsView
   page:      number
@@ -70,7 +71,9 @@ export interface LeadsListData {
   items:               LeadListItem[]
   kanban:              KanbanColumn[] | null
   total:               number
-  hotCount:            number
+  // Leads de calidad ALTA en el filtro actual. Sustituye al viejo conteo por
+  // `current_score >= 70`, umbral que ya no significa nada en el modelo nuevo.
+  highQualityCount:    number
   attentionTodayCount: number
   page:                number
   totalPages:          number
@@ -110,6 +113,7 @@ export function parseLeadListFilters(params: RawParams): LeadListFilters {
     source:    one(params.source)    || 'all',
     channelId: one(params.channelId) || 'all',
     language:  one(params.lang)      || 'all',
+    quality:   one(params.quality)   || 'all',
     sort,
     view,
     page: Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1,
@@ -126,6 +130,7 @@ export function leadListFiltersToQuery(filters: LeadListFilters): string {
   if (filters.source    !== 'all')       p.set('source',    filters.source)
   if (filters.channelId !== 'all')       p.set('channelId', filters.channelId)
   if (filters.language  !== 'all')       p.set('lang',      filters.language)
+  if (filters.quality   !== 'all')       p.set('quality',   filters.quality)
   if (filters.sort      !== 'recientes') p.set('sort',      filters.sort)
   if (filters.view      !== 'table')     p.set('view',      filters.view)
   if (filters.page > 1)                  p.set('page',      String(filters.page))
@@ -138,7 +143,8 @@ export function hasActiveLeadFilters(f: LeadListFilters): boolean {
     f.status    !== 'all' ||
     f.source    !== 'all' ||
     f.channelId !== 'all' ||
-    f.language  !== 'all'
+    f.language  !== 'all' ||
+    f.quality   !== 'all'
 }
 
 // ─── Filtro de fuente ─────────────────────────────────────────────────────────

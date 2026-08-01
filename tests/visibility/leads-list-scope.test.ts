@@ -45,7 +45,7 @@ const AGENT: VisibilityScope = { tenantId: 'tenant-aj', agentId: 'agent-dylan' }
 
 const BASE: LeadListFilters = {
   q: '', agentId: 'all', status: 'all', source: 'all', channelId: 'all',
-  language: 'all', sort: 'recientes', view: 'table', page: 1,
+  language: 'all', quality: 'all', sort: 'recientes', view: 'table', page: 1,
 }
 
 const CHANNELS = [

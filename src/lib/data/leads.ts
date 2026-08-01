@@ -40,6 +40,7 @@ function applyFilters(
   if (filters.q) q = q.ilike('search_text', `%${escapeLike(filters.q.toLowerCase())}%`)
   if (filters.agentId   !== 'all') q = q.eq('agent_id', filters.agentId)
   if (filters.language  !== 'all') q = q.eq('language', filters.language)
+  if (filters.quality   !== 'all') q = q.eq('quality_band', filters.quality)
   if (filters.channelId !== 'all') q = q.eq('acquisition_channel_id', filters.channelId)
 
   if (filters.source !== 'all') {
@@ -127,7 +128,7 @@ export async function getLeadsListData(
       items: [],
       kanban: filters.view === 'kanban' ? emptyKanban() : null,
       total: 0,
-      hotCount: 0,
+      highQualityCount: 0,
       attentionTodayCount: await getAttentionTodayCount(scope),
       page: 1,
       totalPages: 1,
@@ -144,17 +145,19 @@ export async function getLeadsListData(
 
   const [totalRes, hotRes, attentionTodayCount] = await Promise.all([
     countQuery(),
-    countQuery().gte('current_score', 70),
+    // "Alta" es la banda del modelo, no un umbral de score: se autoajusta a la
+    // cartera del tenant (quintiles) en vez de fijar un 70 que no significa nada.
+    countQuery().eq('quality_band', 'alta'),
     getAttentionTodayCount(scope),
   ])
 
   const total      = (totalRes.count ?? 0) as number
-  const hotCount   = (hotRes.count   ?? 0) as number
+  const highQualityCount = (hotRes.count ?? 0) as number
   const totalPages = Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE))
 
   if (filters.view === 'kanban') {
     const kanban = await fetchKanbanColumns(supabase, scope, filters, channels)
-    return { items: [], kanban, total, hotCount, attentionTodayCount, page: 1, totalPages }
+    return { items: [], kanban, total, highQualityCount, attentionTodayCount, page: 1, totalPages }
   }
 
   // Una URL con `page` fuera de rango (link viejo o editado a mano) cae a la
@@ -174,7 +177,7 @@ export async function getLeadsListData(
     items: (data ?? []).map(mapRow),
     kanban: null,
     total,
-    hotCount,
+    highQualityCount,
     attentionTodayCount,
     page,
     totalPages,
