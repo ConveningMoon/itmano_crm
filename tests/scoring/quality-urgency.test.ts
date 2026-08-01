@@ -88,6 +88,7 @@ async function getView() {
 beforeAll(async () => { await createFixtures() })
 afterAll(async () => {
   await adminClient.from('lead_events').delete().eq('lead_id', LEAD_ID)
+  await adminClient.from('lead_status_history').delete().eq('lead_id', LEAD_ID)
   await adminClient.from('leads').delete().eq('id', LEAD_ID)
   await cleanupFixtures()
 })
@@ -237,6 +238,101 @@ describe('getLeadPriorityPosition — el ranking sale de Postgres', () => {
     // Un agente que no es dueño del lead no lo ve, así que no hay posición.
     const ajeno = await getLeadPriorityPosition(LEAD_ID, { tenantId: TENANT_A_ID, agentId: 'agent-que-no-existe' })
     expect(ajeno).toBeNull()
+  })
+})
+
+describe('La urgencia de la IA caduca (079)', () => {
+  // El briefing es una foto del momento en que se escribió. Sin caducidad, un
+  // "llamar hoy" de hace dos semanas seguía llenando la cola del día para
+  // siempre — el eje de urgencia dejaba de medir urgencia.
+  const aiFit = (when: string, daysAgo: number) => ({
+    ai_fit: { next_action_when: when, at: new Date(Date.now() - daysAgo * 86_400_000).toISOString() },
+  })
+
+  it('un briefing reciente manda sobre la señal', async () => {
+    await freshLead({ metadata: aiFit('hoy', 0) })
+    await insertEvent('email_clicked', 20)   // por sí sola daría sin_apuro
+    await recompute()
+
+    const v = await getView()
+    expect(v.urgency).toBe('hoy')
+    expect(v.urgency_rank).toBe(0)
+  })
+
+  it('un "hoy" de hace diez días ya no es hoy', async () => {
+    await freshLead({ metadata: aiFit('hoy', 10) })
+    await insertEvent('email_clicked', 20)
+    await recompute()
+
+    const v = await getView()
+    expect(v.urgency).toBe('sin_apuro')
+  })
+
+  it('caducado, decide la regla determinista sobre la última señal', async () => {
+    // El briefing viejo decía sin_apuro, pero el lead acaba de responder.
+    await freshLead({ metadata: aiFit('sin_apuro', 30) })
+    await insertEvent('email_replied')
+    await recompute()
+
+    expect((await getView()).urgency).toBe('hoy')
+  })
+
+  it('un briefing sin fecha no cuenta', async () => {
+    // Briefings anteriores a que se guardara `at`: no se puede saber si siguen
+    // vigentes, así que no mandan.
+    await freshLead({ metadata: { ai_fit: { next_action_when: 'hoy' } } })
+    await recompute()
+
+    expect((await getView()).urgency).toBe('sin_apuro')
+  })
+
+  it('un `at` corrupto no tumba la vista', async () => {
+    await freshLead({ metadata: { ai_fit: { next_action_when: 'hoy', at: 'ayer por la tarde' } } })
+    await insertEvent('email_replied')
+    await recompute()
+
+    expect((await getView()).urgency).toBe('hoy')   // cae a la señal, sin error
+  })
+})
+
+describe('Cerrados del mes — por fecha de cierre, no de alta (079)', () => {
+  async function closedStats() {
+    const { data } = await adminClient.rpc('lead_dashboard_stats', {
+      p_tenant_id: TENANT_A_ID, p_agent_id: null,
+    })
+    return (data as { closed_this_month: number }).closed_this_month
+  }
+
+  async function setHistory(daysAgo: number) {
+    await adminClient.from('lead_status_history').delete().eq('lead_id', LEAD_ID)
+    const { error } = await adminClient.from('lead_status_history').insert({
+      lead_id: LEAD_ID, tenant_id: TENANT_A_ID,
+      from_status: 'hot', to_status: 'closed', source: 'agent',
+      changed_at: new Date(Date.now() - daysAgo * 86_400_000).toISOString(),
+    })
+    // Sin esto, un insert rechazado deja el test en verde por la razón contraria.
+    if (error) throw new Error(`setHistory failed: ${error.message}`)
+  }
+
+  it('un lead viejo cerrado hoy sí cuenta', async () => {
+    // Justo el caso que el conteo por created_at perdía.
+    await freshLead({ status: 'closed', created_at: new Date('2026-01-15').toISOString() })
+    await setHistory(0)
+    expect(await closedStats()).toBeGreaterThanOrEqual(1)
+  })
+
+  it('un cierre de hace medio año no cuenta', async () => {
+    await freshLead({ status: 'closed', created_at: new Date().toISOString() })
+    await setHistory(180)
+    expect(await closedStats()).toBe(0)
+  })
+
+  it('un cerrado sin historial no cuenta', async () => {
+    // Los leads importados entraron ya cerrados: no sabemos cuándo fue, y
+    // decir que fue este mes sería inventarlo.
+    await freshLead({ status: 'closed' })
+    await adminClient.from('lead_status_history').delete().eq('lead_id', LEAD_ID)
+    expect(await closedStats()).toBe(0)
   })
 })
 
