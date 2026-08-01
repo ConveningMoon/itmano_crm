@@ -15,12 +15,12 @@ import type { Language } from '@/lib/types'
 // no el tenant entero.
 //
 // Se consulta la vista `leads_list` (migración 072) en vez de la tabla: agrega
-// `attention_when` y `attention_rank` ya calculados, lo que permite ordenar por
+// `stage`, `quality_band` y `urgency` ya resueltos, lo que permite ordenar por
 // premura en el servidor sin mandar la columna `metadata` completa al cliente.
 
 const LIST_COLUMNS =
   'id, agent_id, acquisition_channel_id, traffic_source, first_name, last_name, ' +
-  'email, phone, language, current_score, created_at, attention_when, ' +
+  'email, phone, language, current_score, created_at, ' +
   // Los tres ejes. `stage` es columna propia desde la 082; calidad y urgencia
   // las sigue resolviendo la vista.
   'stage, quality_band, urgency, urgency_rank, quality_score'
@@ -73,13 +73,6 @@ function applySort(query: any, sort: LeadSortMode): any {
       .order('quality_score', { ascending: false, nullsFirst: false })
       .order('id',            { ascending: false })
   }
-  if (sort === 'atencion') {
-    return query
-      .order('attention_rank', { ascending: true })
-      .order('current_score',  { ascending: false, nullsFirst: false })
-      .order('created_at',     { ascending: false })
-      .order('id',             { ascending: false })
-  }
   return query
     .order('created_at', { ascending: false })
     .order('id',         { ascending: false })
@@ -99,7 +92,6 @@ function mapRow(r: any): LeadListItem {
     // current_score es el score canónico del motor (temperature_score es la
     // columna legacy que ya no se escribe).
     score:                (r.current_score ?? null) as number | null,
-    attentionWhen:        (r.attention_when ?? null) as LeadListItem['attentionWhen'],
     stage:                r.stage as Stage,
     qualityBand:          (r.quality_band ?? null) as LeadListItem['qualityBand'],
     qualityScore:         (r.quality_score ?? null) as number | null,
@@ -129,7 +121,7 @@ export async function getLeadsListData(
       kanban: filters.view === 'kanban' ? emptyKanban() : null,
       total: 0,
       highQualityCount: 0,
-      attentionTodayCount: await getAttentionTodayCount(scope),
+      urgentTodayCount: await getUrgentTodayCount(scope),
       page: 1,
       totalPages: 1,
     }
@@ -143,12 +135,12 @@ export async function getLeadsListData(
     scope, filters, channels,
   ))
 
-  const [totalRes, hotRes, attentionTodayCount] = await Promise.all([
+  const [totalRes, hotRes, urgentTodayCount] = await Promise.all([
     countQuery(),
     // "Alta" es la banda del modelo, no un umbral de score: se autoajusta a la
     // cartera del tenant (quintiles) en vez de fijar un 70 que no significa nada.
     countQuery().eq('quality_band', 'alta'),
-    getAttentionTodayCount(scope),
+    getUrgentTodayCount(scope),
   ])
 
   const total      = (totalRes.count ?? 0) as number
@@ -157,7 +149,7 @@ export async function getLeadsListData(
 
   if (filters.view === 'kanban') {
     const kanban = await fetchKanbanColumns(supabase, scope, filters, channels)
-    return { items: [], kanban, total, highQualityCount, attentionTodayCount, page: 1, totalPages }
+    return { items: [], kanban, total, highQualityCount, urgentTodayCount, page: 1, totalPages }
   }
 
   // Una URL con `page` fuera de rango (link viejo o editado a mano) cae a la
@@ -178,7 +170,7 @@ export async function getLeadsListData(
     kanban: null,
     total,
     highQualityCount,
-    attentionTodayCount,
+    urgentTodayCount,
     page,
     totalPages,
   }
@@ -218,14 +210,14 @@ async function fetchKanbanColumns(
   }))
 }
 
-// Leads que la IA marcó para hoy en todo el scope (no depende de los filtros
-// activos: es un recordatorio, no una vista de la selección actual).
-export async function getAttentionTodayCount(scope: VisibilityScope): Promise<number> {
+// Leads urgentes para hoy en todo el scope (no depende de los filtros activos:
+// es un recordatorio, no una vista de la selección actual).
+export async function getUrgentTodayCount(scope: VisibilityScope): Promise<number> {
   const supabase = createAdminClient()
   const { count } = await applyVisibilityScope(
     supabase.from('leads_list').select('id', { count: 'exact', head: true }),
     scope,
-  ).eq('attention_when', 'hoy')
+  ).eq('urgency', 'hoy')
   return (count ?? 0) as number
 }
 

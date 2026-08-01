@@ -14,7 +14,7 @@ export const LEADS_PAGE_SIZE = 20
 // el tope acota el payload, no la verdad.
 export const KANBAN_COLUMN_LIMIT = 50
 
-export type LeadSortMode = 'recientes' | 'atencion' | 'prioridad'
+export type LeadSortMode = 'recientes' | 'prioridad'
 export type LeadsView    = 'table' | 'kanban'
 
 // Fila de la lista — sólo lo que la tabla, el kanban y el CSV renderizan.
@@ -30,7 +30,6 @@ export interface LeadListItem {
   phone:                string | null
   language:             Language
   score:                number | null
-  attentionWhen:        'hoy' | 'esta_semana' | 'sin_apuro' | null
   // Los tres ejes del rediseño. `stage` es columna propia desde la 082, así que
   // ya no puede venir nula.
   stage:                Stage
@@ -73,7 +72,7 @@ export interface LeadsListData {
   // Leads de calidad ALTA en el filtro actual. Sustituye al viejo conteo por
   // `current_score >= 70`, umbral que ya no significa nada en el modelo nuevo.
   highQualityCount:    number
-  attentionTodayCount: number
+  urgentTodayCount:    number
   page:                number
   totalPages:          number
 }
@@ -92,7 +91,7 @@ function one(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v
 }
 
-const SORT_MODES: LeadSortMode[] = ['recientes', 'atencion', 'prioridad']
+const SORT_MODES: LeadSortMode[] = ['recientes', 'prioridad']
 
 export function parseLeadListFilters(params: RawParams): LeadListFilters {
   const rawSort = one(params.sort) as LeadSortMode | undefined
