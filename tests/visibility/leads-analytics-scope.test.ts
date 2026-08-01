@@ -91,13 +91,16 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
     expect(stats.closed).toBe(9)
     expect(stats.liveAvgScore).toBe(41)
     expect(stats.thisMonth).toEqual({ leads: 7, hot: 2 })
+    // avg_quality llega null en este fixture: el RPC lo omite cuando no hay
+    // leads con calidad, y el mapeo debe respetarlo sin inventar un 0.
     expect(stats.bySource).toEqual([
-      { channelType: 'lead_magnet', trafficSource: null,        total: 60 },
-      { channelType: null,          trafficSource: 'instagram', total: 60 },
+      { channelType: 'lead_magnet', trafficSource: null,        total: 60, avgQuality: null },
+      { channelType: null,          trafficSource: 'instagram', total: 60, avgQuality: null },
     ])
     expect(stats.byAgent[0]).toEqual({
       agentId: 'agent-dylan', total: 100, hot: 12, closed: 8, avgScore: 44,
-      statuses: { new: 90, hot: 10 },
+      highQuality: 0, avgQuality: 0,
+      statuses: { new: 90, hot: 10 }, stages: {},
     })
     expect(stats.monthly).toEqual([{ month: '2026-07', leads: 7, nurturing: 1, hot: 2, closed: 0 }])
   })
@@ -121,6 +124,7 @@ describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
     expect(stats).toEqual({
       total: 0, hot: 0, closed: 0, liveAvgScore: null,
       thisMonth: { leads: 0, hot: 0 },
+      qualityDistribution: {}, byStage: {},
       bySource: [], byAgent: [], monthly: [],
     })
   })

@@ -5,7 +5,7 @@ import { listSequences } from '@/lib/data/email-sequences'
 import { getLeadAnalyticsStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
-import { bandForScore } from '@/lib/scoring/temperature-band'
+import { QUALITY_BANDS, QUALITY_CONFIG } from '@/lib/scoring/priority'
 import { getLeadSource } from '@/lib/leads/source'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
@@ -67,8 +67,16 @@ export default async function AnalyticsPage() {
 
   // Temperatura promedio (KPI): media de current_score sobre los leads VIVOS
   // (congelados excluidos), mostrada como banda + el número medio de respaldo.
-  const avgLiveTemp = stats.liveAvgScore
-  const tempBand = avgLiveTemp !== null ? bandForScore(avgLiveTemp) : null
+  // Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos: sin
+  // ellos no se puede ver si los buenos leads terminan cerrando.
+  const qualityDist = stats.qualityDistribution
+  const qualityRows = QUALITY_BANDS.map(b => ({
+    band:  b,
+    label: QUALITY_CONFIG[b].label,
+    color: QUALITY_CONFIG[b].color,
+    count: qualityDist[b] ?? 0,
+    pct:   stats.total > 0 ? Math.round(((qualityDist[b] ?? 0) / stats.total) * 100) : 0,
+  }))
 
   // Altas del mes calendario en curso — cortadas en UTC igual que en la base, para
   // que el bucket no dependa de la zona horaria del servidor de Node.
@@ -92,7 +100,7 @@ export default async function AnalyticsPage() {
     manychat:     '💬',
     other:        '📌',
   }
-  const sourceCounts = new Map<string, { label: string; count: number; top: number }>()
+  const sourceCounts = new Map<string, { label: string; count: number; top: number; qualitySum: number }>()
   stats.bySource.forEach(row => {
     const src = getLeadSource(row.channelType, row.trafficSource)
     const prev = sourceCounts.get(src.kind)
@@ -102,10 +110,18 @@ export default async function AnalyticsPage() {
       label: !prev || row.total > prev.top ? src.label : prev.label,
       count: (prev?.count ?? 0) + row.total,
       top:   Math.max(prev?.top ?? 0, row.total),
+      // La media por kind se pondera por volumen: dos filas del mismo kind con
+      // 100 y 2 leads no pueden pesar igual al promediarse.
+      qualitySum: (prev?.qualitySum ?? 0) + (row.avgQuality ?? 0) * row.total,
     })
   })
   const sourceData = [...sourceCounts.entries()]
-    .map(([kind, { label, count }]) => ({ name: label, value: count, emoji: SOURCE_EMOJI[kind] ?? '📌' }))
+    .map(([kind, { label, count, qualitySum }]) => ({
+      name: label,
+      value: count,
+      emoji: SOURCE_EMOJI[kind] ?? '📌',
+      avgQuality: count > 0 ? Math.round(qualitySum / count) : null,
+    }))
     .sort((a, b) => b.value - a.value)
 
   // ─── Agents bar ──────────────────────────────────────────────
@@ -170,15 +186,18 @@ export default async function AnalyticsPage() {
   })
 
   // ─── Avg temp by agent ───────────────────────────────────────
-  const tempByAgent = agents.map(agent => {
+  // Calidad media por agente en vez de temperatura: la temperatura mezclaba el
+  // decaimiento, así que un agente con leads antiguos parecía peor aunque sus
+  // leads fueran igual de buenos.
+  const qualityByAgent = agents.map(agent => {
     const row = byAgent.get(agent.id)
     return {
       agent,
-      avgTemp:    row?.avgScore ?? 0,
-      totalLeads: row?.total    ?? 0,
-      hotLeads:   row?.hot      ?? 0,
+      avgQuality:  row?.avgQuality  ?? 0,
+      totalLeads:  row?.total       ?? 0,
+      highQuality: row?.highQuality ?? 0,
     }
-  }).sort((a, b) => b.avgTemp - a.avgTemp)
+  }).sort((a, b) => b.avgQuality - a.avgQuality)
 
   // tone: 'pos' → green up-arrow + green text (real positive delta); 'neutral' →
   // muted descriptor, no arrow (no fabricated delta).
@@ -211,14 +230,17 @@ export default async function AnalyticsPage() {
       color: 'var(--accent-green)',
     },
     {
-      // Temperatura promedio: banda del score medio de los leads vivos (congelados
-      // excluidos), con el número medio como respaldo.
-      label: 'Temperatura Promedio',
-      value: tempBand ? tempBand.label : '—',
-      sub: avgLiveTemp !== null ? `${avgLiveTemp} pts · pipeline vivo` : 'sin pipeline vivo',
+      // Sustituye a "Temperatura promedio": promediar una escala arbitraria no
+      // significa nada. Cuántos leads son de calidad alta sí — y la distribución
+      // completa está debajo.
+      label: 'Calidad Alta',
+      value: String(qualityDist.alta ?? 0),
+      sub: stats.total > 0
+        ? `${Math.round(((qualityDist.alta ?? 0) / stats.total) * 100)}% de la cartera`
+        : 'sin leads',
       tone: 'neutral',
       icon: <Activity size={18} />,
-      color: tempBand ? tempBand.color : 'var(--text-muted)',
+      color: QUALITY_CONFIG.alta.color,
     },
   ]
 
@@ -279,10 +301,44 @@ export default async function AnalyticsPage() {
         content={{
           resumen: (
             <>
+              {/* Distribución de calidad — reemplaza la "temperatura promedio".
+                  Promediar una escala arbitraria no dice nada; ver cómo se reparte
+                  la cartera entre las cinco bandas sí. Incluye los cerrados: sin
+                  ellos no se puede ver si los buenos leads terminan cerrando. */}
+              <FadeIn delay={0.03} style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={CARD_HEADER}>Distribución de Calidad</div>
+                <div style={CARD_SUBTITLE}>Cómo se reparte tu cartera entre las cinco bandas</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                  {qualityRows.map(r => (
+                    <div key={r.band} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '78px' }}>{r.label}</span>
+                      <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'var(--bg-overlay)' }}>
+                        <div style={{ width: `${r.pct}%`, height: '100%', borderRadius: '4px', background: r.color }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '58px', textAlign: 'right' }}>
+                        {r.count} · {r.pct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </FadeIn>
+
               <FadeIn delay={0.05} style={{ ...CARD, marginBottom: '24px' }}>
                 <div style={CARD_HEADER}>Leads por Fuente</div>
-                <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
+                <div style={CARD_SUBTITLE}>Volumen y calidad media de cada canal</div>
                 <LeadsDonutChart data={sourceData} total={totalLeads} />
+                {/* Calidad media por canal: responde "¿qué fuente trae MEJORES
+                    leads?", que hasta ahora no se podía saber — sólo cuál traía más. */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px' }}>
+                  {sourceData.filter(d => d.avgQuality !== null).map(d => (
+                    <div key={d.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{d.emoji} {d.name}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {d.value} leads · calidad media <strong style={{ color: 'var(--text-secondary)' }}>{d.avgQuality}</strong>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </FadeIn>
               <FadeIn delay={0.1} style={CARD}>
                 <div style={CARD_HEADER}>Evolución de Leads</div>
@@ -310,13 +366,13 @@ export default async function AnalyticsPage() {
 
         {/* Dense table — out of redesign scope; defensive horizontal scroll on phones only. */}
         <div className="max-md:overflow-x-auto" style={CARD}>
-          <div style={CARD_HEADER}>Temperatura por Agente</div>
-          <div style={CARD_SUBTITLE}>Score promedio y leads calientes por agente</div>
+          <div style={CARD_HEADER}>Calidad por Agente</div>
+          <div style={CARD_SUBTITLE}>Calidad media y leads de calidad alta por agente</div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '4px' }}>
             <thead>
               <tr>
-                {['#', 'Agente', 'Leads', '🔥', 'Score'].map(col => (
+                {['#', 'Agente', 'Leads', 'Alta', 'Calidad'].map(col => (
                   <th key={col} style={{
                     fontSize: '10px',
                     fontWeight: 500,
@@ -324,7 +380,7 @@ export default async function AnalyticsPage() {
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',
                     padding: '0 0 10px',
-                    textAlign: col === 'Leads' || col === '🔥' ? 'center' : 'left',
+                    textAlign: col === 'Leads' || col === 'Alta' ? 'center' : 'left',
                   }}>
                     {col}
                   </th>
@@ -332,9 +388,11 @@ export default async function AnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {tempByAgent.map((row, i) => {
-                const barColor = bandForScore(row.avgTemp).color
-                const barWidth = Math.round((row.avgTemp / 100) * 80)
+              {qualityByAgent.map((row, i) => {
+                const barColor = QUALITY_CONFIG[
+                  row.avgQuality >= 60 ? 'alta' : row.avgQuality >= 35 ? 'media' : 'baja'
+                ].color
+                const barWidth = Math.round((row.avgQuality / 100) * 80)
                 return (
                   <tr
                     key={row.agent.id}
@@ -370,7 +428,7 @@ export default async function AnalyticsPage() {
                       {row.totalLeads}
                     </td>
                     <td style={{ padding: '10px 8px', fontSize: '13px', color: 'var(--status-hot)', textAlign: 'center' }}>
-                      {row.hotLeads}
+                      {row.highQuality}
                     </td>
                     <td style={{ padding: '10px 0 10px 8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -378,7 +436,7 @@ export default async function AnalyticsPage() {
                           <div style={{ width: `${barWidth}px`, height: '100%', borderRadius: '2px', background: barColor }} />
                         </div>
                         <span style={{ fontSize: '13px', color: 'var(--text-secondary)', minWidth: '28px' }}>
-                          {row.avgTemp}
+                          {row.avgQuality}
                         </span>
                       </div>
                     </td>
