@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:unit": "vitest run tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/carousels tests/email tests/email-blocking tests/notifications tests/purchase-emails",
+    "test:unit": "vitest run tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/carousels tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business",
     "test:rls": "vitest run tests/rls",
     "test:scoring": "vitest run tests/scoring",
     "test:auth": "vitest run tests/auth",
@@ -19,7 +19,8 @@
     "test:carousels": "vitest run tests/carousels",
     "test:billing": "vitest run tests/billing",
     "test:sources": "vitest run tests/sources",
-    "types:db": "node scripts/gen-db-types.mjs"
+    "types:db": "node scripts/gen-db-types.mjs",
+    "test:business": "vitest run tests/business"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

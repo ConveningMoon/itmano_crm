@@ -1847,7 +1847,13 @@ export type Database = {
           ai_lead_scoring_enabled: boolean
           ai_monthly_limit_usd: number
           ai_unlimited: boolean
+          budget_entry_max: number | null
+          budget_premium_min: number | null
+          commission_buy: number | null
+          commission_model: string | null
+          commission_sell: number | null
           created_at: string | null
+          currency: string | null
           description: string | null
           domain_records: Json | null
           domain_status: string
@@ -1865,7 +1871,13 @@ export type Database = {
           ai_lead_scoring_enabled?: boolean
           ai_monthly_limit_usd?: number
           ai_unlimited?: boolean
+          budget_entry_max?: number | null
+          budget_premium_min?: number | null
+          commission_buy?: number | null
+          commission_model?: string | null
+          commission_sell?: number | null
           created_at?: string | null
+          currency?: string | null
           description?: string | null
           domain_records?: Json | null
           domain_status?: string
@@ -1883,7 +1895,13 @@ export type Database = {
           ai_lead_scoring_enabled?: boolean
           ai_monthly_limit_usd?: number
           ai_unlimited?: boolean
+          budget_entry_max?: number | null
+          budget_premium_min?: number | null
+          commission_buy?: number | null
+          commission_model?: string | null
+          commission_sell?: number | null
           created_at?: string | null
+          currency?: string | null
           description?: string | null
           domain_records?: Json | null
           domain_status?: string

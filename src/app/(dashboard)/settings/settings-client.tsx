@@ -17,6 +17,8 @@ import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABE
 import { PLANS, trialDaysLeft } from '@/lib/plans'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { ScoringSection } from './scoring-section'
+import { BusinessProfileSection } from './business-profile-section'
+import type { BusinessProfile } from '@/lib/business/profile'
 import { Tabs } from '@/components/ui/tabs'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
@@ -1339,7 +1341,7 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'contexto' | 'ia' | 'cuenta'
+type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'scoring' | 'contexto' | 'ia' | 'cuenta'
 
 // El modelo de scoring lo administra ITMANO, así que su pestaña solo existe para
 // super_admin. Dejarla visible en modo lectura era peor que quitarla: una sección
@@ -1348,6 +1350,7 @@ type Tab = 'perfil' | 'agentes' | 'email' | 'scoring' | 'contexto' | 'ia' | 'cue
 function tabsForRole(role: TenantRole): Array<{ value: Tab; label: string }> {
   return [
     { value: 'perfil',   label: 'Perfil del equipo' },
+    { value: 'negocio',  label: 'Perfil de negocio' },
     { value: 'agentes',  label: 'Agentes' },
     { value: 'email',    label: 'Email' },
     ...(role === 'super_admin' ? [{ value: 'scoring' as Tab, label: 'Scoring' }] : []),
@@ -1362,6 +1365,7 @@ interface Props {
   agents: Agent[]
   agentAccess: Record<string, boolean>
   accessCount: number
+  businessProfile: BusinessProfile
   scoringRules: ScoreRule[]
   // Valores recomendados por ITMANO (reglas globales) por id de regla — para el
   // botón "Restablecer a recomendados" del scoring.
@@ -1384,7 +1388,7 @@ interface Props {
 }
 
 export function SettingsClient({
-  tenant, agents, agentAccess, accessCount, scoringRules, recommendedRules,
+  tenant, agents, agentAccess, accessCount, businessProfile, scoringRules, recommendedRules,
   canEditScoring, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
@@ -1419,6 +1423,7 @@ export function SettingsClient({
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
+        negocio: <BusinessProfileSection profile={businessProfile} />,
         scoring: <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />,
         contexto: <ContextSection tenantDescription={tenant.description} agents={agents} canManage={canManageAgents} />,
         ia: (

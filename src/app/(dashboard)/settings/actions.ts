@@ -5,6 +5,10 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
+import {
+  saveBusinessProfile as persistBusinessProfile,
+  type BusinessProfileInput,
+} from '@/lib/data/business-profile'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { PLANS } from '@/lib/plans'
@@ -947,4 +951,25 @@ export async function deleteAgent(
   revalidatePath('/properties')
   revalidatePath('/sources')
   return { ok: true, reassignedTo: targetAgentId }
+}
+
+// ─── Perfil de negocio (086) ─────────────────────────────────────────────────
+// Lo rellena ITMANO al dar de alta al cliente y el tenant puede corregirlo:
+// misma regla de escritura que el resto de Ajustes (owner o super_admin).
+
+export async function saveBusinessProfile(
+  input: BusinessProfileInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const res = await persistBusinessProfile(tenantId, input)
+  if (!res.ok) return res
+
+  revalidatePath('/settings')
+  return { ok: true }
 }

@@ -138,6 +138,20 @@ Esto preserva el diferenciador (un CRM que gestiona equipos) y deja abierta la p
 
 ---
 
+## Perfil de negocio del tenant
+
+Lo que la agencia sabe de su mercado y el CRM no puede deducir. Vive en columnas de `tenants` (migración 086) y se edita en **Ajustes → Perfil de negocio**: lo rellena ITMANO al dar de alta al cliente y el tenant puede corregirlo.
+
+**Todo es nullable a propósito.** Un tenant sin perfil opera exactamente igual; nada del motor depende de que esté relleno.
+
+El campo que más importa no es la comisión sino **los rangos de presupuesto**. `budget_tier` (premium / mid / entry) ya se usa en el fit, y el prompt de la IA dice que ese nivel es "RELATIVO al mercado de la agencia" — pero hasta la 086 nadie le daba los números de esa agencia. 300.000 es de entrada en Barcelona y premium en Hampton Roads; esa diferencia se resolvía adivinando.
+
+`budgetTierFor()` devuelve **null** cuando faltan los cortes. "No lo sé" y "es de entrada" son respuestas distintas: la segunda le restaría puntos a un lead del que no sabemos nada.
+
+La comisión (porcentaje o monto fijo, y distinta para compra y venta) habilita ordenar por valor esperado: dos leads igual de buenos no valen lo mismo si uno compra el doble.
+
+---
+
 ## Modelo de scoring
 
 El scoring es el corazón operativo del CRM: determina el estado del lead, dirige la atención del agente y dispara notificaciones.
@@ -371,6 +385,7 @@ Esto existe porque la migración 082 quitó `attention_when` de `leads_list`, el
 | Cualquier dato de la BD | El MCP de Supabase — nunca este archivo |
 | Leads, agentes, canales, lead magnets | `src/lib/types.ts`, `src/lib/config.ts`, el `src/lib/data/*.ts` correspondiente |
 | Planes, precios, límites, trial | `src/lib/plans.ts` (fuente de verdad), `src/lib/subscriptions.ts` |
+| Perfil de negocio del tenant | `src/lib/business/profile.ts` (puro) + `src/lib/data/business-profile.ts` |
 | Scoring, transiciones de estado, notificaciones | La tabla `lead_score_rules` vía MCP + `src/lib/scoring/` |
 | Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
 | Auth o el proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs de Supabase SSR |
