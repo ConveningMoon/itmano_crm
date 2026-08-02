@@ -315,20 +315,29 @@ npx tsc --noEmit  # chequeo de tipos
 npm run types:db  # regenera src/lib/supabase/database.types.ts desde la BD
 ```
 
-Suites de tests (Vitest) — corre la que cubre lo que tocaste:
+Suites de tests (Vitest):
 
 ```
+npm run test:unit       # TODAS las suites que no tocan la BD — 6 s, sin secretos
 npm run test:rls        # aislamiento por tenant (pega a la BD remota: nunca en paralelo)
-npm run test:scoring    # triggers de scoring y decay
-npm run test:auth       # auth + espejo del matcher del proxy
-npm run test:billing    # suscripciones, degradación, restauración
-npm run test:ai-limits  # presupuesto de IA
-npm run test:leads      # flujos de leads
-npm run test:import     # importación CSV/XLSX
-npm run test:routing    # ruteo automático por idioma
-npm run test:visibility # alcance de visibilidad por agente
-npm run test:carousels  # motor de carousels
+npm run test:scoring    # triggers de scoring y decay (BD remota)
+npm run test:ai-limits  # presupuesto de IA (BD remota)
 ```
+
+`test:unit` es lo que hay que correr casi siempre. Las otras tres pegan a la BD
+remota compartida y **usan los mismos fixtures** (`tests/rls/setup.ts`): córrelas
+de una en una, nunca en paralelo entre sí ni con un build.
+
+Las suites sueltas siguen existiendo (`test:leads`, `test:visibility`,
+`test:import`, `test:routing`, `test:billing`, `test:auth`, `test:carousels`,
+`test:sources`) para iterar sobre un área concreta.
+
+**En CI** (`.github/workflows/`): `checks.yml` corre tipos, lint y `test:unit` en
+todos los PR; `rls-tests.yml` corre las tres de BD, también en todos los PR y
+serializadas. El disparador de esta última era `paths: supabase/migrations/**` y
+eso dejaba una ventana ciega: la BD cambia cuando se APLICA la migración, no
+cuando se mergea el archivo, así que un PR posterior que no tocaba migraciones
+nunca volvía a probar el esquema nuevo.
 
 Si cambias el matcher de `src/proxy.ts`, actualiza `tests/auth/middleware-matcher.test.ts` en el mismo commit: refleja el literal.
 
