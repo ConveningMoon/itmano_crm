@@ -1,0 +1,39 @@
+name: Checks
+
+# Tipos, lint y las suites que NO tocan la base. Corre en todos los PR: es
+# barato, no necesita secretos y atrapa la mayoría de las regresiones antes de
+# que nadie mire el diff.
+on:
+  pull_request:
+
+concurrency:
+  group: checks-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Aquí es donde salta un `.select()` con una columna que la vista ya no
+      # expone: las listas se validan contra src/lib/supabase/database.types.ts.
+      - name: Types
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      # Suites puras o con el cliente de Supabase mockeado. Las que pegan a la
+      # base van en rls-tests.yml, que corre serializado y con secretos.
+      - name: Unit tests
+        run: npm run test:unit

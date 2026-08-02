@@ -1,10 +1,21 @@
 name: RLS Tests
 
+# Corre en TODOS los PR, no sólo cuando cambian las migraciones.
+#
+# El disparador anterior era `paths: supabase/migrations/**`, y parecía
+# razonable: si no cambia el esquema, no hace falta re-probarlo. Pero estas
+# suites no corren contra el esquema del PR — corren contra la base REMOTA
+# compartida, y esa cambia cuando se APLICA la migración, no cuando se mergea
+# el archivo.
+#
+# Pasó exactamente eso: la 083 borró `leads.status` y se aplicó a la base
+# después de mergear su PR. Los fixtures siguieron sembrando esa columna, los
+# tests quedaron rotos, y ningún PR posterior los ejecutó porque ninguno tocaba
+# migraciones. El fallo apareció más tarde, en un PR que no lo había causado.
+#
+# Correrlas siempre cuesta ~2,5 min y cierra esa ventana ciega.
 on:
   pull_request:
-    paths:
-      - 'supabase/migrations/**'
-      - 'tests/rls/**'
 
 # All runs share one remote Supabase database with fixed fixture IDs
 # (tests/rls/setup.ts). Two concurrent runs interleave createFixtures/
@@ -29,10 +40,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run RLS tests
+      # Secuenciales a propósito: scoring y ai-limits usan los MISMOS fixtures
+      # que rls (tests/rls/setup.ts). En paralelo se pisarían entre sí igual que
+      # dos corridas simultáneas.
+      - name: Run DB-backed tests
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
-        run: npm run test:rls
+        run: |
+          npm run test:rls
+          npm run test:scoring
+          npm run test:ai-limits
