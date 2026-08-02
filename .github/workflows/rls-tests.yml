@@ -53,3 +53,4 @@ jobs:
           npm run test:rls
           npm run test:scoring
           npm run test:ai-limits
+          npm run test:sources

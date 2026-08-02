@@ -35,5 +35,13 @@ jobs:
 
       # Suites puras o con el cliente de Supabase mockeado. Las que pegan a la
       # base van en rls-tests.yml, que corre serializado y con secretos.
+      #
+      # RESEND_API_KEY va con un valor de mentira a proposito. No se manda ni un
+      # correo aqui: src/lib/resend.ts valida la clave AL IMPORTARSE, asi que
+      # tres suites que solo la arrastran de forma transitiva reventaban al
+      # cargar el modulo. Con secretos de verdad este job dejaria de ser el
+      # check barato y sin permisos que queremos que sea.
       - name: Unit tests
+        env:
+          RESEND_API_KEY: test-key-no-envia-nada
         run: npm run test:unit
