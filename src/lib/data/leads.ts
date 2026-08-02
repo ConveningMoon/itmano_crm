@@ -21,7 +21,7 @@ import type { Language } from '@/lib/types'
 // premura en el servidor sin mandar la columna `metadata` completa al cliente.
 
 // Verificadas contra el esquema generado: pedir una columna que la vista no
-// expone es error de tsc, no una pagina en blanco en produccion.
+// expone es error de tsc, no una página en blanco en producción.
 const LIST_COLUMNS = columns('leads_list', [
   'id', 'agent_id', 'acquisition_channel_id', 'traffic_source',
   'first_name', 'last_name', 'email', 'phone', 'language',
