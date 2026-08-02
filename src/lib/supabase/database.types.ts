@@ -1,12 +1,8 @@
-// GENERADO por Supabase — no editar a mano.
+// GENERADO — no editar a mano. Se regenera con `npm run types:db`.
 //
-// Regenerar tras cada migracion:
-//   npx supabase gen types typescript --project-id kvmjlrvlnhiarrqxulkr > src/lib/supabase/database.types.ts
-//
-// Existe para una razon concreta: la migracion 082 quito `attention_when` de
-// `leads_list`, el codigo siguio pidiendola en un .select() y /leads dejo de
-// cargar en produccion. Los nombres de columna vivian en strings que nadie
-// validaba. Con estos tipos, pedir una columna que no existe es error de tsc.
+// Correrlo DESPUÉS de cada migración que cambie columnas: este archivo es el
+// espejo del esquema real y lo que hace que `columns()` pueda validar los
+// .select() (ver src/lib/supabase/columns.ts para el porqué).
 
 export type Json =
   | string
@@ -1212,7 +1208,6 @@ export type Database = {
           score_updated_at: string | null
           search_text: string | null
           stage: string
-          temperature_score: number | null
           tenant_id: string
           traffic_source: string | null
           traffic_source_detail: Json | null
@@ -1246,7 +1241,6 @@ export type Database = {
           score_updated_at?: string | null
           search_text?: string | null
           stage?: string
-          temperature_score?: number | null
           tenant_id: string
           traffic_source?: string | null
           traffic_source_detail?: Json | null
@@ -1280,7 +1274,6 @@ export type Database = {
           score_updated_at?: string | null
           search_text?: string | null
           stage?: string
-          temperature_score?: number | null
           tenant_id?: string
           traffic_source?: string | null
           traffic_source_detail?: Json | null
@@ -1971,7 +1964,6 @@ export type Database = {
           score_updated_at: string | null
           search_text: string | null
           stage: string | null
-          temperature_score: number | null
           tenant_id: string | null
           traffic_source: string | null
           traffic_source_detail: Json | null
@@ -2029,6 +2021,15 @@ export type Database = {
       }
       lead_dashboard_stats: {
         Args: { p_agent_id?: string; p_tenant_id?: string }
+        Returns: Json
+      }
+      lead_response_time_stats: {
+        Args: {
+          p_action_types?: string[]
+          p_agent_id?: string
+          p_days?: number
+          p_tenant_id?: string
+        }
         Returns: Json
       }
       recalc_lead_score: { Args: { p_lead_id: string }; Returns: undefined }

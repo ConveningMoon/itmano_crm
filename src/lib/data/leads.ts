@@ -95,8 +95,6 @@ function mapRow(r: any): LeadListItem {
     email:                r.email as string,
     phone:                (r.phone ?? null) as string | null,
     language:             r.language as Language,
-    // current_score es el score canónico del motor (temperature_score es la
-    // columna legacy que ya no se escribe).
     score:                (r.current_score ?? null) as number | null,
     stage:                r.stage as Stage,
     qualityBand:          (r.quality_band ?? null) as LeadListItem['qualityBand'],
