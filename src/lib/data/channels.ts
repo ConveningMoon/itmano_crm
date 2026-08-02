@@ -37,7 +37,7 @@ export interface ChannelLead {
   lastName: string
   email: string
   stage: string
-  temperatureScore: number | null
+  score: number | null
   trafficSource: string | null
   createdAt: string
 }
@@ -192,7 +192,7 @@ export async function getChannelLeads(
     lastName:         r.last_name,
     email:            r.email,
     stage:            r.stage,
-    temperatureScore: r.current_score,
+    score:            r.current_score,
     trafficSource:    r.traffic_source,
     createdAt:        r.created_at,
   }))

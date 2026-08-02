@@ -67,8 +67,7 @@ export interface Lead {
   language: Language
   /** Dónde está en el embudo. La mueve el agente, no el scoring (migración 082). */
   stage: import('./scoring/priority').Stage
-  temperatureScore: number | null
-  peakScore: number | null
+  /** El score del motor. Decae con el tiempo — para "qué tan bueno es", usa quality. */
   currentScore: number | null
   /** Qué tan bueno es. Lo calcula el sistema y NO decae. */
   qualityScore: number | null
@@ -76,10 +75,6 @@ export interface Lead {
   engagementScore: number | null
   manualScore: number | null
   lastEventAt: string | null
-  // Premura de la próxima acción según el último briefing de IA (metadata.ai_fit).
-  // NO es la temperatura (esa mide qué tan bueno es el lead): mide qué tan pronto
-  // conviene actuar. null cuando no hay briefing con IA.
-  attentionWhen?: 'hoy' | 'esta_semana' | 'sin_apuro' | null
   lender?: string
   notes?: string
   createdAt: string

@@ -30,7 +30,6 @@ export interface LeadRow {
   phone: string | null
   language: string
   stage: string
-  temperature_score: number | null
   peak_score: number | null
   current_score: number | null
   quality_score: number | null
@@ -115,28 +114,17 @@ export function mapLead(r: LeadRow): Lead {
     phone: r.phone ?? undefined,
     language: r.language as Lead['language'],
     stage: r.stage as Lead['stage'],
-    // current_score is the canonical engine score; temperatureScore (legacy column,
-    // no longer written) is repointed to it so all UI surfaces show the real score.
-    temperatureScore: r.current_score ?? null,
-    peakScore: r.peak_score ?? null,
     currentScore: r.current_score ?? null,
     qualityScore: r.quality_score ?? null,
     fitScore: r.fit_score ?? null,
     engagementScore: r.engagement_score ?? null,
     manualScore: r.manual_score ?? null,
     lastEventAt: r.last_event_at ?? null,
-    attentionWhen: extractAttentionWhen(r.metadata),
     lender: r.lender ?? undefined,
     notes: r.notes ?? undefined,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
-}
-
-// Premura del último briefing de IA (leads.metadata.ai_fit.next_action_when).
-function extractAttentionWhen(metadata: Record<string, unknown> | null | undefined): Lead['attentionWhen'] {
-  const w = (metadata?.ai_fit as { next_action_when?: unknown } | undefined)?.next_action_when
-  return w === 'hoy' || w === 'esta_semana' || w === 'sin_apuro' ? w : null
 }
 
 export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
