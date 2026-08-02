@@ -7,6 +7,7 @@ import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
+import { getBusinessProfile } from '@/lib/data/business-profile'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
@@ -26,9 +27,10 @@ export default async function SettingsPage() {
 
   // Identidad (id + email) sale del contexto: ya validó el JWT, así que pedirle
   // el usuario otra vez al servidor de auth solo sumaba una ida y vuelta.
-  const [{ data: tenantRow }, { data: rawAgents }, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
+  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
+    getBusinessProfile(tenantId),
     getEffectiveScoreRules(tenantId),
     getGlobalScoreRules(),
     // Honest "active accesses" = every login profile in this tenant (owner + any
@@ -114,6 +116,7 @@ export default async function SettingsPage() {
         agents={agents}
         agentAccess={agentAccess}
         accessCount={accessCountRes.count ?? 0}
+        businessProfile={businessProfile}
         scoringRules={scoringRules}
         recommendedRules={recommendedRules}
         // El modelo de scoring lo administra ITMANO — ver updateScoreRules.
