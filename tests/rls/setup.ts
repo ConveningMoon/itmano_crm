@@ -196,6 +196,9 @@ export async function createFixtures(): Promise<{
   )
 
   // 6. Create leads (one per tenant; acquisition_channel_id is nullable)
+  //
+  // `stage`, no `status`: la migracion 083 borro la columna. `temperature_score`
+  // tampoco se siembra — es legacy y nadie la escribe desde la 072.
   await adminClient.from('leads').upsert(
     [
       {
@@ -207,8 +210,7 @@ export async function createFixtures(): Promise<{
         last_name: 'A',
         email: 'lead-a@test.invalid',
         language: 'es',
-        status: 'new',
-        temperature_score: 10,
+        stage: 'nuevo',
       },
       {
         id: LEAD_B_ID,
@@ -219,8 +221,7 @@ export async function createFixtures(): Promise<{
         last_name: 'B',
         email: 'lead-b@test.invalid',
         language: 'en',
-        status: 'new',
-        temperature_score: 10,
+        stage: 'nuevo',
       },
     ],
     { onConflict: 'id' }
