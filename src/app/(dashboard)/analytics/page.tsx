@@ -376,15 +376,15 @@ export default async function AnalyticsPage() {
             ? {
                 agentes: (
             <>
-              {/* Tiempo de respuesta — la metrica operativa que faltaba. Mediana,
+              {/* Tiempo de respuesta — la métrica operativa que faltaba. Mediana,
                   no promedio: un solo lead contestado tres semanas tarde arrastra
-                  la media a un numero que no describe a nadie. */}
+                  la media a un número que no describe a nadie. */}
               <div style={{ ...CARD, marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                   <div>
                     <div style={CARD_HEADER}>Tiempo de Respuesta</div>
                     <div style={CARD_SUBTITLE}>
-                      Cuanto se tarda en tocar un lead que llego solo. Los registrados a mano no cuentan: no hay nada que responder.
+                      Cuánto se tarda en tocar un lead que llegó solo. Los registrados a mano no cuentan: no hay nada que responder.
                     </div>
                   </div>
                   {responseTime.respondidos > 0 && (
@@ -404,7 +404,7 @@ export default async function AnalyticsPage() {
 
                 {responseTime.total === 0 ? (
                   <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '10px' }}>
-                    Todavia no han entrado leads por formulario en la ventana. La metrica empieza a contar en cuanto llegue el primero.
+                    Todavía no han entrado leads por formulario en la ventana. La métrica empieza a contar en cuanto llegue el primero.
                   </div>
                 ) : (
                   <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -427,7 +427,9 @@ export default async function AnalyticsPage() {
                     })}
                     {responseTime.sinResponder > 0 && (
                       <div style={{ fontSize: '11.5px', color: 'var(--accent-coral)', marginTop: '4px' }}>
-                        {responseTime.sinResponder} lead(s) sin una sola respuesta todavia.
+                        {responseTime.sinResponder === 1
+                          ? 'Un lead sin una sola respuesta todavía.'
+                          : `${responseTime.sinResponder} leads sin una sola respuesta todavía.`}
                       </div>
                     )}
                   </div>

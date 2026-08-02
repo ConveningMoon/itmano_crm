@@ -13,7 +13,7 @@ export interface SubmissionLead {
   lastName:         string
   email:            string
   phone:            string | null
-  temperatureScore: number | null
+  score:            number | null
   stage:            string
 }
 
@@ -109,7 +109,7 @@ export async function getSubmissionsForChannel(
             lastName:         leadRaw.last_name ?? '',
             email:            leadRaw.email ?? '',
             phone:            leadRaw.phone ?? null,
-            temperatureScore: leadRaw.current_score ?? null,
+            score:            leadRaw.current_score ?? null,
             stage:            leadRaw.stage ?? '',
           }
         : null,

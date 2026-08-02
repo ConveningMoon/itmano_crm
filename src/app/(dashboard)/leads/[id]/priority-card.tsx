@@ -142,7 +142,7 @@ export function PriorityCard({ priority, breakdown, opportunities }: {
           <FactRow label="A favor"   items={aFavor} />
           <FactRow label="En contra" items={enContra} negative />
           {/* Una oportunidad NO es un punto a favor: no hace mejor a este lead,
-              abre otra operacion. Por eso va aparte y no suma al score. */}
+              abre otra operación. Por eso va aparte y no suma al score. */}
           {opportunities.map(o => (
             <div key={o.key} style={{
               marginTop: '12px', padding: '10px 12px', borderRadius: '8px',
