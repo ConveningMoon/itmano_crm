@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { getAiLimitStatus } from '@/lib/services/ai-limit'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { getBusinessProfile } from '@/lib/data/business-profile'
+import { formatMoney, hasBudgetBands } from '@/lib/business/profile'
 import { BUCKETS, BUY_DIMS, SELL_DIMS, DIM_LABEL, type Dimension } from '@/lib/scoring/vocabulary'
 
 // ── Análisis de fit de leads con IA (fase de prueba, apagado por tenant) ──────
@@ -108,6 +110,9 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     // webhook de respuestas de Resend y desde el de contacto. Sin él, un tenant
     // cancelado cuyas landing pages sigan vivas quema presupuesto de Anthropic
     // que paga ITMANO, sin que nadie lo esté mirando.
+    // Perfil de negocio: los numeros con los que el modelo deja de adivinar.
+    const profile = await getBusinessProfile(input.tenantId)
+
     const access = await getTenantAccessFor(input.tenantId)
     if (!access.canUseAi) return skip('subscription_inactive', input.leadId)
 
@@ -155,10 +160,24 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     for (const s of (subsRows ?? []) as { answers: unknown }[]) {
       if (Array.isArray(s.answers)) answers.push(...(s.answers as AnswerItem[]))
     }
-    const answerLines = answers
-      .map(a => `- ${a.question ?? a.key ?? '¿?'}: ${a.label ?? a.value ?? ''}`)
-      .filter(l => l.trim().length > 3)
-      .slice(0, 40)
+    // Las respuestas vienen de hasta 5 envios, y un reenvio repite las mismas
+    // preguntas: mandarlas todas gastaba tokens en duplicados. Se queda la mas
+    // reciente de cada pregunta (mismo criterio latest-wins que el fit_profile)
+    // y, si una cambio entre envios, se marca — esa contradiccion SI es senal y
+    // el briefing la usa para pedirle al agente que la aclare.
+    const porPregunta = new Map<string, { valor: string; cambio: boolean }>()
+    for (const a of answers) {
+      const clave = String(a.question ?? a.key ?? '').trim()
+      const valor = String(a.label ?? a.value ?? '').trim()
+      if (!clave || !valor) continue
+      const previo = porPregunta.get(clave)
+      // `answers` viene de mas reciente a mas antiguo: el primero que se ve gana.
+      if (!previo) porPregunta.set(clave, { valor, cambio: false })
+      else if (previo.valor !== valor) previo.cambio = true
+    }
+    const answerLines = [...porPregunta.entries()]
+      .slice(0, 25)
+      .map(([clave, v]) => `- ${clave}: ${v.valor}${v.cambio ? ' (cambio respecto a un envio anterior)' : ''}`)
 
     // Historial de actividad (lead_events): da comportamiento + señales al análisis.
     const { data: eventRows } = await db
@@ -167,23 +186,45 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
       .eq('lead_id', input.leadId)
       .order('created_at', { ascending: false })
       .limit(25)
+    // Eventos de fontaneria de email: dicen que el servidor entrego el correo,
+    // no que el lead hiciera nada. Ocupaban una linea cada uno en el prompt y no
+    // cambian ninguna conclusion del analisis.
+    const RUIDO = new Set(['email_delivered', 'email_sent', 'purchase_email_sent', 'email_opened'])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const activityLines = ((eventRows ?? []) as any[])
-      .map(e => `- ${new Date(e.created_at).toISOString().slice(0, 10)} · ${e.type}${e.description ? `: ${String(e.description).slice(0, 120)}` : ''}${e.points ? ` (${e.points > 0 ? '+' : ''}${e.points} pts)` : ''}`)
+      .filter(e => !RUIDO.has(e.type as string))
+      .slice(0, 15)
+      // Los puntos por evento no se mandan: el modelo ya recibe los totales, y
+      // repetirlos le invitaba a re-sumar el score en vez de interpretarlo.
+      .map(e => `- ${new Date(e.created_at).toISOString().slice(0, 10)} ${e.type}${e.description ? `: ${String(e.description).slice(0, 100)}` : ''}`)
 
     // Qué disparó este análisis (para anclar el `when` de la próxima acción).
     const triggerPhrase = TRIGGER_PHRASE[input.reason ?? 'action'] ?? 'Se pidió un análisis del lead.'
 
+    // Con cortes declarados, el modelo NO tiene que estimar el nivel: se le dan
+    // los numeros y clasifica. Sin ellos vuelve la regla vaga de antes, que es
+    // lo mejor que se puede hacer sin el dato.
+    const reglaPresupuesto = hasBudgetBands(profile)
+      ? `Regla del fit: budget_tier se decide con los cortes de ESTA agencia — hasta ${formatMoney(profile.budgetEntryMax, profile.currency)} es "entry", desde ${formatMoney(profile.budgetPremiumMin, profile.currency)} es "premium", en medio "mid". No estimes: compara contra esos cortes.`
+      : 'Regla clave del fit: el nivel de presupuesto (budget_tier) es RELATIVO al mercado de la agencia. Usa el contexto de la agencia.'
+
+    // Zonas: geo_fit puntua +5 / 0 / -10 y hasta la 087 nadie definia cuales
+    // eran. Sin zonas declaradas se le pide explicitamente que no las invente.
+    const lineaZonas = profile.primaryAreas.length > 0 || profile.secondaryAreas.length > 0
+      ? `Zonas de la agencia — principal: ${profile.primaryAreas.join(', ') || '(ninguna)'}. Secundaria: ${profile.secondaryAreas.join(', ') || '(ninguna)'}. Fuera de esas listas, geo_fit = fuera_de_zona.`
+      : 'La agencia no declaro sus zonas: deja geo_fit sin determinar en vez de suponerlo.'
+
     const prompt = [
       'Eres el analista de ventas de una agencia inmobiliaria. Con TODA la información del lead haces DOS cosas con el tool:',
       '1) Clasificas al lead en los buckets de fit. 2) Preparas un BRIEFING accionable para que el agente sepa exactamente qué hacer ahora con este lead.',
-      'Regla clave del fit: el nivel de presupuesto (budget_tier) es RELATIVO al mercado de la agencia — el mismo monto puede ser premium en un mercado y de entrada en otro. Usa el contexto de la agencia.',
+      reglaPresupuesto,
       'Reglas del briefing: UNA sola próxima acción (no una lista). Concreta y ejecutable. Escribe TODO en el idioma del lead. No inventes datos ni programas que no aparezcan en el contexto; si una dimensión de fit no se puede determinar, usa "unknown".',
       'El `next_action_when` es la PREMURA de la acción, NO qué tan bueno es el lead (eso ya lo mide el score). Ánclalo a lo que el lead ACABA de hacer y a su historial: una respuesta, una visita agendada, una valuación o una consulta concreta = "hoy" aunque el score sea bajo; un lead ya en proceso estable o solo explorando puede ser "sin_apuro" aunque el score sea alto.',
       '',
       `Disparador de este análisis: ${triggerPhrase}`,
       '',
       `Agencia: ${tenant.name}.`,
+      lineaZonas,
       tenant.description ? `Contexto y mercado de la agencia:\n${tenant.description}` : 'Contexto de la agencia: no especificado.',
       agentName ? `Agente asignado: ${agentName}.${agentDesc ? ' ' + agentDesc : ''}` : null,
       '',

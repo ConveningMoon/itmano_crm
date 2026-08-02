@@ -14,6 +14,10 @@ export type CommissionModel = typeof COMMISSION_MODELS[number]
 export const BUDGET_TIERS = ['premium', 'mid', 'entry'] as const
 export type BudgetTier = typeof BUDGET_TIERS[number]
 
+/** Los buckets de `geo_fit`, de mejor a peor encaje. */
+export const GEO_FITS = ['zona_principal', 'zona_secundaria', 'fuera_de_zona'] as const
+export type GeoFit = typeof GEO_FITS[number]
+
 export interface BusinessProfile {
   currency:         Currency | null
   commissionModel:  CommissionModel | null
@@ -25,12 +29,17 @@ export interface BusinessProfile {
   budgetEntryMax:   number | null
   /** Desde aquí, "premium". Entre ambos, "mid". */
   budgetPremiumMin: number | null
+  /** Zonas donde la agencia trabaja habitualmente. */
+  primaryAreas:     string[]
+  /** Zonas que atiende sin ser su foco. Fuera de ambas, fuera_de_zona. */
+  secondaryAreas:   string[]
 }
 
 export const EMPTY_PROFILE: BusinessProfile = {
   currency: null, commissionModel: null,
   commissionBuy: null, commissionSell: null,
   budgetEntryMax: null, budgetPremiumMin: null,
+  primaryAreas: [], secondaryAreas: [],
 }
 
 export const CURRENCY_SYMBOL: Record<Currency, string> = { USD: '$', EUR: '€' }
@@ -90,6 +99,36 @@ export function formatMoney(amount: number | null | undefined, currency: Currenc
   return `${symbol}${Math.round(amount).toLocaleString('es-ES')}`
 }
 
+/** Normaliza para comparar zonas: sin tildes, sin mayúsculas, sin sobrantes. */
+function normalizeArea(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+}
+
+/**
+ * En qué bucket de `geo_fit` cae una zona PARA ESTA AGENCIA.
+ *
+ * Igual que con el presupuesto: sin zonas declaradas devuelve null, no
+ * `fuera_de_zona`. Restarle 10 puntos a un lead por una zona que nadie definió
+ * sería castigarlo por un hueco de configuración.
+ *
+ * El match es por contención en ambos sentidos: el lead escribe "Virginia
+ * Beach, VA" y la agencia declaró "Virginia Beach".
+ */
+export function geoFitFor(area: string | null | undefined, p: BusinessProfile): GeoFit | null {
+  if (!area || !area.trim()) return null
+  if (p.primaryAreas.length === 0 && p.secondaryAreas.length === 0) return null
+
+  const a = normalizeArea(area)
+  const casa = (lista: string[]) => lista.some(z => {
+    const n = normalizeArea(z)
+    return n.length > 0 && (a.includes(n) || n.includes(a))
+  })
+
+  if (casa(p.primaryAreas))   return 'zona_principal'
+  if (casa(p.secondaryAreas)) return 'zona_secundaria'
+  return 'fuera_de_zona'
+}
+
 /** Qué le falta al perfil para ser útil. Vacío = completo. */
 export function missingFields(p: BusinessProfile): string[] {
   const faltan: string[] = []
@@ -97,5 +136,6 @@ export function missingFields(p: BusinessProfile): string[] {
   if (!p.commissionModel)              faltan.push('el modelo de comisión')
   if (p.commissionBuy === null && p.commissionSell === null) faltan.push('al menos una comisión')
   if (!hasBudgetBands(p))              faltan.push('los rangos de presupuesto')
+  if (p.primaryAreas.length === 0)     faltan.push('las zonas donde trabajas')
   return faltan
 }

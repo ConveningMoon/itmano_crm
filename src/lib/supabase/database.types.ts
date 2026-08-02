@@ -1861,9 +1861,11 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          primary_areas: string[] | null
           primary_color: string
           resend_account: string
           resend_domain_id: string | null
+          secondary_areas: string[] | null
           sending_domain: string | null
           slug: string
         }
@@ -1885,9 +1887,11 @@ export type Database = {
           id: string
           logo_url?: string | null
           name: string
+          primary_areas?: string[] | null
           primary_color?: string
           resend_account?: string
           resend_domain_id?: string | null
+          secondary_areas?: string[] | null
           sending_domain?: string | null
           slug: string
         }
@@ -1909,9 +1913,11 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          primary_areas?: string[] | null
           primary_color?: string
           resend_account?: string
           resend_domain_id?: string | null
+          secondary_areas?: string[] | null
           sending_domain?: string | null
           slug?: string
         }

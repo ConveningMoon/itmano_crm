@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   budgetTierFor, expectedCommission, hasBudgetBands, formatMoney, missingFields,
-  EMPTY_PROFILE, type BusinessProfile,
+  geoFitFor, EMPTY_PROFILE, type BusinessProfile,
 } from '@/lib/business/profile'
 
 // Hampton Roads: casa media ~350k. Barcelona: la misma cifra es de entrada.
@@ -9,11 +9,13 @@ const AJ: BusinessProfile = {
   currency: 'USD', commissionModel: 'percentage',
   commissionBuy: 3, commissionSell: 3,
   budgetEntryMax: 250_000, budgetPremiumMin: 600_000,
+  primaryAreas: ['Virginia Beach', 'Norfolk'], secondaryAreas: ['Chesapeake'],
 }
 const TECNOCASA: BusinessProfile = {
   currency: 'EUR', commissionModel: 'percentage',
   commissionBuy: 4, commissionSell: 4,
   budgetEntryMax: 400_000, budgetPremiumMin: 900_000,
+  primaryAreas: ['Barcelona'], secondaryAreas: ['Badalona'],
 }
 
 describe('budgetTierFor — el mismo monto significa cosas distintas', () => {
@@ -96,13 +98,39 @@ describe('formatMoney', () => {
   })
 })
 
+describe('geoFitFor — la zona que nadie había definido', () => {
+  it('clasifica contra las zonas declaradas por la agencia', () => {
+    expect(geoFitFor('Virginia Beach', AJ)).toBe('zona_principal')
+    expect(geoFitFor('Chesapeake', AJ)).toBe('zona_secundaria')
+    expect(geoFitFor('Miami', AJ)).toBe('fuera_de_zona')
+  })
+
+  it('aguanta cómo lo escribe el lead', () => {
+    // El lead pone "Virginia Beach, VA" y la agencia declaró "Virginia Beach".
+    expect(geoFitFor('Virginia Beach, VA', AJ)).toBe('zona_principal')
+    expect(geoFitFor('  virginia beach  ', AJ)).toBe('zona_principal')
+    expect(geoFitFor('BADALONA', TECNOCASA)).toBe('zona_secundaria')
+  })
+
+  it('sin zonas declaradas devuelve null, NO fuera_de_zona', () => {
+    // geo_fit resta 10 puntos. Aplicarlo por un hueco de configuración seria
+    // castigar al lead por algo que la agencia nunca declaró.
+    expect(geoFitFor('Miami', EMPTY_PROFILE)).toBeNull()
+  })
+
+  it('sin zona del lead tampoco inventa', () => {
+    expect(geoFitFor(null, AJ)).toBeNull()
+    expect(geoFitFor('   ', AJ)).toBeNull()
+  })
+})
+
 describe('missingFields — qué le falta al perfil', () => {
   it('un perfil completo no pide nada', () => {
     expect(missingFields(AJ)).toEqual([])
   })
 
   it('uno vacío pide las cuatro cosas', () => {
-    expect(missingFields(EMPTY_PROFILE)).toHaveLength(4)
+    expect(missingFields(EMPTY_PROFILE)).toHaveLength(5)
   })
 
   it('con una sola comisión ya vale', () => {
