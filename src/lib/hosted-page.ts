@@ -3,6 +3,7 @@
 // páginas públicas (hosted) y el proxy (mapa de subdominios).
 
 import { z } from 'zod'
+import { QUALIFYING_DIMENSIONS } from '@/lib/hosted-questions'
 
 // ── Subdominios ───────────────────────────────────────────────────────────────
 // CNAMEs a registrar en el DNS de itmano.com → cname.vercel-dns.com y agregar
@@ -43,6 +44,18 @@ export const HostedQuestionSchema = z.object({
   type:     z.enum(['text', 'select']),
   options:  z.array(z.string().trim().min(1).max(120)).max(12).optional(),
   required: z.boolean().default(false),
+  // Pregunta de CALIFICACIÓN: su clave es una dimensión del modelo y sus
+  // opciones NO se guardan aquí — se derivan del perfil de negocio al
+  // renderizar (ver hosted-questions.ts). Por eso cambiar los rangos o las
+  // zonas en Ajustes corrige el formulario solo: no hay copia que actualizar.
+  //
+  // Sin este campo la pregunta es libre, como hasta ahora: se guarda y se
+  // muestra en el CRM, pero no puntúa.
+  dimension: z.enum(QUALIFYING_DIMENSIONS).optional(),
+  // Etiquetas visibles de `options`, en el mismo orden. Sólo las rellena el
+  // resolutor de preguntas de calificación: el visitante ve "Hasta $300.000" y
+  // lo que viaja al CRM es "300000".
+  optionLabels: z.array(z.string().max(160)).max(12).optional(),
 })
 
 // Tarjeta de beneficio (sección "lo que contiene" — mismo patrón que el

@@ -5,6 +5,8 @@ import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
+import { extractFitDimensions, extractBudgetAmount, DERIVED_KEYS } from '@/lib/services/intake-fit'
+import { getBusinessProfile } from '@/lib/data/business-profile'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -186,6 +188,52 @@ export async function handleContactSubmission(
   })
   if (submissionError) {
     console.error(JSON.stringify({ service: 'handle-contact-submission', channel_id: channel.id, lead_id: leadId, error: 'submission_insert_failed', detail: submissionError.message }))
+  }
+
+  // ── Fit declarado ────────────────────────────────────────────────────────────
+  // Un formulario de contacto puede calificar igual que un lead magnet: si trae
+  // respuestas reconocidas, alimentan fit_profile como en el intake.
+  //
+  // Hasta ahora no lo hacía, y eso convertía en decorativo el constructor de
+  // formularios del CRM: un tenant que armaba su formulario aquí dentro tenía
+  // fit 0 para siempre, sin ningún aviso. La IA lo tapaba cuando estaba
+  // encendida — cuando no, el modelo entero corría con la mitad apagada.
+  const fitDims = extractFitDimensions(
+    reason ?? null,
+    params.form_answers,
+    (params.form_answers ?? []).some(a => a.key in DERIVED_KEYS)
+      ? await getBusinessProfile(tenantId)
+      : undefined,
+  )
+  const budgetAmount = extractBudgetAmount(params.form_answers)
+
+  if (Object.keys(fitDims).length > 0 || reason || budgetAmount !== null) {
+    const { data: current } = await db.from('leads').select('fit_profile, metadata').eq('id', leadId).maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar
+    const c = current as any
+    const update: Record<string, unknown> = {}
+    if (Object.keys(fitDims).length > 0) {
+      update.fit_profile = { ...((c?.fit_profile ?? {}) as Record<string, unknown>), ...fitDims }
+    }
+    if (reason || budgetAmount !== null) {
+      update.metadata = {
+        ...((c?.metadata ?? {}) as Record<string, unknown>),
+        ...(reason ? { intent: reason } : {}),
+        ...(budgetAmount !== null ? { budget_amount: budgetAmount } : {}),
+      }
+    }
+    const { error: fitErr } = await db.from('leads').update(update).eq('id', leadId)
+    if (fitErr) {
+      console.error(JSON.stringify({ service: 'handle-contact-submission', lead_id: leadId, error: 'fit_profile_update_failed', detail: fitErr.message }))
+    } else if (update.fit_profile) {
+      // El trigger de lead_events ya recalculó, pero lo hizo ANTES de que
+      // existiera este perfil. Sin esta segunda pasada el fit no cuenta hasta
+      // el próximo evento del lead.
+      const { error: recErr } = await db.rpc('recompute_lead_score', { p_lead_id: leadId })
+      if (recErr) {
+        console.error(JSON.stringify({ service: 'handle-contact-submission', lead_id: leadId, error: 'recompute_failed', detail: recErr.message }))
+      }
+    }
   }
 
   // Análisis de fit con IA (si el tenant lo tiene activado) — cada acción del

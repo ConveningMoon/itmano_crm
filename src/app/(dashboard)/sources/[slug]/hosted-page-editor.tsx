@@ -4,6 +4,10 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Copy, Download, ExternalLink, Globe, Plus, Quote, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { hostedChannelUrl, HostedPageConfigSchema, type HostedPageConfig, type HostedQuestion, type HostedTestimonial } from '@/lib/hosted-page'
+import {
+  QUALIFYING_DIMENSIONS, DIMENSION_PICKER_LABEL, DIMENSION_QUESTION_TEXT,
+  type QualifyingDimension,
+} from '@/lib/hosted-questions'
 import { deleteHostedImages, generateHostedPageCopy, updateHostedPage, uploadHostedImage } from '../actions'
 
 // Constructor de la página alojada del canal. Secciones según el tipo:
@@ -44,20 +48,20 @@ const EMPTY: HostedPageConfig = {
 
 const EMPTY_INTRO = { name: '', title: '', paragraph: '', quote: '', photo_url: '', whatsapp_url: '', instagram_url: '' }
 
-// Preguntas de calificación por defecto (lead magnet). Alimentan el análisis de
-// fit: la IA las interpreta con el contexto de mercado de la agencia. Los rangos
-// de presupuesto y las zonas son editables — ajústalos a tu mercado. Los puntos
-// de cada nivel se afinan en Ajustes → Scoring.
+// Preguntas de calificación por defecto (lead magnet).
+//
+// Guardan la DIMENSIÓN, no las opciones: éstas se derivan del perfil de negocio
+// del tenant al renderizar la página (ver lib/hosted-questions.ts). Antes eran
+// opciones escritas a mano — incluidos unos rangos de presupuesto ($250k/$400k/
+// $600k) que no tenían por qué coincidir con los que el tenant configuró, y unas
+// claves slugificadas del texto en español que no casaban con ninguna regla del
+// modelo. El formulario parecía calificar y en realidad puntuaba cero.
 const DEFAULT_LM_QUESTIONS: HostedQuestion[] = [
-  { key: '', label: '¿Cuál es tu horizonte de compra?', type: 'select', required: true,
-    options: ['Menos de 3 meses', '3 a 6 meses', '6 a 12 meses', 'Más de 12 meses / explorando'] },
-  { key: '', label: '¿Cómo planeas financiar la compra?', type: 'select', required: false,
-    options: ['Pago en efectivo', 'Pre-aprobado', 'En proceso de financiamiento', 'Aún no he empezado'] },
-  { key: '', label: '¿Cuál es tu presupuesto aproximado?', type: 'select', required: false,
-    options: ['Menos de $250k', '$250k – $400k', '$400k – $600k', 'Más de $600k'] },
-  { key: '', label: '¿Ya trabajas con un agente inmobiliario?', type: 'select', required: false,
-    options: ['No', 'Sí'] },
-  { key: '', label: '¿Qué zonas te interesan?', type: 'text', required: false },
+  { key: 'timeline',      dimension: 'timeline',      label: '¿Cuál es tu horizonte de compra?',     type: 'select', required: true },
+  { key: 'financing',     dimension: 'financing',     label: '¿Cómo planeas financiar la compra?',   type: 'select', required: false },
+  { key: 'budget_amount', dimension: 'budget_amount', label: '¿Cuál es tu presupuesto aproximado?',  type: 'select', required: false },
+  { key: 'agent_status',  dimension: 'agent_status',  label: '¿Ya trabajas con un agente?',          type: 'select', required: false },
+  { key: 'area',          dimension: 'area',          label: '¿En qué zona buscas?',                 type: 'select', required: false },
 ]
 
 // Etiquetas de las preguntas por defecto — para marcarlas en el constructor.
@@ -90,7 +94,7 @@ function buildTemplateJson(channelType: string): Record<string, unknown> {
   const isEvent = channelType === 'event'
   const questions = (isLm ? DEFAULT_LM_QUESTIONS : [
     { key: '', label: 'Ejemplo de pregunta de opción', type: 'select' as const, required: false, options: ['Opción A', 'Opción B'] },
-  ]).map((q, i) => ({ ...q, key: slugifyKey(q.label, `pregunta_${i + 1}`) }))
+  ]).map((q, i) => (q.dimension ? q : { ...q, key: slugifyKey(q.label, `pregunta_${i + 1}`) }))
 
   const tpl: Record<string, unknown> = {
     _instrucciones: [
@@ -728,13 +732,35 @@ export function HostedPageEditor({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', gap: '8px', flexWrap: 'wrap' }}>
                 <label style={{ ...LABEL, marginBottom: 0 }}>Preguntas del formulario</label>
-                <button
-                  onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
-                  style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
-                  disabled={cfg.questions.length >= 10}
-                >
-                  <Plus size={12} /> Agregar pregunta
-                </button>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {/* Preguntas que CALIFICAN: el tenant elige el tema, nunca las
+                      opciones ni los puntos. El CRM las arma con su perfil. */}
+                  <select
+                    value=""
+                    onChange={e => {
+                      const d = e.target.value as QualifyingDimension
+                      if (!d) return
+                      set('questions', [...cfg.questions, {
+                        key: d, dimension: d, label: DIMENSION_QUESTION_TEXT[d],
+                        type: 'select' as const, required: false,
+                      }])
+                    }}
+                    style={{ ...BTN_GHOST, padding: '4px 10px', cursor: 'pointer' }}
+                    disabled={cfg.questions.length >= 10}
+                  >
+                    <option value="">+ Pregunta que califica</option>
+                    {QUALIFYING_DIMENSIONS
+                      .filter(d => !cfg.questions.some(q => q.dimension === d))
+                      .map(d => <option key={d} value={d}>{DIMENSION_PICKER_LABEL[d]}</option>)}
+                  </select>
+                  <button
+                    onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
+                    style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
+                    disabled={cfg.questions.length >= 10}
+                  >
+                    <Plus size={12} /> Pregunta libre
+                  </button>
+                </div>
               </div>
               {isLm && (
                 <div style={{
@@ -763,13 +789,13 @@ export function HostedPageEditor({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {cfg.questions.map((q, i) => (
                   <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {isLm && DEFAULT_LM_LABELS.has(q.label) && (
+                    {(q.dimension || (isLm && DEFAULT_LM_LABELS.has(q.label))) && (
                       <span style={{
                         alignSelf: 'flex-start', fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.06em',
                         textTransform: 'uppercase', padding: '2px 7px', borderRadius: '8px',
                         color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.14)',
                       }}>
-                        Por defecto · scoring
+                        {q.dimension ? 'Califica · opciones de tu perfil' : 'Por defecto · scoring'}
                       </span>
                     )}
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 120px auto', gap: '10px', alignItems: 'center' }}>
@@ -789,7 +815,13 @@ export function HostedPageEditor({
                         <Trash2 size={13} />
                       </button>
                     </div>
-                    {q.type === 'select' && (
+                    {q.dimension ? (
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.6, paddingLeft: '10px', borderLeft: '2px solid var(--border-subtle)' }}>
+                        Las opciones las arma el CRM con tu perfil (Ajustes → Tu negocio): los
+                        rangos de presupuesto y las zonas que atiendes. Si los cambias ahí, este
+                        formulario se actualiza solo. Puedes reescribir el texto de la pregunta.
+                      </div>
+                    ) : q.type === 'select' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '10px', borderLeft: '2px solid var(--border-subtle)' }}>
                         {(q.options ?? []).map((o, oi) => (
                           <div key={oi} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

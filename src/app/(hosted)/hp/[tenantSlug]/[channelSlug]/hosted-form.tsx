@@ -142,7 +142,11 @@ export function HostedForm({
       .map(q => {
         const value = (answers[q.key] ?? '').trim()
         if (!value) return null
-        return { key: q.key, question: q.label, value, label: value }
+        // `value` es el código que puntúa; `label` es lo que el visitante leyó.
+        // El CRM guarda los dos: uno alimenta el scoring, el otro se muestra.
+        const i = (q.options ?? []).indexOf(value)
+        const label = (i >= 0 ? q.optionLabels?.[i] : undefined) ?? value
+        return { key: q.key, question: q.label, value, label }
       })
       .filter((a): a is NonNullable<typeof a> => a !== null)
 
@@ -318,7 +322,10 @@ export function HostedForm({
 
               {q.type === 'select' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '9px' }}>
-                  {(q.options ?? []).map(o => {
+                  {(q.options ?? []).map((o, i) => {
+                    // En las preguntas de calificación el visitante ve
+                    // "Hasta $300.000" y lo que viaja al CRM es "300000".
+                    const texto = q.optionLabels?.[i] ?? o
                     const sel = answers[q.key] === o
                     return (
                       <button
@@ -334,7 +341,7 @@ export function HostedForm({
                           transition: 'border-color .15s, background .15s',
                         }}
                       >
-                        {o}
+                        {texto}
                       </button>
                     )
                   })}
