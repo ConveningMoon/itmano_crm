@@ -110,6 +110,10 @@ describe('geoFitFor — la zona que nadie había definido', () => {
     expect(geoFitFor('Virginia Beach, VA', AJ)).toBe('zona_principal')
     expect(geoFitFor('  virginia beach  ', AJ)).toBe('zona_principal')
     expect(geoFitFor('BADALONA', TECNOCASA)).toBe('zona_secundaria')
+    // Muchos formularios mandan la zona slugificada. Sin tolerar el separador,
+    // geo_fit no clasificaba nada para ellos.
+    expect(geoFitFor('virginia_beach', AJ)).toBe('zona_principal')
+    expect(geoFitFor('virginia-beach', AJ)).toBe('zona_principal')
   })
 
   it('sin zonas declaradas devuelve null, NO fuera_de_zona', () => {
