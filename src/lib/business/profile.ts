@@ -115,6 +115,23 @@ function normalizeArea(s: string): string {
     .trim().toLowerCase()
 }
 
+// Respuestas que significan "no lo sé", no "fuera de zona". `fuera_de_zona`
+// RESTA 10 puntos: es una afirmación sobre el lead, y no saber dónde quiere
+// vivir no es estar fuera del área. Los formularios ofrecen esta opción con
+// nombres distintos, así que se reconocen las formas habituales; lo que no esté
+// aquí se trata como una zona real, que es el comportamiento conservador.
+const UNKNOWN_AREA = new Set([
+  'no se', 'no lo se', 'no estoy seguro', 'no estoy segura', 'aun no lo se',
+  'not sure', 'notsure', 'unknown', 'nao sei', 'ainda nao sei', 'n/a', 'na', '-',
+])
+
+/** `aguja` aparece en `pajar` como secuencia de palabras completas. */
+function containsWords(pajar: string, aguja: string): boolean {
+  const p = ` ${pajar.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()} `
+  const a = ` ${aguja.replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()} `
+  return a.trim().length > 0 && p.includes(a)
+}
+
 /**
  * En qué bucket de `geo_fit` cae una zona PARA ESTA AGENCIA.
  *
@@ -130,9 +147,17 @@ export function geoFitFor(area: string | null | undefined, p: BusinessProfile): 
   if (p.primaryAreas.length === 0 && p.secondaryAreas.length === 0) return null
 
   const a = normalizeArea(area)
+  if (UNKNOWN_AREA.has(a)) return null
+
+  // Sólo en una dirección: la respuesta del lead CONTIENE la zona declarada.
+  // Al revés ("Virginia Beach" contiene "Virginia") un lead que elige el estado
+  // entero se acreditaba como si hubiera dicho la ciudad.
+  //
+  // Y por palabras completas, no por substring: "Norfolk" no debe casar con una
+  // zona declarada "Nor", ni "Charleston" con "Charles".
   const casa = (lista: string[]) => lista.some(z => {
     const n = normalizeArea(z)
-    return n.length > 0 && (a.includes(n) || n.includes(a))
+    return n.length > 0 && containsWords(a, n)
   })
 
   if (casa(p.primaryAreas))   return 'zona_principal'
