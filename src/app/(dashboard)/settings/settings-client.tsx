@@ -17,6 +17,8 @@ import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABE
 import { PLANS, trialDaysLeft } from '@/lib/plans'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { ScoringSection } from './scoring-section'
+import { CalibrationPanel } from './calibration-panel'
+import type { FitEvidence } from '@/lib/scoring/calibration'
 import { BusinessProfileSection } from './business-profile-section'
 import type { BusinessProfile } from '@/lib/business/profile'
 import { Tabs } from '@/components/ui/tabs'
@@ -252,7 +254,7 @@ function TenantSection({ tenant, canManage }: { tenant: { id: string; name: stri
 
 // ─── Agent edit row ───────────────────────────────────────────────────────────
 
-function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages, isOwner, canManageOwner, canDeleteAgents }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditLanguages: boolean; isOwner: boolean; canManageOwner: boolean; canDeleteAgents: boolean }) {
+function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwner, canManageOwner, canDeleteAgents }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditSelf: boolean; isOwner: boolean; canManageOwner: boolean; canDeleteAgents: boolean }) {
   const router = useRouter()
   const [editing, setEditing]   = useState(false)
   const [name, setName]         = useState(agent.name)
@@ -269,6 +271,16 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages, 
   const [accessMsg, setAccessMsg]     = useState<string | null>(null)
   const [accessErr, setAccessErr]     = useState<string | null>(null)
   const [accessPending, startAccess]  = useTransition()
+
+  // Cómo se presenta el agente. Lo escribe él; la IA lo usa para personalizar el
+  // análisis y el contenido. Antes vivía en la pestaña del negocio y sólo lo
+  // podía escribir el propietario — describir a otra persona en tercera persona.
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [desc, setDesc]               = useState(agent.description ?? '')
+  const [descSaved, setDescSaved]     = useState(agent.description ?? '')
+  const [descErr, setDescErr]         = useState<string | null>(null)
+  const [descOk, setDescOk]           = useState(false)
+  const [descPending, startDesc]      = useTransition()
 
   // Idiomas registrados (definen los emails de cierre del agente — 058).
   const [editingLangs, setEditingLangs] = useState(false)
@@ -307,6 +319,18 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages, 
   function toggleLang(l: string) {
     if (l === agent.language) return // el principal (ruteo) no se desmarca
     setLangs(prev => prev.includes(l) ? prev.filter(x => x !== l) : [...prev, l])
+  }
+
+  function handleSaveDesc() {
+    setDescErr(null); setDescOk(false)
+    startDesc(async () => {
+      const res = await updateAgentDescription(agent.id, desc)
+      if (!res.ok) { setDescErr(res.error); return }
+      setDescSaved(desc)
+      setEditingDesc(false)
+      setDescOk(true)
+      setTimeout(() => setDescOk(false), 2500)
+    })
   }
 
   function handleSaveLangs() {
@@ -411,8 +435,11 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages, 
           </span>
 
           <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-            {canEditLanguages && (
-              <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
+            {canEditSelf && (
+              <>
+                <button onClick={() => { setEditingDesc(v => !v); setDesc(descSaved); setDescErr(null) }} style={BTN_GHOST}>Descripción</button>
+                <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
+              </>
             )}
             {canManageOwner && hasAccess && !isOwner && (
               <button onClick={handleMakeOwner} disabled={ownerBusy} style={BTN_GHOST}>
@@ -483,6 +510,37 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditLanguages, 
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Cómo se presenta el agente — contexto para la IA */}
+        {editingDesc && (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ ...LABEL, marginBottom: 0 }}>Cómo te presentas</label>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Especialidad, tipo de cliente con el que mejor trabajas, idiomas, trayectoria, estilo.
+              La IA lo usa para personalizar el análisis de cada lead y el contenido que se le envía.
+            </div>
+            <textarea
+              value={desc}
+              onChange={e => { setDesc(e.target.value); setDescErr(null) }}
+              rows={4}
+              maxLength={3000}
+              placeholder={`Ej.: Llevo 8 años en Hampton Roads, sobre todo con familias militares y compradores primerizos con VA Loan. Atiendo en inglés y español. Prefiero explicar el proceso completo antes de enseñar casas.`}
+              style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+            />
+            {descErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{descErr}</div>}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={handleSaveDesc} disabled={descPending || desc === descSaved} style={{ ...BTN_PRIMARY, opacity: (descPending || desc === descSaved) ? 0.5 : 1, cursor: (descPending || desc === descSaved) ? 'default' : 'pointer' }}>
+                {descPending ? 'Guardando…' : 'Guardar descripción'}
+              </button>
+              <button onClick={() => { setEditingDesc(false); setDesc(descSaved); setDescErr(null) }} style={BTN_GHOST}>Cancelar</button>
+            </div>
+          </div>
+        )}
+        {descOk && (
+          <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+            Descripción guardada. La IA ya la tiene en cuenta.
           </div>
         )}
 
@@ -756,8 +814,9 @@ function AgentsSection({
           hasAccess={!!agentAccess[agent.id]}
           canManage={canManage}
           canLinkSelf={canLinkSelf}
-          // Owner/super editan los idiomas de todos; un 'agent' solo los suyos.
-          canEditLanguages={canManage || agent.id === myAgentId}
+          // Owner/super editan el perfil de todos; un 'agent' sólo el suyo.
+          // Espeja requireSelfOrManager, que es quien lo hace cumplir de verdad.
+          canEditSelf={canManage || agent.id === myAgentId}
           isOwner={agent.id === ownerAgentId}
           canManageOwner={canManageOwner}
           canDeleteAgents={canDeleteAgents}
@@ -769,7 +828,7 @@ function AgentsSection({
 
 // ─── Email settings: firma por agente ─────────────────────────────────────────
 
-function AgentSignatureRow({ agent, canManage }: { agent: Agent; canManage: boolean }) {
+function AgentSignatureRow({ agent, canEdit }: { agent: Agent; canEdit: boolean }) {
   const [value, setValue]   = useState(agent.emailSignature ?? '')
   const [saved, setSaved]   = useState<string>(agent.emailSignature ?? '')
   const [error, setError]   = useState<string | null>(null)
@@ -806,16 +865,16 @@ function AgentSignatureRow({ agent, canManage }: { agent: Agent; canManage: bool
       <textarea
         value={value}
         onChange={e => { setValue(e.target.value); setError(null) }}
-        disabled={!canManage}
+        disabled={!canEdit}
         rows={3}
         maxLength={600}
         placeholder={`Ej.:\nUn abrazo,\n${agent.name}`}
-        style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: canManage ? 1 : 0.7 }}
+        style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: canEdit ? 1 : 0.7 }}
       />
 
       {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
 
-      {canManage && (
+      {canEdit && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
             {pending ? 'Guardando…' : 'Guardar firma'}
@@ -827,7 +886,7 @@ function AgentSignatureRow({ agent, canManage }: { agent: Agent; canManage: bool
   )
 }
 
-function EmailSettingsSection({ agents, canManage }: { agents: Agent[]; canManage: boolean }) {
+function EmailSettingsSection({ agents, canManage, myAgentId }: { agents: Agent[]; canManage: boolean; myAgentId: string | null }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={CARD}>
@@ -844,7 +903,13 @@ function EmailSettingsSection({ agents, canManage }: { agents: Agent[]; canManag
             No hay agentes todavía.
           </div>
         ) : (
-          agents.map(agent => <AgentSignatureRow key={agent.id} agent={agent} canManage={canManage} />)
+          agents.map(agent => (
+            <AgentSignatureRow
+              key={agent.id}
+              agent={agent}
+              canEdit={canManage || agent.id === myAgentId}
+            />
+          ))
         )}
       </div>
     </div>
@@ -903,81 +968,6 @@ function AgencyDescriptionCard({ initial, canManage }: { initial: string | null;
             </button>
             {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Guardada.</span>}
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function AgentDescriptionRow({ agent, canManage }: { agent: Agent; canManage: boolean }) {
-  const [value, setValue] = useState(agent.description ?? '')
-  const [saved, setSaved] = useState(agent.description ?? '')
-  const [error, setError] = useState<string | null>(null)
-  const [ok, setOk]       = useState(false)
-  const [pending, start]  = useTransition()
-  const dirty = value !== saved
-
-  function handleSave() {
-    setError(null); setOk(false)
-    start(async () => {
-      const res = await updateAgentDescription(agent.id, value)
-      if (!res.ok) { setError(res.error); return }
-      setSaved(value); setOk(true); setTimeout(() => setOk(false), 2000)
-    })
-  }
-
-  return (
-    <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{
-          width: '32px', height: '32px', borderRadius: '50%',
-          background: `${agent.accentColor}22`, border: `1px solid ${agent.accentColor}44`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '11px', fontWeight: 700, color: agent.accentColor, flexShrink: 0,
-        }}>
-          {agent.avatarInitials}
-        </div>
-        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
-      </div>
-      <textarea
-        value={value}
-        onChange={e => { setValue(e.target.value); setError(null) }}
-        disabled={!canManage}
-        rows={3}
-        maxLength={3000}
-        placeholder={`Especialidad, idiomas, historia y estilo de ${agent.name} — la IA lo usa para personalizar.`}
-        style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: canManage ? 1 : 0.7 }}
-      />
-      {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
-      {canManage && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
-            {pending ? 'Guardando…' : 'Guardar'}
-          </button>
-          {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Guardada.</span>}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ContextSection({ tenantDescription, agents, canManage }: { tenantDescription: string | null; agents: Agent[]; canManage: boolean }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <AgencyDescriptionCard initial={tenantDescription} canManage={canManage} />
-      <div style={CARD}>
-        <div style={CARD_HEADER}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Descripción por agente</span>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Contexto de cada agente para personalizar el análisis y el contenido con IA.
-          </div>
-        </div>
-        {agents.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No hay agentes todavía.
-          </div>
-        ) : (
-          agents.map(agent => <AgentDescriptionRow key={agent.id} agent={agent} canManage={canManage} />)
         )}
       </div>
     </div>
@@ -1370,6 +1360,8 @@ interface Props {
   // botón "Restablecer a recomendados" del scoring.
   recommendedRules: Record<string, { points: number; isActive: boolean }>
   canEditScoring: boolean
+  // Sólo llega para super_admin — el panel de calibración es de ITMANO.
+  fitEvidence: FitEvidence | null
   canManageAgents: boolean
   multiAgent: boolean
   canLinkSelf: boolean
@@ -1388,7 +1380,7 @@ interface Props {
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, businessProfile, scoringRules, recommendedRules,
-  canEditScoring, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
+  canEditScoring, fitEvidence, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
   const searchParams = useSearchParams()
@@ -1421,16 +1413,32 @@ export function SettingsClient({
             canDeleteAgents={canDeleteAgents}
           />
         ),
-        email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
+        email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} />,
         negocio: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <BusinessProfileSection profile={businessProfile} />
-            {/* El texto libre va DESPUES del formulario y reencuadrado: no es
-                otra forma de decir lo mismo, es lo que ningun campo captura. */}
-            <ContextSection tenantDescription={tenant.description} agents={agents} canManage={canManageAgents} />
+            {/* El texto libre va DESPUÉS del formulario y reencuadrado: no es
+                otra forma de decir lo mismo, es lo que ningún campo captura.
+                Sólo la agencia — cómo se presenta cada agente lo escribe él
+                mismo, en su fila de la pestaña Agentes. */}
+            <AgencyDescriptionCard initial={tenant.description} canManage={canManageAgents} />
           </div>
         ),
-        scoring: <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />,
+        scoring: (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {fitEvidence && (
+              <CalibrationPanel
+                rules={scoringRules.map(r => ({
+                  category: r.category, dimension: r.dimension,
+                  matchValue: r.matchValue, points: r.points, isActive: r.isActive,
+                }))}
+                evidence={fitEvidence}
+                tenantId={tenant.id}
+              />
+            )}
+            <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />
+          </div>
+        ),
         ia: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {userRole === 'agent' ? (

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
+import { requireWriteAccess, requireSelfOrManager, resolveTargetTenant } from '@/lib/auth/guards'
 import {
   saveBusinessProfile as persistBusinessProfile,
   type BusinessProfileInput,
@@ -68,12 +68,15 @@ export async function updateTenantDescription(
   return { ok: true }
 }
 
+// La descripción de un agente la escribe el agente. El propietario también puede
+// —la mayoría de los miembros del equipo no tienen login—, pero no es él quien
+// debería estar redactando en tercera persona la especialidad de otra persona.
 export async function updateAgentDescription(
   agentId: string,
   description: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  const denied = requireWriteAccess(ctx)
+  const denied = requireSelfOrManager(ctx, agentId)
   if (denied) return denied
 
   const tenantId = ctx.tenant_id
@@ -497,12 +500,13 @@ export async function updateAgentLanguages(
 // Se muestra al final de todos los correos (secuencias, compra, one-off) del
 // agente asignado al lead. Texto libre multilínea; vacío = sin firma.
 
+// Cómo firma sus correos es del agente, igual que su descripción.
 export async function updateAgentSignature(
   agentId: string,
   signature: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx    = await getCurrentTenantContext()
-  const denied = requireWriteAccess(ctx)
+  const denied = requireSelfOrManager(ctx, agentId)
   if (denied) return denied
 
   const trimmed = signature.trim()
