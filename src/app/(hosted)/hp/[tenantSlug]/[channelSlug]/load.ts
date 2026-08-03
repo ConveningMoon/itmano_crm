@@ -1,6 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseHostedPage } from '@/lib/hosted-page'
+import { resolveQuestions } from '@/lib/hosted-questions'
+import { getBusinessProfile } from '@/lib/data/business-profile'
 
 // Carga de una página alojada. Vive aparte porque la comparten la ruta pública
 // (cacheada) y la de previsualización (dinámica): `allowDraft` es lo único que
@@ -41,5 +43,13 @@ export async function loadHostedPage(tenantSlug: string, channelSlug: string, al
   // URL solo la conoce quien edita — riesgo aceptable para un borrador).
   if (!config || (!config.enabled && !allowDraft)) return null
 
-  return { tenant: t, channel: c, config }
+  // Las preguntas de calificación se rellenan con el perfil de negocio VIGENTE.
+  // Por eso cambiar los rangos o las zonas en Ajustes corrige el formulario sin
+  // tocarlo: aquí no hay copia guardada de las opciones.
+  const tieneCalificacion = config.questions.some(q => q.dimension)
+  const questions = tieneCalificacion
+    ? resolveQuestions(config.questions, await getBusinessProfile(t.id), config.language)
+    : config.questions
+
+  return { tenant: t, channel: c, config: { ...config, questions } }
 }
