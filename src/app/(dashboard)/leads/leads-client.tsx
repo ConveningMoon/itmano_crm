@@ -448,20 +448,22 @@ export function LeadsClient({
         </div>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Sort: recientes / atención */}
+        {/* Sort: recientes / prioridad / valor */}
         <div style={{ display: 'flex', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-          {([['recientes', 'Recientes'], ['prioridad', 'Prioridad']] as const).map(([v, label], i) => (
+          {([['recientes', 'Recientes'], ['prioridad', 'Prioridad'], ['valor', 'Valor']] as const).map(([v, label], i) => (
             <button
               key={v}
               onClick={() => pushFilters({ sort: v })}
               title={v === 'prioridad'
                 ? 'Primero lo que caduca, y dentro de eso lo de mejor calidad'
+                : v === 'valor'
+                ? 'Por el monto que declaró el lead. Los que no lo declararon van al final'
                 : 'Orden por fecha de registro'}
               style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
                 height: '32px', padding: '0 14px', justifyContent: 'center',
                 fontSize: '13px', cursor: 'pointer', border: 'none',
-                borderRight: i === 0 ? '1px solid var(--border-subtle)' : 'none',
+                borderRight: i < 2 ? '1px solid var(--border-subtle)' : 'none',
                 background: filters.sort === v ? 'var(--bg-elevated)' : 'transparent',
                 color: filters.sort === v ? 'var(--text-primary)' : 'var(--text-muted)',
               }}
@@ -481,7 +483,7 @@ export function LeadsClient({
                 display: 'flex', alignItems: 'center', gap: '6px',
                 width: '80px', height: '32px', justifyContent: 'center',
                 fontSize: '13px', cursor: 'pointer', border: 'none',
-                borderRight: i === 0 ? '1px solid var(--border-subtle)' : 'none',
+                borderRight: i < 2 ? '1px solid var(--border-subtle)' : 'none',
                 background: filters.view === v ? 'var(--bg-elevated)' : 'transparent',
                 color: filters.view === v ? 'var(--text-primary)' : 'var(--text-muted)',
               }}

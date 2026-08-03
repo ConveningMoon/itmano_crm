@@ -175,6 +175,19 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
     expect(orders).toContain('quality_score')
   })
 
+  it('el orden "valor" ordena por monto en la base, con los sin-monto al final', async () => {
+    // Ordenar en el cliente rompería la paginación: la página 1 traería los 20
+    // primeros por fecha y los ordenaría entre ellos, no la cartera entera.
+    await getLeadsListData(OWNER, { ...BASE, sort: 'valor' }, CHANNELS)
+
+    const orders = queries.flatMap(q => callsOf(q, 'order'))
+    const budget = orders.find(c => c.args[0] === 'budget_amount')
+    expect(budget).toBeDefined()
+    // nullsFirst en false: un lead sin monto declarado no puede encabezar el
+    // orden por valor sólo por no haber contestado.
+    expect(budget!.args[1]).toMatchObject({ ascending: false, nullsFirst: false })
+  })
+
   it('sólo pide columnas que la vista expone de verdad', async () => {
     // El fallo que esto habría atrapado: la 082 quitó attention_when de
     // leads_list y el select siguió pidiéndola, asi que /leads dejó de cargar.
@@ -190,6 +203,7 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
       'id', 'agent_id', 'acquisition_channel_id', 'traffic_source', 'first_name',
       'last_name', 'email', 'phone', 'language', 'current_score', 'created_at',
       'stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score',
+      'budget_amount',
     ])
     for (const c of cols) expect(EXPUESTAS.has(c)).toBe(true)
   })

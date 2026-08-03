@@ -14,7 +14,7 @@ export const LEADS_PAGE_SIZE = 20
 // el tope acota el payload, no la verdad.
 export const KANBAN_COLUMN_LIMIT = 50
 
-export type LeadSortMode = 'recientes' | 'prioridad'
+export type LeadSortMode = 'recientes' | 'prioridad' | 'valor'
 export type LeadsView    = 'table' | 'kanban'
 
 // Fila de la lista — sólo lo que la tabla, el kanban y el CSV renderizan.
@@ -37,6 +37,9 @@ export interface LeadListItem {
   qualityScore:         number | null
   urgency:              Urgency | null
   urgencyRank:          number
+  // Monto declarado por el lead (columna generada, migración 088). null cuando
+  // el formulario no lo mandó — que hoy es casi siempre.
+  budgetAmount:         number | null
   createdAt:            string
 }
 
@@ -91,7 +94,7 @@ function one(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v
 }
 
-const SORT_MODES: LeadSortMode[] = ['recientes', 'prioridad']
+const SORT_MODES: LeadSortMode[] = ['recientes', 'prioridad', 'valor']
 
 export function parseLeadListFilters(params: RawParams): LeadListFilters {
   const rawSort = one(params.sort) as LeadSortMode | undefined

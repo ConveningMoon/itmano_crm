@@ -29,6 +29,8 @@ const LIST_COLUMNS = columns('leads_list', [
   // Los tres ejes. `stage` es columna propia desde la 082; calidad y urgencia
   // las sigue resolviendo la vista.
   'stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score',
+  // Monto declarado — sólo para el orden por valor (migración 088).
+  'budget_amount',
 ])
 
 // reason: el cliente de Supabase no está tipado con el esquema generado
@@ -79,6 +81,16 @@ function applySort(query: any, sort: LeadSortMode): any {
       .order('quality_score', { ascending: false, nullsFirst: false })
       .order('id',            { ascending: false })
   }
+  // 'valor' ordena por el MONTO, no por la comisión: con un porcentaje la
+  // comisión es una transformación monótona del monto (mismo orden), y con un
+  // monto fijo todos los leads valen igual y ordenar por él no diría nada. Los
+  // que no declararon monto van al final — no arriba por ser null.
+  if (sort === 'valor') {
+    return query
+      .order('budget_amount', { ascending: false, nullsFirst: false })
+      .order('quality_score', { ascending: false, nullsFirst: false })
+      .order('id',            { ascending: false })
+  }
   return query
     .order('created_at', { ascending: false })
     .order('id',         { ascending: false })
@@ -101,6 +113,7 @@ function mapRow(r: any): LeadListItem {
     qualityScore:         (r.quality_score ?? null) as number | null,
     urgency:              (r.urgency ?? null) as LeadListItem['urgency'],
     urgencyRank:          (r.urgency_rank ?? OUT_OF_QUEUE_RANK) as number,
+    budgetAmount:         r.budget_amount === null || r.budget_amount === undefined ? null : Number(r.budget_amount),
     createdAt:            r.created_at as string,
   }
 }
