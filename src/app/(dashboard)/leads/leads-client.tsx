@@ -443,7 +443,7 @@ export function LeadsClient({
         <div>
           <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Leads</div>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {total} leads · {highQualityCount} de calidad alta{urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}
+            {total} {total === 1 ? 'lead' : 'leads'} · {highQualityCount} de calidad alta{urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}
           </div>
         </div>
 
