@@ -116,6 +116,29 @@ describe('geoFitFor — la zona que nadie había definido', () => {
     expect(geoFitFor('virginia-beach', AJ)).toBe('zona_principal')
   })
 
+  it('el estado entero NO cuenta como la ciudad declarada', () => {
+    // "Virginia Beach" contiene "Virginia": con match bidireccional, un lead que
+    // elegia el estado entero se acreditaba como si hubiera dicho la ciudad.
+    expect(geoFitFor('Virginia', AJ)).toBe('fuera_de_zona')
+    expect(geoFitFor('Virginia Beach', AJ)).toBe('zona_principal')
+  })
+
+  it('casa por palabras completas, no por substring', () => {
+    const p: BusinessProfile = { ...AJ, primaryAreas: ['Charles City'], secondaryAreas: [] }
+    expect(geoFitFor('Charleston', p)).toBe('fuera_de_zona')
+    expect(geoFitFor('Charles City, VA', p)).toBe('zona_principal')
+  })
+
+  it('"no lo sé" no es "fuera de zona"', () => {
+    // fuera_de_zona resta 10 puntos: es una afirmación sobre el lead. No saber
+    // dónde quiere vivir no es estar fuera del área.
+    for (const v of ['No estoy seguro', 'not sure', 'notSure', 'Aún no lo sé', 'N/A']) {
+      expect(geoFitFor(v, AJ)).toBeNull()
+    }
+    // Pero "otra zona" sí afirma que está fuera.
+    expect(geoFitFor('Miami', AJ)).toBe('fuera_de_zona')
+  })
+
   it('sin zonas declaradas devuelve null, NO fuera_de_zona', () => {
     // geo_fit resta 10 puntos. Aplicarlo por un hueco de configuración seria
     // castigar al lead por algo que la agencia nunca declaró.
