@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { ArrowUp, ArrowDown, Check } from 'lucide-react'
-import { DIM_LABEL, type Dimension } from '@/lib/scoring/vocabulary'
+import { DIM_UI_LABEL, type Dimension } from '@/lib/scoring/vocabulary'
 import {
   calibratableDimensions, currentOrder, recalibrate,
   MIN_CLOSES_FOR_EVIDENCE, type CalibrationRule, type FitEvidence,
@@ -32,7 +32,7 @@ const BTN_GHOST: React.CSSProperties = {
 }
 
 function label(d: string): string {
-  return DIM_LABEL[d as Dimension] ?? d
+  return DIM_UI_LABEL[d as Dimension] ?? d
 }
 
 export function CalibrationPanel({ rules, evidence, tenantId }: {
@@ -130,7 +130,8 @@ export function CalibrationPanel({ rules, evidence, tenantId }: {
               separa debería estar arriba.</>
           ) : (
             <>Todavía no hay evidencia: {evidence.closedWithFit} de {MIN_CLOSES_FOR_EVIDENCE} cierres
-              con perfil declarado ({evidence.withFit} leads con perfil en total). Hasta llegar
+              con perfil declarado ({evidence.withFit} {evidence.withFit === 1 ? 'lead' : 'leads'} con
+              perfil en total). Hasta llegar
               ahí, el orden es un criterio de negocio — no un dato.</>
           )}
         </div>
