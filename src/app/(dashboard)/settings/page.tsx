@@ -8,6 +8,8 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
 import { getBusinessProfile } from '@/lib/data/business-profile'
+import { getFitEvidence } from '@/lib/data/fit-evidence'
+import type { FitEvidence } from '@/lib/scoring/calibration'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
@@ -27,7 +29,11 @@ export default async function SettingsPage() {
 
   // Identidad (id + email) sale del contexto: ya validó el JWT, así que pedirle
   // el usuario otra vez al servidor de auth solo sumaba una ida y vuelta.
-  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw] = await Promise.all([
+  // La evidencia del fit sólo la mira el panel de calibración, que es de
+  // super_admin: para el resto no se paga la consulta.
+  const wantsCalibration = ctx.role === 'super_admin'
+
+  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     getBusinessProfile(tenantId),
@@ -40,6 +46,7 @@ export default async function SettingsPage() {
     getAiLimitIndicatorFor(ctx),
     getSubscription(tenantId),
     isAgentViewer ? Promise.resolve(null) : getAgentAiBreakdown(tenantId),
+    wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
   ])
 
   const tenant = tenantRow
@@ -121,6 +128,7 @@ export default async function SettingsPage() {
         recommendedRules={recommendedRules}
         // El modelo de scoring lo administra ITMANO — ver updateScoreRules.
         canEditScoring={ctx.role === 'super_admin'}
+        fitEvidence={fitEvidence}
         canManageAgents={ctx.role !== 'agent'}
         multiAgent={multiAgent}
         canLinkSelf={canLinkSelf}

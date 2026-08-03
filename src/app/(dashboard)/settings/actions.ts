@@ -9,6 +9,8 @@ import {
   saveBusinessProfile as persistBusinessProfile,
   type BusinessProfileInput,
 } from '@/lib/data/business-profile'
+import { getGlobalScoreRules } from '@/lib/data/score-rules'
+import { recalibrate } from '@/lib/scoring/calibration'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { PLANS } from '@/lib/plans'
@@ -199,6 +201,74 @@ export async function updateScoreRules(
 
   revalidatePath('/settings')
   return { ok: true }
+}
+
+// ─── Calibración del fit por mercado (super_admin) ────────────────────────────
+//
+// Reordena la importancia de los factores de compra PARA UN TENANT, repartiendo
+// entre ellos los máximos que ya existen en el modelo global. No inventa números
+// nuevos y no mueve el techo, así que las bandas de calidad quedan intactas —
+// ver la invariante probada en tests/business/calibration.test.ts.
+//
+// Escribe overrides en lead_score_rules con tenant_id: recompute_lead_score ya
+// prefiere la regla del tenant sobre la global desde la 029. Es exactamente la
+// excepción sembrada a mano que menciona updateScoreRules, sólo que con una
+// pantalla en vez de un INSERT.
+
+export async function applyFitCalibration(
+  tenantId: string,
+  order: string[],
+): Promise<{ ok: true; changed: number } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'La calibración del modelo la administra ITMANO.' }
+  }
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const globales = await getGlobalScoreRules()
+  const cambios  = recalibrate(
+    globales.map(r => ({
+      category: r.category, dimension: r.dimension,
+      matchValue: r.matchValue, points: r.points, isActive: r.isActive,
+    })),
+    order,
+  )
+
+  const supabase = createAdminClient()
+
+  // Borrar y reinsertar en vez de upsert: la clave única de la tabla es un
+  // índice sobre coalesce(match_value,''), que PostgREST no puede apuntar con
+  // onConflict. La ventana entre ambas es mínima y su peor caso es quedarse con
+  // las reglas globales, que es el estado seguro.
+  const { error: delErr } = await supabase
+    .from('lead_score_rules')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('category', 'fit')
+  if (delErr) return { ok: false, error: delErr.message }
+
+  if (cambios.length > 0) {
+    const porRegla = new Map(globales.map(r => [`${r.dimension}|${r.matchValue ?? ''}`, r]))
+    const filas = cambios.map(c => {
+      const base = porRegla.get(`${c.dimension}|${c.matchValue}`)
+      return {
+        tenant_id:   tenantId,
+        category:    'fit',
+        dimension:   c.dimension,
+        match_value: c.matchValue,
+        points:      c.to,
+        decays:      base?.decays ?? false,
+        is_active:   base?.isActive ?? true,
+        side_effect: base?.sideEffect ?? null,
+        label:       base?.label ?? null,
+      }
+    })
+    const { error: insErr } = await supabase.from('lead_score_rules').insert(filas)
+    if (insErr) return { ok: false, error: insErr.message }
+  }
+
+  revalidatePath('/settings')
+  return { ok: true, changed: cambios.length }
 }
 
 // ─── Tenant logo (bucket tenant-assets) ───────────────────────────────────────
