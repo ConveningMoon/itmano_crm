@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
-import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit'
+import { normalizeIntent, extractFitDimensions, extractBudgetAmount, DERIVED_KEYS } from '@/lib/services/intake-fit'
+import { getBusinessProfile } from '@/lib/data/business-profile'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
@@ -281,15 +282,32 @@ export async function POST(
   // leads.metadata for routing/display. recompute_lead_score (at the end) folds
   // fit_profile into the score. Runs for every channel_type that sends form_answers.
   const intent  = normalizeIntent(parsed.intent)
-  const fitDims = extractFitDimensions(intent, parsed.form_answers)
-  if (Object.keys(fitDims).length > 0 || intent) {
+
+  // El perfil del tenant sólo hace falta para clasificar datos crudos
+  // (budget_amount, area). Se pide únicamente si el envío trae alguno: la
+  // inmensa mayoría de formularios manda códigos y no debe pagar un viaje extra
+  // a la base por un dato que no usa.
+  const traeDatoCrudo = (parsed.form_answers ?? []).some(a => a.key in DERIVED_KEYS)
+  const profile = traeDatoCrudo ? await getBusinessProfile(tenantId) : undefined
+
+  const fitDims      = extractFitDimensions(intent, parsed.form_answers, profile)
+  const budgetAmount = extractBudgetAmount(parsed.form_answers)
+  if (Object.keys(fitDims).length > 0 || intent || budgetAmount !== null) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing       = existingLead as any
     const currentProfile = (existing?.fit_profile ?? {}) as Record<string, unknown>
     const currentMeta    = (existing?.metadata ?? {}) as Record<string, unknown>
     const leadUpdate: Record<string, unknown> = {}
     if (Object.keys(fitDims).length > 0) leadUpdate.fit_profile = { ...currentProfile, ...fitDims }
-    if (intent)                          leadUpdate.metadata    = { ...currentMeta, intent }
+    // El monto crudo se guarda además del bucket: el bucket dice en qué rango
+    // cae, el monto es lo que la comisión necesita para valer algo.
+    if (intent || budgetAmount !== null) {
+      leadUpdate.metadata = {
+        ...currentMeta,
+        ...(intent ? { intent } : {}),
+        ...(budgetAmount !== null ? { budget_amount: budgetAmount } : {}),
+      }
+    }
     const { error: fitErr } = await db.from('leads').update(leadUpdate).eq('id', leadId)
     if (fitErr) {
       console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'fit_profile_update_failed', detail: fitErr.message }))
