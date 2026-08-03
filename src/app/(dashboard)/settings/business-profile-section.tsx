@@ -40,6 +40,8 @@ type Draft = {
   commissionSell:   string
   budgetEntryMax:   string
   budgetPremiumMin: string
+  primaryAreas:     string
+  secondaryAreas:   string
 }
 
 function toDraft(p: BusinessProfile): Draft {
@@ -51,7 +53,14 @@ function toDraft(p: BusinessProfile): Draft {
     commissionSell:   n(p.commissionSell),
     budgetEntryMax:   n(p.budgetEntryMax),
     budgetPremiumMin: n(p.budgetPremiumMin),
+    primaryAreas:     p.primaryAreas.join(', '),
+    secondaryAreas:   p.secondaryAreas.join(', '),
   }
+}
+
+/** "Virginia Beach, Norfolk" → ['Virginia Beach', 'Norfolk']. */
+function parseAreas(raw: string): string[] {
+  return raw.split(',').map(z => z.trim()).filter(z => z.length > 0).slice(0, 30)
 }
 
 function toProfile(d: Draft): BusinessProfile {
@@ -63,6 +72,8 @@ function toProfile(d: Draft): BusinessProfile {
     commissionSell:   n(d.commissionSell),
     budgetEntryMax:   n(d.budgetEntryMax),
     budgetPremiumMin: n(d.budgetPremiumMin),
+    primaryAreas:     parseAreas(d.primaryAreas),
+    secondaryAreas:   parseAreas(d.secondaryAreas),
   }
 }
 
@@ -163,6 +174,43 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
                 </span>
               )
             })}
+          </div>
+        </div>
+      </div>
+
+      <div style={CARD}>
+        <div style={HEAD}>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Zonas que atiendes
+          </span>
+          <div style={HINT}>
+            Separadas por comas. El CRM las usa para saber si un lead cae en tu zona:
+            fuera de ambas listas le resta puntos. Sin zonas declaradas no clasifica
+            ninguna — prefiere no saber a castigar a un lead por un hueco de configuración.
+          </div>
+        </div>
+        <div style={BODY}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label style={LABEL}>Zona principal</label>
+              <input
+                value={draft.primaryAreas}
+                onChange={e => set('primaryAreas', e.target.value)}
+                placeholder="Virginia Beach, Norfolk"
+                style={INPUT}
+              />
+              <div style={HINT}>Donde trabajas habitualmente.</div>
+            </div>
+            <div>
+              <label style={LABEL}>Zona secundaria</label>
+              <input
+                value={draft.secondaryAreas}
+                onChange={e => set('secondaryAreas', e.target.value)}
+                placeholder="Chesapeake, Suffolk"
+                style={INPUT}
+              />
+              <div style={HINT}>Las atiendes, pero no son tu foco.</div>
+            </div>
           </div>
         </div>
       </div>

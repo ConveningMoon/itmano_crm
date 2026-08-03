@@ -877,12 +877,12 @@ function AgencyDescriptionCard({ initial, canManage }: { initial: string | null;
       <div style={CARD_HEADER}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Sparkles size={15} color="var(--accent-gold)" />
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Descripción de la agencia</span>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Lo que el formulario no captura</span>
         </div>
         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
-          Mercado, ciudad, rangos de inversión típicos, perfil de comprador y tono. La IA la usa como
-          contexto para analizar el fit de tus leads (ej.: entender si un presupuesto es alto o bajo para
-          tu mercado) y para personalizar el contenido.
+          Los rangos, las zonas y la comisión ya están arriba: la IA los usa como números exactos.
+          Aquí va el matiz que ningún campo recoge — a quién atiendes, qué objeciones te encuentras,
+          qué inventario te sobra o te falta, en qué tono hablas.
         </div>
       </div>
       <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -892,7 +892,7 @@ function AgencyDescriptionCard({ initial, canManage }: { initial: string | null;
           disabled={!canManage}
           rows={6}
           maxLength={4000}
-          placeholder={'Ej.: Agencia en Hampton Roads, Virginia. Mercado de compradores primerizos y familias militares. Rangos: entrada ~$250k, medio $350–550k, premium $600k+. Atendemos en inglés y español. Tono cercano y educativo.'}
+          placeholder={'Ej.: Muchas familias militares con VA Loan y traslados por PCS, así que la urgencia manda sobre el presupuesto. Nos falta inventario de 3 dormitorios bajo el rango medio. Atendemos en inglés y español; tono cercano y educativo.'}
           style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, opacity: canManage ? 1 : 0.7 }}
         />
         {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
@@ -1341,7 +1341,7 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'scoring' | 'contexto' | 'ia' | 'cuenta'
+type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'scoring' | 'ia' | 'cuenta'
 
 // El modelo de scoring lo administra ITMANO, así que su pestaña solo existe para
 // super_admin. Dejarla visible en modo lectura era peor que quitarla: una sección
@@ -1350,11 +1350,10 @@ type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'scoring' | 'contexto' |
 function tabsForRole(role: TenantRole): Array<{ value: Tab; label: string }> {
   return [
     { value: 'perfil',   label: 'Perfil del equipo' },
-    { value: 'negocio',  label: 'Perfil de negocio' },
+    { value: 'negocio',  label: 'Tu negocio' },
     { value: 'agentes',  label: 'Agentes' },
     { value: 'email',    label: 'Email' },
     ...(role === 'super_admin' ? [{ value: 'scoring' as Tab, label: 'Scoring' }] : []),
-    { value: 'contexto', label: 'Contexto IA' },
     { value: 'ia',       label: 'Uso de IA' },
     { value: 'cuenta',   label: 'Cuenta y acceso' },
   ]
@@ -1423,9 +1422,15 @@ export function SettingsClient({
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} />,
-        negocio: <BusinessProfileSection profile={businessProfile} />,
+        negocio: (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <BusinessProfileSection profile={businessProfile} />
+            {/* El texto libre va DESPUES del formulario y reencuadrado: no es
+                otra forma de decir lo mismo, es lo que ningun campo captura. */}
+            <ContextSection tenantDescription={tenant.description} agents={agents} canManage={canManageAgents} />
+          </div>
+        ),
         scoring: <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />,
-        contexto: <ContextSection tenantDescription={tenant.description} agents={agents} canManage={canManageAgents} />,
         ia: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {userRole === 'agent' ? (

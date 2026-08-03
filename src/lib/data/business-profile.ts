@@ -8,7 +8,7 @@ import {
 
 const PROFILE_COLUMNS = columns('tenants', [
   'currency', 'commission_model', 'commission_buy', 'commission_sell',
-  'budget_entry_max', 'budget_premium_min',
+  'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
 ])
 
 // Los números llegan del formulario como string. `''` es "lo dejé vacío", que
@@ -28,6 +28,8 @@ export const BusinessProfileSchema = z.object({
   commissionSell:   numeroOpcional,
   budgetEntryMax:   numeroOpcional,
   budgetPremiumMin: numeroOpcional,
+  primaryAreas:     z.array(z.string().trim().min(1).max(80)).max(30),
+  secondaryAreas:   z.array(z.string().trim().min(1).max(80)).max(30),
 })
   // Espeja el CHECK de la 086: sin esto se puede guardar un perfil donde el
   // rango medio no existe, y el bucket `mid` desaparece sin ningún aviso.
@@ -65,6 +67,8 @@ export async function getBusinessProfile(tenantId: string): Promise<BusinessProf
     commissionSell:   num(r.commission_sell),
     budgetEntryMax:   num(r.budget_entry_max),
     budgetPremiumMin: num(r.budget_premium_min),
+    primaryAreas:     (r.primary_areas   ?? []) as string[],
+    secondaryAreas:   (r.secondary_areas ?? []) as string[],
   }
 }
 
@@ -88,6 +92,8 @@ export async function saveBusinessProfile(
       commission_sell:    p.commissionSell,
       budget_entry_max:   p.budgetEntryMax,
       budget_premium_min: p.budgetPremiumMin,
+      primary_areas:      p.primaryAreas,
+      secondary_areas:    p.secondaryAreas,
     })
     .eq('id', tenantId)
 
