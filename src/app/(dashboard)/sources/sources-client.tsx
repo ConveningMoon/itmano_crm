@@ -5,6 +5,14 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Plus, X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
+import { STATUS_COPY, type SourceHealth } from '@/lib/sources/health'
+
+const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', { fg: string; bg: string }> = {
+  ok:   { fg: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.12)' },
+  warn: { fg: 'var(--accent-gold)',   bg: 'rgba(201,169,110,0.14)' },
+  bad:  { fg: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.14)' },
+  mute: { fg: 'var(--text-muted)',    bg: 'var(--bg-overlay)' },
+}
 import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
 import { FormSection } from '@/components/ui/form-section'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
@@ -48,7 +56,7 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
 
 // ─── Channel Card ─────────────────────────────────────────────────────────────
 
-function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number }) {
+function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?: number; health?: SourceHealth }) {
   const { navigate, pending: navPending } = useCardNavigation()
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
@@ -113,9 +121,27 @@ function ChannelCard({ ch, index = 0 }: { ch: ChannelWithMetrics; index?: number
         <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
           {ch.name}
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
           {ch.publicId}
         </div>
+
+        {/* Cómo está entrando: se calcula de los envíos reales, no de comparar
+            configuraciones. Es la única forma de ver una desviación que no da
+            error — un valor que no casa sólo resta puntos, en silencio. */}
+        {health && health.status !== 'sin_envios' && (
+          <div style={{ marginBottom: '12px' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              color: HEALTH_TONE[STATUS_COPY[health.status].tone].fg,
+              background: HEALTH_TONE[STATUS_COPY[health.status].tone].bg,
+            }}>
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
+              {STATUS_COPY[health.status].label}
+            </span>
+          </div>
+        )}
 
         {/* Metrics 2×2 grid */}
         <div style={{
@@ -783,7 +809,7 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
             </span>
           )}
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
           {ch.publicId}
         </div>
 
@@ -821,6 +847,8 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
 // ─── Main client component ────────────────────────────────────────────────────
 
 interface Props {
+  /** Diagnóstico por canal — vacío mientras no haya envíos. */
+  health:           Record<string, SourceHealth>
   channels:         ChannelWithMetrics[]
   archivedChannels: ChannelWithMetrics[]
   windowDays:       number
@@ -829,7 +857,7 @@ interface Props {
   agents:           AgentOption[]
 }
 
-export function SourcesClient({ channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents }: Props) {
+export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<TabValue>('all')
@@ -958,7 +986,7 @@ export function SourcesClient({ channels, archivedChannels, windowDays, isSuperA
                   tenantName={tenantName(ch.tenantId)}
                 />
               ))
-            : display.map((ch, i) => <ChannelCard key={ch.id} ch={ch} index={i} />)}
+            : display.map((ch, i) => <ChannelCard key={ch.id} ch={ch} index={i} health={health[ch.id]} />)}
         </div>
       )}
     </div>

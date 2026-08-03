@@ -3,6 +3,7 @@ import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/da
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
+import { getSourcesHealth } from '@/lib/data/source-health'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
 
 export default async function SourcesPage({
@@ -21,6 +22,8 @@ export default async function SourcesPage({
   // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
   const channels         = await getChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
   const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
+  // Cómo está entrando cada fuente, según lo que realmente llega.
+  const health = tenant_id ? await getSourcesHealth(tenant_id) : {}
 
   const supabase = createAdminClient()
 
@@ -108,6 +111,7 @@ export default async function SourcesPage({
 
       {/* Client: tabs + window selector + cards */}
       <SourcesClient
+        health={health}
         channels={channels}
         archivedChannels={archivedChannels}
         windowDays={validWindow}
