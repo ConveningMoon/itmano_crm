@@ -1183,6 +1183,7 @@ export type Database = {
         Row: {
           acquisition_channel_id: string | null
           agent_id: string
+          budget_amount: number | null
           created_at: string | null
           current_score: number | null
           email: string
@@ -1216,6 +1217,7 @@ export type Database = {
         Insert: {
           acquisition_channel_id?: string | null
           agent_id: string
+          budget_amount?: number | null
           created_at?: string | null
           current_score?: number | null
           email: string
@@ -1249,6 +1251,7 @@ export type Database = {
         Update: {
           acquisition_channel_id?: string | null
           agent_id?: string
+          budget_amount?: number | null
           created_at?: string | null
           current_score?: number | null
           email?: string
@@ -1961,6 +1964,7 @@ export type Database = {
         Row: {
           acquisition_channel_id: string | null
           agent_id: string | null
+          budget_amount: number | null
           created_at: string | null
           current_score: number | null
           email: string | null
