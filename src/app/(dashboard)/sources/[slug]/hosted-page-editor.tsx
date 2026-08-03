@@ -800,17 +800,27 @@ export function HostedPageEditor({
                     )}
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 120px auto', gap: '10px', alignItems: 'center' }}>
                       <input style={INPUT} value={q.label} onChange={e => setQuestion(i, { label: e.target.value })} placeholder="¿Cuál es tu horizonte de compra?" />
-                      <select
-                        style={{ ...INPUT, cursor: 'pointer' }}
-                        value={q.type}
-                        onChange={e => {
-                          const type = e.target.value as HostedQuestion['type']
-                          setQuestion(i, { type, options: type === 'select' ? (q.options?.length ? q.options : ['']) : undefined })
-                        }}
-                      >
-                        <option value="text">Texto</option>
-                        <option value="select">Opciones</option>
-                      </select>
+                      {q.dimension ? (
+                        /* Una pregunta que califica es SIEMPRE de opciones: su
+                           valor tiene que ser uno de los códigos del modelo.
+                           En texto libre el visitante escribiría cualquier cosa
+                           y no puntuaría — el error que este rediseño elimina. */
+                        <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                          Opciones
+                        </span>
+                      ) : (
+                        <select
+                          style={{ ...INPUT, cursor: 'pointer' }}
+                          value={q.type}
+                          onChange={e => {
+                            const type = e.target.value as HostedQuestion['type']
+                            setQuestion(i, { type, options: type === 'select' ? (q.options?.length ? q.options : ['']) : undefined })
+                          }}
+                        >
+                          <option value="text">Texto</option>
+                          <option value="select">Opciones</option>
+                        </select>
+                      )}
                       <button onClick={() => set('questions', cfg.questions.filter((_, idx) => idx !== i))} title="Quitar" style={{ ...BTN_GHOST, padding: '6px 8px' }}>
                         <Trash2 size={13} />
                       </button>

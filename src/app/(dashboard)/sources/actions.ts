@@ -11,6 +11,7 @@ import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { createPlatformRequest } from '@/lib/services/platform-requests'
 import { HostedPageConfigSchema } from '@/lib/hosted-page'
 import { buildIntegrationPrompt, getFitCatalog } from '@/lib/services/integration-prompt'
+import { getBusinessProfile } from '@/lib/data/business-profile'
 
 // ─── Página alojada del canal (constructor — migración 060) ───────────────────
 // Guarda acquisition_channels.hosted_page. Escriben owner/super_admin
@@ -516,6 +517,9 @@ async function buildPromptForChannel(
   const { data: tenantRow } = await supabase.from('tenants').select('name').eq('id', ch.tenant_id).maybeSingle()
   const tenantName = ((tenantRow as { name?: string } | null)?.name) ?? 'tu agencia'
   const fitCatalog = await getFitCatalog(supabase, ch.tenant_id)
+  // El perfil de negocio VIGENTE: el prompt se regenera en cada lectura, así que
+  // cambiar los rangos o las zonas en Ajustes lo actualiza sin tocar nada.
+  const profile = await getBusinessProfile(ch.tenant_id)
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'
   return buildIntegrationPrompt({
     channelType: ch.channel_type as 'lead_magnet' | 'event' | 'contact_form',
@@ -525,6 +529,7 @@ async function buildPromptForChannel(
     baseUrl,
     contactSecret,
     fitCatalog,
+    profile,
   })
 }
 

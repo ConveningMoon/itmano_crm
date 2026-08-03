@@ -1,10 +1,14 @@
 import 'server-only'
 import { FIT_DIMENSIONS } from './intake-fit'
+import { optionsFor, QUALIFYING_DIMENSIONS, type QualifyingDimension } from '@/lib/hosted-questions'
+import { formatMoney, hasBudgetBands, EMPTY_PROFILE, type BusinessProfile } from '@/lib/business/profile'
 
 export interface FitCatalogEntry {
   dimension:  string
   matchValue: string
   label:      string
+  /** Puntos de la regla vigente — sirven para mostrar qué fit produce el ejemplo. */
+  points:     number
 }
 
 export type IntegrationChannelType = 'lead_magnet' | 'event' | 'contact_form'
@@ -17,6 +21,8 @@ export interface IntegrationPromptInput {
   baseUrl:        string
   contactSecret?: string
   fitCatalog:     FitCatalogEntry[]
+  /** Perfil de negocio vigente. Sin él el prompt cae a la versión genérica. */
+  profile?:       BusinessProfile
 }
 
 const CHANNEL_TYPE_LABEL: Record<IntegrationChannelType, string> = {
@@ -81,6 +87,81 @@ function buildFitSection(fitCatalog: FitCatalogEntry[]): string {
   ].join('\n').trimEnd()
 }
 
+
+// ── Lo que esta agencia decidió, con sus números ──────────────────────────────
+//
+// Antes el prompt describía el contrato en abstracto: "manda budget_amount y el
+// CRM lo clasifica". Cierto, pero un integrador no puede comprobar que lo hizo
+// bien. Aquí van los cortes y las zonas VIGENTES, un envío de ejemplo construido
+// con ellos, y el fit que produciría — la consecuencia, no sólo la forma.
+//
+// Se genera en cada lectura, así que cambiar el perfil en Ajustes cambia este
+// texto sin que nadie lo regenere a mano.
+function buildProfileSection(profile: BusinessProfile, fitCatalog: FitCatalogEntry[]): string {
+  const lineas: string[] = ['### La configuración ACTUAL de esta agencia']
+
+  if (hasBudgetBands(profile)) {
+    lineas.push(
+      `Rangos de presupuesto: hasta ${formatMoney(profile.budgetEntryMax, profile.currency)} es "entry",`,
+      `desde ${formatMoney(profile.budgetPremiumMin, profile.currency)} es "premium", en medio "mid".`,
+      'Manda `budget_amount` con el monto y el CRM aplica estos cortes. Si los cambia,',
+      'tu formulario NO necesita cambiar.',
+    )
+  } else {
+    lineas.push('Rangos de presupuesto: sin configurar — `budget_amount` no clasificará nada todavía.')
+  }
+
+  const zonas = [...profile.primaryAreas, ...profile.secondaryAreas]
+  if (zonas.length > 0) {
+    lineas.push(
+      '',
+      `Zonas declaradas — principal: ${profile.primaryAreas.join(', ') || '(ninguna)'};`,
+      `secundaria: ${profile.secondaryAreas.join(', ') || '(ninguna)'}.`,
+      'Manda `area` con la zona EN PALABRAS. Ofrece EXACTAMENTE estas zonas en tu',
+      'formulario: cualquier otra cuenta como fuera de zona y le RESTA puntos al lead.',
+    )
+  } else {
+    lineas.push('', 'Zonas: sin declarar — `area` no clasificará nada todavía.')
+  }
+
+  // Ejemplo con las opciones que la propia configuración genera.
+  const ejemplo: Array<{ key: string; question: string; value: string; label: string }> = []
+  let fit = 0
+  const puntosDe = (dim: string, val: string) =>
+    fitCatalog.find(e => e.dimension === dim && e.matchValue === val)?.points ?? 0
+
+  for (const d of QUALIFYING_DIMENSIONS as readonly QualifyingDimension[]) {
+    const opciones = optionsFor(d, profile, 'es')
+    if (!opciones?.length) continue
+    const elegida = opciones[0] // la mejor opción de cada dimensión
+    ejemplo.push({ key: d, question: `(tu pregunta sobre ${d})`, value: elegida.value, label: elegida.label })
+    // `budget_amount` y `area` no puntúan por sí mismos: puntúa el bucket que el
+    // CRM deriva de ellos. La primera opción es siempre la mejor de su lista.
+    if (d === 'budget_amount')  fit += puntosDe('budget_tier', 'entry')
+    else if (d === 'area')      fit += puntosDe('geo_fit', 'zona_principal')
+    else                        fit += puntosDe(d, elegida.value)
+  }
+
+  if (ejemplo.length > 0) {
+    const fence = '```'
+    lineas.push(
+      '',
+      '### Envío de ejemplo, con TU configuración',
+      `${fence}json`,
+      JSON.stringify({
+        first_name: 'María', last_name: 'Gómez', email: 'maria@ejemplo.com',
+        phone: '+1 757 555 0100', language: 'es', intent: 'buy',
+        website: '', form_answers: ejemplo,
+      }, null, 2),
+      fence,
+      `Ese envío da un fit de ${fit} puntos con las reglas de hoy. Si tu formulario`,
+      'manda algo distinto y el fit sale 0, es que las claves o los valores no coinciden.',
+    )
+  }
+
+  return lineas.join(String.fromCharCode(10))
+}
+
 function buildViewSnippet(baseUrl: string, publicId: string): string {
   const fence = '```'
   return [
@@ -119,6 +200,7 @@ function buildWebflowFootnote(baseUrl: string, publicId: string): string {
 
 export function buildIntegrationPrompt(input: IntegrationPromptInput): string {
   const { channelType, channelName, publicId, tenantName, baseUrl, contactSecret, fitCatalog } = input
+  const profile = input.profile ?? EMPTY_PROFILE
   const typeLabel = CHANNEL_TYPE_LABEL[channelType]
   const fence = '```'
 
@@ -180,6 +262,7 @@ export function buildIntegrationPrompt(input: IntegrationPromptInput): string {
 
   const fitSection = buildFitSection(fitCatalog)
   if (fitSection) lines.push(fitSection, '')
+  lines.push(buildProfileSection(profile, fitCatalog), '')
 
   lines.push(
     '### Respuesta y qué dispara',
@@ -211,7 +294,7 @@ export async function getFitCatalog(
 ): Promise<FitCatalogEntry[]> {
   const { data, error } = await db
     .from('lead_score_rules')
-    .select('tenant_id, dimension, match_value, label')
+    .select('tenant_id, dimension, match_value, label, points')
     .eq('category', 'fit')
     .eq('is_active', true)
     .not('match_value', 'is', null)
@@ -221,7 +304,7 @@ export async function getFitCatalog(
     console.error(JSON.stringify({ service: 'integration-prompt', fn: 'getFitCatalog', error: error.message }))
   }
 
-  type Row = { tenant_id: string | null; dimension: string; match_value: string; label: string | null }
+  type Row = { tenant_id: string | null; dimension: string; match_value: string; label: string | null; points: number | null }
   const byKey = new Map<string, FitCatalogEntry & { isTenantSpecific: boolean }>()
   for (const row of (data ?? []) as Row[]) {
     const key = `${row.dimension}::${row.match_value}`
@@ -232,9 +315,10 @@ export async function getFitCatalog(
         dimension:  row.dimension,
         matchValue: row.match_value,
         label:      row.label ?? row.match_value,
+        points:     row.points ?? 0,
         isTenantSpecific,
       })
     }
   }
-  return [...byKey.values()].map(({ dimension, matchValue, label }) => ({ dimension, matchValue, label }))
+  return [...byKey.values()].map(({ dimension, matchValue, label, points }) => ({ dimension, matchValue, label, points }))
 }

@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { buildIntegrationPrompt, type FitCatalogEntry } from '../../src/lib/services/integration-prompt'
 
 const FIT_CATALOG: FitCatalogEntry[] = [
-  { dimension: 'timeline',        matchValue: 'under_3_months',          label: 'Compra en <3 meses' },
-  { dimension: 'timeline',        matchValue: '3_6_months',              label: 'Compra en 3–6 meses' },
-  { dimension: 'financing',       matchValue: 'cash',                    label: 'Pago en efectivo' },
-  { dimension: 'budget_tier',     matchValue: 'premium',                 label: 'Presupuesto premium' },
-  { dimension: 'agent_status',    matchValue: 'sin_agente',              label: 'Sin agente' },
-  { dimension: 'sell_motivation', matchValue: 'alta',                    label: 'Motivación de venta alta' },
-  { dimension: 'listing_status',  matchValue: 'no_listado_sin_agente',   label: 'No listado, sin agente' },
+  { dimension: 'timeline',        matchValue: 'under_3_months',          label: 'Compra en <3 meses', points: 10 },
+  { dimension: 'timeline',        matchValue: '3_6_months',              label: 'Compra en 3–6 meses', points: 10 },
+  { dimension: 'financing',       matchValue: 'cash',                    label: 'Pago en efectivo', points: 10 },
+  { dimension: 'budget_tier',     matchValue: 'premium',                 label: 'Presupuesto premium', points: 10 },
+  { dimension: 'agent_status',    matchValue: 'sin_agente',              label: 'Sin agente', points: 10 },
+  { dimension: 'sell_motivation', matchValue: 'alta',                    label: 'Motivación de venta alta', points: 10 },
+  { dimension: 'listing_status',  matchValue: 'no_listado_sin_agente',   label: 'No listado, sin agente', points: 10 },
 ]
 
 describe('buildIntegrationPrompt', () => {
