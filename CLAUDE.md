@@ -140,7 +140,7 @@ Esto preserva el diferenciador (un CRM que gestiona equipos) y deja abierta la p
 
 ## Perfil de negocio del tenant
 
-Lo que la agencia sabe de su mercado y el CRM no puede deducir. Vive en columnas de `tenants` (migración 086) y se edita en **Ajustes → Perfil de negocio**: lo rellena ITMANO al dar de alta al cliente y el tenant puede corregirlo.
+Lo que la agencia sabe de su mercado y el CRM no puede deducir. Vive en columnas de `tenants` (migración 086) y se edita en **Ajustes → Tu negocio**: lo rellena ITMANO al dar de alta al cliente y el tenant puede corregirlo. La descripción libre de la agencia vive en esa misma pestaña; **cómo se presenta cada agente lo escribe el agente**, en su fila de Ajustes → Agentes (`requireSelfOrManager`).
 
 **Todo es nullable a propósito.** Un tenant sin perfil opera exactamente igual; nada del motor depende de que esté relleno.
 
@@ -148,7 +148,11 @@ El campo que más importa no es la comisión sino **los rangos de presupuesto**.
 
 `budgetTierFor()` devuelve **null** cuando faltan los cortes. "No lo sé" y "es de entrada" son respuestas distintas: la segunda le restaría puntos a un lead del que no sabemos nada.
 
-La comisión (porcentaje o monto fijo, y distinta para compra y venta) habilita ordenar por valor esperado: dos leads igual de buenos no valen lo mismo si uno compra el doble.
+Las zonas (`primary_areas` / `secondary_areas`, migración 087) hacen lo mismo con `geo_fit`, que repartía +5/0/-10 desde la 077 sin que nadie definiera cuáles eran. `geoFitFor()` también devuelve **null** sin zonas declaradas: nunca `fuera_de_zona`, que restaría 10 puntos por un hueco de configuración.
+
+La comisión (porcentaje o monto fijo, y distinta para compra y venta) da el valor potencial del lead — la fila "Si cierra" del detalle. Es un hecho condicional, no una probabilidad: no se pondera por calidad ni entra al score. Necesita `metadata.budget_amount`, que sólo existe si el formulario mandó el monto.
+
+**El formulario manda el hecho, el CRM pone el nivel.** El intake acepta `budget_amount` (monto, en cualquier formato) y `area` (zona en palabras) además de los códigos `budget_tier` / `geo_fit`, y cuando llegan los dos **gana el dato en bruto**: un formulario no puede saber qué es "premium" para esa agencia, los cortes del tenant sí. Ver `extractFitDimensions` en `src/lib/services/intake-fit.ts` y el prompt de integración, que ya lo documenta.
 
 ---
 
@@ -156,9 +160,11 @@ La comisión (porcentaje o monto fijo, y distinta para compra y venta) habilita 
 
 El scoring es el corazón operativo del CRM: determina el estado del lead, dirige la atención del agente y dispara notificaciones.
 
-**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. Hoy son 34 reglas, todas globales.
+**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. Hoy son 42 reglas, todas globales.
 
 **El modelo es de ITMANO, no del tenant.** Solo `super_admin` edita los puntos (`updateScoreRules`); para el cliente la pantalla de Ajustes → Scoring es explicativa, no configurable — es parte de lo que está comprando. La columna `tenant_id` sigue existiendo y `recompute_lead_score` prefiere un override del tenant sobre la regla global, así que ITMANO puede sembrar una excepción a mano para un cliente que lo justifique; lo que se retiró es que el cliente se la escriba a sí mismo. La diferencia entre mercados no se resuelve con puntos: la resuelve el fit con IA (más abajo).
+
+**Calibración por mercado** (Ajustes → Scoring, super_admin): lo único que se ordena a mano es la IMPORTANCIA relativa de los factores de compra, y reparte entre ellos los máximos que el modelo global ya tiene. No inventa números: el multiconjunto de máximos no cambia, así que el techo del fit y las bandas quedan idénticos — la invariante está probada en `tests/business/calibration.test.ts`. Los puntos negativos no se escalan: restan por su propio motivo, y escalarlos convertiría un -15 en un -90 al subir la dimensión de rango. Escribe overrides con `tenant_id` (`applyFitCalibration`). Al lado, `getFitEvidence` mide lo que debe sustituir a esa opinión: cuánto separa cada dimensión a los leads que cerraron de los que no, y hasta `MIN_CLOSES_FOR_EVIDENCE` cierres con perfil lo dice en vez de mostrar un número sin significado.
 
 **La fuente de verdad del cálculo es `recompute_lead_score(lead_id)` en Postgres**, no el código TypeScript. Si el motor y este documento se contradicen, gana la función. Se lee con `pg_get_functiondef` por el MCP.
 
