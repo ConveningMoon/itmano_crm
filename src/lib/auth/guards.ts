@@ -34,6 +34,26 @@ export function requireWriteAccess(ctx: TenantContext): AuthDenial | null {
 }
 
 /**
+ * Gate para los campos que un agente escribe SOBRE SÍ MISMO: su descripción y su
+ * firma de correo. Los edita su dueño, o el propietario del equipo.
+ *
+ * `requireWriteAccess` no sirve aquí: bloquea al rol 'agent' por completo, así
+ * que la firma y la descripción de cada agente las redactaba el propietario en
+ * tercera persona. Y el propietario sigue pudiendo editarlas porque la mayoría
+ * de las filas de `agents` tienen `user_id` null — son miembros del equipo sin
+ * login, y si sólo su dueño pudiera editarlas quedarían congeladas para siempre.
+ *
+ * @returns an AuthDenial to return from the action, or null if allowed.
+ */
+export function requireSelfOrManager(ctx: TenantContext, agentId: string): AuthDenial | null {
+  if (ctx.role !== 'agent') return null
+  // ctx.agent_id es non-null para el rol 'agent' (getCurrentTenantContext lanza
+  // si el usuario no está vinculado a un agente).
+  if (ctx.agent_id === agentId) return null
+  return { ok: false, error: 'Sólo puedes editar tu propio perfil.' }
+}
+
+/**
  * Lead-level write gate.
  *   - super_admin → any lead.
  *   - agent_owner → leads within their tenant.

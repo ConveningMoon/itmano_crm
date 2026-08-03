@@ -66,6 +66,18 @@ function buildFitSection(fitCatalog: FitCatalogEntry[]): string {
     'puntaje automático (otro `key`/valor se guarda igual, pero no puntúa):',
     '',
     ...groupLines,
+    '### Presupuesto y zona: manda el dato, no el nivel',
+    'Estas dos claves son la alternativa recomendada a `budget_tier` y `geo_fit`.',
+    'Tu formulario no puede saber si 300.000 es mucho o poco para esta agencia, ni',
+    'qué zonas atiende — eso está configurado en el CRM. Manda el dato en bruto y',
+    'el CRM lo clasifica contra los rangos y las zonas de la agencia:',
+    '',
+    '  - budget_amount   → el monto, número o texto ("350000", "$350,000", "300k-400k")',
+    '  - area            → la zona en palabras ("Virginia Beach", "Chesapeake, VA")',
+    '',
+    'Si mandas las dos formas, gana el dato en bruto. Si la agencia todavía no ha',
+    'configurado sus rangos o sus zonas, la dimensión se queda sin determinar (no',
+    'se le inventa un nivel al lead).',
   ].join('\n').trimEnd()
 }
 

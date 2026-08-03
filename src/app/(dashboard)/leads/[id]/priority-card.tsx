@@ -8,6 +8,7 @@ import {
 } from '@/lib/scoring/priority'
 import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import type { LeadOpportunity } from '@/lib/scoring/opportunities'
+import { formatMoney, type Currency } from '@/lib/business/profile'
 
 // Reemplaza "Desglose del score" y "Temperatura del lead".
 //
@@ -25,6 +26,13 @@ export interface LeadPriority {
   urgency:     Urgency | null
   rank:        number
   total:       number
+}
+
+/** Lo que deja la operación si cierra. `commission` es null sin perfil de negocio. */
+export interface LeadPotentialValue {
+  amount:     number
+  commission: number | null
+  currency:   Currency | null
 }
 
 const CARD: React.CSSProperties = {
@@ -72,10 +80,11 @@ function FactRow({ label, items, negative = false }: {
   )
 }
 
-export function PriorityCard({ priority, breakdown, opportunities }: {
-  priority:      LeadPriority | null
-  breakdown:     ScoreBreakdown
-  opportunities: LeadOpportunity[]
+export function PriorityCard({ priority, breakdown, opportunities, potentialValue }: {
+  priority:       LeadPriority | null
+  breakdown:      ScoreBreakdown
+  opportunities:  LeadOpportunity[]
+  potentialValue: LeadPotentialValue | null
 }) {
   const [open, setOpen] = useState(false)
 
@@ -161,6 +170,41 @@ export function PriorityCard({ priority, breakdown, opportunities }: {
       ) : (
         <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '10px', fontStyle: 'italic' }}>
           Todavía no hay respuestas de formulario para calificar a este lead.
+        </div>
+      )}
+
+      {/* Valor potencial. Va aparte de los ejes a propósito: no es una medida de
+          qué tan bueno es el lead, es cuánto deja SI cierra. Mezclarlo con la
+          calidad haría que un mal lead con presupuesto alto pareciera bueno. */}
+      {potentialValue && (
+        <div style={{
+          marginTop: '14px', paddingTop: '12px',
+          borderTop: '1px solid var(--border-subtle)',
+          display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap',
+        }}>
+          <span style={{
+            fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em',
+            color: 'var(--text-muted)', minWidth: '74px', flexShrink: 0,
+          }}>
+            Si cierra
+          </span>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+            Operación de{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>
+              {formatMoney(potentialValue.amount, potentialValue.currency)}
+            </strong>
+            {potentialValue.commission !== null ? (
+              <> · deja{' '}
+                <strong style={{ color: 'var(--accent-green)' }}>
+                  {formatMoney(potentialValue.commission, potentialValue.currency)}
+                </strong>
+              </>
+            ) : (
+              <span style={{ color: 'var(--text-muted)' }}>
+                {' '}· configura tu comisión en Ajustes para ver cuánto deja
+              </span>
+            )}
+          </span>
         </div>
       )}
 

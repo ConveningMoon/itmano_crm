@@ -19,7 +19,7 @@ import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
 import { SendEmailModal, type EmailSendingInfo } from './send-email-modal'
 import { AiFitCard, type AiFitBriefing } from './ai-fit-card'
-import { PriorityCard, type LeadPriority } from './priority-card'
+import { PriorityCard, type LeadPriority, type LeadPotentialValue } from './priority-card'
 import type { LeadOpportunity } from '@/lib/scoring/opportunities'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
@@ -131,13 +131,14 @@ interface LeadDetailProps {
   scoreBreakdown: ScoreBreakdown
   opportunities: LeadOpportunity[]
   priority: LeadPriority | null
+  potentialValue: LeadPotentialValue | null
   emailSending?: EmailSendingInfo
   aiFit?: { enabled: boolean; briefing: AiFitBriefing | null; at: string | null }
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, opportunities, priority, emailSending, aiFit }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, opportunities, priority, potentialValue, emailSending, aiFit }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStage, setCurrentStage] = useState<Stage>(lead.stage)
@@ -342,7 +343,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
           {/* Card 2: Prioridad — reemplaza "Temperatura del lead" y "Desglose del
               score". El agente no trabaja con fit/engagement/manual: trabaja con
               a quién llamar y por qué. El desglose sigue dentro, plegado. */}
-          <PriorityCard priority={priority} breakdown={scoreBreakdown} opportunities={opportunities} />
+          <PriorityCard priority={priority} breakdown={scoreBreakdown} opportunities={opportunities} potentialValue={potentialValue} />
 
           {/* Card: Análisis de fit con IA */}
           {aiFit && (

@@ -26,6 +26,8 @@ import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { getBusinessProfile } from '@/lib/data/business-profile'
+import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
@@ -63,6 +65,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     { data: tenantRow },
     tenantAccess,
     priority,
+    businessProfile,
   ] = await Promise.all([
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
@@ -83,6 +86,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     // Los tres ejes + la posicion en la cola. El ranking se resuelve con counts
     // sobre indice dentro de Postgres, nunca trayendo la cartera a memoria.
     getLeadPriorityPosition(id, scope),
+    // Comisión y moneda de la agencia — sin esto el monto del lead es un número
+    // sin significado para quien lo mira.
+    getBusinessProfile(leadTenantId),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -117,6 +123,18 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     rules:           scoreRules,
   })
   const opportunities = opportunitiesFor(lr.fit_profile as Record<string, unknown> | null)
+
+  // Valor potencial: lo que deja la operación si cierra. El bucket de presupuesto
+  // dice en qué rango cae el lead; esto dice cuánto vale — dos leads igual de
+  // buenos no valen lo mismo si uno compra el doble. Es un HECHO condicional
+  // ("si cierra, deja X"), no una probabilidad: no se pondera por calidad ni se
+  // mezcla con el score.
+  const budgetAmount = typeof lr.metadata?.budget_amount === 'number' ? lr.metadata.budget_amount as number : null
+  const potentialValue = budgetAmount === null ? null : {
+    amount:     budgetAmount,
+    commission: expectedCommission(budgetAmount, businessProfile, lr.metadata?.intent === 'sell' ? 'sell' : 'buy'),
+    currency:   businessProfile.currency,
+  }
   const purchaseProcess: PurchaseProcess | null = rawProcess ? mapPurchaseProcess(rawProcess as PurchaseProcessRow) : null
 
   // Identidad de envío del tenant (065) — el popup de correo muestra desde qué
@@ -190,6 +208,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       scoreBreakdown={scoreBreakdown}
       opportunities={opportunities}
       priority={priority}
+      potentialValue={potentialValue}
       emailSending={emailSending}
       aiFit={aiFit}
     />
