@@ -99,9 +99,20 @@ export function formatMoney(amount: number | null | undefined, currency: Currenc
   return `${symbol}${Math.round(amount).toLocaleString('es-ES')}`
 }
 
-/** Normaliza para comparar zonas: sin tildes, sin mayúsculas, sin sobrantes. */
+/**
+ * Normaliza para comparar zonas: sin tildes, sin mayúsculas, sin sobrantes.
+ *
+ * Los guiones y guiones bajos cuentan como espacio porque muchos formularios
+ * mandan la zona slugificada: `virginia_beach` tiene que casar con la zona
+ * "Virginia Beach" que declaró la agencia. Sin esto, geo_fit se quedaba sin
+ * clasificar para cualquier formulario que no escribiera la zona a mano.
+ */
 function normalizeArea(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+  return s
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim().toLowerCase()
 }
 
 /**
