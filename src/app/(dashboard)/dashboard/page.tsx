@@ -85,18 +85,25 @@ export default async function DashboardPage() {
     { key: 'en_proceso', label: 'En proceso',   count: stageOf('en_proceso') },
     { key: 'cerrado',    label: 'Cerrado',      count: stageOf('cerrado') },
   ]
-  // Tasa de paso: qué fracción de los que ENTRARON a una etapa llegó a la
-  // siguiente. Se acumula hacia atrás porque un lead cerrado también pasó por
-  // nuevo — contar sólo los que están AHORA en cada etapa daría tasas absurdas.
-  const reachedFrom = funnel.map((_, i) =>
-    funnel.slice(i).reduce((sum, f) => sum + f.count, 0),
-  )
-  const funnelMax = Math.max(...reachedFrom, 1)
+  // Cada barra son los leads que están AHORA en esa etapa — el mismo número que
+  // el kanban, comprobable abriendo la lista.
+  //
+  // Antes mostraba un acumulado hacia atrás ("un cerrado también pasó por
+  // nuevo") con la etiqueta de la etapa, así que "Nuevo 4" salía con 1 solo lead
+  // en Nuevo y nadie podía reconciliarlo con nada. Y el acumulado además daba
+  // por hecho que todos pasan por Nutrición, que es opcional: un lead puede ir
+  // de Nuevo a En proceso directo.
+  //
+  // La tasa de paso REAL vive en lead_status_history, no aquí. Mientras esa
+  // tabla no tenga las transiciones de este tenant, cualquier porcentaje que
+  // pintáramos sería inventado — y un número inventado en un panel es peor que
+  // no tener el número.
+  const funnelMax = Math.max(...funnel.map(f => f.count), 1)
   // Los leads traídos de otro CRM quedan FUERA del embudo (migración 080): no
   // recorrieron estas etapas aquí, y contarlos daba un 100% de paso inventado.
   // Se dicen aparte para que el total del embudo no parezca un lead perdido.
   const importedLeads = leadStats.imported
-  const funnelTotal   = reachedFrom[0] + stageOf('perdido')
+  const funnelTotal   = funnel.reduce((sum, f) => sum + f.count, 0) + stageOf('perdido')
 
   const agentStats: AgentStat[] = agents.map(agent => {
     const row = leadStats.byAgent.find(a => a.agentId === agent.id)
@@ -215,24 +222,17 @@ export default async function DashboardPage() {
           </span>
         </div>
 
-        {/* Cuatro etapas reales en vez de ocho `status`. Ahora sí es un embudo:
-            cada barra son los que LLEGARON a esa etapa (acumulado hacia atrás,
-            porque un cerrado también pasó por nuevo) y entre barras va la tasa
-            de paso — el número que una agencia quiere de su operación. */}
+        {/* Dónde está la cartera AHORA: una barra por etapa, con el número que
+            se ve en el kanban. Sin acumulados ni porcentajes derivados de una
+            suposición — ver el comentario del cálculo. */}
         <div className="max-md:overflow-x-auto" style={{ display: 'flex', alignItems: 'flex-end' }}>
           {funnel.map((stage, idx) => {
-            const reached = reachedFrom[idx]
-            const h = Math.max(4, Math.round((reached / funnelMax) * 48))
+            const h = Math.max(4, Math.round((stage.count / funnelMax) * 48))
             const color = STAGE_COLORS[stage.key]
-            // Tasa de paso hacia la etapa siguiente.
-            const next = reachedFrom[idx + 1]
-            const rate = idx < funnel.length - 1 && reached > 0
-              ? Math.round((next / reached) * 100)
-              : null
             return (
               <div key={stage.key} style={{ display: 'flex', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '92px' }}>
-                  <span style={{ fontSize: '22px', fontWeight: 500, color, lineHeight: 1 }}>{reached}</span>
+                  <span style={{ fontSize: '22px', fontWeight: 500, color, lineHeight: 1 }}>{stage.count}</span>
                   <GrowBar
                     axis="y"
                     delay={idx * 0.05}
@@ -242,12 +242,6 @@ export default async function DashboardPage() {
                     {stage.label}
                   </span>
                 </div>
-                {rate !== null && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0 4px', paddingBottom: '24px' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>{rate}%</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>→</span>
-                  </div>
-                )}
               </div>
             )
           })}
