@@ -25,9 +25,33 @@ describe('diagnoseSource', () => {
 
   it('marca los valores que no casan ningún bucket', () => {
     // El caso real de la web principal de A&J: la clave existe, el valor no.
-    const h = diagnoseSource([envio(['timeline', 'immediately'])], AJ)
+    const h = diagnoseSource([envio(['timeline', 'immediately'], ['financing', 'cash'])], AJ)
+    expect(h.status).toBe('parcial')
     expect(h.valoresInvalidos).toContainEqual({ key: 'timeline', value: 'immediately' })
     expect(h.reconocidas).not.toContain('timeline')
+  })
+
+  it('un lead magnet que manda 5 de 6 dimensiones sale VERDE', () => {
+    // Es el caso real de A&J. No preguntar `contingency` (una dimensión de 5
+    // puntos) es una decisión de producto — más preguntas dan mejor perfil pero
+    // peor conversión. Mezclarlo con los defectos hacía que un formulario
+    // impecable saliera en ámbar y el badge dejara de significar nada.
+    const h = diagnoseSource([envio(
+      ['timeline', '3_6_months'], ['financing', 'preapproved'],
+      ['budget_amount', '300000'], ['area', 'Virginia Beach'],
+      ['agent_status', 'sin_agente'], ['property_type', 'single_family'],
+    )], AJ)
+    expect(h.status).toBe('ok')
+    expect(h.nuncaLlegan).toEqual(['contingency'])
+    // Pero la oportunidad se informa igual.
+    expect(healthHint(h, AJ)).toContain('contingency')
+  })
+
+  it('un formulario de contacto puro no es un error', () => {
+    // Sólo recoge contacto: no intenta calificar, y eso está bien.
+    const h = diagnoseSource([envio(['message', 'Quiero una casa'], ['reason', 'buy'])], AJ)
+    expect(h.status).toBe('sin_calificar')
+    expect(healthHint(h, AJ)).toContain('sólo recoge el contacto')
   })
 
   it('una fuente que no puntúa nada se marca entera', () => {
@@ -36,13 +60,15 @@ describe('diagnoseSource', () => {
     const h = diagnoseSource([envio(
       ['cual_es_tu_presupuesto_estimado_de_compr', 'Menos de USD 300,000'],
       ['en_que_plazo_te_gustaria_comprar', 'Lo antes posible'],
+      ['ya_estas_trabajando_con_otro_agente_de_b', 'No'],
     )], AJ)
+    // Hace preguntas de calificación y ninguna entra: eso SÍ está roto.
     expect(h.status).toBe('no_puntua')
-    expect(healthHint(h, AJ)).toContain('Ningún envío')
+    expect(healthHint(h, AJ)).toContain('ninguna alimenta el score')
   })
 
   it('avisa de quien manda el nivel ya resuelto', () => {
-    const h = diagnoseSource([envio(['budget_tier', 'premium'])], AJ)
+    const h = diagnoseSource([envio(['budget_tier', 'premium'], ['timeline', 'under_3_months'])], AJ)
     expect(h.mandaNivelResuelto).toBe(true)
     expect(healthHint(h, AJ)).toContain('nivel ya resuelto')
   })
@@ -50,7 +76,7 @@ describe('diagnoseSource', () => {
   it('reporta las zonas que no casan con las declaradas', () => {
     // Es la señal de la errata: si TODOS los envíos traen una zona que no casa,
     // algo está mal en una de las dos puntas.
-    const h = diagnoseSource([envio(['area', 'Birginia Beach'])], AJ)
+    const h = diagnoseSource([envio(['area', 'Birginia Beach'], ['timeline', 'under_3_months'])], AJ)
     expect(h.zonasSinCasar).toContain('Birginia Beach')
     expect(healthHint(h, AJ)).toContain('zonas fuera de las tuyas')
   })
@@ -75,7 +101,7 @@ describe('diagnoseSource', () => {
   })
 
   it('un monto ilegible se reporta', () => {
-    const h = diagnoseSource([envio(['budget_amount', 'depende'])], AJ)
+    const h = diagnoseSource([envio(['budget_amount', 'depende'], ['timeline', 'under_3_months'])], AJ)
     expect(h.valoresInvalidos).toContainEqual({ key: 'budget_amount', value: 'depende' })
   })
 })

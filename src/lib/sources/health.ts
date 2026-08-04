@@ -19,7 +19,12 @@ const FIT_DIMENSIONS_ALL = new Set<string>([...BUY_DIMS, ...SELL_DIMS])
 export interface SubmissionAnswer { key: string; value: unknown }
 export interface SubmissionLike { answers: SubmissionAnswer[] }
 
-export type SourceStatus = 'sin_envios' | 'ok' | 'parcial' | 'no_puntua'
+// El estado mide si lo que ESTA fuente manda entra bien. NO mide cuántas
+// dimensiones cubre: cuántas preguntas hace un formulario es una decisión de
+// producto (más preguntas = mejor perfil, peor conversión), no un defecto.
+// Mezclar las dos cosas hacía que un lead magnet impecable saliera en ámbar por
+// no preguntar una dimensión de 5 puntos.
+export type SourceStatus = 'sin_envios' | 'sin_calificar' | 'ok' | 'parcial' | 'no_puntua'
 
 export interface SourceHealth {
   submissions: number
@@ -32,14 +37,26 @@ export interface SourceHealth {
   zonasSinCasar: string[]
   /** Manda el nivel ya resuelto en vez del dato en bruto. */
   mandaNivelResuelto: boolean
-  /** Dimensiones del modelo que esta fuente nunca pregunta. */
+  /**
+   * Dimensiones del modelo que esta fuente nunca pregunta. Es una OPORTUNIDAD,
+   * no un fallo: no cambia el estado, sólo se informa.
+   */
   nuncaLlegan: string[]
+  /** Preguntas propias que no alimentan ninguna dimensión (texto libre). */
+  preguntasLibres: number
 }
 
 const EMPTY: SourceHealth = {
   submissions: 0, status: 'sin_envios', reconocidas: [],
-  valoresInvalidos: [], zonasSinCasar: [], mandaNivelResuelto: false, nuncaLlegan: [],
+  valoresInvalidos: [], zonasSinCasar: [], mandaNivelResuelto: false,
+  nuncaLlegan: [], preguntasLibres: 0,
 }
+
+// Un formulario de contacto puro (mensaje + motivo) no intenta calificar, y eso
+// está bien. Uno con muchas preguntas propias y ninguna reconocida SÍ lo intenta
+// y no lo consigue — es el caso de las claves slugificadas del texto en español.
+const MIN_PREGUNTAS_PARA_SOSPECHAR = 3
+const CLAVES_DE_CONTACTO = new Set(['message', 'reason', 'mensaje', 'motivo'])
 
 /**
  * Diagnostica una fuente a partir de sus envíos.
@@ -56,6 +73,7 @@ export function diagnoseSource(
   const reconocidas = new Set<string>()
   const invalidos = new Map<string, string>()
   const zonasSinCasar = new Set<string>()
+  const libres = new Set<string>()
   let mandaNivelResuelto = false
 
   for (const s of submissions) {
@@ -89,7 +107,10 @@ export function diagnoseSource(
         continue
       }
 
-      if (!FIT_DIMENSIONS_ALL.has(key)) continue // pregunta libre: legítima
+      if (!FIT_DIMENSIONS_ALL.has(key)) {
+        if (!CLAVES_DE_CONTACTO.has(key)) libres.add(key)
+        continue // pregunta libre: legítima, se guarda y se muestra
+      }
 
       // Manda el nivel ya resuelto: funciona, pero se queda congelado si la
       // agencia cambia sus rangos o sus zonas.
@@ -109,10 +130,14 @@ export function diagnoseSource(
     .filter(d => d !== 'budget_tier' && d !== 'geo_fit' && d !== 'property_use')
   const nuncaLlegan = esperadas.filter(d => !reconocidas.has(d))
 
+  // Ámbar SÓLO por defectos reales: algo que llega y no entra como debería.
+  const hayDefecto = valoresInvalidos.length > 0 || zonasSinCasar.size > 0 || mandaNivelResuelto
+
   const status: SourceStatus =
-    reconocidas.size === 0                             ? 'no_puntua'
-    : valoresInvalidos.length > 0 || nuncaLlegan.length > 0 ? 'parcial'
-    : 'ok'
+    reconocidas.size > 0
+      ? (hayDefecto ? 'parcial' : 'ok')
+      // Nada reconocido: distinguir el que no lo intenta del que lo intenta y falla.
+      : (libres.size >= MIN_PREGUNTAS_PARA_SOSPECHAR ? 'no_puntua' : 'sin_calificar')
 
   return {
     submissions: submissions.length,
@@ -122,21 +147,26 @@ export function diagnoseSource(
     zonasSinCasar: [...zonasSinCasar].slice(0, 8),
     mandaNivelResuelto,
     nuncaLlegan,
+    preguntasLibres: libres.size,
   }
 }
 
 export const STATUS_COPY: Record<SourceStatus, { label: string; tone: 'ok' | 'warn' | 'bad' | 'mute' }> = {
-  sin_envios: { label: 'Sin envíos',            tone: 'mute' },
-  ok:         { label: 'Recibiendo bien',       tone: 'ok'   },
-  parcial:    { label: 'Califica a medias',     tone: 'warn' },
-  no_puntua:  { label: 'No califica al lead',   tone: 'bad'  },
+  sin_envios:    { label: 'Sin envíos',          tone: 'mute' },
+  sin_calificar: { label: 'Solo contacto',       tone: 'mute' },
+  ok:            { label: 'Califica bien',       tone: 'ok'   },
+  parcial:       { label: 'Revisar respuestas',  tone: 'warn' },
+  no_puntua:     { label: 'No califica al lead', tone: 'bad'  },
 }
 
 /** Frase concreta de qué arreglar, o null si no hay nada. */
 export function healthHint(h: SourceHealth, profile: BusinessProfile): string | null {
   if (h.status === 'sin_envios') return null
+  if (h.status === 'sin_calificar') {
+    return 'Esta fuente sólo recoge el contacto — no hace preguntas que califiquen. Es lo esperado en un formulario de contacto; si quieres que puntúe, añádele preguntas de calificación.'
+  }
   if (h.status === 'no_puntua') {
-    return 'Ningún envío de esta fuente alimenta el score: las claves o los valores no coinciden con el contrato. Abre "Opciones de integración" y compáralo.'
+    return `Esta fuente hace ${h.preguntasLibres} preguntas propias y ninguna alimenta el score: las claves o los valores no coinciden con el contrato. Abre "Opciones de integración" y compáralo.`
   }
   const partes: string[] = []
   if (h.valoresInvalidos.length > 0) {
@@ -148,8 +178,11 @@ export function healthHint(h: SourceHealth, profile: BusinessProfile): string | 
   if (h.zonasSinCasar.length > 0 && (profile.primaryAreas.length > 0 || profile.secondaryAreas.length > 0)) {
     partes.push(`recibe zonas fuera de las tuyas (${h.zonasSinCasar.slice(0, 3).join(', ')}) — si alguna debería contar, decláratela en Ajustes → Tu negocio`)
   }
-  if (h.nuncaLlegan.length > 0) {
-    partes.push(`nunca pregunta: ${h.nuncaLlegan.join(', ')}`)
-  }
-  return partes.length > 0 ? `Esta fuente ${partes.join('; ')}.` : null
+  const defectos = partes.length > 0 ? `Esta fuente ${partes.join('; ')}.` : null
+  // La cobertura se informa aparte y en tono de oportunidad: preguntar más da
+  // mejor perfil, pero también alarga el formulario. Lo decide el tenant.
+  const cobertura = h.nuncaLlegan.length > 0
+    ? `Podría calificar mejor si preguntara: ${h.nuncaLlegan.join(', ')}.`
+    : null
+  return [defectos, cobertura].filter(Boolean).join(' ') || null
 }
