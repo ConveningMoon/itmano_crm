@@ -39,6 +39,10 @@ export interface Agent {
   emailSignature?: string | null
   /** Descripción del agente para personalizar el análisis de fit con IA (064). */
   description?: string | null
+  /** Comisión que ESTE agente negoció. null = hereda la de la agencia. */
+  commissionModel?: 'percentage' | 'flat' | null
+  commissionBuy?:   number | null
+  commissionSell?:  number | null
 }
 
 export interface LeadMagnet {

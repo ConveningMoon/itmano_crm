@@ -16,6 +16,9 @@ export interface AgentRow {
   created_at: string
   email_signature: string | null
   description?: string | null
+  commission_model?: string | null
+  commission_buy?:   number | null
+  commission_sell?:  number | null
 }
 
 export interface LeadRow {
@@ -98,6 +101,9 @@ export function mapAgent(r: AgentRow): Agent {
     active: r.active,
     emailSignature: r.email_signature ?? null,
     description: r.description ?? null,
+    commissionModel: (r.commission_model ?? null) as 'percentage' | 'flat' | null,
+    commissionBuy:   r.commission_buy  === null || r.commission_buy  === undefined ? null : Number(r.commission_buy),
+    commissionSell:  r.commission_sell === null || r.commission_sell === undefined ? null : Number(r.commission_sell),
   }
 }
 

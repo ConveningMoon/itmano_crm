@@ -26,9 +26,19 @@ export interface SubmissionLike { answers: SubmissionAnswer[] }
 // no preguntar una dimensión de 5 puntos.
 export type SourceStatus = 'sin_envios' | 'sin_calificar' | 'ok' | 'parcial' | 'no_puntua'
 
+// Estado de la MEDICION, separado del contenido del formulario. Son dos
+// problemas distintos con dos culpables distintos: uno se arregla cambiando las
+// preguntas, el otro pegando un script. Mezclarlos en un solo badge hacia que
+// "Califica bien" desapareciera en cuanto faltaba el beacon, que no tiene nada
+// que ver con la calidad de las preguntas.
+export type MeasurementStatus = 'sin_datos' | 'midiendo' | 'sin_medicion'
+
 export interface SourceHealth {
   submissions: number
+  /** Qué tan bien califica el CONTENIDO del formulario. */
   status:      SourceStatus
+  /** Si la fuente está reportando visitas. Independiente del contenido. */
+  measurement: MeasurementStatus
   /** Dimensiones de fit que sí llegan bien. */
   reconocidas: string[]
   /** `dimension: valor` que llega pero no casa ningún bucket del modelo. */
@@ -53,7 +63,7 @@ export interface SourceHealth {
 }
 
 const EMPTY: SourceHealth = {
-  submissions: 0, status: 'sin_envios', reconocidas: [],
+  submissions: 0, status: 'sin_envios', measurement: 'sin_datos', reconocidas: [],
   valoresInvalidos: [], zonasSinCasar: [], mandaNivelResuelto: false,
   nuncaLlegan: [], preguntasLibres: 0, faltaBeacon: false,
 }
@@ -138,9 +148,10 @@ export function diagnoseSource(
     .filter(d => d !== 'budget_tier' && d !== 'geo_fit' && d !== 'property_use')
   const nuncaLlegan = esperadas.filter(d => !reconocidas.has(d))
 
-  // Ámbar SÓLO por defectos reales: algo que llega y no entra como debería.
+  // El estado del FORMULARIO no mira la medición: son dos problemas con dos
+  // culpables distintos. Ámbar sólo por defectos del contenido.
   const faltaBeacon = submissions.length > 0 && pageViews === 0
-  const hayDefecto = valoresInvalidos.length > 0 || zonasSinCasar.size > 0 || mandaNivelResuelto || faltaBeacon
+  const hayDefecto = valoresInvalidos.length > 0 || zonasSinCasar.size > 0 || mandaNivelResuelto
 
   const status: SourceStatus =
     reconocidas.size > 0
@@ -151,6 +162,7 @@ export function diagnoseSource(
   return {
     submissions: submissions.length,
     status,
+    measurement: faltaBeacon ? 'sin_medicion' : 'midiendo',
     reconocidas: [...reconocidas].sort(),
     valoresInvalidos,
     zonasSinCasar: [...zonasSinCasar].slice(0, 8),
@@ -161,12 +173,28 @@ export function diagnoseSource(
   }
 }
 
-export const STATUS_COPY: Record<SourceStatus, { label: string; tone: 'ok' | 'warn' | 'bad' | 'mute' }> = {
+export type Tone = 'ok' | 'warn' | 'bad' | 'mute'
+
+/** Estado del FORMULARIO: qué tan bien califica lo que pregunta. */
+export const STATUS_COPY: Record<SourceStatus, { label: string; tone: Tone }> = {
   sin_envios:    { label: 'Sin envíos',          tone: 'mute' },
   sin_calificar: { label: 'Solo contacto',       tone: 'mute' },
   ok:            { label: 'Califica bien',       tone: 'ok'   },
   parcial:       { label: 'Revisar respuestas',  tone: 'warn' },
   no_puntua:     { label: 'No califica al lead', tone: 'bad'  },
+}
+
+/** Estado de la FUENTE: si está reportando lo que hace falta para medirla. */
+export const MEASUREMENT_COPY: Record<MeasurementStatus, { label: string; tone: Tone }> = {
+  sin_datos:    { label: 'Sin datos',      tone: 'mute' },
+  midiendo:     { label: 'Midiendo',       tone: 'ok'   },
+  sin_medicion: { label: 'Sin medición',   tone: 'warn' },
+}
+
+/** Qué le pasa a la medición de esta fuente, o null si va bien. */
+export function measurementHint(h: SourceHealth): string | null {
+  if (h.measurement !== 'sin_medicion') return null
+  return 'Llegan envíos pero ninguna visita: a la página le falta el script de medición. Sin él, Vistas y Conversión se quedan en cero y no sabes cuánta gente llegó y no llenó el formulario — que es lo que dice si el problema está en el tráfico o en el formulario. El script está en "Opciones de integración".'
 }
 
 /** Frase concreta de qué arreglar, o null si no hay nada. */
@@ -179,9 +207,6 @@ export function healthHint(h: SourceHealth, profile: BusinessProfile): string | 
     return `Esta fuente hace ${h.preguntasLibres} preguntas propias y ninguna alimenta el score: las claves o los valores no coinciden con el contrato. Abre "Opciones de integración" y compáralo.`
   }
   const partes: string[] = []
-  if (h.faltaBeacon) {
-    partes.push('recibe envíos pero ninguna visita, así que le falta el script de medición — sin él, Vistas y Conversión se quedan en cero y no sabes cuánta gente vio la página sin llenarla (está en "Opciones de integración")')
-  }
   if (h.valoresInvalidos.length > 0) {
     partes.push(`llegan valores que el modelo no reconoce (${h.valoresInvalidos.slice(0, 3).map(v => `${v.key}: "${v.value}"`).join(', ')})`)
   }

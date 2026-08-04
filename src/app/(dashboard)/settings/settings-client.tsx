@@ -11,7 +11,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentCommission, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
 import { openBillingPortal } from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, trialDaysLeft } from '@/lib/plans'
@@ -282,6 +282,19 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
   const [descOk, setDescOk]           = useState(false)
   const [descPending, startDesc]      = useTransition()
 
+  // Comisión propia. null en el modelo = hereda la de la agencia, así que un
+  // Partner sólo declara las excepciones. Rangos y zonas NO: esos definen cómo
+  // se mide la calidad y esa vara es una sola para todo el tenant.
+  const [editingCom, setEditingCom] = useState(false)
+  const [com, setCom] = useState({
+    model: agent.commissionModel ?? '',
+    buy:   agent.commissionBuy  === null || agent.commissionBuy  === undefined ? '' : String(agent.commissionBuy),
+    sell:  agent.commissionSell === null || agent.commissionSell === undefined ? '' : String(agent.commissionSell),
+  })
+  const [comErr, setComErr]         = useState<string | null>(null)
+  const [comOk, setComOk]           = useState(false)
+  const [comPending, startCom]      = useTransition()
+
   // Idiomas registrados (definen los emails de cierre del agente — 058).
   const [editingLangs, setEditingLangs] = useState(false)
   const [langs, setLangs]               = useState<string[]>(agent.languages)
@@ -330,6 +343,15 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
       setEditingDesc(false)
       setDescOk(true)
       setTimeout(() => setDescOk(false), 2500)
+    })
+  }
+
+  function handleSaveCom() {
+    setComErr(null); setComOk(false)
+    startCom(async () => {
+      const res = await updateAgentCommission(agent.id, com)
+      if (!res.ok) { setComErr(res.error); return }
+      setEditingCom(false); setComOk(true); setTimeout(() => setComOk(false), 2500)
     })
   }
 
@@ -438,6 +460,7 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
             {canEditSelf && (
               <>
                 <button onClick={() => { setEditingDesc(v => !v); setDesc(descSaved); setDescErr(null) }} style={BTN_GHOST}>Descripción</button>
+                <button onClick={() => { setEditingCom(v => !v); setComErr(null) }} style={BTN_GHOST}>Comisión</button>
                 <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
               </>
             )}
@@ -541,6 +564,56 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
         {descOk && (
           <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
             Descripción guardada. La IA ya la tiene en cuenta.
+          </div>
+        )}
+
+        {/* Comisión propia del agente */}
+        {editingCom && (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ ...LABEL, marginBottom: 0 }}>Su comisión</label>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Cada agente negocia su split. Déjalo en &quot;Hereda la de la agencia&quot; si cobra
+              lo mismo que el resto. Se usa para el valor potencial de sus leads — no toca el score.
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <select
+                value={com.model}
+                onChange={e => setCom(c => ({ ...c, model: e.target.value }))}
+                style={{ ...INPUT, cursor: 'pointer' }}
+              >
+                <option value="">Hereda la de la agencia</option>
+                <option value="percentage">Porcentaje de la operación</option>
+                <option value="flat">Monto fijo por operación</option>
+              </select>
+              <input
+                inputMode="decimal"
+                value={com.buy}
+                onChange={e => setCom(c => ({ ...c, buy: e.target.value }))}
+                disabled={!com.model}
+                placeholder={com.model === 'flat' ? 'Compra (monto)' : 'Compra (%)'}
+                style={{ ...INPUT, opacity: com.model ? 1 : 0.5 }}
+              />
+              <input
+                inputMode="decimal"
+                value={com.sell}
+                onChange={e => setCom(c => ({ ...c, sell: e.target.value }))}
+                disabled={!com.model}
+                placeholder={com.model === 'flat' ? 'Venta (monto)' : 'Venta (%)'}
+                style={{ ...INPUT, opacity: com.model ? 1 : 0.5 }}
+              />
+            </div>
+            {comErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{comErr}</div>}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={handleSaveCom} disabled={comPending} style={{ ...BTN_PRIMARY, opacity: comPending ? 0.6 : 1 }}>
+                {comPending ? 'Guardando…' : 'Guardar comisión'}
+              </button>
+              <button onClick={() => setEditingCom(false)} style={BTN_GHOST}>Cancelar</button>
+            </div>
+          </div>
+        )}
+        {comOk && (
+          <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
+            Comisión guardada. Se aplica al valor potencial de sus leads.
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { diagnoseSource, healthHint } from '@/lib/sources/health'
+import { diagnoseSource, healthHint, measurementHint } from '@/lib/sources/health'
 import { EMPTY_PROFILE, type BusinessProfile } from '@/lib/business/profile'
 
 const AJ: BusinessProfile = {
@@ -103,8 +103,12 @@ describe('diagnoseSource', () => {
     // nadie sabe cuánta gente vio la página sin llenarla.
     const h = diagnoseSource([envio(['timeline', 'under_3_months'])], AJ, 0)
     expect(h.faltaBeacon).toBe(true)
-    expect(h.status).toBe('parcial')
-    expect(healthHint(h, AJ)).toContain('script de medición')
+    expect(h.measurement).toBe('sin_medicion')
+    expect(measurementHint(h)).toContain('script de medición')
+    // Y NO ensucia el estado del formulario: las preguntas están bien. Son dos
+    // problemas con dos culpables distintos.
+    expect(h.status).toBe('ok')
+    expect(healthHint(h, AJ)).not.toContain('script')
   })
 
   it('sin envíos no dice nada', () => {
