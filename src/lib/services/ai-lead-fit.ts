@@ -94,7 +94,11 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     if (!process.env.ANTHROPIC_API_KEY) return skip('no_api_key', input.leadId)
     const db = createAdminClient()
 
-    // Tenant: gate por toggle + contexto de mercado.
+    // El analisis de fit ya no se activa por tenant: es parte del producto y
+    // viene encendido de fabrica (migracion 089). La columna sigue existiendo
+    // como interruptor de emergencia de ITMANO, pero ya no hay pantalla que
+    // invite a apagarlo — tenerlo apagado dejaba la mitad del modelo sin correr
+    // sin que nadie se enterara.
     const { data: tenantRow } = await db
       .from('tenants')
       .select('name, description, ai_lead_scoring_enabled')
