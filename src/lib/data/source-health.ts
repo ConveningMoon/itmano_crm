@@ -14,12 +14,16 @@ const MAX_SUBMISSIONS = 500
 
 export async function getSourcesHealth(tenantId: string): Promise<Record<string, SourceHealth>> {
   const db = createAdminClient()
-  const [{ data, error }, profile] = await Promise.all([
+  const [{ data, error }, { data: viewRows }, profile] = await Promise.all([
     db.from('form_submissions')
       .select('channel_id, answers')
       .eq('tenant_id', tenantId)
       .order('submitted_at', { ascending: false })
       .limit(MAX_SUBMISSIONS),
+    // Las visitas dicen si la página tiene el script de medición. Se cuentan
+    // sobre TODO el histórico, no sobre una ventana: la pregunta no es "cuántas
+    // visitas tuvo este mes" sino "¿alguna vez ha reportado una?".
+    db.from('channel_page_views').select('channel_id').eq('tenant_id', tenantId).limit(5000),
     getBusinessProfile(tenantId),
   ])
 
@@ -36,9 +40,14 @@ export async function getSourcesHealth(tenantId: string): Promise<Record<string,
     porCanal.set(row.channel_id, lista)
   }
 
+  const vistasPorCanal = new Map<string, number>()
+  for (const v of (viewRows ?? []) as { channel_id: string }[]) {
+    vistasPorCanal.set(v.channel_id, (vistasPorCanal.get(v.channel_id) ?? 0) + 1)
+  }
+
   const out: Record<string, SourceHealth> = {}
   for (const [channelId, envios] of porCanal) {
-    out[channelId] = diagnoseSource(envios, profile)
+    out[channelId] = diagnoseSource(envios, profile, vistasPorCanal.get(channelId) ?? 0)
   }
   return out
 }

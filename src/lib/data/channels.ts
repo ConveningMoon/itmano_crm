@@ -22,10 +22,20 @@ export interface AcquisitionChannel {
 }
 
 export interface ChannelMetrics {
+  /** Leads que este canal ADQUIRIO (leads.acquisition_channel_id). */
   leadsTotal: number
   leadsInWindow: number
+  /**
+   * Formularios enviados en este canal. Distinto de los leads: un visitante que
+   * ya era lead y vuelve a llenar otro formulario suma envio pero no adquisicion
+   * — se adquirio una vez. Sin este numero, un canal con actividad real salia
+   * con un cero mudo.
+   */
+  submissionsTotal: number
+  submissionsInWindow: number
   pageViewsInWindow: number
-  conversionRate: number
+  /** Envios / vistas. `null` sin vistas: un 0% afirmaria que nadie convirtio. */
+  conversionRate: number | null
   avgTempScore: number | null
 }
 
@@ -118,8 +128,10 @@ async function fetchChannelsWithMetrics(
   const metricsById = (metricsRaw ?? {}) as Record<string, {
     leads_total: number
     leads_in_window: number
+    submissions_total: number
+    submissions_in_window: number
     page_views_in_window: number
-    conversion_rate: number
+    conversion_rate: number | null
     avg_temp_score: number | null
   } | undefined>
 
@@ -128,7 +140,7 @@ async function fetchChannelsWithMetrics(
     const m = metricsById[c.id as string]
     const leadsInWindow     = m?.leads_in_window ?? 0
     const pageViewsInWindow = m?.page_views_in_window ?? 0
-    const conversionRate    = m?.conversion_rate ?? 0
+    const conversionRate    = m?.conversion_rate ?? null
     const avgTempScore      = m?.avg_temp_score ?? null
     const totalLeadsCount   = m?.leads_total ?? 0
 
@@ -149,6 +161,8 @@ async function fetchChannelsWithMetrics(
       metrics: {
         leadsTotal:       totalLeadsCount,
         leadsInWindow,
+        submissionsTotal:    m?.submissions_total ?? 0,
+        submissionsInWindow: m?.submissions_in_window ?? 0,
         pageViewsInWindow,
         conversionRate,
         avgTempScore,

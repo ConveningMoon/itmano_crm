@@ -725,9 +725,10 @@ export default async function AnalyticsPage() {
                     <span style={{
                       fontSize: '13px',
                       fontWeight: 500,
-                      color: ch.metrics.conversionRate >= 15 ? 'var(--accent-green)' : ch.metrics.conversionRate >= 8 ? 'var(--accent-gold)' : 'var(--text-muted)',
+                      // Sin vistas no hay conversion que juzgar (falta el beacon).
+                      color: (ch.metrics.conversionRate ?? 0) >= 15 ? 'var(--accent-green)' : (ch.metrics.conversionRate ?? 0) >= 8 ? 'var(--accent-gold)' : 'var(--text-muted)',
                     }}>
-                      {ch.metrics.conversionRate}%
+                      {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
                     </span>
                   </td>
                   <td style={{ padding: '10px 0 10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
