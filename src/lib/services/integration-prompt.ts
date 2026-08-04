@@ -165,9 +165,14 @@ function buildProfileSection(profile: BusinessProfile, fitCatalog: FitCatalogEnt
 function buildViewSnippet(baseUrl: string, publicId: string): string {
   const fence = '```'
   return [
-    '### Métricas de vistas (opcional, recomendado)',
-    'Sin esto, "Vistas" y "Conversión" de este canal quedan en 0. Dispara esto en',
-    'cada carga de página (no bloquea, no espera respuesta):',
+    '### Medición de vistas (OBLIGATORIO — no es opcional)',
+    'Sin esto, "Vistas" y "Conversión" de este canal quedan en 0 PARA SIEMPRE, y el',
+    'CRM no puede decirte si el problema está en el tráfico o en el formulario: ve',
+    'los envíos, pero no cuánta gente llegó a la página y no la llenó.',
+    '',
+    'ANTES DE TERMINAR, verifica que la página ya lo tenga. Si el proyecto carga',
+    `intake.js de ${baseUrl} con data-channel, ya está — no lo dupliques. Si no,`,
+    'dispara esto en cada carga de página (no bloquea, no espera respuesta):',
     '',
     `${fence}html`,
     '<script>',

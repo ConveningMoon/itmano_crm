@@ -165,6 +165,35 @@ export function geoFitFor(area: string | null | undefined, p: BusinessProfile): 
   return 'fuera_de_zona'
 }
 
+/** La comisión que un agente concreto negoció. null en cada campo = hereda. */
+export interface AgentCommission {
+  commissionModel: CommissionModel | null
+  commissionBuy:   number | null
+  commissionSell:  number | null
+}
+
+/**
+ * El perfil que aplica a un lead, con la comisión del agente encima.
+ *
+ * Sólo la comisión se sobreescribe. Los rangos y las zonas siguen siendo del
+ * tenant: definen cómo se mide la CALIDAD de un lead, y esa vara tiene que ser
+ * la misma para toda la cartera — si cada agente tuviera la suya, el mismo lead
+ * valdría distinto según a quién se le asignara, y los quintiles dejarían de
+ * comparar lo mismo.
+ *
+ * El modelo se hereda entero: mezclar el porcentaje de un agente con el modelo
+ * `flat` del tenant daría un número sin sentido.
+ */
+export function profileForAgent(p: BusinessProfile, agent: AgentCommission | null): BusinessProfile {
+  if (!agent?.commissionModel) return p
+  return {
+    ...p,
+    commissionModel: agent.commissionModel,
+    commissionBuy:   agent.commissionBuy,
+    commissionSell:  agent.commissionSell,
+  }
+}
+
 /** Qué le falta al perfil para ser útil. Vacío = completo. */
 export function missingFields(p: BusinessProfile): string[] {
   const faltan: string[] = []

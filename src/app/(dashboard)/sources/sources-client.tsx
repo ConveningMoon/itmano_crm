@@ -154,10 +154,14 @@ function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?
           marginBottom: '12px',
         }}>
           {[
-            { value: ch.metrics.leadsInWindow, label: 'Leads' },
-            { value: ch.metrics.pageViewsInWindow, label: 'Vistas' },
-            { value: `${ch.metrics.conversionRate}%`, label: 'Conversión' },
-            { value: ch.metrics.avgTempScore !== null ? ch.metrics.avgTempScore : '—', label: 'Score prom.' },
+            // Envíos y leads son cosas distintas: quien ya era lead y vuelve a
+            // llenar un formulario suma envío pero no adquisición. Sin el primer
+            // número, un canal con actividad real salía con un cero mudo.
+            { value: ch.metrics.submissionsInWindow, label: 'Envíos' },
+            { value: ch.metrics.leadsInWindow, label: 'Leads nuevos' },
+            // Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió.
+            { value: ch.metrics.pageViewsInWindow || '—', label: 'Vistas' },
+            { value: ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`, label: 'Conversión' },
           ].map((s, i) => (
             <div key={i} style={{ background: 'var(--bg-elevated)', padding: '10px 14px' }}>
               <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.2 }}>

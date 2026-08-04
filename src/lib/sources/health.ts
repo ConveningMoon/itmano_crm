@@ -44,12 +44,18 @@ export interface SourceHealth {
   nuncaLlegan: string[]
   /** Preguntas propias que no alimentan ninguna dimensión (texto libre). */
   preguntasLibres: number
+  /**
+   * Llegan envíos pero NINGUNA visita: la página no tiene el beacon instalado.
+   * Sin él, "Vistas" y "Conversión" quedan en cero para siempre y no hay forma
+   * de saber cuánta gente vio la página y no la llenó.
+   */
+  faltaBeacon: boolean
 }
 
 const EMPTY: SourceHealth = {
   submissions: 0, status: 'sin_envios', reconocidas: [],
   valoresInvalidos: [], zonasSinCasar: [], mandaNivelResuelto: false,
-  nuncaLlegan: [], preguntasLibres: 0,
+  nuncaLlegan: [], preguntasLibres: 0, faltaBeacon: false,
 }
 
 // Un formulario de contacto puro (mensaje + motivo) no intenta calificar, y eso
@@ -67,6 +73,8 @@ const CLAVES_DE_CONTACTO = new Set(['message', 'reason', 'mensaje', 'motivo'])
 export function diagnoseSource(
   submissions: SubmissionLike[],
   profile: BusinessProfile,
+  /** Visitas registradas del canal. Sólo se juzga cuando ya hay envíos. */
+  pageViews = 0,
 ): SourceHealth {
   if (submissions.length === 0) return EMPTY
 
@@ -131,7 +139,8 @@ export function diagnoseSource(
   const nuncaLlegan = esperadas.filter(d => !reconocidas.has(d))
 
   // Ámbar SÓLO por defectos reales: algo que llega y no entra como debería.
-  const hayDefecto = valoresInvalidos.length > 0 || zonasSinCasar.size > 0 || mandaNivelResuelto
+  const faltaBeacon = submissions.length > 0 && pageViews === 0
+  const hayDefecto = valoresInvalidos.length > 0 || zonasSinCasar.size > 0 || mandaNivelResuelto || faltaBeacon
 
   const status: SourceStatus =
     reconocidas.size > 0
@@ -148,6 +157,7 @@ export function diagnoseSource(
     mandaNivelResuelto,
     nuncaLlegan,
     preguntasLibres: libres.size,
+    faltaBeacon,
   }
 }
 
@@ -169,6 +179,9 @@ export function healthHint(h: SourceHealth, profile: BusinessProfile): string | 
     return `Esta fuente hace ${h.preguntasLibres} preguntas propias y ninguna alimenta el score: las claves o los valores no coinciden con el contrato. Abre "Opciones de integración" y compáralo.`
   }
   const partes: string[] = []
+  if (h.faltaBeacon) {
+    partes.push('recibe envíos pero ninguna visita, así que le falta el script de medición — sin él, Vistas y Conversión se quedan en cero y no sabes cuánta gente vio la página sin llenarla (está en "Opciones de integración")')
+  }
   if (h.valoresInvalidos.length > 0) {
     partes.push(`llegan valores que el modelo no reconoce (${h.valoresInvalidos.slice(0, 3).map(v => `${v.key}: "${v.value}"`).join(', ')})`)
   }
