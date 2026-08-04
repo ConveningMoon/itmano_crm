@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { Plus, X, Trash2, AlertTriangle } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
-import { STATUS_COPY, type SourceHealth } from '@/lib/sources/health'
+import { STATUS_COPY, MEASUREMENT_COPY, type SourceHealth } from '@/lib/sources/health'
 
 const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', { fg: string; bg: string }> = {
   ok:   { fg: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.12)' },
@@ -125,21 +125,25 @@ function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?
           {ch.publicId}
         </div>
 
-        {/* Cómo está entrando: se calcula de los envíos reales, no de comparar
-            configuraciones. Es la única forma de ver una desviación que no da
-            error — un valor que no casa sólo resta puntos, en silencio. */}
+        {/* Dos semáforos, dos problemas distintos: el del FORMULARIO (qué tan
+            bien califica lo que pregunta) y el de la FUENTE (si está reportando
+            lo que hace falta para medirla). Se arreglan en sitios distintos —
+            uno cambiando preguntas, el otro pegando un script — así que
+            juntarlos escondía uno detrás del otro. */}
         {health && health.status !== 'sin_envios' && (
-          <div style={{ marginBottom: '12px' }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px',
-              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-              letterSpacing: '0.05em', textTransform: 'uppercase',
-              color: HEALTH_TONE[STATUS_COPY[health.status].tone].fg,
-              background: HEALTH_TONE[STATUS_COPY[health.status].tone].bg,
-            }}>
-              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
-              {STATUS_COPY[health.status].label}
-            </span>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+            {[STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+                letterSpacing: '0.05em', textTransform: 'uppercase',
+                color: HEALTH_TONE[b.tone].fg,
+                background: HEALTH_TONE[b.tone].bg,
+              }}>
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
+                {b.label}
+              </span>
+            ))}
           </div>
         )}
 

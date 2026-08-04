@@ -570,6 +570,54 @@ export async function updateAgentLanguages(
 // Se muestra al final de todos los correos (secuencias, compra, one-off) del
 // agente asignado al lead. Texto libre multilínea; vacío = sin firma.
 
+// La comisión que negoció ESTE agente. null = hereda la de la agencia, así que
+// un Partner sólo declara las excepciones. Los rangos y las zonas NO se tocan
+// aquí: definen cómo se mide la calidad y esa vara es una sola para el tenant.
+export async function updateAgentCommission(
+  agentId: string,
+  input: { model: string; buy: string; sell: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireSelfOrManager(ctx, agentId)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const num = (v: string) => {
+    const t = v.trim()
+    if (!t) return null
+    const n = Number(t.replace(',', '.'))
+    return Number.isFinite(n) && n >= 0 ? n : NaN
+  }
+  const model = input.model === 'percentage' || input.model === 'flat' ? input.model : null
+  const buy  = num(input.buy)
+  const sell = num(input.sell)
+  if (Number.isNaN(buy) || Number.isNaN(sell)) return { ok: false, error: 'La comisión tiene que ser un número positivo.' }
+  // Mismo tope que el perfil del tenant: nadie cobra el 30%, así que un número
+  // por encima es casi seguro un cero de más.
+  if (model === 'percentage' && ((buy ?? 0) > 25 || (sell ?? 0) > 25)) {
+    return { ok: false, error: 'Un porcentaje de comisión por encima de 25 parece un error.' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('agents')
+    .update({
+      commission_model: model,
+      // Sin modelo no hay comisión propia: se limpia entera para que herede.
+      commission_buy:  model ? buy  : null,
+      commission_sell: model ? sell : null,
+    })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/leads')
+  return { ok: true }
+}
+
 // Cómo firma sus correos es del agente, igual que su descripción.
 export async function updateAgentSignature(
   agentId: string,
