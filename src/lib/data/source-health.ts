@@ -16,14 +16,14 @@ export async function getSourcesHealth(tenantId: string): Promise<Record<string,
   const db = createAdminClient()
   const [{ data, error }, { data: viewRows }, profile] = await Promise.all([
     db.from('form_submissions')
-      .select('channel_id, answers')
+      .select('channel_id, answers, submitted_at')
       .eq('tenant_id', tenantId)
       .order('submitted_at', { ascending: false })
       .limit(MAX_SUBMISSIONS),
-    // Las visitas dicen si la página tiene el script de medición. Se cuentan
-    // sobre TODO el histórico, no sobre una ventana: la pregunta no es "cuántas
-    // visitas tuvo este mes" sino "¿alguna vez ha reportado una?".
-    db.from('channel_page_views').select('channel_id').eq('tenant_id', tenantId).limit(5000),
+    // Las visitas se comparan con los envíos EN EL MISMO PERIODO. Contarlas
+    // sobre todo el histórico dejaba pasar el caso peor: una fuente que midió
+    // una vez y se rompió después seguía saliendo sana para siempre.
+    db.from('channel_page_views').select('channel_id, created_at').eq('tenant_id', tenantId).limit(5000),
     getBusinessProfile(tenantId),
   ])
 
@@ -33,15 +33,24 @@ export async function getSourcesHealth(tenantId: string): Promise<Record<string,
   }
 
   const porCanal = new Map<string, Array<{ answers: SubmissionAnswer[] }>>()
-  for (const row of (data ?? []) as { channel_id: string; answers: unknown }[]) {
+  // El envío más antiguo de los que se miran marca desde cuándo cuentan las
+  // visitas de ese canal.
+  const desdeCuando = new Map<string, number>()
+  for (const row of (data ?? []) as { channel_id: string; answers: unknown; submitted_at: string }[]) {
     if (!row.channel_id) continue
     const lista = porCanal.get(row.channel_id) ?? []
     lista.push({ answers: Array.isArray(row.answers) ? (row.answers as SubmissionAnswer[]) : [] })
     porCanal.set(row.channel_id, lista)
+    const t = new Date(row.submitted_at).getTime()
+    const previo = desdeCuando.get(row.channel_id)
+    if (Number.isFinite(t) && (previo === undefined || t < previo)) desdeCuando.set(row.channel_id, t)
   }
 
   const vistasPorCanal = new Map<string, number>()
-  for (const v of (viewRows ?? []) as { channel_id: string }[]) {
+  for (const v of (viewRows ?? []) as { channel_id: string; created_at: string }[]) {
+    const desde = desdeCuando.get(v.channel_id)
+    if (desde === undefined) continue
+    if (new Date(v.created_at).getTime() < desde) continue
     vistasPorCanal.set(v.channel_id, (vistasPorCanal.get(v.channel_id) ?? 0) + 1)
   }
 
