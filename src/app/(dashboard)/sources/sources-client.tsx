@@ -133,7 +133,10 @@ function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?
         {health && health.status !== 'sin_envios' && (
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
             {[STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
-              <span key={i} style={{
+              <span key={i} title={`${b.label} — ${b.what}
+
+${b.why}`} style={{
+                cursor: 'help',
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
                 fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
                 letterSpacing: '0.05em', textTransform: 'uppercase',

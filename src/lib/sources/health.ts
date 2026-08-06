@@ -175,20 +175,58 @@ export function diagnoseSource(
 
 export type Tone = 'ok' | 'warn' | 'bad' | 'mute'
 
+// Cada estado lleva su propia explicación: quien abre esta pantalla no tiene por
+// qué saber qué es "calificar". `what` es la definición en una frase, `why` es
+// por qué le importa. Se muestran al pasar el ratón, no en la tarjeta, para que
+// el panel siga leyéndose de un vistazo.
+export interface BadgeCopy { label: string; tone: Tone; what: string; why: string }
+
 /** Estado del FORMULARIO: qué tan bien califica lo que pregunta. */
-export const STATUS_COPY: Record<SourceStatus, { label: string; tone: Tone }> = {
-  sin_envios:    { label: 'Sin envíos',          tone: 'mute' },
-  sin_calificar: { label: 'Solo contacto',       tone: 'mute' },
-  ok:            { label: 'Califica bien',       tone: 'ok'   },
-  parcial:       { label: 'Revisar respuestas',  tone: 'warn' },
-  no_puntua:     { label: 'No califica al lead', tone: 'bad'  },
+export const STATUS_COPY: Record<SourceStatus, BadgeCopy> = {
+  sin_envios: {
+    label: 'Sin envíos', tone: 'mute',
+    what: 'Todavía nadie ha llenado este formulario.',
+    why:  'Hasta que llegue el primero no hay nada que revisar.',
+  },
+  sin_calificar: {
+    label: 'Solo contacto', tone: 'mute',
+    what: 'Recoge nombre y correo, pero no hace preguntas que califiquen al lead.',
+    why:  'Es lo esperado en un formulario de contacto. Si quieres que además puntúe, añádele preguntas de calificación.',
+  },
+  ok: {
+    label: 'Califica bien', tone: 'ok',
+    what: 'Todas las respuestas que llegan de aquí alimentan el score del lead.',
+    why:  'Los leads de esta fuente entran con su perfil completo y se ordenan solos por calidad.',
+  },
+  parcial: {
+    label: 'Revisar respuestas', tone: 'warn',
+    what: 'Llegan respuestas que el CRM no reconoce, así que esas no puntúan.',
+    why:  'Los leads de esta fuente salen con menos perfil del que deberían y pueden quedar por debajo de su calidad real.',
+  },
+  no_puntua: {
+    label: 'No califica al lead', tone: 'bad',
+    what: 'Este formulario hace preguntas, pero ninguna llega en el formato que el CRM entiende.',
+    why:  'Sus leads entran sin perfil: sin puntaje de calidad y sin orden de prioridad.',
+  },
 }
 
 /** Estado de la FUENTE: si está reportando lo que hace falta para medirla. */
-export const MEASUREMENT_COPY: Record<MeasurementStatus, { label: string; tone: Tone }> = {
-  sin_datos:    { label: 'Sin datos',      tone: 'mute' },
-  midiendo:     { label: 'Midiendo',       tone: 'ok'   },
-  sin_medicion: { label: 'Sin medición',   tone: 'warn' },
+export const MEASUREMENT_COPY: Record<MeasurementStatus, BadgeCopy> = {
+  sin_datos: {
+    label: 'Sin datos', tone: 'mute',
+    what: 'Todavía no hay actividad suficiente para medir esta fuente.',
+    why:  'Se activa sola en cuanto llegue la primera visita o el primer envío.',
+  },
+  midiendo: {
+    label: 'Midiendo', tone: 'ok',
+    what: 'La página reporta sus visitas al CRM.',
+    why:  'Puedes ver cuánta gente llega y qué porcentaje llena el formulario.',
+  },
+  sin_medicion: {
+    label: 'Sin medición', tone: 'warn',
+    what: 'Llegan envíos pero ninguna visita: a la página le falta el script de medición.',
+    why:  'Sin él no sabes cuánta gente llegó y NO llenó el formulario — que es lo que dice si el problema está en el tráfico o en el formulario.',
+  },
 }
 
 /** Qué le pasa a la medición de esta fuente, o null si va bien. */
