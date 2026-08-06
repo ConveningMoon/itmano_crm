@@ -83,7 +83,14 @@ const CLAVES_DE_CONTACTO = new Set(['message', 'reason', 'mensaje', 'motivo'])
 export function diagnoseSource(
   submissions: SubmissionLike[],
   profile: BusinessProfile,
-  /** Visitas registradas del canal. Sólo se juzga cuando ya hay envíos. */
+  /**
+   * Visitas registradas DESDE que empezaron los envíos que se están mirando.
+   *
+   * No vale contarlas sobre todo el histórico: una fuente que midió una vez y
+   * se rompió después seguiría saliendo sana para siempre. Es exactamente lo que
+   * pasó — un canal con visitas de hace dos meses aparecía "Midiendo" mientras
+   * los envíos de hoy no registraban ninguna.
+   */
   pageViews = 0,
 ): SourceHealth {
   if (submissions.length === 0) return EMPTY
