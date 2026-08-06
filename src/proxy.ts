@@ -76,7 +76,14 @@ export const config = {
   // Run on every page EXCEPT: the root landing (`.+` instead of `.*` leaves `/`
   // unmatched), all /api routes (own auth), /login, /auth/*, /unsubscribe, the
   // legal pages, and static assets. Mirrored by tests/auth/middleware-matcher.test.ts.
+//
+// `js` está en la lista de extensiones por una razón concreta: /intake.js es el
+// script de medición que las landings EXTERNAS cargan desde aquí. Sin excluirlo,
+// el guard lo trataba como página protegida y devolvía el HTML de /login donde
+// el navegador esperaba JavaScript — el script no se ejecutaba, ninguna visita
+// se registraba y no había ningún error visible. Los envíos seguían entrando
+// por su propio endpoint, así que nada parecía roto.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).+)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt)$).+)',
   ],
 }

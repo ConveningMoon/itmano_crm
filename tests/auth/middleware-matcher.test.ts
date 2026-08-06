@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 // can't import it here without pulling in next/server — this copy is the contract,
 // asserted below. If you change the proxy matcher, change this string too (and the
 // cases will tell you if a public route accidentally became protected).
-const MATCHER = '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).+)'
+const MATCHER = '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt)$).+)'
 
 const matcherRe = new RegExp(`^${MATCHER}$`)
 const isProtected = (path: string) => matcherRe.test(path)
@@ -37,6 +37,10 @@ describe('middleware matcher — public/system routes are NOT protected', () => 
     '/api/health',
     '/api/leads/lead-1/force-next-send', // self-guarded; must not get a redirect
     '/_next/static/chunk.js',
+    // El script de medición que cargan las landings externas. Protegerlo les
+    // devolvía el HTML de /login donde esperaban JavaScript.
+    '/intake.js',
+    '/robots.txt',
     '/favicon.ico',
     '/logo.png',
   ]
