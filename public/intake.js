@@ -1,14 +1,26 @@
 /* eslint-disable */
 /* itmano intake.js — embed on landing pages to track views and capture form leads.
- * Load synchronously (no async/defer): <script src="https://app.itmano.com/intake.js" data-channel="chn_..."></script>
+ * Se puede cargar sincrono o async (next/script, GTM, etc.): el bootstrap de
+ * abajo encuentra su propio tag de las dos formas.
  * Size target: < 3KB. No dependencies. IIFE — only exposes window.itmano. */
 (function () {
   'use strict';
 
   /* ── 1. Bootstrap ─────────────────────────────────────────────────────── */
+  /* `document.currentScript` es null cuando el script se inyecta de forma
+   * asincrona — que es justo lo que hace <Script> de Next, GTM y cualquier
+   * gestor de etiquetas. El script se cargaba, arrancaba, no se encontraba a si
+   * mismo y salia sin registrar nada: cero vistas, para siempre, sin error
+   * visible. El fallback busca el tag por su src. */
   var script = document.currentScript;
+  if (!script || !script.getAttribute('data-channel')) {
+    var tags = document.querySelectorAll('script[data-channel]');
+    for (var i = 0; i < tags.length; i++) {
+      if ((tags[i].src || '').indexOf('intake.js') !== -1) { script = tags[i]; break; }
+    }
+  }
   var channel = script && script.getAttribute('data-channel');
-  if (!channel) { console.warn('[itmano] data-channel attribute is missing'); return; }
+  if (!channel) { console.warn('[itmano] falta el atributo data-channel en el <script> de intake.js'); return; }
 
   var base = (function () {
     try { return new URL(script.src).origin; } catch (e) { return 'https://app.itmano.com'; }
