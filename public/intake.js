@@ -75,12 +75,27 @@
     timestamp:   new Date().toISOString()
   });
   var viewUrl = base + '/api/intake/' + channel + '/view';
-  if (navigator.sendBeacon) {
-    navigator.sendBeacon(viewUrl, new Blob([viewPayload], { type: 'text/plain' }));
-  } else {
-    fetch(viewUrl, { method: 'POST', body: viewPayload,
-      headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(function () {});
+  /* sendBeacon DEVUELVE false cuando no consigue encolar el envio, y eso pasa mas
+   * de lo que parece en movil: cola llena, cuota del user agent, o un Blob que el
+   * navegador rechaza. Ignorar ese valor dejaba la visita perdida sin reintento y
+   * sin rastro — la pagina cargaba, el script corria y no se registraba nada.
+   * Ahora se comprueba y se cae a fetch, que ademas cubre a los navegadores que
+   * no traen sendBeacon. */
+  function enviarVista() {
+    var enviado = false;
+    try {
+      if (navigator.sendBeacon) {
+        enviado = navigator.sendBeacon(viewUrl, new Blob([viewPayload], { type: 'text/plain' }));
+      }
+    } catch (e) { enviado = false; }
+    if (enviado) return;
+    try {
+      fetch(viewUrl, { method: 'POST', body: viewPayload,
+        headers: { 'Content-Type': 'text/plain' }, keepalive: true, mode: 'cors' })
+        .catch(function () {});
+    } catch (e) {}
   }
+  enviarVista();
 
   /* ── 5. Form wiring ───────────────────────────────────────────────────── */
   function showElement(el) { if (el) el.style.display = 'block'; }
