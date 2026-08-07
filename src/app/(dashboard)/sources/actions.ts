@@ -586,7 +586,9 @@ export async function createLeadMagnet(fields: {
     active:       true,
     agent_id:     agent,
     metadata:     {
-      lp_url:   fields.lpUrl?.trim()   || null,
+      // page_url y no lp_url: es el mismo dato y es el que lee la tarjeta de la
+      // fuente para abrir la página (migración 092).
+      ...(fields.lpUrl?.trim() ? { page_url: fields.lpUrl.trim() } : {}),
       file_url: fields.fileUrl?.trim() || null,
     },
   })
@@ -621,11 +623,16 @@ export async function createLeadMagnet(fields: {
   return { ok: true, channelId, publicId, slug, sequenceId: seqId, integrationPrompt }
 }
 
-// ─── Update channel (name + active) ──────────────────────────────────────────
+// ─── Update channel (name + active + link de la página) ──────────────────────
+
+// El link tiene que ser absoluto y http(s): se abre en una pestaña nueva desde
+// la tarjeta de la fuente, y un valor relativo apuntaría al propio CRM.
+const PageUrlSchema = z.string().trim().url().max(600)
+  .refine(v => /^https?:\/\//i.test(v), 'Usa una URL http(s).')
 
 export async function updateChannel(
   channelId: string,
-  fields: { name: string; active: boolean; agentId?: string | null }
+  fields: { name: string; active: boolean; agentId?: string | null; pageUrl?: string | null }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
@@ -648,6 +655,24 @@ export async function updateChannel(
     const agent = await resolveChannelAgentId(supabase, (chRow as any).tenant_id, fields.agentId)
     if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
     update.agent_id = agent
+  }
+
+  // Link de la página (migración 092). metadata es jsonb con más claves vivas
+  // (file_url, contact_secret, event_date…): se lee y se fusiona, nunca se pisa.
+  if (fields.pageUrl !== undefined) {
+    const raw = fields.pageUrl?.trim() ?? ''
+    if (raw && !PageUrlSchema.safeParse(raw).success) {
+      return { ok: false, error: 'El link debe ser una URL completa, empezando por https://' }
+    }
+    let metaQ = supabase.from('acquisition_channels').select('metadata').eq('id', channelId)
+    if (ctx.tenant_id) metaQ = metaQ.eq('tenant_id', ctx.tenant_id)
+    const { data: metaRow } = await metaQ.maybeSingle()
+    if (!metaRow) return { ok: false, error: 'Fuente no encontrada' }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const metadata = { ...((metaRow as any).metadata ?? {}) }
+    if (raw) metadata.page_url = raw
+    else delete metadata.page_url
+    update.metadata = metadata
   }
 
   let q = supabase

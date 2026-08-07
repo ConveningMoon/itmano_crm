@@ -16,6 +16,13 @@ interface ChannelActionsProps {
   agentId:         string | null
   agents:          Array<{ id: string; name: string }>
   sequences:       Array<{ id: string; name: string }>
+  /**
+   * Tenant administrado por ITMANO (migración 091): no ve el constructor, así
+   * que el link de su página se escribe a mano aquí — es el único sitio donde
+   * puede quedar registrado.
+   */
+  managedByItmano: boolean
+  pageUrl:         string | null
 }
 
 const INPUT: React.CSSProperties = {
@@ -40,13 +47,14 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences, managedByItmano, pageUrl }: ChannelActionsProps) {
   const router = useRouter()
   const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
   const [name,       setName]       = useState(channelName)
   const [active,     setActive]     = useState(channelActive)
   const [sequenceId, setSequenceId] = useState<string>(emailSequenceId ?? '')
   const [agId,       setAgId]       = useState<string>(agentId ?? '') // '' = Toda la agencia
+  const [page,       setPage]       = useState<string>(pageUrl ?? '')
   const [error,      setError]      = useState<string | null>(null)
   const [pending,    start]         = useTransition()
   const [integrationPrompt, setIntegrationPrompt] = useState<string | null>(null)
@@ -56,7 +64,12 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
     setError(null)
     start(async () => {
       const [nameRes, seqRes] = await Promise.all([
-        updateChannel(channelId, { name, active, agentId: agId || null }),
+        updateChannel(channelId, {
+          name, active, agentId: agId || null,
+          // Sólo se manda cuando el campo existe: si no, `undefined` deja el
+          // metadata como está en vez de borrar el link.
+          ...(managedByItmano ? { pageUrl: page.trim() || null } : {}),
+        }),
         updateChannelSequence(channelId, sequenceId || null),
       ])
       if (!nameRes.ok) { setError(nameRes.error); return }
@@ -108,7 +121,7 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
           </button>
         )}
         <button
-          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setMode('edit') }}
+          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setPage(pageUrl ?? ''); setError(null); setMode('edit') }}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
@@ -170,6 +183,26 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
                   autoFocus
                 />
               </div>
+
+              {/* Sólo para tenants administrados por ITMANO: su página vive
+                  fuera del CRM, así que el link se registra a mano. */}
+              {managedByItmano && (
+                <div>
+                  <label style={LABEL}>Link de la página</label>
+                  <input
+                    value={page}
+                    onChange={e => setPage(e.target.value)}
+                    className="ch-act-input"
+                    style={INPUT}
+                    type="url"
+                    placeholder="https://tudominio.com/mi-pagina"
+                  />
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                    La página de esta fuente la conecta ITMANO. Pega aquí su link y quedará disponible
+                    con un clic desde la tarjeta de la fuente. Déjalo vacío para quitarlo.
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label style={{ ...LABEL, marginBottom: '10px' }}>Estado</label>

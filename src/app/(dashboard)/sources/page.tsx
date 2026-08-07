@@ -38,6 +38,24 @@ export default async function SourcesPage({
     tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
   }
 
+  // Slug y modo de gestión de cada tenant presente en las tarjetas: el botón de
+  // "abrir página" arma la URL alojada con el slug, y el mensaje cuando no hay
+  // página depende de si ITMANO administra a ese tenant. Se resuelve por tenant
+  // porque el super_admin sin selección ve canales de varios a la vez.
+  const tenantIds = [...new Set([...channels, ...archivedChannels].map(c => c.tenantId))]
+  let tenantPages: Record<string, { slug: string; managedByItmano: boolean }> = {}
+  if (tenantIds.length > 0) {
+    const { data } = await supabase
+      .from('tenants').select('id, slug, pages_managed_by_itmano').in('id', tenantIds)
+    tenantPages = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data ?? []).map((t: any) => [
+        t.id as string,
+        { slug: (t.slug as string) ?? '', managedByItmano: t.pages_managed_by_itmano === true },
+      ]),
+    )
+  }
+
   // Active agents for the owner selector, scoped al tenant del contexto
   // (incluye al super_admin actuando como tenant).
   let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
@@ -118,6 +136,7 @@ export default async function SourcesPage({
         isSuperAdmin={needsTenantPicker}
         tenants={tenants}
         agents={agents}
+        tenantPages={tenantPages}
       />
     </>
   )
