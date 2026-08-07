@@ -125,6 +125,10 @@ function EditModal({
                 language:   row.language,
                 tenantName,
               }}
+              // El template es de este agente y el envío real lo firma él
+              // (send-purchase-email lee agents.email_signature): la vista
+              // previa muestra esa misma firma, no una de muestra.
+              previewContext={{ agentId: row.agent_id }}
             />
             {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '20px' }}>
