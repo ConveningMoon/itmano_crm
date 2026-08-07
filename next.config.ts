@@ -21,10 +21,14 @@ const nextConfig: NextConfig = {
   // creation for it fails outright on some filesystems).
   serverExternalPackages: ["sharp"],
   // The Carousel Engine compositor rasterizes bundled OFL fonts (opentype.js →
-  // paths → sharp) inside the /admin/carousels server actions. Next's file
-  // tracer must copy the .ttf files into that route's serverless function.
+  // paths → sharp). Next's file tracer must copy the .ttf files into the
+  // serverless function of EVERY route that composes a slide — fonts.ts reads
+  // them from process.cwd(), so a route without them dies at runtime with
+  // "Fuente del carrusel no encontrada". Two routes render today: the admin
+  // page's server actions and the cron that drains slides left pending.
   outputFileTracingIncludes: {
     "/admin/carousels": ["./src/lib/carousels/fonts/**"],
+    "/api/cron/carousel-render": ["./src/lib/carousels/fonts/**"],
   },
   experimental: {
     // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así
