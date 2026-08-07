@@ -5,7 +5,21 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { SequenceListActions } from './sequence-list-actions'
 import { getAllPurchaseTemplatesByTenant, getPurchaseTemplatesByAgent } from './purchase-templates-actions'
 import { PurchaseTemplatesPanel } from './purchase-templates-panel'
+import { getMetricsForSequences } from '@/lib/services/email-metrics'
 import { Plus, Mail } from 'lucide-react'
+
+// Una sola definición de columnas para la cabecera y las filas: si divergen, la
+// tabla se desalinea sin que nada falle.
+const GRID_COLUMNS = '2fr 96px 56px 64px 76px 76px 72px 72px 72px 72px 88px 116px'
+const GRID_MIN_WIDTH = '1180px'
+
+// Mismos criterios que la tarjeta del detalle (email-metrics-card): un 0% no se
+// pinta de color —no hay nada que celebrar ni que alarmar— y rebotes o bajas por
+// encima del umbral sano se marcan en coral.
+function rateColor(value: number, opts: { alertOver?: number; color: string }): string {
+  if (opts.alertOver !== undefined && value > opts.alertOver) return 'var(--accent-coral)'
+  return value === 0 ? 'var(--text-muted)' : opts.color
+}
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {
@@ -28,6 +42,10 @@ export default async function EmailsPage() {
       ? getPurchaseTemplatesByAgent(tenant_id, { agentId: scope.agentId })
       : Promise.resolve([]),
   ])
+
+  // Las mismas métricas de la tarjeta del detalle, para cada fila. Batcheado:
+  // una llamada por secuencia serían 3 queries por fila leyendo los mismos datos.
+  const metrics = await getMetricsForSequences(sequences.map(s => s.id))
 
   return (
     <>
@@ -93,13 +111,14 @@ export default async function EmailsPage() {
           </Link>
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
+        // La tabla creció con las métricas: en pantallas estrechas se desplaza
+        // de lado en vez de aplastar las columnas.
+        <div className="overflow-x-auto" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px' }}>
+          <div style={{ minWidth: GRID_MIN_WIDTH }}>
           {/* Table header */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isSuperAdmin
-              ? '2fr 100px 60px 80px 80px 90px 120px'
-              : '2fr 100px 60px 80px 80px 90px 120px',
+            gridTemplateColumns: GRID_COLUMNS,
             padding: '10px 20px',
             background: 'var(--bg-elevated)',
             borderBottom: '1px solid var(--border-subtle)',
@@ -110,9 +129,13 @@ export default async function EmailsPage() {
               'Pasos',
               'Canales',
               'Runs activos',
+              'Enviados',
+              'Click rate',
+              'Reply rate',
+              'Bounce rate',
+              'Unsub rate',
               'Estado',
               'Acciones',
-              ...(isSuperAdmin ? [] : []),
             ].map(h => (
               <span key={h} style={{ fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {h}
@@ -120,13 +143,15 @@ export default async function EmailsPage() {
             ))}
           </div>
 
-          {sequences.map((seq, i) => (
+          {sequences.map((seq, i) => {
+            const m = metrics.get(seq.id)
+            return (
             <div
               key={seq.id}
               className="seq-row"
               style={{
                 display: 'grid',
-                gridTemplateColumns: '2fr 100px 60px 80px 80px 90px 120px',
+                gridTemplateColumns: GRID_COLUMNS,
                 padding: '14px 20px',
                 borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,
                 alignItems: 'center',
@@ -195,6 +220,30 @@ export default async function EmailsPage() {
                 {seq.activeRunCount}
               </span>
 
+              {/* Métricas de envío — las mismas que la tarjeta del detalle.
+                  El open rate no está a propósito: Apple Mail precarga los
+                  píxeles y lo infla (ver CLAUDE.md). */}
+              <span style={{ fontSize: '13px', fontWeight: 500, color: (m?.totalSends ?? 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+                {m?.totalSends ?? 0}
+                {m && m.uniqueLeads > 0 && (
+                  <span style={{ display: 'block', fontSize: '10px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
+                    {m.uniqueLeads} {m.uniqueLeads === 1 ? 'lead' : 'leads'}
+                  </span>
+                )}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.clickRate ?? 0, { color: 'var(--accent-blue)' }) }}>
+                {m?.clickRate ?? 0}%
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.replyRate ?? 0, { color: 'var(--accent-green)' }) }}>
+                {m?.replyRate ?? 0}%
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.bounceRate ?? 0, { alertOver: 5, color: 'var(--text-secondary)' }) }}>
+                {m?.bounceRate ?? 0}%
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.unsubscribeRate ?? 0, { alertOver: 3, color: 'var(--text-secondary)' }) }}>
+                {m?.unsubscribeRate ?? 0}%
+              </span>
+
               {/* Status */}
               <span style={{
                 fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
@@ -213,7 +262,9 @@ export default async function EmailsPage() {
                 activeRunCount={seq.activeRunCount}
               />
             </div>
-          ))}
+            )
+          })}
+          </div>
         </div>
       )}
 

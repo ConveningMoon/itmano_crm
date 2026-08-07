@@ -417,9 +417,11 @@ const PreviewSchema = z.object({
   content: EmailContentSchema,
   locale:  z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]).default('en'),
   // Contexto opcional para mostrar la FIRMA REAL del agente que firmaría el
-  // envío: por lead (one-off) o por secuencia (steps). Sin contexto → muestra.
+  // envío: por lead (one-off), por secuencia (steps) o por agente (emails de
+  // cierre, que son de un agente concreto). Sin contexto → muestra.
   leadId:     z.string().optional(),
   sequenceId: z.string().optional(),
+  agentId:    z.string().optional(),
 })
 
 export async function previewEmailHtml(
@@ -451,6 +453,17 @@ export async function previewEmailHtml(
     const ag = data ? (Array.isArray((data as any).agents) ? (data as any).agents[0] : (data as any).agents) : null
     signature = (ag?.email_signature as string | null) ?? null
     if (ag?.name) agentName = ag.name as string
+  } else if (parsed.data.agentId) {
+    // Emails de cierre (058): el template es de UN agente, así que la vista
+    // previa puede mostrar su firma real igual que las de secuencia. El filtro
+    // por tenant no es cosmético: el id llega del cliente.
+    let aq = supabase.from('agents').select('name, email_signature').eq('id', parsed.data.agentId)
+    if (ctx.tenant_id) aq = aq.eq('tenant_id', ctx.tenant_id)
+    const { data: ag } = await aq.maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    signature = ((ag as any)?.email_signature as string | null) ?? null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((ag as any)?.name) agentName = (ag as any).name as string
   } else if (parsed.data.sequenceId) {
     let sq = supabase.from('email_sequences').select('agent_id').eq('id', parsed.data.sequenceId)
     if (ctx.tenant_id) sq = sq.eq('tenant_id', ctx.tenant_id)

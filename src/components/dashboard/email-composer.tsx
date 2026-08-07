@@ -103,8 +103,9 @@ interface Props {
   // Contexto para "Generar con IA"; sin él, el botón no se muestra.
   ai?: ComposerAiContext
   // Contexto para que la vista previa muestre la FIRMA REAL del agente que
-  // firmaría el envío (por lead en one-off, o por secuencia en steps).
-  previewContext?: { leadId?: string; sequenceId?: string }
+  // firmaría el envío: por lead (one-off), por secuencia (steps) o por agente
+  // (emails de cierre).
+  previewContext?: { leadId?: string; sequenceId?: string; agentId?: string }
 }
 
 export function EmailComposer({ value, onChange, locale = 'es', ai, previewContext }: Props) {
@@ -155,6 +156,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
         locale,
         leadId:     previewContext?.leadId,
         sequenceId: previewContext?.sequenceId,
+        agentId:    previewContext?.agentId,
       })
       if (!res.ok) { setPreviewError(res.error); return }
       setPreviewHtml(res.html)
