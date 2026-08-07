@@ -1,18 +1,18 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Check, Code2, Copy, Globe, Send, ShieldCheck } from 'lucide-react'
 import { hostedChannelUrl, type HostedPageConfig } from '@/lib/hosted-page'
-import { requestPageBuild, setPageManagedByItmano } from '../actions'
+import { requestPageBuild } from '../actions'
 import { HostedPageEditor } from './hosted-page-editor'
 
 // Tab "Página" de una fuente: cómo se crea la landing de este canal.
 //   1. Alojada por ITMANO (constructor — default recomendado)
 //   2. Embebible en la web propia (iframe + contrato de campos del intake)
 //   3. Solicitar la creación a ITMANO (→ /solicitudes, tab Páginas)
-// Si el super_admin marcó la página como conectada manualmente
-// (page_managed_by_itmano), el tenant no ve las opciones de construcción.
+// Si el tenant está marcado como gestionado por ITMANO (migración 091), nadie ve
+// las opciones de construcción: sus páginas las conecta el equipo. La marca es
+// del tenant, así que las fuentes nuevas nacen ya gestionadas.
 
 const BTN_GHOST: React.CSSProperties = {
   padding: '7px 14px', fontSize: '12px', color: 'var(--text-muted)',
@@ -49,7 +49,7 @@ function CopyBtn({ text, label = 'Copiar' }: { text: string; label?: string }) {
 
 export function PageOptions({
   channelId, channelType, channelName, tenantSlug, channelSlug,
-  initial, managedByItmano, isSuperAdmin, canEdit, tenantName, agentName,
+  initial, managedByItmano, canEdit, tenantName, agentName,
 }: {
   channelId: string
   channelType: string
@@ -58,12 +58,10 @@ export function PageOptions({
   channelSlug: string
   initial: HostedPageConfig | null
   managedByItmano: boolean
-  isSuperAdmin: boolean
   canEdit: boolean
   tenantName?: string
   agentName?: string | null
 }) {
-  const router = useRouter()
   const [mode, setMode] = useState<Mode>('hosted')
   const [reqMsg, setReqMsg]   = useState('')
   const [reqDone, setReqDone] = useState(false)
@@ -72,29 +70,17 @@ export function PageOptions({
 
   const url = hostedChannelUrl(channelType, tenantSlug, channelSlug)
 
-  function toggleManaged(next: boolean) {
-    start(async () => {
-      const res = await setPageManagedByItmano('channel', channelId, next)
-      if (res.ok) router.refresh()
-    })
-  }
-
-  // ── Conectada manualmente por ITMANO ────────────────────────────────────────
+  // ── Tenant administrado por ITMANO ──────────────────────────────────────────
   if (managedByItmano) {
     return (
       <div style={{ ...CARD, padding: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
         <ShieldCheck size={18} color="var(--accent-green)" />
         <div style={{ flex: 1, minWidth: '220px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Página conectada por ITMANO</div>
+          <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Página administrada por ITMANO</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
             La página de este canal la gestiona el equipo de ITMANO. Si necesitas un cambio, escríbenos desde Soporte.
           </div>
         </div>
-        {isSuperAdmin && (
-          <button onClick={() => toggleManaged(false)} disabled={pending} style={BTN_GHOST}>
-            Quitar marca (mostrar constructor)
-          </button>
-        )}
       </div>
     )
   }
@@ -124,14 +110,6 @@ export function PageOptions({
           )
         })}
       </div>
-
-      {/* super_admin: marcar como conectada manualmente */}
-      {isSuperAdmin && (
-        <button onClick={() => toggleManaged(true)} disabled={pending} style={{ ...BTN_GHOST, alignSelf: 'flex-start' }}>
-          <ShieldCheck size={12} style={{ verticalAlign: '-2px', marginRight: '5px' }} />
-          Marcar como conectada por ITMANO (ocultar constructor al tenant)
-        </button>
-      )}
 
       {/* ── Opción 1: constructor ── */}
       {mode === 'hosted' && (

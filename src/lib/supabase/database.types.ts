@@ -32,7 +32,6 @@ export type Database = {
           id: string
           metadata: Json
           name: string
-          page_managed_by_itmano: boolean
           public_id: string
           slug: string
           tenant_id: string
@@ -48,7 +47,6 @@ export type Database = {
           id?: string
           metadata?: Json
           name: string
-          page_managed_by_itmano?: boolean
           public_id: string
           slug: string
           tenant_id: string
@@ -64,7 +62,6 @@ export type Database = {
           id?: string
           metadata?: Json
           name?: string
-          page_managed_by_itmano?: boolean
           public_id?: string
           slug?: string
           tenant_id?: string
@@ -1514,7 +1511,6 @@ export type Database = {
           name: string | null
           neighborhood: string | null
           notes: string | null
-          page_managed_by_itmano: boolean
           property_type: string
           published_to_web: boolean
           slug: string | null
@@ -1556,7 +1552,6 @@ export type Database = {
           name?: string | null
           neighborhood?: string | null
           notes?: string | null
-          page_managed_by_itmano?: boolean
           property_type: string
           published_to_web?: boolean
           slug?: string | null
@@ -1598,7 +1593,6 @@ export type Database = {
           name?: string | null
           neighborhood?: string | null
           notes?: string | null
-          page_managed_by_itmano?: boolean
           property_type?: string
           published_to_web?: boolean
           slug?: string | null
@@ -1873,6 +1867,7 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          pages_managed_by_itmano: boolean
           primary_areas: string[] | null
           primary_color: string
           resend_account: string
@@ -1899,6 +1894,7 @@ export type Database = {
           id: string
           logo_url?: string | null
           name: string
+          pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
           resend_account?: string
@@ -1925,6 +1921,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
           resend_account?: string

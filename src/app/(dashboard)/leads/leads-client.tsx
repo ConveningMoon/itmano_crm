@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AnimatePresence, m } from 'motion/react'
 import {
   Search, List, LayoutGrid, ChevronDown, X, Users, SlidersHorizontal,
-  Camera, ThumbsUp, MessageCircle, PenLine, FileDown, Calendar, Globe,
+  Camera, ThumbsUp, MessageCircle, PenLine, FileDown, FileUp, Calendar, Globe,
   Trash2, Download, CheckSquare, Square, Clock,
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
@@ -27,6 +27,7 @@ import { deleteLeads } from './[id]/actions'
 // lucide v1 so representative generics are used).
 const SOURCE_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   manual:       PenLine,
+  import:       FileUp,
   instagram:    Camera,
   facebook:     ThumbsUp,
   whatsapp:     MessageCircle,

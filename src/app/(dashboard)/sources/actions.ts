@@ -61,30 +61,9 @@ export async function updateHostedPage(
   return { ok: true }
 }
 
-// ─── Marcar página como conectada por ITMANO (solo super_admin) ───────────────
-// Para tenants gestionados en persona: oculta las opciones de construcción al
-// tenant. target: 'channel' | 'property' (migración 061).
-
-export async function setPageManagedByItmano(
-  target: 'channel' | 'property',
-  id: string,
-  managed: boolean,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const ctx = await getCurrentTenantContext()
-  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede marcar esto.' }
-
-  const supabase = createAdminClient()
-  const table = target === 'channel' ? 'acquisition_channels' : 'properties'
-  const { error } = await supabase
-    .from(table)
-    .update({ page_managed_by_itmano: managed })
-    .eq('id', id)
-  if (error) return { ok: false, error: error.message }
-
-  revalidatePath('/sources')
-  revalidatePath('/properties')
-  return { ok: true }
-}
+// La marca "conectada por ITMANO" ya no vive en la fuente ni en la propiedad:
+// desde la migración 091 es del tenant (tenants.pages_managed_by_itmano) y la
+// edita el super_admin en el perfil del tenant, dentro del centro de control.
 
 // ─── Solicitud de creación de página a ITMANO ─────────────────────────────────
 // Opción 3 del tab Página: se registra como platform_request kind='page' (tab

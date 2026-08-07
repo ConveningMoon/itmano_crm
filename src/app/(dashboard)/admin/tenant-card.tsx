@@ -85,13 +85,16 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
         Última actividad: {tenant.lastActivityAt ? relativeTime(tenant.lastActivityAt) : 'sin actividad'}
       </div>
 
-      {/* Dominio de envío (verificación vía API de Resend) */}
+      {/* Dominio de envío (verificación vía API de Resend). Con el tenant
+          administrado por ITMANO el panel queda bloqueado: sale por el dominio
+          compartido y no se le configura uno propio. */}
       <TenantDomainManager
         tenantId={tenant.id}
         resendAccount={tenant.resendAccount}
         sendingDomain={tenant.sendingDomain}
         domainStatus={tenant.domainStatus}
         domainRecords={tenant.domainRecords}
+        managedByItmano={tenant.pagesManagedByItmano}
       />
 
       <form action={enterTenant.bind(null, tenant.id)} style={{ marginTop: '4px' }}>
