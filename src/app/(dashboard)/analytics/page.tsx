@@ -243,9 +243,12 @@ export default async function AnalyticsPage() {
     {
       label: 'Tasa de Conversión',
       value: `${conversionRate}%`,
+      // "captados aquí" no le decía a nadie de dónde salía el denominador: el
+      // número visible era 4 mientras la cartera mostraba 117, sin pista de que
+      // los importados quedaban fuera. Se nombran las dos cifras y el motivo.
       sub: stats.imported > 0
-        ? `sobre ${stats.attributedTotal} leads captados aquí`
-        : 'sobre el total de leads',
+        ? `${stats.attributedClosed} de ${stats.attributedTotal} cerrados · ${stats.imported} importados fuera del cálculo`
+        : `${stats.attributedClosed} de ${stats.attributedTotal} leads cerrados`,
       tone: 'neutral',
       icon: <TrendingUp size={18} />,
       color: 'var(--accent-green)',
