@@ -1,20 +1,19 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canAccessCarouselEngine } from '@/lib/access/carousel-engine'
 import { recordAiUsage, computeCostUsd, type AiUsageTokens } from '@/lib/services/ai-usage'
-import { researchTrends, generateImage, hasGoogleKey, lastResearchModel } from '@/lib/carousels/gemini'
+import { researchTrends, hasGoogleKey, lastResearchModel } from '@/lib/carousels/gemini'
 import { generateCopy } from '@/lib/carousels/copy'
-import { composeSlide } from '@/lib/carousels/compositor'
 import { getJobWithSlides, getCarouselLogs, type CarouselLogRow } from '@/lib/data/carousels'
 import { logCarousel, CAROUSEL_PRICING } from '@/lib/carousels/log'
+import { renderOneSlide, drainJob, toBrand, BUCKET } from '@/lib/carousels/render'
 import type {
-  ActionResult, CarouselBrandProfile, CarouselJobWithSlides, CarouselSlide, SlideCopy,
+  ActionResult, CarouselBrandProfile, CarouselJobWithSlides, CarouselSlide,
 } from '@/lib/carousels/types'
-
-const BUCKET = 'carousel-assets'
 
 function costFromUsage(usage: AiUsageTokens): number {
   return computeCostUsd('claude-sonnet-5', usage)
@@ -32,25 +31,6 @@ async function gate() {
 function isNextControlFlow(e: unknown): boolean {
   const d = (e as { digest?: unknown } | null)?.digest
   return typeof d === 'string' && (d.startsWith('NEXT_REDIRECT') || d === 'NEXT_NOT_FOUND')
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toBrand(r: any): CarouselBrandProfile {
-  return {
-    agent_id: r.agent_id, tenant_id: r.tenant_id, display_name: r.display_name,
-    instagram_handle: r.instagram_handle, agency_name: r.agency_name ?? null,
-    market: r.market ?? null, language: r.language, brand_voice: r.brand_voice ?? null,
-    style_prompt: r.style_prompt ?? null, active: r.active,
-  }
-}
-
-async function uploadPng(path: string, png: Buffer): Promise<string> {
-  const db = createAdminClient()
-  const { error } = await db.storage
-    .from(BUCKET)
-    .upload(path, new Blob([new Uint8Array(png)], { type: 'image/png' }), { contentType: 'image/png', upsert: true })
-  if (error) throw new Error(`Storage: ${error.message}`)
-  return path
 }
 
 // ── Editar el perfil de marca (contexto) de un agente ────────────────────────
@@ -193,9 +173,23 @@ export async function startCarousel(input: { agentId: string; topic?: string }):
 
     const job = await getJobWithSlides(jobId)
     if (!job) return { ok: false, error: 'No se pudo cargar el job' }
+
+    // El render arranca en el SERVIDOR, no en el navegador. after() corre el
+    // drenado cuando la respuesta ya salió, así que la UI recibe el copy al
+    // instante y los slides se van componiendo por su cuenta — cerrar la
+    // pestaña, perder la red o dormir el equipo ya no deja el carrusel a medias.
+    // Lo que no quepa en el maxDuration de esta invocación queda en 'pending' y
+    // lo recoge el cron de barrido.
+    after(async () => {
+      try { await drainJob(jobId) } catch (e) {
+        await logCarousel({ jobId, level: 'error', step: 'render', message: `El drenado automático falló: ${e instanceof Error ? e.message : 'error'}` })
+      }
+    })
+
     revalidatePath('/admin/carousels')
     return { ok: true, data: job }
   } catch (e) {
+    if (isNextControlFlow(e)) throw e
     const msg = e instanceof Error ? e.message : 'Error desconocido'
     await logCarousel({ jobId, step: 'start', level: 'error', message: `Falló la generación: ${msg}`, detail: { agent_id: agentId, had_topic: !!topic } })
     await db.from('carousel_jobs').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', jobId)
@@ -286,168 +280,31 @@ export async function reportRenderFailure(input: { slideId: string; message: str
 }
 
 // ── Renderizar (o regenerar) un slide: imagen + composición ──────────────────
-// forceImage=true → genera una imagen NUEVA (paga). Por defecto (false) se
-// REUTILIZA la imagen ya generada si existe (reanudar/recomponer no re-paga).
+// Capa fina sobre renderOneSlide: valida acceso y delega. La lógica vive en
+// src/lib/carousels/render.ts porque el cron de barrido la comparte.
+//
+// requireClaim va en false a propósito: aquí el usuario pulsó un botón sobre un
+// slide concreto y quiere que se rehaga aunque ya estuviera listo. El drenado
+// automático sí reclama, para no pisarse con el cron.
 export async function renderSlide(slideId: string, opts?: { forceImage?: boolean }): Promise<ActionResult<CarouselSlide>> {
-  // gate() queda FUERA del try: getCurrentTenantContext puede hacer redirect()
-  // a /login y ese "error" de control de flujo debe propagarse, no loguearse.
   const ctx = await gate()
   if (!ctx) return { ok: false, error: 'Sin acceso' }
-  const forceImage = opts?.forceImage === true
+  return renderOneSlide(slideId, { forceImage: opts?.forceImage === true })
+}
 
-  const db = createAdminClient()
+// ── Reanudar un carrusel a medias, en el servidor ────────────────────────────
+// Sustituye al bucle que hacía el navegador: una sola llamada arranca el
+// drenado y este sobrevive a que se cierre la pestaña.
+export async function resumeCarousel(jobId: string): Promise<ActionResult<{ started: true }>> {
+  const ctx = await gate()
+  if (!ctx) return { ok: false, error: 'Sin acceso' }
+  const id = (jobId ?? '').trim()
+  if (!id) return { ok: false, error: 'Falta el id del carrusel' }
 
-  // El resto del preámbulo (las tres lecturas y el marcado 'rendering') vivía
-  // fuera del try. Cualquier fallo ahí — pooler saturado, lectura caída — se
-  // propagaba SIN escribir en carousel_logs y dejando el slide colgado en
-  // 'rendering': error visible en pantalla, cero rastro para diagnosticarlo.
-  // Ahora todo está cubierto y cada salida deja registro.
-  let jobId: string | null = null
-  let n: number | null = null
-  let hadImagePrompt = false
-
-  try {
-    const { data: slideRow, error: slideErr } = await db.from('carousel_slides').select('*').eq('id', slideId).maybeSingle()
-    if (slideErr) throw new Error(`No se pudo leer el slide: ${slideErr.message}`)
-    if (!slideRow) return { ok: false, error: 'Slide no encontrado' }
-    jobId = slideRow.job_id as string
-    n = slideRow.slide_number as number
-    hadImagePrompt = !!slideRow.image_prompt
-
-    const { data: jobRow, error: jobErr } = await db.from('carousel_jobs').select('*').eq('id', slideRow.job_id).maybeSingle()
-    if (jobErr) throw new Error(`No se pudo leer el carrusel: ${jobErr.message}`)
-    if (!jobRow) return { ok: false, error: 'Job no encontrado' }
-
-    const { data: brandRow, error: brandErr } = await db.from('carousel_brand_profiles').select('*').eq('agent_id', jobRow.agent_id).maybeSingle()
-    if (brandErr) throw new Error(`No se pudo leer el perfil de marca: ${brandErr.message}`)
-    if (!brandRow) return { ok: false, error: 'Perfil de marca no encontrado' }
-    const brand = toBrand(brandRow)
-
-    const { error: markErr } = await db.from('carousel_slides')
-      .update({ status: 'rendering', error_message: null, updated_at: new Date().toISOString() })
-      .eq('id', slideId)
-    if (markErr) throw new Error(`No se pudo marcar el slide como "componiendo": ${markErr.message}`)
-
-    const base = `${jobRow.agent_id}/${jobRow.id}`
-
-    // Fondo editorial con Nano Banana (solo si el slide lo pide).
-    let bg: Buffer | null = null
-    let imageStoragePath: string | null = slideRow.image_storage_path ?? null
-    let imageWarning: string | null = null
-    if (slideRow.image_prompt) {
-      const hasExisting = !!slideRow.image_storage_path
-      // 1) REUTILIZAR la imagen existente (sin pagar) al reanudar/recomponer.
-      if (hasExisting && !forceImage) {
-        try {
-          const { data: blob } = await db.storage.from(BUCKET).download(slideRow.image_storage_path as string)
-          if (!blob) throw new Error('descarga vacía')
-          bg = Buffer.from(await blob.arrayBuffer())
-          await logCarousel({ jobId: jobRow.id, slideNumber: n, step: 'image', message: `Reutilizó la imagen existente del slide ${n} (sin costo)` })
-        } catch (dlErr) {
-          // Si no se pudo descargar, generamos de nuevo (fallback).
-          await logCarousel({ jobId: jobRow.id, slideNumber: n, level: 'warn', step: 'image', message: `No se pudo reutilizar la imagen del slide ${n}, se regenerará: ${dlErr instanceof Error ? dlErr.message : 'error'}` })
-        }
-      }
-      // 2) GENERAR imagen nueva (paga) si se fuerza, no había, o falló la reutilización.
-      if (!bg) {
-        // Breadcrumb ANTES de la llamada cara: si la función muriera aquí,
-        // queda rastro de que se intentó (aunque el timeout de fetch lo evita).
-        await logCarousel({ jobId: jobRow.id, slideNumber: n, step: 'image', message: `Solicitando imagen a Nano Banana (slide ${n})…` })
-        try {
-          const img = await generateImage(slideRow.image_prompt as string)
-          // Ledger: se registra EN CUANTO llega la imagen (antes de subir), así
-          // una imagen facturada NUNCA queda sin contabilizar aunque falle el paso siguiente.
-          await logCarousel({
-            jobId: jobRow.id, slideNumber: n, step: 'image', message: `Imagen generada (slide ${n})`,
-            provider: 'Google Nano Banana', model: img.model, billing: 'estimado', costUsd: CAROUSEL_PRICING.imageEstUsd,
-          })
-          bg = img.data
-          imageStoragePath = await uploadPng(`${base}/bg-${n}.png`, img.data)
-        } catch (imgErr) {
-          bg = null
-          imageWarning = imgErr instanceof Error ? imgErr.message : 'No se pudo generar la imagen'
-          await logCarousel({
-            jobId: jobRow.id, slideNumber: n, level: 'warn', step: 'image',
-            message: `Imagen falló → fondo procedural: ${imageWarning}`,
-            detail: { image_prompt: (slideRow.image_prompt as string)?.slice(0, 200) },
-          })
-        }
-      }
+  after(async () => {
+    try { await drainJob(id) } catch (e) {
+      await logCarousel({ jobId: id, level: 'error', step: 'render', message: `El drenado manual falló: ${e instanceof Error ? e.message : 'error'}` })
     }
-
-    const slideCopy: SlideCopy = {
-      slide_number: n,
-      slide_type: slideRow.slide_type ?? 'text',
-      label: slideRow.copy_label ?? null,
-      title: slideRow.copy_title ?? null,
-      subtitle: slideRow.copy_subtitle ?? null,
-      lines: slideRow.copy_lines ?? null,
-      icon: slideRow.icon ?? null,
-      image_prompt: slideRow.image_prompt ?? null,
-    }
-
-    const png = await composeSlide(slideCopy, brand, bg)
-    const renderedPath = await uploadPng(`${base}/slide-${n}.png`, png)
-
-    await db.from('carousel_slides').update({
-      status: 'ready',
-      // Si el slide pedía imagen pero falló, quedó con fondo procedural.
-      image_source: bg ? 'nano_banana' : 'procedural',
-      image_storage_path: imageStoragePath,
-      rendered_storage_path: renderedPath,
-      // Nota (no error): imagen no generada → fondo procedural. status sigue ready.
-      error_message: imageWarning ? `Fondo procedural: ${imageWarning}` : null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', slideId)
-
-    await logCarousel({ jobId: jobRow.id, slideNumber: n, step: 'render', message: `Slide ${n} listo (${bg ? 'con foto' : 'procedural'})` })
-
-    // Estado del job: ready si todos los slides están listos.
-    const { data: siblings } = await db.from('carousel_slides').select('status').eq('job_id', jobRow.id)
-    const allReady = (siblings ?? []).every((s: { status: string }) => s.status === 'ready')
-    await db.from('carousel_jobs').update({ status: allReady ? 'ready' : 'composing', updated_at: new Date().toISOString() }).eq('id', jobRow.id)
-
-    // Sin revalidatePath aquí a propósito. Se llamaba una vez POR SLIDE, y cada
-    // llamada obliga a Next a re-renderizar la página entera del motor
-    // (getBrandProfiles + getRecentJobs + getCarouselCosts + getJobWithSlides)
-    // y a devolver ese payload junto con la respuesta — dentro de la MISMA
-    // invocación que acaba de componer un PNG con sharp. Ocho slides eran ocho
-    // re-renderizados completos de la página, con sus decenas de consultas, sin
-    // que el cliente los usara: la UI ya aplica el slide devuelto con patchSlide.
-    // Era el mayor consumo de tiempo y de conexiones del render, y puro
-    // desperdicio. La caché de la ruta se refresca en startCarousel/deleteCarousel.
-    const { data: fresh } = await db.from('carousel_slides').select('*').eq('id', slideId).single()
-    const url = createAdminClient().storage.from(BUCKET).getPublicUrl(renderedPath).data.publicUrl
-    return {
-      ok: true,
-      data: {
-        id: fresh.id, job_id: fresh.job_id, slide_number: fresh.slide_number, slide_type: fresh.slide_type,
-        copy_label: fresh.copy_label, copy_title: fresh.copy_title, copy_subtitle: fresh.copy_subtitle,
-        copy_lines: fresh.copy_lines, icon: fresh.icon, image_source: fresh.image_source,
-        image_prompt: fresh.image_prompt, image_storage_path: fresh.image_storage_path,
-        rendered_storage_path: fresh.rendered_storage_path, rendered_url: url, status: fresh.status,
-        error_message: fresh.error_message,
-      },
-    }
-  } catch (e) {
-    if (isNextControlFlow(e)) throw e
-    const msg = e instanceof Error ? e.message : 'Error desconocido'
-    // jobId es null solo si ni siquiera se pudo leer la fila del slide; en ese
-    // caso no hay carrusel al que asociar el registro y queda el console.error.
-    if (jobId) {
-      await logCarousel({
-        jobId, slideNumber: n, level: 'error', step: 'render',
-        message: `Slide ${n ?? '?'} falló: ${msg}`,
-        detail: { had_image_prompt: hadImagePrompt, forced_image: forceImage, stack: e instanceof Error ? e.stack?.slice(0, 600) : null },
-      })
-    } else {
-      console.error(JSON.stringify({ service: 'carousel', level: 'error', step: 'render', slide_id: slideId, message: msg }))
-    }
-    // Best-effort: si esta escritura también falla, no queremos perder el error
-    // real de arriba tapándolo con el de la escritura.
-    try {
-      await db.from('carousel_slides').update({ status: 'failed', error_message: msg, updated_at: new Date().toISOString() }).eq('id', slideId)
-    } catch { /* el registro de arriba ya dejó constancia */ }
-    return { ok: false, error: msg }
-  }
+  })
+  return { ok: true, data: { started: true } }
 }
