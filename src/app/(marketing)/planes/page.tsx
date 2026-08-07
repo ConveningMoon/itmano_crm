@@ -2,14 +2,14 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Check, Minus } from 'lucide-react'
 import { Reveal } from '@/components/marketing/reveal'
-import { AuroraBackground } from '@/components/marketing/aurora-background'
+import { Backdrop } from '@/components/marketing/backdrop'
 import { PLANS, PLAN_ORDER, PARTNER_SEAT, TRIAL } from '@/lib/plans'
 import { PricingTable } from './pricing-table'
 
 export const metadata: Metadata = {
   title: 'Planes e inversión — ITMANO',
   description:
-    'Compara Esencial, Growth y Partner en detalle — límites, IA incluida y acompañamiento — y mira cómo se posiciona ITMANO frente al resto del mercado de CRMs inmobiliarios.',
+    'Compara Esencial, Growth y Partner en detalle — capacidad, IA incluida y acompañamiento — y mira cómo se posiciona ITMANO frente al resto del mercado de CRM inmobiliarios.',
 }
 
 // ─── Datos de la comparativa de planes ────────────────────────────────────────
@@ -27,26 +27,27 @@ interface CompareGroup {
   rows: CompareRow[]
 }
 
-const n = (v: number) => v.toLocaleString('en-US')
+// Los límites de plans.ts son `number | 'unlimited'`; aquí sólo se formatean.
+const n = (v: number | 'unlimited') => (typeof v === 'number' ? v.toLocaleString('en-US') : 'Ilimitados')
 
 const COMPARISON: CompareGroup[] = [
   {
     title: 'Capacidad',
     rows: [
       {
-        label: 'Accesos de login',
+        label: 'Accesos con sesión propia',
         values: ['1', '1', `${PARTNER_SEAT.includedLogins} incluidos · +$${PARTNER_SEAT.extraLoginUsd}/mes por agente extra`],
       },
-      { label: 'Agentes del equipo rastreados', values: ['1', String(PLANS.growth.limits.trackedAgents), 'Ilimitados'] },
-      { label: 'Leads / contactos', values: [n(2500), n(10000), 'Ilimitados'] },
+      { label: 'Agentes del equipo con seguimiento', values: ['1', String(PLANS.growth.limits.trackedAgents), 'Ilimitados'] },
+      { label: 'Leads / contactos', values: [n(PLANS.esencial.limits.leads), n(PLANS.growth.limits.leads), 'Ilimitados'] },
       {
-        label: 'Emails por mes',
+        label: 'Correos por mes',
         values: [n(PLANS.esencial.limits.emailsPerMonth), n(PLANS.growth.limits.emailsPerMonth), n(PLANS.partner.limits.emailsPerMonth)],
       },
       { label: 'Propiedades publicadas en tu web', values: [false, String(PLANS.growth.limits.webProperties), 'Ilimitadas'] },
       {
         // Público en tokens — el presupuesto en USD es referencia interna de ITMANO.
-        label: 'Tokens de IA al mes',
+        label: 'Capacidad de IA incluida al mes',
         values: [`≈ ${PLANS.esencial.limits.aiTokensLabel}`, `≈ ${PLANS.growth.limits.aiTokensLabel}`, `≈ ${PLANS.partner.limits.aiTokensLabel} · ampliable`],
       },
     ],
@@ -54,18 +55,18 @@ const COMPARISON: CompareGroup[] = [
   {
     title: 'Producto',
     rows: [
-      { label: 'Scoring automático 0–100 con time-decay', values: [true, true, true] },
-      { label: 'Pipeline en tiempo real', values: [true, true, true] },
-      { label: 'Secuencias de email automáticas', values: [true, true, true] },
-      { label: 'Canales de adquisición (lead magnets, eventos, formularios)', values: [true, true, true] },
-      { label: 'Importación de leads (CSV / Excel)', values: [true, true, true] },
-      { label: 'Notificaciones instantáneas (app + Telegram)', values: [true, true, true] },
-      { label: 'Routing automático por idioma (ES / EN / PT)', values: [true, true, true] },
+      { label: 'Calificación automática de cada lead que entra', values: [true, true, true] },
+      { label: 'Tu lista del día, ordenada sola', values: [true, true, true] },
+      { label: 'Secuencias de correo automáticas', values: [true, true, true] },
+      { label: 'Captación conectada (páginas, guías, eventos y formularios)', values: [true, true, true] },
+      { label: 'Importación de tus contactos (CSV / Excel)', values: [true, true, true] },
+      { label: 'Aviso instantáneo cuando un lead se pone caliente', values: [true, true, true] },
+      { label: 'Asignación por idioma (español, inglés, portugués)', values: [true, true, true] },
       {
         // Solución A: Esencial envía desde el dominio compartido de ITMANO con la
         // marca del tenant en el nombre visible; Growth/Partner reciben su propio
         // dominio de envío verificado (mail.tudominio.com), gestionado por ITMANO.
-        label: 'Identidad de envío de emails',
+        label: 'Identidad de tus correos',
         values: [
           'Marca propia visible (dominio gestionado ITMANO)',
           'Dominio de envío propio (mail.tudominio.com)',
@@ -73,13 +74,15 @@ const COMPARISON: CompareGroup[] = [
         ],
       },
       { label: 'Propiedades sincronizadas con tu sitio web', values: [false, true, true] },
-      { label: 'Analytics', values: ['KPIs básicos', 'Completo (agente, canal, email)', 'Completo + vista de equipo'] },
+      { label: 'Reportes', values: ['Los números esenciales', 'Completos (agente, fuente y correo)', 'Completos + vista de equipo'] },
     ],
   },
   {
     title: 'Inteligencia artificial',
     rows: [
-      { label: 'Redacción de emails con IA (voz de cada agente)', values: [true, true, true] },
+      { label: 'Análisis de cada lead y briefing para el agente', values: [true, true, true] },
+      { label: 'Calificación adaptada a tu mercado y tus zonas', values: [true, true, true] },
+      { label: 'Redacción de correos con la voz de cada agente', values: [true, true, true] },
       { label: 'Secuencias generadas en un clic', values: [true, true, true] },
       { label: 'Alta de propiedades desde un PDF', values: [false, true, true] },
     ],
@@ -87,8 +90,8 @@ const COMPARISON: CompareGroup[] = [
   {
     title: 'Acompañamiento',
     rows: [
-      { label: 'Onboarding', values: ['Guiado', 'Asistido', 'Dedicado'] },
-      { label: 'Migración de datos (HubSpot y otros)', values: [false, false, true] },
+      { label: 'Puesta en marcha', values: ['Guiada', 'Asistida', 'Dedicada'] },
+      { label: 'Migración de tus datos (HubSpot y otros)', values: [false, false, true] },
       { label: 'Soporte', values: ['Email', 'Email prioritario', 'Prioritario + contacto directo'] },
     ],
   },
@@ -111,14 +114,14 @@ const MARKET_COLUMNS: { name: string; logo: string | null }[] = [
 const MARKET_ROWS: { label: string; values: [CellValue, CellValue, CellValue, CellValue, CellValue] }[] = [
   {
     label: 'Inversión de entrada',
-    values: ['$59 /mes', '~$69 /usuario/mes', '~$49 /mes', 'desde ~$449 /mes', 'desde ~$499 /asiento/mes'],
+    values: [`$${PLANS.esencial.priceUsd} /mes`, '~$69 /usuario/mes', '~$49 /mes', 'desde ~$449 /mes', 'desde ~$499 /asiento/mes'],
   },
   {
-    label: 'IA generativa integrada (emails, secuencias, documentos)',
+    label: 'IA generativa incluida (correos, secuencias, documentos)',
     values: ['Incluida en todos los planes', 'Parcial', false, 'En suite', 'En suite'],
   },
   {
-    label: 'Configuración inicial hecha por el proveedor (done-for-you)',
+    label: 'Lo deja configurado el proveedor, no tú',
     values: [true, false, false, 'Parcial', 'Parcial'],
   },
   {
@@ -126,7 +129,7 @@ const MARKET_ROWS: { label: string; values: [CellValue, CellValue, CellValue, Ce
     values: ['Growth y Partner', false, false, 'IDX (EE.UU.)', 'IDX (EE.UU.)'],
   },
   {
-    label: 'Routing de leads por idioma (ES / EN / PT)',
+    label: 'Asignación de leads por idioma (español, inglés, portugués)',
     values: [true, false, false, false, false],
   },
   {
@@ -134,7 +137,7 @@ const MARKET_ROWS: { label: string; values: [CellValue, CellValue, CellValue, Ce
     values: [true, false, false, false, false],
   },
   {
-    label: 'Multi-login para equipos',
+    label: 'Acceso propio para cada agente',
     values: ['Partner', true, true, true, true],
   },
   {
@@ -182,7 +185,7 @@ export default function PlanesPage() {
 
       {/* Encabezado */}
       <section style={{ position: 'relative', overflow: 'hidden' }}>
-        <AuroraBackground style={{ opacity: 0.5 }} />
+        <Backdrop intensity={0.55} />
         <div className="mk-container" style={{ position: 'relative', paddingTop: '148px', paddingBottom: '24px' }}>
           <Reveal>
             <span className="mk-eyebrow">Inversión</span>
@@ -193,10 +196,11 @@ export default function PlanesPage() {
             <p className="mk-lead" style={{ marginTop: '20px', maxWidth: '560px' }}>
               Esencial y Growth están pensados para agentes independientes; Partner,
               para equipos donde cada agente necesita su propio acceso. Todos
-              incluyen el mismo motor: scoring automático, secuencias y IA.
+              incluyen lo mismo por dentro: la calificación de cada lead, el análisis
+              con IA y las secuencias de correo.
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '28px', flexWrap: 'wrap' }}>
-              <Link href="/#contacto" className="mk-btn-gold btn-cta">Prueba {TRIAL.days} días gratis</Link>
+              <Link href="/#contacto" className="mk-btn-gold btn-cta">Empieza tu prueba de {TRIAL.days} días</Link>
               <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                 <strong style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>100% gratis</strong>
                 {' '}· sin tarjeta de crédito · experiencia {PLANS[TRIAL.plan].label} completa
@@ -241,13 +245,13 @@ export default function PlanesPage() {
               El punto donde el CRM se paga solo
             </h2>
             <p className="mk-body" style={{ marginTop: '12px', maxWidth: '640px' }}>
-              Un agente independiente serio hoy arma un stack: un CRM (~$69/mes), una
-              herramienta de IA para redactar (~$30/mes) y otra de email marketing
-              (~$30/mes) — más de $129 al mes en piezas que no se hablan entre sí.
-              Growth junta todo eso en un solo sistema donde el scoring, la IA y tu
-              web de propiedades trabajan sobre los mismos datos. Y con una comisión
-              promedio de una sola transacción cerrada, la inversión del año entero
-              queda cubierta.
+              Un agente independiente serio hoy junta piezas sueltas: un CRM
+              (~$69/mes), una herramienta de IA para redactar (~$30/mes) y otra de
+              correo (~$30/mes) — más de $129 al mes en cosas que no se hablan entre
+              sí. Growth las reúne en un solo lugar, donde la calificación de tus
+              leads, la IA y tu web de propiedades trabajan sobre la misma
+              información. Y con la comisión de una sola operación cerrada, la
+              inversión del año entero queda cubierta.
             </p>
           </div>
         </Reveal>
@@ -339,8 +343,8 @@ export default function PlanesPage() {
                 totalmente gratis, sin tarjeta de crédito.
               </p>
               <div style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Link href="/#contacto" className="mk-btn-gold btn-cta">Prueba {TRIAL.days} días gratis</Link>
-                <Link href="/#producto" className="mk-btn-ghost">Ver el producto</Link>
+                <Link href="/#contacto" className="mk-btn-gold btn-cta">Empieza tu prueba</Link>
+                <Link href="/#producto" className="mk-btn-ghost">Ver cómo funciona</Link>
               </div>
             </div>
           </Reveal>

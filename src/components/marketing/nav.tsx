@@ -9,7 +9,7 @@ import { EASE_OUT_PREMIUM } from '@/components/motion/primitives'
 const LINKS = [
   { href: '/#producto', label: 'Producto' },
   { href: '/#ia', label: 'IA' },
-  { href: '/#como-funciona', label: 'Cómo funciona' },
+  { href: '/#enfoque', label: 'Enfoque' },
   { href: '/planes', label: 'Planes' },
 ]
 
@@ -66,7 +66,7 @@ export function MarketingNav() {
             Iniciar sesión
           </Link>
           <Link href="/#contacto" className="mk-btn-gold btn-cta" style={{ padding: '9px 18px' }}>
-            Contáctanos
+            Empieza gratis
           </Link>
           <button
             className="mk-burger btn-icon"
