@@ -29,9 +29,13 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   if (!p) notFound()
 
   const db = createAdminClient()
-  const { data: tenantRow } = await db.from('tenants').select('slug').eq('id', p.tenantId).maybeSingle()
+  const { data: tenantRow } = await db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', p.tenantId).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  // La marca es del tenant (migración 091): aplica a todas sus propiedades,
+  // también a las que cargue después.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pageManaged = (tenantRow as any)?.pages_managed_by_itmano === true
 
   const price = p.listPrice !== null
     ? `$${p.listPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -126,13 +130,11 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
 
   const paginaTab = tenantSlug ? (
     <PropertyPageOptions
-      propertyId={p.id}
       propertyName={p.name ?? p.address}
       tenantSlug={tenantSlug}
       propertySlug={p.slug}
       published={p.publishedToWeb}
-      managedByItmano={p.pageManagedByItmano}
-      isSuperAdmin={ctx.role === 'super_admin'}
+      managedByItmano={pageManaged}
     />
   ) : (
     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>El tenant no tiene slug configurado.</div>

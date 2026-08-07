@@ -142,12 +142,16 @@ const UpdateTenantSchema = z.object({
   // Límite mensual de IA (USD). aiUnlimited = true ignora el monto.
   aiMonthlyLimitUsd: z.number().min(0, 'El límite no puede ser negativo').max(9999.99, 'Límite demasiado alto'),
   aiUnlimited:       z.boolean(),
+  // Migración 091: ITMANO gestiona las páginas del tenant (fuentes y propiedades)
+  // y su dominio de envío.
+  pagesManagedByItmano: z.boolean(),
 })
 
 export async function updateTenant(
   input: {
     tenantId: string; name: string; primaryColor: string
     aiMonthlyLimitUsd: number; aiUnlimited: boolean
+    pagesManagedByItmano: boolean
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
@@ -168,6 +172,7 @@ export async function updateTenant(
       primary_color:        parsed.data.primaryColor,
       ai_monthly_limit_usd: Math.round(parsed.data.aiMonthlyLimitUsd * 100) / 100,
       ai_unlimited:         parsed.data.aiUnlimited,
+      pages_managed_by_itmano: parsed.data.pagesManagedByItmano,
     })
     .eq('id', parsed.data.tenantId)
   if (error) return { ok: false, error: error.message }
@@ -229,6 +234,14 @@ export async function addTenantDomain(
   const parsed = AddDomainSchema.safeParse(input)
   if (!parsed.success || !DOMAIN_RE.test(parsed.data.domain)) {
     return { ok: false, error: 'Dominio inválido. Usa algo como mail.tudominio.com.' }
+  }
+
+  // Un tenant administrado por ITMANO sale por el dominio compartido: el panel
+  // está bloqueado en la UI y el camino de escritura también (migración 091).
+  const { data: managedRow } = await createAdminClient()
+    .from('tenants').select('pages_managed_by_itmano').eq('id', parsed.data.tenantId).maybeSingle()
+  if ((managedRow as { pages_managed_by_itmano?: boolean } | null)?.pages_managed_by_itmano) {
+    return { ok: false, error: 'Este tenant está administrado por ITMANO: desmárcalo antes de agregarle un dominio.' }
   }
 
   const clientRes = await resendClientForTenant(parsed.data.tenantId)

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Globe, RefreshCw, Trash2, Check, Copy, ChevronDown } from 'lucide-react'
+import { Globe, RefreshCw, Trash2, Check, Copy, ChevronDown, ShieldCheck } from 'lucide-react'
 import { addTenantDomain, refreshTenantDomain, removeTenantDomain } from './actions'
 
 interface DomainRecord { record?: string; type?: string; name?: string; value?: string; ttl?: string; priority?: number | null; status?: string }
@@ -29,13 +29,16 @@ function CopyValue({ text }: { text: string }) {
 }
 
 export function TenantDomainManager({
-  tenantId, resendAccount, sendingDomain, domainStatus, domainRecords,
+  tenantId, resendAccount, sendingDomain, domainStatus, domainRecords, managedByItmano,
 }: {
   tenantId: string
   resendAccount: string
   sendingDomain: string | null
   domainStatus: string
   domainRecords: DomainRecord[] | null
+  // tenants.pages_managed_by_itmano (migración 091): el tenant no configura
+  // dominio propio, sus correos salen por el compartido de ITMANO.
+  managedByItmano: boolean
 }) {
   const router = useRouter()
   const [open, setOpen]     = useState(false)
@@ -45,6 +48,26 @@ export function TenantDomainManager({
 
   const st = STATUS[domainStatus] ?? STATUS.not_configured
   const hasDomain = !!sendingDomain
+
+  // Bloqueado para todos, super_admin incluido: el estado se cambia desmarcando
+  // "Administrado por ITMANO" en el perfil del tenant (tab Gestión).
+  if (managedByItmano) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px',
+        border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-elevated)',
+      }}>
+        <ShieldCheck size={14} color="var(--accent-green)" />
+        <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text-primary)' }}>Dominio de envío</span>
+        <span style={{
+          fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '8px',
+          color: 'var(--accent-green)', background: 'rgba(107,163,104,0.14)',
+        }}>
+          Administrado por ITMANO
+        </span>
+      </div>
+    )
+  }
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null)

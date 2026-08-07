@@ -270,6 +270,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [color, setColor] = useState(tenant.primaryColor)
   const [aiLimit, setAiLimit]         = useState(tenant.aiMonthlyLimitUsd.toFixed(2))
   const [aiUnlimited, setAiUnlimited] = useState(tenant.aiUnlimited)
+  const [pagesManaged, setPagesManaged] = useState(tenant.pagesManagedByItmano)
   const [subPlan, setSubPlan]     = useState<SubscriptionPlan>((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
   const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'cancelled'>(editableStatus(tenant.subscriptionStatus))
   const [trialEnd, setTrialEnd]   = useState(dateInputValue(tenant.subscriptionTrialEndsAt))
@@ -284,6 +285,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
     setMode('view'); setError(null)
     setName(tenant.name); setColor(tenant.primaryColor); setConfirmSlug('')
     setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
+    setPagesManaged(tenant.pagesManagedByItmano)
     setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
     setSubStatus(editableStatus(tenant.subscriptionStatus))
     setTrialEnd(dateInputValue(tenant.subscriptionTrialEndsAt))
@@ -303,6 +305,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
         tenantId: tenant.id, name, primaryColor: color,
         aiMonthlyLimitUsd: aiUnlimited ? tenant.aiMonthlyLimitUsd : limitNum,
         aiUnlimited,
+        pagesManagedByItmano: pagesManaged,
       })
       if (!res.ok) { setError(res.error); return }
 
@@ -363,7 +366,17 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
         <LogoThumb logoUrl={tenant.logoUrl} name={tenant.name} />
         <span style={{ width: '14px', height: '14px', borderRadius: '4px', background: tenant.primaryColor, border: '1px solid var(--border-subtle)', flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{tenant.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{tenant.name}</span>
+            {tenant.pagesManagedByItmano && (
+              <span style={{
+                fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
+                color: 'var(--accent-green)', background: 'color-mix(in srgb, var(--accent-green) 12%, transparent)',
+              }}>
+                Administrado por ITMANO
+              </span>
+            )}
+          </div>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{tenant.slug} · {tenant.id}</div>
           <div style={{ fontSize: '11px', marginTop: '2px', color: 'var(--text-muted)' }}>
             IA este mes:{' '}
@@ -445,6 +458,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               onClick={() => {
                 setName(tenant.name); setColor(tenant.primaryColor)
                 setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
+                setPagesManaged(tenant.pagesManagedByItmano)
                 setSubPlan((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
                 setSubStatus(editableStatus(tenant.subscriptionStatus))
                 setTrialEnd(dateInputValue(tenant.subscriptionTrialEndsAt))
@@ -530,6 +544,23 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
               Uso del mes en curso: <strong style={{ color: 'var(--text-secondary)' }}>${tenant.aiUsedThisMonthUsd.toFixed(2)}</strong>.
               El contador se reinicia el día 1 de cada mes; al alcanzar el límite, las generaciones con IA se bloquean para el tenant.
+            </div>
+          </div>
+          <div>
+            <label style={LABEL}>Páginas y dominio</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={pagesManaged}
+                onChange={e => setPagesManaged(e.target.checked)}
+                style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+              />
+              Administrado por ITMANO
+            </label>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Marca las páginas de <strong>todas</strong> sus fuentes y propiedades como conectadas por ITMANO —
+              también las que cree después — y les oculta el constructor. Además cierra el dominio de envío:
+              el tenant sale por el dominio compartido y el panel de dominio queda bloqueado.
             </div>
           </div>
           <div>

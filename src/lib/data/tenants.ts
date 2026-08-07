@@ -57,6 +57,10 @@ export interface TenantWithOwner {
   aiUsedThisMonthUsd: number
   // Análisis de fit de leads con IA (fase de prueba, apagado por defecto).
   aiLeadScoringEnabled: boolean
+  // ITMANO gestiona las páginas de este tenant (migración 091): sus fuentes y
+  // propiedades se muestran como conectadas por ITMANO — también las nuevas — y
+  // el dominio de envío deja de configurarse.
+  pagesManagedByItmano: boolean
   // Envío de email (migración 065): cuenta Resend + estado del dominio propio.
   resendAccount:   string
   sendingDomain:   string | null
@@ -94,7 +98,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
   const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }, { data: subRows }] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited, ai_lead_scoring_enabled, resend_account, sending_domain, resend_domain_id, domain_status, domain_records').order('created_at'),
+    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited, ai_lead_scoring_enabled, pages_managed_by_itmano, resend_account, sending_domain, resend_domain_id, domain_status, domain_records').order('created_at'),
     supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
     supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, degraded_at, paddle_price_id, billing_exempt'),
@@ -128,6 +132,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     id: string; name: string; slug: string; primary_color: string | null; logo_url: string | null
     ai_monthly_limit_usd: number | string | null; ai_unlimited: boolean | null
     ai_lead_scoring_enabled: boolean | null
+    pages_managed_by_itmano: boolean | null
     resend_account: string | null; sending_domain: string | null; resend_domain_id: string | null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     domain_status: string | null; domain_records: any[] | null
@@ -149,6 +154,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       aiUnlimited:        t.ai_unlimited ?? false,
       aiUsedThisMonthUsd: Math.round((usedByTenant.get(t.id) ?? 0) * 1_000_000) / 1_000_000,
       aiLeadScoringEnabled: t.ai_lead_scoring_enabled ?? false,
+      pagesManagedByItmano: t.pages_managed_by_itmano ?? false,
       resendAccount:  t.resend_account ?? 'itmano',
       sendingDomain:  t.sending_domain ?? null,
       resendDomainId: t.resend_domain_id ?? null,

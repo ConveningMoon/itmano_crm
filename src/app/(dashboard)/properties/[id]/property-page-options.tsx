@@ -1,17 +1,17 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Check, Code2, Copy, ExternalLink, Globe, Send, ShieldCheck } from 'lucide-react'
 import { hostedPropertiesUrl } from '@/lib/hosted-page'
-import { requestPageBuild, setPageManagedByItmano } from '../../sources/actions'
+import { requestPageBuild } from '../../sources/actions'
 
 // Tab "Página" de una propiedad: cómo se publica en la web.
 //   1. Catálogo alojado por ITMANO (properties.itmano.com/<tenant>) — la
 //      propiedad aparece cuando está "Publicada en web" (formulario de edición).
 //   2. Embebible en la web propia (iframe del catálogo o del detalle).
 //   3. Solicitar la página a ITMANO (→ /solicitudes, tab Páginas).
-// page_managed_by_itmano (super_admin) oculta todo esto al tenant.
+// Si el tenant está marcado como administrado por ITMANO (migración 091), nada
+// de esto se muestra: sus páginas las conecta el equipo.
 
 const BTN_GHOST: React.CSSProperties = {
   padding: '7px 14px', fontSize: '12px', color: 'var(--text-muted)',
@@ -41,17 +41,14 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 export function PropertyPageOptions({
-  propertyId, propertyName, tenantSlug, propertySlug, published, managedByItmano, isSuperAdmin,
+  propertyName, tenantSlug, propertySlug, published, managedByItmano,
 }: {
-  propertyId: string
   propertyName: string
   tenantSlug: string
   propertySlug: string | null
   published: boolean
   managedByItmano: boolean
-  isSuperAdmin: boolean
 }) {
-  const router = useRouter()
   const [mode, setMode] = useState<Mode>('hosted')
   const [reqMsg, setReqMsg]   = useState('')
   const [reqDone, setReqDone] = useState(false)
@@ -61,28 +58,16 @@ export function PropertyPageOptions({
   const catalogUrl = hostedPropertiesUrl(tenantSlug)
   const detailUrl  = propertySlug ? `${catalogUrl}/${propertySlug}` : null
 
-  function toggleManaged(next: boolean) {
-    start(async () => {
-      const res = await setPageManagedByItmano('property', propertyId, next)
-      if (res.ok) router.refresh()
-    })
-  }
-
   if (managedByItmano) {
     return (
       <div style={{ ...CARD, padding: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
         <ShieldCheck size={18} color="var(--accent-green)" />
         <div style={{ flex: 1, minWidth: '220px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Página conectada por ITMANO</div>
+          <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Página administrada por ITMANO</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
             La publicación web de esta propiedad la gestiona el equipo de ITMANO.
           </div>
         </div>
-        {isSuperAdmin && (
-          <button onClick={() => toggleManaged(false)} disabled={pending} style={BTN_GHOST}>
-            Quitar marca (mostrar opciones)
-          </button>
-        )}
       </div>
     )
   }
@@ -114,13 +99,6 @@ export function PropertyPageOptions({
           )
         })}
       </div>
-
-      {isSuperAdmin && (
-        <button onClick={() => toggleManaged(true)} disabled={pending} style={{ ...BTN_GHOST, alignSelf: 'flex-start' }}>
-          <ShieldCheck size={12} style={{ verticalAlign: '-2px', marginRight: '5px' }} />
-          Marcar como conectada por ITMANO (ocultar opciones al tenant)
-        </button>
-      )}
 
       {mode === 'hosted' && (
         <div style={{ ...CARD, padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>

@@ -40,13 +40,15 @@ export default async function ChannelDetailPage({
     getSubmissionsForChannel(channel.id, tenant_id),
     listSequences(tenant_id, scope.agentId),
     supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
-    supabase.from('acquisition_channels').select('hosted_page, page_managed_by_itmano').eq('id', channel.id).maybeSingle(),
-    supabase.from('tenants').select('slug, name').eq('id', channel.tenantId).maybeSingle(),
+    supabase.from('acquisition_channels').select('hosted_page').eq('id', channel.id).maybeSingle(),
+    supabase.from('tenants').select('slug, name, pages_managed_by_itmano').eq('id', channel.tenantId).maybeSingle(),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hostedConfig = parseHostedPage((hostedRow as any)?.hosted_page)
+  // La marca es del tenant (migración 091): aplica a todas sus fuentes, también
+  // a las que cree después.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pageManaged = !!((hostedRow as any)?.page_managed_by_itmano)
+  const pageManaged = (tenantRow as any)?.pages_managed_by_itmano === true
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -185,7 +187,6 @@ export default async function ChannelDetailPage({
               channelSlug={channel.slug}
               initial={hostedConfig}
               managedByItmano={pageManaged}
-              isSuperAdmin={ctx.role === 'super_admin'}
               canEdit={ctx.role !== 'agent'}
               tenantName={tenantName}
               agentName={channel.agentName}

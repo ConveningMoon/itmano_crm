@@ -53,7 +53,6 @@ export interface Property {
   floorPlans:          string[]
   detailPdfUrl:        string | null
   publishedToWeb:      boolean
-  pageManagedByItmano: boolean
   createdAt:           string
   updatedAt:           string
 }
@@ -99,7 +98,6 @@ function mapRow(r: any, tenantName: string | null, agentName: string | null): Pr
     floorPlans:         Array.isArray(r.floor_plans) ? (r.floor_plans as string[]) : [],
     detailPdfUrl:       r.detail_pdf_url ?? null,
     publishedToWeb:     r.published_to_web === true,
-    pageManagedByItmano: r.page_managed_by_itmano === true,
     createdAt:          r.created_at as string,
     updatedAt:          r.updated_at as string,
   }
