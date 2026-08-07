@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Sparkles, RefreshCw, Download, Copy, Check, Loader2, ImageIcon, AlertCircle, Trash2, Search, PenLine, PlayCircle, ScrollText } from 'lucide-react'
 import type { CarouselBrandProfile, CarouselJob, CarouselJobWithSlides, CarouselSlide } from '@/lib/carousels/types'
 import type { CarouselLogRow } from '@/lib/data/carousels'
 import { PILLAR_LABELS } from '@/lib/carousels/brand'
-import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel, loadCarouselLogs, reportRenderFailure } from './actions'
+import { startCarousel, renderSlide, loadCarouselJob, deleteCarousel, loadCarouselLogs, reportRenderFailure, resumeCarousel } from './actions'
 
 type Phase = 'idle' | 'researching' | 'rendering' | 'done' | 'error'
 
@@ -14,6 +14,17 @@ type Phase = 'idle' | 'researching' | 'rendering' | 'done' | 'error'
 // {ok:false} del servidor, que es una respuesta legítima y ya viene logueada.
 const TRANSPORT_RETRIES = 2
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// El render ya no lo ejecuta el navegador: lo drena el servidor. La UI solo
+// observa el avance releyendo el job. 3 s da sensación de vivo sin castigar la
+// base; el techo evita quedarse encuestando para siempre si algo se atasca
+// (a los 10 min el cron reclama el slide colgado de todas formas).
+const POLL_MS = 3000
+const MAX_POLLS = 300
+
+function hasWorkLeft(slides: { status: string }[]): boolean {
+  return slides.some((s) => s.status === 'pending' || s.status === 'rendering')
+}
 
 const SLIDE_TYPE_LABEL: Record<string, string> = {
   cover: 'Portada', data: 'Dato', emotional: 'Emocional', text: 'Impacto', cta: 'Cierre',
@@ -24,7 +35,11 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
   const [topic, setTopic] = useState('')
   const [job, setJob] = useState<CarouselJobWithSlides | null>(initialJob)
   const [jobs, setJobs] = useState<CarouselJob[]>(recentJobs)
-  const [phase, setPhase] = useState<Phase>(initialJob ? 'done' : 'idle')
+  // Si al abrir la página el último carrusel sigue a medias, el servidor lo
+  // está componiendo (o lo hará el cron): entramos ya en modo observación.
+  const [phase, setPhase] = useState<Phase>(
+    initialJob ? (hasWorkLeft(initialJob.slides) ? 'rendering' : 'done') : 'idle',
+  )
   const [status, setStatus] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -48,6 +63,38 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     const done = slides.every((s) => s.status === 'ready')
     setJobs((xs) => xs.map((j) => (j.id === jobId ? { ...j, status: done ? 'ready' : 'composing' } : j)))
   }
+
+  // ── Observación del avance ────────────────────────────────────────────────
+  // Encadena una relectura cada POLL_MS mientras al carrusel abierto le queden
+  // slides por terminar. Cada respuesta cambia la identidad de `job`, lo que
+  // vuelve a disparar este efecto: así se sigue el avance sin un intervalo que
+  // haya que limpiar a mano, y da igual quién esté renderizando (el drenado de
+  // after() o el cron) porque la fuente de verdad es siempre la base.
+  const pollsRef = useRef(0)
+  useEffect(() => {
+    if (!job || !hasWorkLeft(job.slides)) return
+    if (pollsRef.current >= MAX_POLLS) return
+
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      pollsRef.current += 1
+      const r = await loadCarouselJob(job.id)
+      if (cancelled || !r.ok) return
+
+      setJob(r.data)
+      syncJobBadge(r.data.id, r.data.slides)
+
+      if (!hasWorkLeft(r.data.slides)) {
+        const failed = r.data.slides.filter((s) => s.status === 'failed').length
+        setPhase('done')
+        setStatus(failed > 0
+          ? `Terminado con ${failed} slide(s) con error — usa "Renderizar pendientes" o "Nueva imagen"`
+          : 'Carrusel listo')
+      }
+    }, POLL_MS)
+
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [job])
 
   async function safeRender(id: string, forceImage = false): Promise<CarouselSlide | { error: string }> {
     let lastErr = 'Error inesperado al renderizar'
@@ -90,35 +137,21 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     }
     if (!res.ok) { setPhase('error'); setError(res.error); setStatus(''); return }
 
-    let current = res.data
-    setJob(current)
+    const created = res.data
+    setJob(created)
     // El historial vive en estado del cliente: se sembró una sola vez desde las
     // props del servidor, así que un revalidatePath NO lo actualiza y el
     // carrusel recién creado no aparecía hasta recargar. Lo insertamos aquí.
-    // Snapshot en const: el updater de setJobs corre en el render siguiente y
-    // `current` ya habrá sido reasignado por el bucle de abajo.
-    const created = res.data
     setJobs((xs) => [created, ...xs.filter((j) => j.id !== created.id)])
+
+    // Aquí terminaba el trabajo del navegador y empezaba un bucle que llamaba
+    // al servidor slide por slide. Ese bucle ya no existe: startCarousel deja
+    // el drenado corriendo en el servidor, así que basta con ponerse a observar.
+    // El efecto de polling se encarga del resto y sobrevive a que se cierre la
+    // pestaña — al volver, la página retoma la observación donde iba.
+    pollsRef.current = 0
     setPhase('rendering')
-
-    for (let i = 0; i < current.slides.length; i++) {
-      const s = current.slides[i]
-      setStatus(`Componiendo slide ${s.slide_number} (${i + 1} de ${current.slides.length})…`)
-      // Marcar "componiendo" en vivo.
-      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? { ...x, status: 'rendering' } : x)) }
-      setJob(current)
-      const out = await safeRender(s.id)
-      const next: CarouselSlide = 'error' in out ? { ...s, status: 'failed', error_message: out.error } : out
-      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? next : x)) }
-      setJob(current)
-    }
-
-    const failed = current.slides.filter((s) => s.status === 'failed').length
-    setPhase('done')
-    syncJobBadge(current.id, current.slides)
-    setStatus(failed > 0
-      ? `Terminado con ${failed} slide(s) con error — usa "Renderizar pendientes" o "Nueva imagen"`
-      : 'Carrusel listo')
+    setStatus('El servidor está componiendo los slides…')
   }
 
   // forceImage=false → recompone reutilizando la imagen existente (GRATIS).
@@ -138,32 +171,36 @@ export function CarouselsClient({ brands, recentJobs, initialJob }: { brands: Ca
     setError(null); setStatus(''); setOpeningId(id); setLogs(null); setLogsOpen(false)
     const r = await loadCarouselJob(id)
     setOpeningId(null)
-    if (r.ok) { setJob(r.data); setPhase('done') } else { setPhase('error'); setError(r.error) }
+    if (!r.ok) { setPhase('error'); setError(r.error); return }
+    setJob(r.data)
+    // Si el carrusel que abrimos sigue a medias, el servidor lo está
+    // componiendo: entramos a observarlo en vez de darlo por terminado.
+    pollsRef.current = 0
+    const working = hasWorkLeft(r.data.slides)
+    setPhase(working ? 'rendering' : 'done')
+    setStatus(working ? 'El servidor está componiendo los slides…' : '')
   }
 
-  // Reanudar: renderiza los slides pendientes, en error o atascados en
-  // 'rendering' (p. ej. si la función murió a mitad y se recargó la página).
-  // Reutiliza imágenes ya generadas → reanudar NO re-paga imágenes.
+  // Reanudar: le pide al SERVIDOR que drene lo que falte (pendientes, en error
+  // y los colgados en 'rendering' cuya invocación murió). Antes era otro bucle
+  // del navegador; ahora es una sola llamada y el trabajo continúa aunque se
+  // cierre la pestaña. Reutiliza imágenes ya generadas → reanudar NO re-paga.
   async function resumePending() {
     if (!job || resuming || busy) return
     const todo = job.slides.filter((s) => s.status === 'pending' || s.status === 'failed' || s.status === 'rendering')
     if (todo.length === 0) return
-    setResuming(true); setPhase('rendering')
-    let current = job
-    for (let i = 0; i < todo.length; i++) {
-      const s = todo[i]
-      setStatus(`Renderizando pendiente ${i + 1} de ${todo.length} (slide ${s.slide_number})…`)
-      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? { ...x, status: 'rendering' } : x)) }
-      setJob(current)
-      const out = await safeRender(s.id)
-      const next: CarouselSlide = 'error' in out ? { ...s, status: 'failed', error_message: out.error } : out
-      current = { ...current, slides: current.slides.map((x) => (x.id === s.id ? next : x)) }
-      setJob(current)
-    }
-    const failed = current.slides.filter((s) => s.status === 'failed').length
-    setResuming(false); setPhase('done')
-    syncJobBadge(current.id, current.slides)
-    setStatus(failed > 0 ? `Terminado con ${failed} slide(s) con error` : 'Pendientes completados')
+
+    setResuming(true)
+    const r = await resumeCarousel(job.id)
+    setResuming(false)
+    if (!r.ok) { setPhase('error'); setError(r.error); return }
+
+    // Marcamos los pendientes como 'rendering' para que el polling arranque
+    // (su condición es que quede trabajo) y la UI reaccione al instante.
+    setJob((j) => (j ? { ...j, slides: j.slides.map((s) => (todo.some((t) => t.id === s.id) ? { ...s, status: 'rendering', error_message: null } : s)) } : j))
+    pollsRef.current = 0
+    setPhase('rendering')
+    setStatus(`El servidor está renderizando ${todo.length} slide(s) pendiente(s)…`)
   }
 
   async function toggleLogs() {
