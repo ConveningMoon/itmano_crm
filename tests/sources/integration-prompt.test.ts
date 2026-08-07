@@ -86,8 +86,15 @@ describe('buildIntegrationPrompt', () => {
       baseUrl:     'https://app.itmano.com',
       fitCatalog:  [],
     })
-    expect(prompt).toContain('sendBeacon')
-    expect(prompt).toContain('/api/intake/chn_ev000000001/view')
+    // El script se carga, no se escribe a mano: intake.js ya trae la huella del
+    // visitante, las UTMs y el envio.
+    expect(prompt).toContain('data-channel="chn_ev000000001"')
+    // Y la forma RECOMENDADA es first-party. Cargarlo desde otro dominio lo
+    // expone a los bloqueadores de rastreo, a CORS y al bot-check del otro
+    // dominio — los tres fallan sin dejar rastro, y eso costo dias de diagnostico.
+    expect(prompt).toContain('rewrites()')
+    expect(prompt).toContain('/api/intake/:path*')
+    expect(prompt).toContain('src="/intake.js"')
   })
 })
 
