@@ -227,19 +227,64 @@ export async function refreshJobStatus(jobId: string): Promise<void> {
 
 export interface DrainResult { rendered: number; failed: number; skipped: number; exhausted: boolean }
 
-// Drena los slides que falten de un carrusel, secuencialmente y dentro de un
-// presupuesto de tiempo: la invocación tiene un maxDuration y quedarse sin
-// tiempo a mitad de un sharp no deja nada útil. Lo que no alcance queda en
-// 'pending' y lo recoge la siguiente pasada (el cron o un reintento manual).
+interface Candidate { id: string; slide_number: number; image_prompt: string | null; image_storage_path: string | null; status: string; updated_at: string }
+
+// Cuántas imágenes se piden a la vez. Un carrusel tiene exactamente 3 slides
+// con foto, así que 3 cubre el caso normal de una sola tanda sin pasarse con
+// los límites por minuto del free tier de Google.
+const IMAGE_CONCURRENCY = 3
+
+// Genera la imagen de un slide y la deja subida y apuntada en su fila. Después
+// renderOneSlide la encuentra en el bucket y la REUTILIZA (gratis), que es la
+// misma ruta que ya existía para reanudar — por eso paralelizar no puede
+// duplicar cobros: quien paga es esta función, y solo sobre slides reclamados.
+async function prefetchImage(s: Candidate, jobId: string, agentId: string): Promise<void> {
+  const db = createAdminClient()
+  const n = s.slide_number
+  await logCarousel({ jobId, slideNumber: n, step: 'image', message: `Solicitando imagen a Nano Banana (slide ${n})…` })
+  try {
+    const img = await generateImage(s.image_prompt as string)
+    // Ledger antes de subir: una imagen facturada nunca queda sin contabilizar.
+    await logCarousel({
+      jobId, slideNumber: n, step: 'image', message: `Imagen generada (slide ${n})`,
+      provider: 'Google Nano Banana', model: img.model, billing: 'estimado', costUsd: CAROUSEL_PRICING.imageEstUsd,
+    })
+    const path = await uploadPng(`${agentId}/${jobId}/bg-${n}.png`, img.data)
+    await db.from('carousel_slides').update({ image_storage_path: path }).eq('id', s.id)
+  } catch (e) {
+    // No es fatal: renderOneSlide intentará generarla en línea y, si tampoco
+    // puede, el slide sale con fondo procedural. Aquí solo dejamos el rastro.
+    await logCarousel({
+      jobId, slideNumber: n, level: 'warn', step: 'image',
+      message: `La imagen adelantada del slide ${n} falló: ${e instanceof Error ? e.message : 'error'}`,
+    })
+  }
+}
+
+// Drena los slides que falten de un carrusel dentro de un presupuesto de tiempo.
+//
+// Dos fases, y la separación es el porqué de todo esto:
+//   1. IMÁGENES, en paralelo. Generar una imagen es esperar a Google — no gasta
+//      CPU nuestra. En serie, tres imágenes eran ~60 s y el carrusel entero no
+//      cabía en una sola invocación; a la vez son ~20 s y sí cabe.
+//   2. COMPOSICIÓN, en serie. sharp sí es CPU y memoria: hacerlo en paralelo no
+//      acelera nada (se pelean por el mismo core) y multiplica el pico de
+//      memoria de la función, que es justo como se muere una invocación.
+//
+// Los slides se reclaman ANTES de pedir sus imágenes. Sin eso, dos drenados
+// simultáneos pedirían —y pagarían— las mismas imágenes en paralelo.
 export async function drainJob(jobId: string, opts: { budgetMs?: number } = {}): Promise<DrainResult> {
   const budgetMs = opts.budgetMs ?? 90_000
   const startedAt = Date.now()
   const db = createAdminClient()
   const out: DrainResult = { rendered: 0, failed: 0, skipped: 0, exhausted: false }
 
+  const { data: jobRow } = await db.from('carousel_jobs').select('id, agent_id').eq('id', jobId).maybeSingle()
+  if (!jobRow) return out
+
   const staleBefore = Date.now() - STALE_RENDERING_MS
-  const { data: candidates } = await db.from('carousel_slides')
-    .select('id, slide_number, image_prompt, status, updated_at')
+  const { data: rows } = await db.from('carousel_slides')
+    .select('id, slide_number, image_prompt, image_storage_path, status, updated_at')
     .eq('job_id', jobId)
     .in('status', ['pending', 'failed', 'rendering'])
     .order('slide_number', { ascending: true })
@@ -247,19 +292,44 @@ export async function drainJob(jobId: string, opts: { budgetMs?: number } = {}):
   // Un 'rendering' reciente lo está haciendo otro proceso ahora mismo: se deja
   // en paz. El claim volverá a comprobarlo de todos modos, esto solo evita
   // intentos inútiles. El filtro va en JS por lo dicho arriba sobre .or().
-  const todo = (candidates ?? []).filter((s: { status: string; updated_at: string }) =>
-    s.status !== 'rendering' || new Date(s.updated_at).getTime() < staleBefore)
+  const candidates = (rows ?? []).filter((s: Candidate) =>
+    s.status !== 'rendering' || new Date(s.updated_at).getTime() < staleBefore) as Candidate[]
 
-  for (const s of todo) {
-    // Un slide con foto tarda bastante más (llamada a Nano Banana). Si no cabe
-    // en lo que queda de presupuesto, mejor dejarlo para la próxima pasada que
-    // empezarlo y que lo mate el límite de la función a mitad.
-    const estimateMs = s.image_prompt ? 35_000 : 12_000
-    if (Date.now() - startedAt + estimateMs > budgetMs) { out.exhausted = true; break }
+  // ── Fase 0: reclamar lo que quepa en el presupuesto ───────────────────────
+  // Se estima con las imágenes ya en paralelo: una sola tanda de ~25 s más el
+  // coste de componer cada slide.
+  const claimed: Candidate[] = []
+  for (const s of candidates) {
+    const needsImage = !!s.image_prompt && !s.image_storage_path
+    const batches = Math.ceil((claimed.filter((c) => c.image_prompt && !c.image_storage_path).length + (needsImage ? 1 : 0)) / IMAGE_CONCURRENCY)
+    const planned = batches * 25_000 + (claimed.length + 1) * 8_000
+    if (planned > budgetMs) { out.exhausted = true; break }
+    if (await claimSlide(s.id)) claimed.push(s)
+    else out.skipped++
+  }
 
-    const r = await renderOneSlide(s.id as string, { requireClaim: true })
+  // ── Fase 1: imágenes en paralelo ──────────────────────────────────────────
+  const needImages = claimed.filter((s) => s.image_prompt && !s.image_storage_path)
+  for (let i = 0; i < needImages.length; i += IMAGE_CONCURRENCY) {
+    const batch = needImages.slice(i, i + IMAGE_CONCURRENCY)
+    // allSettled: una imagen caída no debe tumbar a las demás de la tanda.
+    await Promise.allSettled(batch.map((s) => prefetchImage(s, jobId, jobRow.agent_id as string)))
+  }
+
+  // ── Fase 2: composición en serie ──────────────────────────────────────────
+  for (const s of claimed) {
+    if (Date.now() - startedAt + 8_000 > budgetMs) {
+      // Sin tiempo para este: se devuelve a 'pending' en vez de dejarlo
+      // reclamado, o quedaría bloqueado 10 minutos para la siguiente pasada.
+      await db.from('carousel_slides')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('id', s.id).eq('status', 'rendering')
+      out.exhausted = true
+      continue
+    }
+    // requireClaim en false: ya es nuestro de la fase 0.
+    const r = await renderOneSlide(s.id, { requireClaim: false })
     if (r.ok) out.rendered++
-    else if (r.error === 'Otro proceso ya está renderizando este slide') out.skipped++
     else out.failed++
   }
 
