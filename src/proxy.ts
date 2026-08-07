@@ -83,7 +83,11 @@ export const config = {
 // el navegador esperaba JavaScript — el script no se ejecutaba, ninguna visita
 // se registraba y no había ningún error visible. Los envíos seguían entrando
 // por su propio endpoint, así que nada parecía roto.
+//
+// `mp4`/`webm` por lo mismo: el recorrido del producto que reproduce el hero de
+// la landing vive en /landing/. Sin excluirlos, el guard le devolvía el HTML de
+// /login al elemento <video> y el hero se quedaba en su marcador.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt)$).+)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
   ],
 }

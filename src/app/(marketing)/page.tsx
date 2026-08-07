@@ -1,169 +1,125 @@
-import {
-  Gauge,
-  LayoutDashboard,
-  Mail,
-  Home,
-  BarChart3,
-  Bell,
-  PenLine,
-  ListPlus,
-  FileText,
-} from 'lucide-react'
+import { Eye, Target, MessageSquare, ShieldAlert, Inbox, Mail, Bell, BarChart3 } from 'lucide-react'
 import Link from 'next/link'
-import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
-import { HeroPipeline } from '@/components/marketing/hero-pipeline'
+import { FadeIn } from '@/components/motion/primitives'
+import { HeroVideo } from '@/components/marketing/hero-video'
+import { BriefingCard } from '@/components/marketing/briefing-card'
 import { Reveal } from '@/components/marketing/reveal'
 import { ContactForm } from '@/components/marketing/contact-form'
-import { AuroraBackground } from '@/components/marketing/aurora-background'
-import { Particles } from '@/components/marketing/particles'
+import { Backdrop } from '@/components/marketing/backdrop'
 import { PLANS, TRIAL } from '@/lib/plans'
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
-// Todo el copy y los datos viven aquí arriba, no esparcidos por el JSX.
+// Todo el copy vive aquí arriba, no esparcido por el JSX. Regla de la landing:
+// beneficio y consecuencia para el agente inmobiliario — nunca el mecanismo
+// interno. Nada de "scoring", "banda", "fit" ni nombres de campos.
 
-const STATS = [
-  { value: '0–100', color: 'var(--accent-gold)',  label: 'puntaje por comportamiento real, con decaimiento por inactividad' },
-  { value: '4',      color: 'var(--accent-blue)',  label: 'estados automáticos: el pipeline se ordena solo, sin mover tarjetas' },
-  { value: '3',      color: 'var(--accent-coral)', label: 'idiomas con asignación automática de leads al agente correcto' },
-  { value: '24/7',   color: 'var(--accent-teal)',  label: 'secuencias de nurturing en marcha mientras tu equipo vende' },
-]
-
-const FEATURES = [
+const PROBLEMS = [
   {
-    icon: Gauge,
-    glow: 'var(--accent-gold)',
-    title: 'Scoring automático',
-    body: 'Cada lead acumula puntos por señales reales: respuestas, clics, formularios, consultas agendadas. El tiempo sin actividad los reduce solo — nadie persigue leads fríos.',
+    title: 'El lead que escribió el martes',
+    body: 'Llegó a las nueve de la noche, entre otros doce. Alguien lo llamó el viernes. Para entonces ya había hablado con otro agente.',
   },
   {
-    icon: LayoutDashboard,
+    title: 'Las horas que no vuelven',
+    body: 'Ordenar la planilla, recordar a quién le tocaba seguimiento, redactar el mismo correo por décima vez. Es media jornada por semana en la que no estuviste vendiendo.',
+  },
+  {
+    title: 'El sistema que nadie abre',
+    body: 'Lo contrataste, te entregaron cuarenta módulos y tres semanas de configuración. Tu equipo volvió al chat y a la libreta.',
+  },
+]
+
+const BRIEFING_POINTS = [
+  {
+    icon: Eye,
+    glow: 'var(--accent-gold)',
+    title: 'Quién es de verdad',
+    body: 'Su motivación real, su urgencia y el obstáculo que todavía no dijo en voz alta.',
+  },
+  {
+    icon: Target,
     glow: 'var(--accent-blue)',
-    title: 'Pipeline en tiempo real',
-    body: 'Nuevo, nurturing, tibio, caliente: la banda de cada lead se deriva de su puntaje y cambia en vivo en el dashboard. Tu equipo abre la página y sabe a quién llamar primero.',
+    title: 'Qué hacer ahora',
+    body: 'Una sola acción, con verbo: llamar, escribir, agendar o esperar. Y si es para hoy o puede esperar a la semana.',
+  },
+  {
+    icon: MessageSquare,
+    glow: 'var(--accent-teal)',
+    title: 'Qué decirle',
+    body: 'Dos o tres puntos concretos para esa conversación, anclados a lo que el lead acaba de hacer.',
+  },
+  {
+    icon: ShieldAlert,
+    glow: 'var(--accent-coral)',
+    title: 'Qué objeción anticipar',
+    body: 'Si ya trabaja con otro agente, si su presupuesto no alcanza para lo que busca, si quien decide es otra persona.',
+  },
+]
+
+const OPERATION = [
+  {
+    icon: Inbox,
+    glow: 'var(--accent-blue)',
+    title: 'Todo lo que captas, en un solo lugar',
+    body: 'Tus páginas de captura, tus guías descargables, tus eventos y los formularios de tu web entran directo, ya identificados por dónde llegaron. Sin copiar y pegar, sin exportar nada.',
   },
   {
     icon: Mail,
     glow: 'var(--accent-teal)',
-    title: 'Secuencias de email',
-    body: 'Nurturing automático por canal y por agente, medido por clics y respuestas — no por aperturas infladas. Bajas, rebotes y quejas se bloquean solos.',
+    title: 'El correo que siempre ibas a mandar',
+    body: 'Secuencias que salen solas, con tu tono y con la firma del agente que atiende. Las bajas y los rebotes se manejan solos: nadie recibe un correo que no debería recibir.',
   },
   {
-    icon: Home,
+    icon: Bell,
     glow: 'var(--accent-coral)',
-    title: 'Propiedades sincronizadas',
-    body: 'El inventario del CRM publica directo a tu sitio web: una sola carga, fotos optimizadas, control de qué se muestra al público.',
+    title: 'El aviso llega antes que la competencia',
+    body: 'Cuando un lead se pone caliente lo sabes en segundos, en la aplicación y en tu teléfono. No hace falta que nadie esté mirando la pantalla.',
   },
   {
     icon: BarChart3,
     glow: 'var(--accent-pink)',
-    title: 'Analytics por agente y canal',
-    body: 'Qué canal trae leads que avanzan, qué agente convierte, cómo rinde cada secuencia. Decisiones sobre datos de tu operación, no intuición.',
-  },
-  {
-    icon: Bell,
-    glow: 'var(--accent-green)',
-    title: 'Notificaciones al instante',
-    body: 'Cuando un lead cruza los 80 puntos o llega una pregunta del formulario web, tu equipo lo sabe en segundos — campana en la app y aviso directo por Telegram.',
+    title: 'Sabes qué fuente vale la pena',
+    body: 'Cuál de tus canales trae gente que avanza y cuál sólo trae volumen — con lo que de verdad pasó después, no con lo que prometió la campaña.',
   },
 ]
 
-const AI_FEATURES = [
+const ABSENT = [
   {
-    icon: PenLine,
-    glow: 'var(--accent-gold)',
-    title: 'Emails redactados por IA',
-    body: 'El composer escribe correos con la voz y la firma de cada agente: cartas personales, no plantillas de marketing. Tú revisas y envías.',
+    title: 'Cuarenta módulos que nunca abres',
+    body: 'No hay tickets de soporte, ni inventario de bodega, ni un constructor de flujos con doscientos bloques. Hay leads, propiedades, correos y números. Nada más.',
   },
   {
-    icon: ListPlus,
-    glow: 'var(--accent-blue)',
-    title: 'Secuencias en un clic',
-    body: 'Una secuencia de nurturing de 3 pasos generada desde cero para cada canal de adquisición, alineada al tono de tu equipo, lista para editar.',
+    title: 'Tres semanas de configuración',
+    body: 'No hay que diseñar el embudo ni inventar los campos. El sistema ya sabe cómo trabaja una inmobiliaria, porque no sabe hacer otra cosa.',
   },
   {
-    icon: FileText,
-    glow: 'var(--accent-coral)',
-    title: 'Propiedades desde un PDF',
-    body: 'Sube la ficha del listing y el formulario se completa solo: descripción bilingüe, características, datos del inmueble. Tu equipo solo revisa y publica.',
+    title: 'Un consultor certificado',
+    body: 'No necesitas contratar a nadie para implementarlo. Lo dejamos operando nosotros y tu equipo entra a usarlo.',
+  },
+  {
+    title: 'Campos que no aplican a una casa',
+    body: 'Nada de forzar un sistema genérico a punta de campos personalizados que después nadie llena.',
   },
 ]
 
 const STEPS = [
   {
     n: '1',
-    title: 'Contáctanos',
-    body: 'Cuéntanos cómo opera tu equipo hoy: cuántos agentes, de dónde llegan los leads, qué se pierde en el camino.',
+    title: 'Nos cuentas cómo trabajan hoy',
+    body: 'Cuántos agentes son, de dónde llegan sus leads y qué se les escapa. Media hora de conversación.',
   },
   {
     n: '2',
-    title: 'Configuramos tu infraestructura',
-    body: 'Canales de adquisición, agentes, scoring, secuencias y tu inventario de propiedades — todo queda operando sin trabajo de tu lado.',
+    title: 'Lo dejamos montado',
+    body: 'Tus fuentes, tu equipo, tus secuencias y tu inventario, con tu marca. El trabajo de configuración es nuestro, no tuyo.',
   },
   {
     n: '3',
-    title: 'Opera desde tu dashboard',
-    body: 'Tu pipeline vivo, tus métricas por agente y las notificaciones de leads calientes. Tu equipo se enfoca en cerrar.',
+    title: 'Tu equipo entra y vende',
+    body: 'Abren la lista del día y empiezan a llamar. Sin tres sesiones de capacitación.',
   },
 ]
 
-// Precios/labels desde la fuente única (src/lib/plans.ts); los bullets son el
-// copy de marketing de cada plan y viven aquí. El detalle completo va en /planes.
-const PLAN_CARDS: {
-  name: string
-  price: string
-  pricePrefix?: string
-  period: string
-  tagline: string
-  features: string[]
-  highlighted: boolean
-}[] = [
-  {
-    name: PLANS.esencial.label,
-    price: '$59',
-    period: '/ mes',
-    tagline: 'Para el agente independiente que empieza a ordenar su operación.',
-    features: [
-      'CRM completo con pipeline y scoring automático',
-      'Secuencias de email con redacción por IA',
-      'Hasta 2,500 leads y 3,000 emails al mes',
-      'Canales de adquisición y notificaciones (app + Telegram)',
-      'Soporte por email',
-    ],
-    highlighted: PLANS.esencial.highlighted,
-  },
-  {
-    name: PLANS.growth.label,
-    price: '$129',
-    period: '/ mes',
-    tagline: 'El independiente pro: toda la IA y tu web alimentada por el CRM.',
-    features: [
-      'Todo lo de Esencial, con más capacidad',
-      'IA completa: emails, secuencias y alta de propiedades desde PDF',
-      'Dominio de envío propio (mail.tudominio.com), gestionado por nosotros',
-      'Propiedades sincronizadas con tu sitio web',
-      'Analytics completo por agente, canal y email',
-      'Hasta 10,000 leads y 15,000 emails al mes',
-      'Onboarding asistido',
-    ],
-    highlighted: PLANS.growth.highlighted,
-  },
-  {
-    name: PLANS.partner.label,
-    price: '$249',
-    pricePrefix: 'desde',
-    period: '/ mes',
-    tagline: 'Para equipos y grupos inmobiliarios: 2 o más agentes con acceso propio.',
-    features: [
-      'Todo lo de Growth, sin límites',
-      'Acceso propio para cada agente — cada quien ve sus leads',
-      'Leads y propiedades ilimitados · 50,000 emails al mes',
-      'Analytics con vista de equipo',
-      'Onboarding dedicado y migración de datos (HubSpot y otros)',
-      'Soporte prioritario con contacto directo',
-    ],
-    highlighted: PLANS.partner.highlighted,
-  },
-]
+const ENTRY_PRICE = `$${PLANS.esencial.priceUsd}`
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
@@ -172,295 +128,314 @@ export default function LandingPage() {
     <>
       {/* HERO */}
       <section style={{ position: 'relative', overflow: 'hidden' }}>
-        <AuroraBackground />
-        <Particles />
+        <Backdrop />
         <div className="mk-container mk-hero" style={{ position: 'relative' }}>
-          <div>
-            <FadeIn y={10}>
-              <span className="mk-eyebrow">Growth Partner Platform · con IA integrada</span>
-            </FadeIn>
-            <FadeIn y={14} delay={0.08}>
-              <h1 className="mk-h1" style={{ marginTop: '18px' }}>
-                El CRM con <span className="mk-gradient-text">IA</span> que tu
-                equipo inmobiliario necesita
-              </h1>
-            </FadeIn>
-            <FadeIn y={14} delay={0.16}>
-              <p className="mk-lead" style={{ marginTop: '22px', maxWidth: '480px' }}>
-                Scoring automático, secuencias que se redactan solas y un pipeline
-                que se ordena en tiempo real — la infraestructura que antes solo
-                tenían los equipos más grandes, ahora al alcance del tuyo.
-              </p>
-            </FadeIn>
-            <FadeIn y={14} delay={0.24}>
-              <div style={{ display: 'flex', gap: '12px', marginTop: '32px', flexWrap: 'wrap' }}>
-                <a href="#contacto" className="mk-btn-gold btn-cta">Prueba {TRIAL.days} días gratis</a>
-                <a href="#producto" className="mk-btn-ghost">Ver el producto</a>
-              </div>
-              <p style={{ marginTop: '14px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                <strong style={{ color: 'var(--accent-gold)', fontWeight: 600 }}>100% gratis</strong>
-                {' '}· sin tarjeta de crédito · experiencia {PLANS[TRIAL.plan].label} completa
-              </p>
-            </FadeIn>
-          </div>
-          <FadeIn y={20} delay={0.2}>
-            <HeroPipeline />
+          <FadeIn y={10}>
+            <span className="mk-eyebrow">CRM inmobiliario con inteligencia artificial</span>
+          </FadeIn>
+          <FadeIn y={14} delay={0.08}>
+            <h1 className="mk-h1" style={{ marginTop: '20px' }}>
+              Abre el CRM y ya sabes a quién llamar <span className="mk-gradient-text">hoy</span>
+            </h1>
+          </FadeIn>
+          <FadeIn y={14} delay={0.16}>
+            <p className="mk-lead" style={{ marginTop: '22px', maxWidth: '620px' }}>
+              La inteligencia artificial lee cada lead que entra, ordena tu lista del
+              día y te dice qué decirle a cada uno antes de levantar el teléfono.
+              Hecho sólo para bienes raíces: sin módulos que nunca abres, sin semanas
+              de configuración.
+            </p>
+          </FadeIn>
+          <FadeIn y={14} delay={0.24}>
+            <div className="mk-hero-cta">
+              <a href="#contacto" className="mk-btn-gold btn-cta">
+                Empieza tu prueba de {TRIAL.days} días
+              </a>
+              <a href="#producto" className="mk-btn-ghost">Ver cómo funciona</a>
+            </div>
+            <p className="mk-fineprint">
+              Totalmente gratis · sin tarjeta de crédito · la experiencia{' '}
+              {PLANS[TRIAL.plan].label} completa
+            </p>
+          </FadeIn>
+          <FadeIn y={18} delay={0.32}>
+            <div className="mk-hero-video">
+              <HeroVideo />
+            </div>
           </FadeIn>
         </div>
       </section>
 
-      {/* MÉTRICAS */}
+      {/* EL PROBLEMA */}
       <section className="mk-container mk-section-tight">
         <Reveal>
-          <div className="mk-stats">
-            {STATS.map(s => (
-              <div key={s.value} className="mk-stat">
+          <span className="mk-eyebrow">Lo que cuesta no tenerlo</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '620px' }}>
+            El dinero no se pierde en la negociación. Se pierde antes.
+          </h2>
+        </Reveal>
+        <Reveal delay={0.08}>
+          <div className="mk-problems">
+            {PROBLEMS.map(p => (
+              <div key={p.title} className="mk-problem">
+                <h3 className="mk-item-title">{p.title}</h3>
+                <p className="mk-body" style={{ fontSize: '13px', marginTop: '10px' }}>{p.body}</p>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+        <Reveal delay={0.12}>
+          <p className="mk-body" style={{ marginTop: '32px', maxWidth: '620px' }}>
+            Ninguno de los tres es un problema de esfuerzo. Es un problema de no
+            saber, cada mañana, por dónde empezar.
+          </p>
+        </Reveal>
+      </section>
+
+      {/* LA LISTA DEL DÍA */}
+      <section id="producto" className="mk-container mk-section">
+        <Reveal>
+          <span className="mk-eyebrow">Cómo se siente usarlo</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '660px' }}>
+            Nadie decide a quién llamar. La lista ya viene decidida.
+          </h2>
+          <div className="mk-prose">
+            <p className="mk-lead">
+              Cada lead que entra se califica solo: con lo que respondió al llegar y
+              con lo que hace después — si contestó tu correo, si volvió a tu web, si
+              pidió una valoración. Tu equipo abre el CRM en la mañana y encuentra la
+              lista del día ya ordenada. Arriba, quien está más cerca de firmar.
+            </p>
+            <p className="mk-body">
+              Nadie tiene que mantener la lista al día, ni mover tarjetas para que las
+              cuentas cuadren, ni acordarse de a quién le tocaba seguimiento. El
+              trabajo de decidir el orden ya está hecho cuando tu agente se sienta.
+            </p>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* IA */}
+      <section id="ia" className="mk-band">
+        <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
+        <div className="mk-divider-gradient" style={{ position: 'absolute', bottom: 0 }} />
+        <Backdrop intensity={0.55} />
+        <div className="mk-container mk-section" style={{ position: 'relative' }}>
+          <Reveal>
+            <span className="mk-eyebrow">Inteligencia artificial</span>
+            <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '660px' }}>
+              La IA lee cada lead <span className="mk-gradient-text">antes</span> que tú
+            </h2>
+            <p className="mk-lead" style={{ marginTop: '18px', maxWidth: '620px' }}>
+              Lo que tu agente encuentra al abrir un lead no es una ficha con campos.
+              Es lo que un buen director de ventas le diría en diez segundos antes de
+              levantar el teléfono.
+            </p>
+          </Reveal>
+
+          <div className="mk-ia-layout">
+            <Reveal delay={0.06}>
+              <div className="mk-ia-points">
+                {BRIEFING_POINTS.map(f => (
+                  <div key={f.title} className="mk-point" style={{ ['--glow-color' as string]: f.glow }}>
+                    <div className="mk-icon-badge">
+                      <f.icon size={18} strokeWidth={1.5} aria-hidden />
+                    </div>
+                    <div>
+                      <h3 className="mk-item-title">{f.title}</h3>
+                      <p className="mk-body" style={{ fontSize: '13px', marginTop: '6px' }}>{f.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+            <Reveal delay={0.12}>
+              <BriefingCard />
+            </Reveal>
+          </div>
+
+          <Reveal delay={0.08}>
+            <p className="mk-body" style={{ marginTop: '36px', maxWidth: '620px' }}>
+              Viene encendido desde el primer día, en todos los planes. No hay nada
+              que configurar ni nada que activar.
+            </p>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* TU MERCADO */}
+      <section className="mk-container mk-section">
+        <Reveal>
+          <span className="mk-eyebrow">Tu mercado</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '700px' }}>
+            Un presupuesto alto en Virginia no es un presupuesto alto en Barcelona
+          </h2>
+          <div className="mk-prose">
+            <p className="mk-lead">
+              La mayoría de los sistemas traen una vara importada y miden a todos tus
+              leads con ella. Aquí le dices cómo es tu mercado — en qué rangos se
+              mueve, cuáles son tus zonas, cuánto vale para ti cerrar una operación —
+              y califica con esa vara. Un lead que en otra ciudad sería marginal, en
+              la tuya puede ser el mejor de la semana.
+            </p>
+            <p className="mk-body">
+              Y cuando algo no lo sabemos, no lo inventamos: un dato que falta nunca
+              se convierte en un punto en contra del lead.
+            </p>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* CAPTACIÓN Y SEGUIMIENTO */}
+      <section className="mk-band">
+        <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
+        <div className="mk-container mk-section" style={{ position: 'relative' }}>
+          <Reveal>
+            <span className="mk-eyebrow">Captación y seguimiento</span>
+            <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '660px' }}>
+              Los leads entran solos. El seguimiento no se te olvida.
+            </h2>
+          </Reveal>
+          <Reveal delay={0.06}>
+            <div className="mk-grid-2">
+              {OPERATION.map(f => (
                 <div
-                  className="mk-num"
-                  style={{ fontSize: '30px', fontWeight: 500, letterSpacing: '-0.02em', color: s.color }}
+                  key={f.title}
+                  className="mk-card mk-feature-card"
+                  style={{ height: '100%', backgroundColor: 'var(--bg-elevated)', ['--glow-color' as string]: f.glow }}
                 >
-                  {s.value}
+                  <div className="mk-icon-badge">
+                    <f.icon size={19} strokeWidth={1.5} aria-hidden />
+                  </div>
+                  <h3 className="mk-item-title" style={{ marginTop: '14px' }}>{f.title}</h3>
+                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px' }}>{f.body}</p>
                 </div>
-                <p style={{ fontSize: '12px', lineHeight: 1.55, color: 'var(--text-muted)', marginTop: '8px' }}>
-                  {s.label}
-                </p>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* PROPIEDADES */}
+      <section className="mk-container mk-section">
+        <Reveal>
+          <span className="mk-eyebrow">Propiedades</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '620px' }}>
+            La cargas una vez. Aparece en tu sitio web.
+          </h2>
+          <div className="mk-prose">
+            <p className="mk-lead">
+              Tu inventario vive en el CRM y alimenta tu página pública: fotos,
+              descripción, disponibilidad. Tú decides qué se muestra al público y qué
+              se queda adentro para el equipo.
+            </p>
+            <p className="mk-body">
+              Todo lleva tu marca: tu logo, tus colores, tu dominio. En ningún lugar
+              donde mire tu cliente dice ITMANO.
+            </p>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* EL ENFOQUE */}
+      <section id="enfoque" className="mk-band">
+        <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
+        <Backdrop intensity={0.5} />
+        <div className="mk-container mk-section" style={{ position: 'relative' }}>
+          <Reveal>
+            <span className="mk-eyebrow">El enfoque</span>
+            <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '660px' }}>
+              Hecho sólo para bienes raíces. Se nota en lo que no tiene.
+            </h2>
+            <p className="mk-lead" style={{ marginTop: '18px', maxWidth: '620px' }}>
+              Casi todos los CRM del mercado sirven para vender cualquier cosa, y por
+              eso hay que enseñarles el negocio. Este ya lo sabe.
+            </p>
+          </Reveal>
+          <Reveal delay={0.06}>
+            <div className="mk-absent">
+              {ABSENT.map(a => (
+                <div key={a.title} className="mk-absent-item">
+                  <span className="mk-absent-mark" aria-hidden>—</span>
+                  <div>
+                    <h3 className="mk-item-title">{a.title}</h3>
+                    <p className="mk-body" style={{ fontSize: '13px', marginTop: '6px' }}>{a.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* CÓMO EMPEZAMOS */}
+      <section id="como-funciona" className="mk-container mk-section">
+        <Reveal>
+          <span className="mk-eyebrow">Cómo empezamos</span>
+          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '620px' }}>
+            De la primera conversación a estar operando, en días
+          </h2>
+        </Reveal>
+        <Reveal delay={0.06}>
+          <div className="mk-steps">
+            {STEPS.map(s => (
+              <div key={s.n} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '20px', height: '100%' }}>
+                <span className="mk-num" style={{ fontSize: '13px', color: 'var(--accent-gold)', fontWeight: 600 }}>
+                  {s.n}
+                </span>
+                <h3 className="mk-item-title" style={{ fontSize: '16px', marginTop: '10px' }}>{s.title}</h3>
+                <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px', maxWidth: '320px' }}>{s.body}</p>
               </div>
             ))}
           </div>
         </Reveal>
       </section>
 
-      {/* PRODUCTO */}
-      <section id="producto" className="mk-container mk-section">
-        <Reveal>
-          <span className="mk-eyebrow">Producto</span>
-          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
-            Un CRM que prioriza por ti
-          </h2>
-          <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
-            La mayoría de los CRM son una lista de contactos que alguien tiene que
-            mantener. ITMANO es un sistema operativo: los leads entran por tus
-            canales, se califican por su comportamiento y llegan a tu equipo ya
-            priorizados.
-          </p>
-        </Reveal>
-        <div style={{ marginTop: '40px' }}>
-          <StaggerGroup className="mk-grid-3" stagger={0.06}>
-            {FEATURES.map(f => (
-              <StaggerItem key={f.title}>
-                <div
-                  className="mk-card mk-feature-card"
-                  style={{ height: '100%', ['--glow-color' as string]: f.glow }}
-                >
-                  <div className="mk-icon-badge">
-                    <f.icon size={19} strokeWidth={1.5} aria-hidden />
-                  </div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '14px' }}>
-                    {f.title}
-                  </h3>
-                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px' }}>{f.body}</p>
-                </div>
-              </StaggerItem>
-            ))}
-          </StaggerGroup>
-        </div>
-      </section>
-
-      {/* IA */}
-      <section id="ia" style={{ position: 'relative', backgroundColor: 'var(--bg-surface)', overflow: 'hidden', scrollMarginTop: '72px' }}>
-        <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
-        <div className="mk-divider-gradient" style={{ position: 'absolute', bottom: 0 }} />
-        <AuroraBackground style={{ opacity: 0.6 }} />
-        <div className="mk-container mk-section" style={{ position: 'relative' }}>
-          <Reveal>
-            <span className="mk-eyebrow">Inteligencia artificial</span>
-            <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
-              <span className="mk-gradient-text">IA</span> integrada donde ahorra horas, no donde estorba
-            </h2>
-            <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
-              Nada de chatbots genéricos. La IA de ITMANO trabaja dentro del flujo de
-              tu equipo — redacta, genera y captura — y una persona siempre revisa
-              antes de que algo salga al mundo.
-            </p>
-          </Reveal>
-          <div style={{ marginTop: '40px' }}>
-            <StaggerGroup className="mk-grid-3" stagger={0.08}>
-              {AI_FEATURES.map(f => (
-                <StaggerItem key={f.title}>
-                  <div
-                    className="mk-card mk-feature-card"
-                    style={{
-                      height: '100%',
-                      backgroundColor: 'var(--bg-elevated)',
-                      borderTop: '1px solid var(--border-accent)',
-                      ['--glow-color' as string]: f.glow,
-                    }}
-                  >
-                    <div className="mk-icon-badge">
-                      <f.icon size={19} strokeWidth={1.5} aria-hidden />
-                    </div>
-                    <h3 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '14px' }}>
-                      {f.title}
-                    </h3>
-                    <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px' }}>{f.body}</p>
-                  </div>
-                </StaggerItem>
-              ))}
-            </StaggerGroup>
-          </div>
-        </div>
-      </section>
-
-      {/* CÓMO FUNCIONA */}
-      <section id="como-funciona" className="mk-container mk-section">
-        <Reveal>
-          <span className="mk-eyebrow">Cómo funciona</span>
-          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
-            De la primera llamada a operar, en días
-          </h2>
-        </Reveal>
-        <div style={{ marginTop: '40px' }}>
-          <StaggerGroup className="mk-steps" stagger={0.08}>
-            {STEPS.map(s => (
-              <StaggerItem key={s.n}>
-                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '20px', height: '100%' }}>
-                  <span className="mk-num" style={{ fontSize: '13px', color: 'var(--accent-gold)', fontWeight: 600 }}>
-                    {s.n}
-                  </span>
-                  <h3 style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '10px' }}>
-                    {s.title}
-                  </h3>
-                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '8px', maxWidth: '320px' }}>{s.body}</p>
-                </div>
-              </StaggerItem>
-            ))}
-          </StaggerGroup>
-        </div>
-      </section>
-
       {/* INVERSIÓN */}
-      <section id="inversion" className="mk-container mk-section" style={{ paddingTop: '48px' }}>
+      <section id="inversion" className="mk-container mk-section" style={{ paddingTop: '32px' }}>
         <Reveal>
-          <span className="mk-eyebrow">Inversión</span>
-          <h2 className="mk-h2" style={{ marginTop: '14px', maxWidth: '560px' }}>
-            Una inversión, toda la infraestructura
-          </h2>
-          <p className="mk-body" style={{ marginTop: '14px', maxWidth: '560px' }}>
-            Las cuentas se crean con nuestro equipo — así tu operación queda
-            configurada y funcionando desde el primer día, no un software vacío.
-          </p>
-          {/* Banner del período de prueba — el gancho de adquisición */}
-          <div
-            style={{
-              marginTop: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px',
-              flexWrap: 'wrap',
-              padding: '16px 20px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-accent)',
-              backgroundImage:
-                'linear-gradient(100deg, color-mix(in srgb, var(--accent-gold) 10%, transparent), color-mix(in srgb, var(--accent-coral) 6%, transparent) 60%, color-mix(in srgb, var(--accent-blue) 8%, transparent))',
-            }}
-          >
-            <p style={{ fontSize: '14px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-              <strong style={{ fontWeight: 600 }}>
-                Prueba ITMANO {TRIAL.days} días — <span className="mk-gradient-text">totalmente gratis</span>
-              </strong>
-              {' '}· la experiencia {PLANS[TRIAL.plan].label} completa, sin tarjeta de crédito
-              y con presupuesto de IA de cortesía incluido.
-            </p>
-            <a href="#contacto" className="mk-btn-gold btn-cta" style={{ padding: '10px 20px' }}>
-              Prueba {TRIAL.days} días gratis
-            </a>
+          <div className="mk-invest">
+            <div>
+              <span className="mk-eyebrow">Inversión</span>
+              <h2 className="mk-h2" style={{ marginTop: '14px' }}>
+                Desde <span className="mk-num">{ENTRY_PRICE}</span> al mes
+              </h2>
+              <p className="mk-body" style={{ marginTop: '16px', maxWidth: '460px' }}>
+                Tres planes, según trabajes solo o con equipo. Todos incluyen lo
+                mismo por dentro: la calificación de cada lead, el análisis con IA y
+                las secuencias de correo. Lo que cambia es la capacidad y cuántos
+                agentes tienen su propio acceso.
+              </p>
+              <p className="mk-body" style={{ marginTop: '12px', maxWidth: '460px' }}>
+                Con la comisión de una sola operación cerrada, la inversión de un año
+                entero queda cubierta.
+              </p>
+            </div>
+            <div className="mk-invest-panel">
+              <span className="mk-eyebrow">Prueba {TRIAL.days} días</span>
+              <p style={{ fontSize: '17px', lineHeight: 1.5, color: 'var(--text-primary)', marginTop: '12px' }}>
+                Pruébalo con tus propios leads,{' '}
+                <span className="mk-gradient-text">totalmente gratis</span>.
+              </p>
+              <p className="mk-body" style={{ fontSize: '13px', marginTop: '10px' }}>
+                {TRIAL.days} días con la experiencia {PLANS[TRIAL.plan].label} completa,
+                sin tarjeta de crédito y con la IA incluida de cortesía.
+              </p>
+              <a href="#contacto" className="mk-btn-gold btn-cta" style={{ marginTop: '22px', width: '100%' }}>
+                Empieza tu prueba
+              </a>
+              <Link href="/planes" className="mk-invest-link">
+                Compara los planes en detalle — y contra el resto del mercado →
+              </Link>
+            </div>
           </div>
-        </Reveal>
-        <div style={{ marginTop: '40px' }}>
-          <StaggerGroup className="mk-pricing" stagger={0.08}>
-            {PLAN_CARDS.map(p => (
-              <StaggerItem key={p.name}>
-                <div
-                  className="mk-card"
-                  style={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: '28px',
-                    ...(p.highlighted
-                      ? {
-                          border: '1px solid var(--border-gold-hover)',
-                          backgroundImage:
-                            'radial-gradient(circle at 25% -10%, color-mix(in srgb, var(--accent-gold) 14%, transparent), transparent 55%)',
-                          backgroundColor: 'var(--bg-elevated)',
-                          boxShadow: 'var(--highlight-top), var(--shadow-lg)',
-                        }
-                      : {}),
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span
-                      className={p.highlighted ? 'mk-gradient-text' : undefined}
-                      style={{
-                        fontSize: '13px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase',
-                        color: p.highlighted ? undefined : 'var(--text-secondary)',
-                      }}
-                    >
-                      {p.name}
-                    </span>
-                    {p.highlighted && (
-                      <span style={{ fontSize: '10px', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent-gold)', border: '1px solid var(--border-accent)', borderRadius: '4px', padding: '3px 8px' }}>
-                        Más elegido
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ marginTop: '18px', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                    {p.pricePrefix && (
-                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{p.pricePrefix}</span>
-                    )}
-                    <span className="mk-num" style={{ fontSize: '38px', fontWeight: 300, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-                      {p.price}
-                    </span>
-                    <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{p.period}</span>
-                  </div>
-                  <p className="mk-body" style={{ fontSize: '13px', marginTop: '10px' }}>{p.tagline}</p>
-                  <ul style={{ listStyle: 'none', marginTop: '22px', display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1 }}>
-                    {p.features.map(f => (
-                      <li key={f} style={{ display: 'flex', gap: '10px', fontSize: '13px', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
-                        <span aria-hidden style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: '1px' }}>·</span>
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <a
-                    href="#contacto"
-                    className={p.highlighted ? 'mk-btn-gold btn-cta' : 'mk-btn-ghost'}
-                    style={{ marginTop: '26px', width: '100%' }}
-                  >
-                    Contáctanos
-                  </a>
-                </div>
-              </StaggerItem>
-            ))}
-          </StaggerGroup>
-        </div>
-        <Reveal>
-          <p style={{ marginTop: '28px', textAlign: 'center' }}>
-            <Link
-              href="/planes"
-              style={{ fontSize: '14px', color: 'var(--accent-gold)', textDecoration: 'none' }}
-            >
-              Compara los planes en detalle — y contra el resto del mercado →
-            </Link>
-          </p>
         </Reveal>
       </section>
 
       {/* CONTACTO */}
-      <section id="contacto" style={{ position: 'relative', backgroundColor: 'var(--bg-surface)', overflow: 'hidden', scrollMarginTop: '72px' }}>
+      <section id="contacto" className="mk-band">
         <div className="mk-divider-gradient" style={{ position: 'absolute', top: 0 }} />
-        <AuroraBackground style={{ opacity: 0.45 }} />
+        <Backdrop intensity={0.45} />
         <div className="mk-container mk-section" style={{ position: 'relative' }}>
           <div className="mk-contact">
             <Reveal>
@@ -469,12 +444,12 @@ export default function LandingPage() {
                 Hablemos de tu operación
               </h2>
               <p className="mk-body" style={{ marginTop: '14px', maxWidth: '400px' }}>
-                Cuéntanos cómo trabaja tu equipo y te mostraremos, con una
-                demostración en vivo, cómo se vería operando sobre ITMANO.
-                Respondemos en menos de 24 horas hábiles.
+                Cuéntanos cómo trabaja tu equipo hoy y te mostramos, en una llamada,
+                cómo se vería operando aquí. Respondemos en menos de 24 horas
+                hábiles.
               </p>
             </Reveal>
-            <Reveal delay={0.1}>
+            <Reveal delay={0.08}>
               <ContactForm />
             </Reveal>
           </div>

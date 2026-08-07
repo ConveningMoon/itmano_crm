@@ -28,8 +28,8 @@ export function MarketingFooter() {
               </span>
             </div>
             <p className="mk-body" style={{ fontSize: '13px' }}>
-              Infraestructura de crecimiento para equipos inmobiliarios: adquisición,
-              calificación, nurturing y conversión en una sola plataforma.
+              El CRM con inteligencia artificial hecho sólo para bienes raíces:
+              captación, calificación, seguimiento y cierre en un solo lugar.
             </p>
           </div>
 
@@ -65,7 +65,7 @@ export function MarketingFooter() {
             © {new Date().getFullYear()} ITMANO. Todos los derechos reservados.
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
-            GROWTH PARTNER PLATFORM
+            CRM INMOBILIARIO CON IA
           </span>
         </div>
       </div>
