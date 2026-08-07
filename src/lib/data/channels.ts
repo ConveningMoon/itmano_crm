@@ -17,8 +17,23 @@ export interface AcquisitionChannel {
   agentId: string | null      // owning agent (routing); null = "Toda la agencia"
   agentName: string | null    // resolved display name, null when agentId is null
   metadata: Record<string, unknown>
+  /**
+   * Link de la página de esta fuente cuando NO la construye el CRM (migración
+   * 092): la conectó ITMANO por fuera, o el tenant ya tenía su landing. Es el
+   * único link posible para un tenant administrado por ITMANO, que no ve el
+   * constructor.
+   */
+  pageUrl: string | null
+  /** hosted_page.enabled — la página del constructor está publicada. */
+  hostedPageEnabled: boolean
   createdAt: string
   archivedAt: string | null
+}
+
+/** Lee metadata.page_url tolerando filas viejas sin la clave o con basura. */
+export function channelPageUrl(metadata: Record<string, unknown> | null | undefined): string | null {
+  const raw = metadata?.page_url
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : null
 }
 
 export interface ChannelMetrics {
@@ -156,6 +171,8 @@ async function fetchChannelsWithMetrics(
       agentId:         c.agent_id ?? null,
       agentName:       c.agent_id ? (agentNameMap.get(c.agent_id) ?? null) : null,
       metadata:        c.metadata ?? {},
+      pageUrl:         channelPageUrl(c.metadata),
+      hostedPageEnabled: c.hosted_page?.enabled === true,
       createdAt:       c.created_at,
       archivedAt:      c.archived_at,
       metrics: {

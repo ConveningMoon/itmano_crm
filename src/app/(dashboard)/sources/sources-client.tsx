@@ -3,8 +3,9 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, X, Trash2, AlertTriangle } from 'lucide-react'
+import { Plus, X, Trash2, AlertTriangle, ExternalLink } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
+import { resolveChannelPageUrl, type TenantPageInfo } from '@/lib/sources/page-link'
 import { STATUS_COPY, MEASUREMENT_COPY, type SourceHealth } from '@/lib/sources/health'
 
 const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', { fg: string; bg: string }> = {
@@ -54,12 +55,81 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
   { value: 'archived',     label: 'Archivados' },
 ]
 
+// ─── Página de la fuente ──────────────────────────────────────────────────────
+
+// Aviso cuando la fuente todavía no tiene página. El camino para arreglarlo es
+// distinto según quién construye la página, así que el mensaje también.
+function NoPageModal({ channelName, managedByItmano, onClose }: {
+  channelName:     string
+  managedByItmano: boolean
+  onClose:         () => void
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+          borderRadius: '16px', width: '100%', maxWidth: '440px',
+        }}
+      >
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={16} style={{ color: 'var(--accent-gold)' }} />
+            Página sin configurar
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{channelName}</strong> todavía no tiene una página que abrir.
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            {managedByItmano
+              ? <>La página de esta fuente la conecta ITMANO, pero su link aún no está registrado. Abre la
+                  fuente, pulsa <strong style={{ color: 'var(--text-primary)' }}>Editar</strong> y pega el
+                  link en <strong style={{ color: 'var(--text-primary)' }}>Link de la página</strong>.</>
+              : <>Abre la fuente, entra a la sección <strong style={{ color: 'var(--text-primary)' }}>Página</strong> y
+                  configúrala. Cuando la publiques, este botón la abrirá directamente.</>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={BTN_PRIMARY}>Entendido</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Channel Card ─────────────────────────────────────────────────────────────
 
-function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?: number; health?: SourceHealth }) {
+function ChannelCard({ ch, index = 0, health, tenant }: {
+  ch: ChannelWithMetrics
+  index?: number
+  health?: SourceHealth
+  tenant?: TenantPageInfo
+}) {
   const { navigate, pending: navPending } = useCardNavigation()
+  const [noPage, setNoPage] = useState(false)
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
+  const pageUrl   = resolveChannelPageUrl(ch, tenant)
+
+  // Atajo para no tener que entrar a la fuente y bajar al tab Página cada vez.
+  function openPage(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!pageUrl) { setNoPage(true); return }
+    window.open(pageUrl, '_blank', 'noopener,noreferrer')
+  }
 
   return (
     <div
@@ -81,6 +151,13 @@ function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?
       }}
     >
       <NavLoadingOverlay show={navPending} />
+      {noPage && (
+        <NoPageModal
+          channelName={ch.name}
+          managedByItmano={tenant?.managedByItmano === true}
+          onClose={() => setNoPage(false)}
+        />
+      )}
       {/* Header */}
       <div style={{
         background: 'var(--bg-elevated)',
@@ -118,8 +195,25 @@ function ChannelCard({ ch, index = 0, health }: { ch: ChannelWithMetrics; index?
 
       {/* Body */}
       <div style={{ padding: '16px', flex: 1 }}>
-        <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          {ch.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {ch.name}
+          </span>
+          <button
+            onClick={openPage}
+            className="page-open-btn"
+            title={pageUrl ? `Abrir la página · ${pageUrl}` : 'La página aún no está configurada'}
+            aria-label={pageUrl ? `Abrir la página de ${ch.name}` : `${ch.name} no tiene página configurada`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '24px', height: '24px', flexShrink: 0,
+              background: 'transparent', border: '1px solid var(--border-subtle)',
+              borderRadius: '6px', cursor: 'pointer',
+              color: pageUrl ? 'var(--accent-gold)' : 'var(--text-muted)',
+            }}
+          >
+            <ExternalLink size={12} />
+          </button>
         </div>
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
           {ch.publicId}
@@ -866,9 +960,11 @@ interface Props {
   isSuperAdmin:     boolean
   tenants:          Array<{ id: string; name: string }>
   agents:           AgentOption[]
+  /** tenantId → slug + si ITMANO administra sus páginas. */
+  tenantPages:      Record<string, TenantPageInfo>
 }
 
-export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents }: Props) {
+export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, tenantPages }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<TabValue>('all')
@@ -893,6 +989,7 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
     <div>
       <style>{`
         .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
+        .page-open-btn:hover { border-color: var(--accent-gold) !important; background: rgba(201,169,110,0.10) !important; }
         @keyframes src-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
         .source-card { animation: src-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
         .source-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--shadow-md); transform: translateY(-3px); }
@@ -997,7 +1094,9 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
                   tenantName={tenantName(ch.tenantId)}
                 />
               ))
-            : display.map((ch, i) => <ChannelCard key={ch.id} ch={ch} index={i} health={health[ch.id]} />)}
+            : display.map((ch, i) => (
+                <ChannelCard key={ch.id} ch={ch} index={i} health={health[ch.id]} tenant={tenantPages[ch.tenantId]} />
+              ))}
         </div>
       )}
     </div>

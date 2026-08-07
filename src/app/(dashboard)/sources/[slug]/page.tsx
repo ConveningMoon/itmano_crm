@@ -129,6 +129,8 @@ export default async function ChannelDetailPage({
           agentId={channel.agentId}
           agents={agents}
           sequences={sequences.filter(s => s.activationType === 'form').map(s => ({ id: s.id, name: s.name }))}
+          managedByItmano={pageManaged}
+          pageUrl={channel.pageUrl}
         />
       </div>
 
