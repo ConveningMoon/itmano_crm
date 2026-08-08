@@ -7,7 +7,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // calculado con la tabla de precios por modelo. El registro es best-effort:
 // NUNCA hace fallar la acción que generó el contenido.
 
-export type AiFeature = 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy' | 'lead_fit' | 'carousel_copy'
+export type AiFeature =
+  | 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy'
+  | 'lead_fit' | 'carousel_copy' | 'studio_prompt' | 'studio_image'
 
 export const AI_FEATURE_LABELS: Record<string, string> = {
   property_intake:    'Propiedades · Crear con IA',
@@ -16,7 +18,14 @@ export const AI_FEATURE_LABELS: Record<string, string> = {
   hosted_page_copy:   'Páginas · Copy con IA',
   lead_fit:           'Leads · Análisis de fit',
   carousel_copy:      'Carruseles · Copy con IA',
+  studio_prompt:      'Estudio · Dirección de escena',
+  studio_image:       'Estudio · Generación de imagen',
 }
+
+// Costo por imagen de Nano Banana. Google no factura por token en imagen, así
+// que el ledger guarda un costo FIJO por unidad en vez de derivarlo del usage
+// (ver `costUsdOverride` más abajo).
+export const IMAGE_UNIT_COST_USD = 0.039
 
 // Precios en USD por millón de tokens (fuente: docs de la Claude API).
 // claude-sonnet-5: $3 in / $15 out (precio de lista; hay intro $2/$10 hasta
@@ -74,6 +83,9 @@ export async function recordAiUsage(params: {
   model:     string
   usage:     AiUsageTokens
   metadata?: Record<string, unknown>
+  // Costo ya conocido (imágenes: precio por unidad, no por tokens). Cuando se
+  // pasa, gana sobre el cálculo por tokens.
+  costUsdOverride?: number
 }): Promise<void> {
   try {
     const supabase = createAdminClient()
@@ -102,7 +114,7 @@ export async function recordAiUsage(params: {
       output_tokens:         params.usage.output_tokens ?? 0,
       cache_read_tokens:     params.usage.cache_read_input_tokens ?? 0,
       cache_creation_tokens: params.usage.cache_creation_input_tokens ?? 0,
-      cost_usd:              computeCostUsd(params.model, params.usage),
+      cost_usd:              params.costUsdOverride ?? computeCostUsd(params.model, params.usage),
       metadata:              params.metadata ?? null,
     })
     if (error) {
