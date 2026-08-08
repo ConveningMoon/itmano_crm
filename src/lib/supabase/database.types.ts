@@ -1739,6 +1739,103 @@ export type Database = {
           },
         ]
       }
+      studio_images: {
+        Row: {
+          agent_id: string | null
+          aspect: string
+          background_path: string | null
+          cost_usd: number
+          created_at: string
+          created_by: string | null
+          error_message: string | null
+          form_json: Json
+          id: string
+          palette: string[] | null
+          property_id: string | null
+          recipe: string
+          reference_path: string | null
+          reference_role: string | null
+          rendered_path: string | null
+          scene_prompt: string | null
+          source_mode: string
+          status: string
+          style: string
+          tenant_id: string
+          text_zone: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id?: string | null
+          aspect: string
+          background_path?: string | null
+          cost_usd?: number
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          form_json: Json
+          id?: string
+          palette?: string[] | null
+          property_id?: string | null
+          recipe: string
+          reference_path?: string | null
+          reference_role?: string | null
+          rendered_path?: string | null
+          scene_prompt?: string | null
+          source_mode?: string
+          status?: string
+          style: string
+          tenant_id: string
+          text_zone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string | null
+          aspect?: string
+          background_path?: string | null
+          cost_usd?: number
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          form_json?: Json
+          id?: string
+          palette?: string[] | null
+          property_id?: string | null
+          recipe?: string
+          reference_path?: string | null
+          reference_role?: string | null
+          rendered_path?: string | null
+          scene_prompt?: string | null
+          source_mode?: string
+          status?: string
+          style?: string
+          tenant_id?: string
+          text_zone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "studio_images_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "studio_images_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "studio_images_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           billing_cycle: string | null
