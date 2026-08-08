@@ -7,6 +7,10 @@ export interface NavItemDef {
   label: string
   href:  string
   icon:  string
+  // Etiqueta de texto ("Pronto") para una ruta visible pero todavía cerrada.
+  // Distinta de `badge` (numérico, contadores) a propósito: no debe pintarse en
+  // dorado ni competir con los contadores de solicitudes/notificaciones.
+  badgeLabel?: string
 }
 
 export const navItems: NavItemDef[] = [
@@ -16,27 +20,31 @@ export const navItems: NavItemDef[] = [
   { label: 'Fuentes',       href: '/sources',    icon: 'GitBranch'  },
   { label: 'Emails',        href: '/emails',    icon: 'Mail' },
   { label: 'Analytics',     href: '/analytics', icon: 'BarChart2' },
+  { label: 'Estudio',       href: '/studio',    icon: 'Sparkles', badgeLabel: 'Pronto' },
   { label: 'Configuración', href: '/settings',  icon: 'Settings' },
   { label: 'Soporte',       href: '/soporte',   icon: 'LifeBuoy' },
 ]
 
+// El Estudio sin el badge "Pronto": para super_admin la página es real. El
+// motor de carruseles vive dentro de /studio, por eso ya no es un ítem propio.
+const STUDIO_OPEN: NavItemDef = { label: 'Estudio', href: '/studio', icon: 'Sparkles' }
+
 // super_admin gets the control-center link appended. In hub mode (super_admin
 // without a selected tenant) the tenant pages would all redirect to the hub, so
-// the nav collapses to the only two routes that make sense there.
+// the nav collapses to the only routes that make sense there.
 export function navItemsForRole(role: TenantRole, opts?: { hubMode?: boolean }): NavItemDef[] {
   if (role !== 'super_admin') return navItems
   if (opts?.hubMode) {
     return [
       { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
-      { label: 'Carruseles', href: '/admin/carousels', icon: 'Images' },
+      STUDIO_OPEN,
       { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
       { label: 'Notificaciones', href: '/notifications', icon: 'Bell' },
     ]
   }
   return [
-    ...navItems,
+    ...navItems.map(i => (i.href === '/studio' ? STUDIO_OPEN : i)),
     { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
-    { label: 'Carruseles', href: '/admin/carousels', icon: 'Images' },
     { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
   ]
 }

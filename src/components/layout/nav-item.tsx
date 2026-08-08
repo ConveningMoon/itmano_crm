@@ -18,6 +18,7 @@ import {
   LifeBuoy,
   Inbox,
   Images,
+  Sparkles,
 } from 'lucide-react'
 
 // Un ítem está activo si su href es el prefijo MÁS específico que coincide con la
@@ -49,6 +50,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   LifeBuoy,
   Inbox,
   Images,
+  Sparkles,
 }
 
 interface NavItemProps {
@@ -56,6 +58,9 @@ interface NavItemProps {
   href: string
   icon: string
   badge?: number
+  // Etiqueta de texto ("Pronto") de una ruta visible pero cerrada. En muted, no
+  // en dorado: anticipa algo, no reclama atención como un contador.
+  badgeLabel?: string
   // Sidebar y MobileNav coexisten montados; cada lista necesita su propio
   // layoutId para que el indicador no salte entre ambas.
   indicatorId?: string
@@ -64,7 +69,7 @@ interface NavItemProps {
   hrefs?: string[]
 }
 
-export function NavItem({ label, href, icon, badge, indicatorId = 'nav-indicator', hrefs }: NavItemProps) {
+export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'nav-indicator', hrefs }: NavItemProps) {
   const pathname = usePathname()
   const isActive = computeActive(pathname, href, hrefs)
   const Icon = ICONS[icon]
@@ -134,6 +139,21 @@ export function NavItem({ label, href, icon, badge, indicatorId = 'nav-indicator
           }}
         >
           {badge}
+        </span>
+      )}
+      {badgeLabel && (
+        <span
+          style={{
+            fontSize: '10px',
+            fontWeight: '500',
+            letterSpacing: '0.04em',
+            color: 'var(--text-muted)',
+            backgroundColor: 'var(--bg-overlay)',
+            padding: '1px 6px',
+            borderRadius: '4px',
+          }}
+        >
+          {badgeLabel}
         </span>
       )}
     </Link>
