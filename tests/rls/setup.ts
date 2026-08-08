@@ -92,6 +92,8 @@ export const FORM_SUB_A_UUID = '00000000-0000-0000-0000-000000000a03'
 export const FORM_SUB_B_UUID = '00000000-0000-0000-0000-000000000b03'
 export const INVITE_A_UUID   = '00000000-0000-0000-0000-000000000a04'
 export const INVITE_B_UUID   = '00000000-0000-0000-0000-000000000b04'
+export const STUDIO_IMG_A_UUID = '00000000-0000-0000-0000-000000000a05'
+export const STUDIO_IMG_B_UUID = '00000000-0000-0000-0000-000000000b05'
 
 // Text IDs for agents and leads
 export const AGENT_A_ID = 'agent-rls-test-a'
@@ -288,11 +290,45 @@ export async function createFixtures(): Promise<{
     { onConflict: 'id' }
   )
 
+  // 10. Create studio_images (una pieza por tenant). Sin property_id: el
+  //     aislamiento que se prueba es por tenant_id y no depende de la propiedad.
+  await adminClient.from('studio_images').upsert(
+    [
+      {
+        id: STUDIO_IMG_A_UUID,
+        tenant_id: TENANT_A_ID,
+        recipe: 'new_listing',
+        form_json: { recipe: 'new_listing', address: '1 Test St', price: 100000 },
+        source_mode: 'generate',
+        style: 'editorial',
+        aspect: '4:5',
+        status: 'ready',
+      },
+      {
+        id: STUDIO_IMG_B_UUID,
+        tenant_id: TENANT_B_ID,
+        recipe: 'sold',
+        form_json: { recipe: 'sold', address: '2 Test Ave', show_price: false },
+        source_mode: 'photo',
+        style: 'warm_home',
+        aspect: '1:1',
+        status: 'ready',
+      },
+    ],
+    { onConflict: 'id' }
+  )
+
   return { userAId, userBId, superAdminId }
 }
 
 // Call once after all RLS tests — cleans up in reverse FK order
 export async function cleanupFixtures() {
+  // studio_images (FK a tenants/agents/properties; delete antes que ellos)
+  await adminClient
+    .from('studio_images')
+    .delete()
+    .in('tenant_id', [TENANT_A_ID, TENANT_B_ID])
+
   // invitations (FK to tenants + agents; delete before them)
   await adminClient
     .from('invitations')

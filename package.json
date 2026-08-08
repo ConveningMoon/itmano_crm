@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:unit": "vitest run tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/carousels tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business tests/sources/page-link.test.ts",
+    "test:unit": "vitest run tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/carousels tests/studio tests/access tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business tests/sources/page-link.test.ts",
     "test:rls": "vitest run tests/rls",
     "test:scoring": "vitest run tests/scoring",
     "test:auth": "vitest run tests/auth",

@@ -1,0 +1,124 @@
+import { z } from 'zod'
+import { STYLE_KEYS } from './styles'
+import type { ActionResult } from './types'
+
+// Validación por receta, PURA y sin dependencias de servidor: corre antes de
+// gastar un token. Es el contrato que impide que una generación empiece con
+// datos incompletos — el requisito central del Estudio: el formulario correcto
+// para cada caso, completo, para evitar imprecisiones y desgaste de tokens.
+
+const HEX  = /^#[0-9a-fA-F]{6}$/
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+
+// Campos comunes a las cinco recetas.
+const common = {
+  source_mode:    z.enum(['generate', 'photo']).default('generate'),
+  scene_notes:    z.string().trim().max(500).optional(),
+  style:          z.enum(STYLE_KEYS as [string, ...string[]]),
+  palette:        z.array(z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')).max(4).default([]),
+  aspect:         z.enum(['1:1', '4:5', '9:16']),
+  has_reference:  z.boolean().default(false),
+  reference_role: z.enum(['subject', 'style', 'composition']).optional(),
+  property_id:    z.string().uuid().optional(),
+  // El teléfono NO es un campo del formulario: sale de agents.phone del agente
+  // elegido. Pedirlo a mano sería retranscribir un dato que el CRM ya tiene,
+  // que es exactamente lo que el selector de propiedad viene a evitar.
+  agent_id:       z.string().min(1).optional(),
+}
+
+const money = z.number({ error: 'La cifra es obligatoria' }).positive('La cifra debe ser mayor que cero')
+
+// El mensaje del `.regex()` solo se emite si el valor ES un string: un campo
+// ausente produce el error de tipo base ("expected string, received undefined"),
+// que no le dice nada al usuario. Por eso el mensaje va también en el tipo.
+const required = (message: string) => z.string({ error: message })
+
+const openHouse = z.object({
+  ...common,
+  recipe:       z.literal('open_house'),
+  address:      required('La dirección es obligatoria').trim().min(3, 'La dirección es obligatoria'),
+  date:         required('La fecha es obligatoria').regex(DATE, 'La fecha es obligatoria'),
+  time_start:   required('La hora de inicio es obligatoria').regex(TIME, 'La hora de inicio es obligatoria'),
+  time_end:     required('La hora de cierre es obligatoria').regex(TIME, 'La hora de cierre es obligatoria'),
+  refreshments: z.boolean().default(false),
+})
+
+const newListing = z.object({
+  ...common,
+  recipe:     z.literal('new_listing'),
+  address:    required('La dirección es obligatoria').trim().min(3, 'La dirección es obligatoria'),
+  price:      money,
+  bedrooms:   z.number().int().nonnegative().optional(),
+  bathrooms:  z.number().nonnegative().optional(),
+  sqft:       z.number().int().positive().optional(),
+  highlights: z.array(z.string().trim().min(1).max(40)).max(3).default([]),
+})
+
+const sold = z.object({
+  ...common,
+  recipe:     z.literal('sold'),
+  address:    required('La dirección o la zona es obligatoria').trim().min(3, 'La dirección o la zona es obligatoria'),
+  show_price: z.boolean().default(false),
+  price:      money.optional(),
+  note:       z.string().trim().max(60).optional(),
+})
+
+const event = z.object({
+  ...common,
+  recipe:     z.literal('event'),
+  title:      required('El título es obligatorio').trim().min(3, 'El título es obligatorio'),
+  event_type: z.enum(['seminario', 'webinar', 'casa_abierta_comunitaria', 'otro']).default('otro'),
+  date:       required('La fecha es obligatoria').regex(DATE, 'La fecha es obligatoria'),
+  time_start: required('La hora es obligatoria').regex(TIME, 'La hora es obligatoria'),
+  venue:      required('El lugar es obligatorio').trim().min(2, 'El lugar es obligatorio'),
+  is_free:    z.boolean().default(true),
+  price:      money.optional(),
+  signup:     z.string().trim().max(120).optional(),
+})
+
+const openPrompt = z.object({
+  ...common,
+  recipe: z.literal('open_prompt'),
+  prompt: required('El prompt es obligatorio').trim().min(3, 'El prompt es obligatorio').max(800),
+})
+
+// Las recetas de casa son las únicas donde "usar la foto tal cual" tiene sentido.
+const PHOTO_RECIPES = ['open_house', 'new_listing', 'sold']
+
+const schema = z
+  .discriminatedUnion('recipe', [openHouse, newListing, sold, event, openPrompt])
+  .superRefine((v, ctx) => {
+    // Una imagen adjunta sin rol declarado es un deseo, no una instrucción: el
+    // modelo no puede saber si es la casa, el clima o el encuadre.
+    if (v.has_reference && !v.reference_role) {
+      ctx.addIssue({ code: 'custom', path: ['reference_role'], message: 'Declara qué es la imagen de referencia' })
+    }
+    if (v.source_mode === 'photo') {
+      if (!PHOTO_RECIPES.includes(v.recipe)) {
+        ctx.addIssue({ code: 'custom', path: ['source_mode'], message: 'Usar la foto solo aplica a las recetas de casa' })
+      }
+      if (!v.property_id) {
+        ctx.addIssue({ code: 'custom', path: ['property_id'], message: 'Elige la propiedad de la que sale la foto' })
+      }
+    }
+    if (v.recipe === 'sold' && v.show_price && v.price === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Indica la cifra o desactiva mostrarla' })
+    }
+    if (v.recipe === 'event' && !v.is_free && v.price === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Indica la cifra o marca el evento como gratuito' })
+    }
+  })
+
+export type StudioForm = z.infer<typeof schema>
+
+/**
+ * Valida el formulario. Devuelve el primer mensaje legible en vez de un árbol
+ * de errores: la UI marca un campo a la vez y el mensaje va tal cual al usuario.
+ */
+export function parseStudioForm(input: unknown): ActionResult<StudioForm> {
+  const r = schema.safeParse(input)
+  if (r.success) return { ok: true, data: r.data }
+  const first = r.error.issues[0]
+  return { ok: false, error: first?.message ?? 'El formulario tiene datos inválidos' }
+}

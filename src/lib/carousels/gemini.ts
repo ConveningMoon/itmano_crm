@@ -67,6 +67,10 @@ function friendlyError(status: number, body: string): string {
 
 // ¿El error es "modelo no disponible" → conviene probar el siguiente candidato?
 function isModelUnavailable(status: number, body: string): boolean {
+  // Un modelo que EXISTE pero rechaza la imagen de entrada no es "no
+  // disponible": saltar al siguiente candidato produciría una imagen que ignora
+  // la referencia en silencio, que es peor que un error visible.
+  if (/inline_data|inlineData|image input|multimodal input/i.test(body)) return false
   return status === 404 || /no longer available|not\s*found|is not supported|unknown name|does not exist/i.test(body)
 }
 
@@ -202,13 +206,24 @@ export async function researchTrends(brand: CarouselBrandProfile, recentTopics: 
 }
 
 // ── Generación de imagen (Nano Banana) ───────────────────────────────────────
-// Devuelve el buffer + el modelo que sirvió (para el ledger de costos). Reintenta
-// una vez ante 429 para reducir fallos por throttle sin desperdiciar tokens.
-export async function generateImage(prompt: string): Promise<{ data: Buffer; model: string }> {
+// Devuelve el buffer + el modelo que sirvió (para el ledger de costos). Dos
+// reintentos ante un transitorio (429 de throttle o 5xx de capacidad de Google).
+// `reference` adjunta una imagen de entrada (edición / estilo / composición).
+// El Estudio la usa; los carruseles llaman sin ella y no se enteran del cambio.
+export async function generateImage(
+  prompt: string,
+  reference?: { data: Buffer; mimeType: string },
+): Promise<{ data: Buffer; model: string }> {
+  const inputParts: Array<Record<string, unknown>> = [{ text: prompt }]
+  if (reference) {
+    inputParts.unshift({ inline_data: { mime_type: reference.mimeType, data: reference.data.toString('base64') } })
+  }
+
   const { json, model } = await callWithFallback(
     IMAGE_MODELS, cachedImageModel,
-    { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
-    { retriesTransient: 2, timeoutMs: 35000 },
+    { contents: [{ role: 'user', parts: inputParts }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
+    // Con referencia el modelo tarda más: la entrada es una imagen completa.
+    { retriesTransient: 2, timeoutMs: reference ? 45000 : 35000 },
   )
   cachedImageModel = model
 
