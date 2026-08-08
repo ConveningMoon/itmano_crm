@@ -97,7 +97,9 @@ Los límites de plan (leads, emails, propiedades) son **contractuales**; solo el
 
 ## Estado actual
 
-En producción en `https://app.itmano.com`. El CRM está completo y operando: scoring automático, pipeline con Realtime, gestión de leads con importación CSV/XLSX, secuencias de email con Resend, módulo de propiedades, canales de adquisición, analytics, notificaciones (bell + Telegram), hub de super admin e integraciones de IA.
+En producción en `https://app.itmano.com`. El CRM está completo y operando: scoring automático, pipeline de leads por etapas, gestión de leads con importación CSV/XLSX, secuencias de email con Resend, módulo de propiedades, canales de adquisición, analytics, notificaciones (bell + Telegram), hub de super admin e integraciones de IA.
+
+**No hay Realtime de Supabase en el proyecto.** La publicación `supabase_realtime` no tiene ninguna tabla y no existe una sola suscripción en `src/`. La UI se refresca con server actions + `router.refresh()`, o releyendo desde el cliente cuando hace falta seguir un proceso largo (el motor de carruseles). Si algún día se añade Realtime hay que habilitar la tabla en la publicación por migración — no basta con suscribirse desde el cliente.
 
 **Fase activa — comercialización.** Landing público, páginas legales y `/planes` ya están construidos. **Billing con Paddle está integrado en código** (checkout, webhook en `api/webhooks/paddle`, cron de ciclo de vida en `api/cron/billing-lifecycle`, degradación y restauración por estado de suscripción), pero **todavía no hay ninguna suscripción real transaccionando por Paddle** — las suscripciones vivas hoy se administran a mano.
 
@@ -134,7 +136,7 @@ Esto preserva el diferenciador (un CRM que gestiona equipos) y deja abierta la p
 - **Los Server Components hacen fetch.** Los Client Components reciben props.
 - El acceso a datos vive en `src/lib/data/*.ts`: funciones de servidor tipadas. Las páginas llaman a estas, nunca a Supabase directo.
 - Las mutaciones van por **Server Actions** (preferido) o por route handlers en `src/app/api/*` (solo cuando llama un sistema externo: webhooks, intake, crons).
-- **Nada de queries de Supabase desde el cliente** para datos de aplicación. En cliente solo se permite: estado de auth y suscripciones de Realtime.
+- **Nada de queries de Supabase desde el cliente** para datos de aplicación. En cliente solo se permite el estado de auth (y suscripciones de Realtime si algún día se habilitan — hoy no hay ninguna). Para seguir un proceso largo, el cliente vuelve a llamar a la server action de lectura; no abre un query propio.
 
 ---
 

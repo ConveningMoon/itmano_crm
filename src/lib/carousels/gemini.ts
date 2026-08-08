@@ -9,8 +9,9 @@ import type { CarouselBrandProfile, ResearchResult, ResearchTrend } from './type
 // Robustez: los IDs de modelo de Google cambian/retiran seguido (p. ej.
 // gemini-2.5-flash quedó "no longer available to new users"). Por eso cada paso
 // prueba una LISTA de modelos candidatos y, ante un 404 / modelo retirado, pasa
-// al siguiente — sin desperdiciar la request. Errores no-404 (key inválida,
-// cuota, request inválida) se propagan de inmediato sin probar más modelos.
+// al siguiente — sin desperdiciar la request. Los errores transitorios (429 y
+// 5xx) se reintentan sobre el mismo modelo con backoff. Los definitivos (key
+// inválida, cuota agotada, request inválida) se propagan de inmediato.
 // Los defaults se pueden sobreescribir por env (GEMINI_RESEARCH_MODEL /
 // GEMINI_IMAGE_MODEL) sin re-deploy.
 
@@ -74,7 +75,8 @@ function isModelUnavailable(status: number, body: string): boolean {
 }
 
 // POST genérico con fallback de modelos. Devuelve el JSON + el modelo que sirvió.
-// `retries429`: reintentos con backoff ante un 429 (throttle) del MISMO modelo.
+// `retriesTransient`: reintentos con backoff ante un error transitorio (429 de
+// throttle o 5xx de capacidad de Google) del MISMO modelo.
 // `timeoutMs`: corta el fetch si Gemini se cuelga/tarda de más — CLAVE para que
 // la función serverless no muera con 504 ("An unexpected response..."). Un
 // timeout se trata como "modelo no disponible" → se prueba el siguiente
@@ -83,9 +85,9 @@ async function callWithFallback(
   models: string[],
   cached: string | null,
   body: unknown,
-  opts: { retries429?: number; timeoutMs?: number } = {},
+  opts: { retriesTransient?: number; timeoutMs?: number } = {},
 ): Promise<{ json: Record<string, unknown>; model: string }> {
-  const { retries429 = 0, timeoutMs = 30000 } = opts
+  const { retriesTransient = 0, timeoutMs = 30000 } = opts
   const order = cached ? dedupe([cached, ...models]) : models
   if (order.length === 0) throw new GeminiError('No hay modelos de Gemini configurados')
 
@@ -116,7 +118,12 @@ async function callWithFallback(
       if (res.ok) return { json: await res.json(), model }
 
       const bodyText = (await res.text()).slice(0, 300)
-      if (res.status === 429 && attempt < retries429) {
+      // Transitorios: 429 (throttle nuestro) y 5xx (capacidad del lado de
+      // Google). El mismo modelo suele responder bien un momento después, así
+      // que se reintenta en vez de darlo por perdido. Un 503 "This model is
+      // currently experiencing high demand" apareció pidiendo tres imágenes a
+      // la vez, y antes ese caso se trataba como error fatal.
+      if ((res.status === 429 || res.status >= 500) && attempt < retriesTransient) {
         await sleep(2500 * (attempt + 1)) // backoff: 2.5s, 5s…
         continue // reintentar el mismo modelo
       }
@@ -157,7 +164,7 @@ export async function researchTrends(brand: CarouselBrandProfile, recentTopics: 
   const { json, model } = await callWithFallback(
     RESEARCH_MODELS, cachedResearchModel,
     { contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0.9 } },
-    { timeoutMs: 40000 },
+    { retriesTransient: 1, timeoutMs: 40000 },
   )
   cachedResearchModel = model
 
@@ -199,8 +206,8 @@ export async function researchTrends(brand: CarouselBrandProfile, recentTopics: 
 }
 
 // ── Generación de imagen (Nano Banana) ───────────────────────────────────────
-// Devuelve el buffer + el modelo que sirvió (para el ledger de costos). Reintenta
-// una vez ante 429 para reducir fallos por throttle sin desperdiciar tokens.
+// Devuelve el buffer + el modelo que sirvió (para el ledger de costos). Dos
+// reintentos ante un transitorio (429 de throttle o 5xx de capacidad de Google).
 // `reference` adjunta una imagen de entrada (edición / estilo / composición).
 // El Estudio la usa; los carruseles llaman sin ella y no se enteran del cambio.
 export async function generateImage(
@@ -216,7 +223,7 @@ export async function generateImage(
     IMAGE_MODELS, cachedImageModel,
     { contents: [{ role: 'user', parts: inputParts }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } },
     // Con referencia el modelo tarda más: la entrada es una imagen completa.
-    { retries429: 1, timeoutMs: reference ? 45000 : 35000 },
+    { retriesTransient: 2, timeoutMs: reference ? 45000 : 35000 },
   )
   cachedImageModel = model
 
