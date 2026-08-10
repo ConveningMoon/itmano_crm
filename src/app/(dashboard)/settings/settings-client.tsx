@@ -960,23 +960,30 @@ function AgentSignatureRow({ agent, canEdit }: { agent: Agent; canEdit: boolean 
 }
 
 function EmailSettingsSection({ agents, canManage, myAgentId }: { agents: Agent[]; canManage: boolean; myAgentId: string | null }) {
+  // El agente sólo ve —y edita— su propia firma. Las de sus compañeros no eran
+  // editables (requireSelfOrManager), pero seguían a la vista en solo lectura:
+  // es texto que escribió otra persona y no aporta nada a su configuración.
+  const visible = canManage ? agents : agents.filter(a => a.id === myAgentId)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={CARD}>
         <div style={CARD_HEADER}>
           <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Firma de correo</span>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            La firma de cada agente se agrega automáticamente al final de todos los correos que se envían a sus
-            leads (secuencias, hitos de compra y envíos puntuales). Escríbela en tono personal, como cerrarías
-            un correo a un conocido.
+            {canManage
+              ? 'La firma de cada agente se agrega automáticamente al final de todos los correos que se envían a sus leads'
+              : 'Tu firma se agrega automáticamente al final de todos los correos que se envían a tus leads'}
+            {' '}(secuencias, hitos de compra y envíos puntuales). Escríbela en tono personal, como cerrarías un
+            correo a un conocido.
           </div>
         </div>
-        {agents.length === 0 ? (
+        {visible.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
             No hay agentes todavía.
           </div>
         ) : (
-          agents.map(agent => (
+          visible.map(agent => (
             <AgentSignatureRow
               key={agent.id}
               agent={agent}
@@ -1410,10 +1417,13 @@ type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'scoring' | 'ia' | 'cuen
 // super_admin. Dejarla visible en modo lectura era peor que quitarla: una sección
 // dentro de "Configuración" que muestra inputs deshabilitados invita a intentar
 // tocarlos y genera la pregunta "¿por qué no puedo cambiar esto?".
+// "Tu negocio" describe al equipo (comisión, rangos de presupuesto, zonas) y
+// sólo lo escriben owner/super — misma razón que arriba: una pestaña de solo
+// lectura sobra, y para el agente el dato tampoco es suyo.
 function tabsForRole(role: TenantRole): Array<{ value: Tab; label: string }> {
   return [
     { value: 'perfil',   label: 'Perfil del equipo' },
-    { value: 'negocio',  label: 'Tu negocio' },
+    ...(role !== 'agent' ? [{ value: 'negocio' as Tab, label: 'Tu negocio' }] : []),
     { value: 'agentes',  label: 'Agentes' },
     { value: 'email',    label: 'Email' },
     ...(role === 'super_admin' ? [{ value: 'scoring' as Tab, label: 'Scoring' }] : []),
