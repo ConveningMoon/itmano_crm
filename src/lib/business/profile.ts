@@ -194,6 +194,25 @@ export function profileForAgent(p: BusinessProfile, agent: AgentCommission | nul
   }
 }
 
+/**
+ * "10% compra · 10% venta" — cómo se lee una comisión, sea del tenant o de un
+ * agente (`BusinessProfile` cumple `AgentCommission` estructuralmente).
+ *
+ * null cuando no hay modelo: sin él los números no significan nada, y es
+ * exactamente el caso "hereda" de un agente. El lado que la agencia no trabaja
+ * se omite en vez de escribirse como cero — vacío es "no opero aquí".
+ */
+export function describeCommission(c: AgentCommission, currency: Currency | null): string | null {
+  if (!c.commissionModel) return null
+  const lado = (v: number | null, etiqueta: string) => {
+    if (v === null) return null
+    const monto = c.commissionModel === 'percentage' ? `${v}%` : formatMoney(v, currency)
+    return `${monto} ${etiqueta}`
+  }
+  const partes = [lado(c.commissionBuy, 'compra'), lado(c.commissionSell, 'venta')].filter(Boolean)
+  return partes.length > 0 ? partes.join(' · ') : null
+}
+
 /** Qué le falta al perfil para ser útil. Vacío = completo. */
 export function missingFields(p: BusinessProfile): string[] {
   const faltan: string[] = []
