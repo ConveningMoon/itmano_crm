@@ -14,12 +14,11 @@ import { buildIntegrationPrompt, getFitCatalog } from '@/lib/services/integratio
 import { getBusinessProfile } from '@/lib/data/business-profile'
 
 // ─── Página alojada del canal (constructor — migración 060) ───────────────────
-// Guarda acquisition_channels.hosted_page. Escriben owner/super_admin: la
-// página alojada sigue con `requireWriteAccess`, que bloquea al rol 'agent'.
-// Un agente ya crea y administra SUS fuentes (requireChannelWriteAccess), pero
-// construir la landing es otra cosa — sube imágenes y quema presupuesto de IA
-// del tenant. El slug de la URL es (tenants.slug, channels.slug) — único por
-// construcción.
+// Guarda acquisition_channels.hosted_page. La escribe quien puede escribir la
+// fuente: owner, super_admin, y el agente sobre las suyas — una fuente sin su
+// landing es media fuente, y el agente que la crea es quien sabe qué material
+// está entregando. El slug de la URL es (tenants.slug, channels.slug) — único
+// por construcción.
 
 export async function updateHostedPage(
   channelId: string,
@@ -27,7 +26,7 @@ export async function updateHostedPage(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const parsed = HostedPageConfigSchema.safeParse(rawConfig)
@@ -38,11 +37,14 @@ export async function updateHostedPage(
   const supabase = createAdminClient()
   let q = supabase
     .from('acquisition_channels')
-    .select('id, channel_type, slug, tenants!inner(slug)')
+    .select('id, tenant_id, agent_id, channel_type, slug, tenants!inner(slug)')
     .eq('id', channelId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
   const { data: channel } = await q.maybeSingle()
   if (!channel) return { ok: false, error: 'Canal no encontrado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const notMine = assertCanWriteChannel(ctx, channel as any)
+  if (notMine) return notMine
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!['lead_magnet', 'event', 'contact_form'].includes((channel as any).channel_type)) {
     return { ok: false, error: 'Este tipo de canal no tiene página alojada.' }
@@ -116,7 +118,10 @@ export async function uploadHostedImage(
   formData: FormData,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  const denied = requireWriteAccess(ctx)
+  // Las imágenes van a `<tenant>/hosted/`, no a una carpeta por canal: el
+  // permiso que aplica es el de escribir fuentes, y el aislamiento entre
+  // tenants lo da el prefijo de la ruta.
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
 
@@ -156,7 +161,7 @@ export async function deleteHostedImages(
   urls: string[],
 ): Promise<{ ok: true }> {
   const ctx = await getCurrentTenantContext()
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return { ok: true } // sin permiso de escritura: no-op silencioso
   if (!ctx.tenant_id) return { ok: true }
 

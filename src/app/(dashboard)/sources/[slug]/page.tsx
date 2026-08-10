@@ -190,7 +190,9 @@ export default async function ChannelDetailPage({
               channelSlug={channel.slug}
               initial={hostedConfig}
               managedByItmano={pageManaged}
-              canEdit={ctx.role !== 'agent'}
+              // Si esta página resolvió, la fuente es suya: getChannelBySlug
+              // filtra por scope.agentId y un canal ajeno cae en notFound().
+              canEdit
               tenantName={tenantName}
               agentName={channel.agentName}
             />
