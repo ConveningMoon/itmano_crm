@@ -218,11 +218,15 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
       <div style={CARD}>
         <div style={HEAD}>
           <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Comisión
+            Comisión por defecto
           </span>
           <div style={HINT}>
             Lo que la agencia factura por operación cerrada. Sirve para ordenar por valor
             esperado: dos leads igual de buenos no valen lo mismo si uno compra el doble.
+            <br />
+            Es el valor por defecto, no una regla: se aplica a los agentes que no hayan
+            declarado la suya. Cada agente ajusta la propia en Ajustes → Agentes, y esa
+            gana para sus leads.
           </div>
         </div>
         <div style={BODY}>

@@ -4,8 +4,8 @@ import { revalidatePath } from 'next/cache'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { requireWriteAccess } from '@/lib/auth/guards'
+import { getCurrentTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
+import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { createPlatformRequest } from '@/lib/services/platform-requests'
@@ -14,9 +14,11 @@ import { buildIntegrationPrompt, getFitCatalog } from '@/lib/services/integratio
 import { getBusinessProfile } from '@/lib/data/business-profile'
 
 // ─── Página alojada del canal (constructor — migración 060) ───────────────────
-// Guarda acquisition_channels.hosted_page. Escriben owner/super_admin
-// (requireWriteAccess bloquea rol 'agent', igual que el resto de mutaciones de
-// canales). El slug de la URL es (tenants.slug, channels.slug) — único por
+// Guarda acquisition_channels.hosted_page. Escriben owner/super_admin: la
+// página alojada sigue con `requireWriteAccess`, que bloquea al rol 'agent'.
+// Un agente ya crea y administra SUS fuentes (requireChannelWriteAccess), pero
+// construir la landing es otra cosa — sube imágenes y quema presupuesto de IA
+// del tenant. El slug de la URL es (tenants.slug, channels.slug) — único por
 // construcción.
 
 export async function updateHostedPage(
@@ -461,6 +463,33 @@ async function resolveChannelAgentId(
   return id
 }
 
+// El propietario que se guarda de verdad. Para el rol 'agent' es siempre él
+// mismo: no crea fuentes de "Toda la agencia" ni a nombre de un colega. Se
+// resuelve en el servidor porque el <select> deshabilitado de la UI es cortesía,
+// no una defensa — el cliente puede mandar cualquier agentId.
+function ownerAgentFor(ctx: TenantContext, requested: string | null | undefined): string | null | undefined {
+  return ctx.role === 'agent' ? ctx.agent_id : requested
+}
+
+// Carga la fuente y comprueba que este usuario puede escribirla. El filtro por
+// tenant se mantiene en el query para que una fuente de otro tenant siga siendo
+// "no encontrada" en vez de "no tienes permiso"; el guard añade el dueño.
+async function loadWritableChannel(
+  supabase: ReturnType<typeof createAdminClient>,
+  ctx: TenantContext,
+  channelId: string,
+): Promise<{ tenant_id: string; agent_id: string | null } | { error: string }> {
+  let q = supabase.from('acquisition_channels').select('tenant_id, agent_id').eq('id', channelId)
+  if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+  const { data } = await q.maybeSingle()
+  if (!data) return { error: 'Fuente no encontrada' }
+
+  const ch = data as { tenant_id: string; agent_id: string | null }
+  const denied = assertCanWriteChannel(ctx, ch)
+  if (denied) return { error: denied.error }
+  return ch
+}
+
 function genPublicId(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let s = ''
@@ -549,7 +578,7 @@ export async function createLeadMagnet(fields: {
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
@@ -557,7 +586,7 @@ export async function createLeadMagnet(fields: {
 
   const supabase  = createAdminClient()
 
-  const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
+  const agent = await resolveChannelAgentId(supabase, tenant_id, ownerAgentFor(ctx, fields.agentId))
   if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
 
   const publicId  = genPublicId()
@@ -638,21 +667,20 @@ export async function updateChannel(
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const supabase = createAdminClient()
 
-  // agentId provided → validate it belongs to the channel's tenant. Resolve the
-  // channel's tenant first (super_admin has no ctx.tenant_id).
+  const channel = await loadWritableChannel(supabase, ctx, channelId)
+  if ('error' in channel) return { ok: false, error: channel.error }
+
+  // agentId provided → validate it belongs to the channel's tenant. Un agente no
+  // puede reasignar la fuente: ownerAgentFor la deja en su nombre, así que ni la
+  // regala ni la convierte en "Toda la agencia".
   const update: Record<string, unknown> = { name: fields.name.trim(), active: fields.active }
   if (fields.agentId !== undefined) {
-    let chQ = supabase.from('acquisition_channels').select('tenant_id').eq('id', channelId)
-    if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
-    const { data: chRow } = await chQ.maybeSingle()
-    if (!chRow) return { ok: false, error: 'Fuente no encontrada' }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const agent = await resolveChannelAgentId(supabase, (chRow as any).tenant_id, fields.agentId)
+    const agent = await resolveChannelAgentId(supabase, channel.tenant_id, ownerAgentFor(ctx, fields.agentId))
     if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
     update.agent_id = agent
   }
@@ -697,10 +725,13 @@ export async function archiveChannel(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const supabase = createAdminClient()
+
+  const channel = await loadWritableChannel(supabase, ctx, channelId)
+  if ('error' in channel) return { ok: false, error: channel.error }
 
   // Archiving is silent — no notification. Notifications fire only on creation
   // and on permanent deletion (see deleteChannelPermanently).
@@ -788,10 +819,14 @@ export async function updateChannelSequence(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const supabase = createAdminClient()
+
+  const channel = await loadWritableChannel(supabase, ctx, channelId)
+  if ('error' in channel) return { ok: false, error: channel.error }
+
   let q = supabase
     .from('acquisition_channels')
     .update({ email_sequence_id: emailSequenceId })
@@ -830,7 +865,7 @@ export async function createEvent(fields: {
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
@@ -838,7 +873,7 @@ export async function createEvent(fields: {
 
   const supabase  = createAdminClient()
 
-  const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
+  const agent = await resolveChannelAgentId(supabase, tenant_id, ownerAgentFor(ctx, fields.agentId))
   if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
 
   const publicId  = genPublicId()
@@ -909,7 +944,7 @@ export async function createContactForm(fields: {
 
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const tenant_id = ctx.tenant_id ?? fields.tenantId ?? null
@@ -917,7 +952,7 @@ export async function createContactForm(fields: {
 
   const supabase = createAdminClient()
 
-  const agent = await resolveChannelAgentId(supabase, tenant_id, fields.agentId)
+  const agent = await resolveChannelAgentId(supabase, tenant_id, ownerAgentFor(ctx, fields.agentId))
   if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
 
   const publicId      = genPublicId()
@@ -971,14 +1006,14 @@ export async function getIntegrationInfo(
   // Puede escribir (backfill perezoso del secret de contact_form más abajo),
   // igual que updateChannel/archiveChannel/regenerateContactSecret en este
   // mismo archivo — mismo guard, por consistencia y porque la global
-  // constraint de este plan exige requireWriteAccess en toda mutación.
-  const denied = requireWriteAccess(ctx)
+  // constraint de este plan exige un guard de escritura en toda mutación.
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const supabase = createAdminClient()
   let chQ = supabase
     .from('acquisition_channels')
-    .select('id, tenant_id, channel_type, name, public_id, metadata')
+    .select('id, tenant_id, agent_id, channel_type, name, public_id, metadata')
     .eq('id', channelId)
   if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
   const { data: channel } = await chQ.maybeSingle()
@@ -986,6 +1021,8 @@ export async function getIntegrationInfo(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ch = channel as any
+  const notMine = assertCanWriteChannel(ctx, ch)
+  if (notMine) return notMine
   const channelType = ch.channel_type as string
   if (!['lead_magnet', 'event', 'contact_form'].includes(channelType)) {
     return { ok: false, error: 'Este tipo de fuente no tiene opciones de integración.' }
@@ -1014,13 +1051,13 @@ export async function regenerateContactSecret(
 ): Promise<{ ok: true; prompt: string } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const supabase = createAdminClient()
   let chQ = supabase
     .from('acquisition_channels')
-    .select('id, tenant_id, channel_type, name, public_id, metadata')
+    .select('id, tenant_id, agent_id, channel_type, name, public_id, metadata')
     .eq('id', channelId)
     .eq('channel_type', 'contact_form')
   if (ctx.tenant_id) chQ = chQ.eq('tenant_id', ctx.tenant_id)
@@ -1029,6 +1066,8 @@ export async function regenerateContactSecret(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ch = channel as any
+  const notMine = assertCanWriteChannel(ctx, ch)
+  if (notMine) return notMine
   const contactSecret = generateContactSecret()
   const { error } = await supabase
     .from('acquisition_channels')

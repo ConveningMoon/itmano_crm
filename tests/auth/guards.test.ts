@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { requireWriteAccess, assertCanWriteLead, assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
+import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel, assertCanWriteLead, assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 
 // ─── Context factories ────────────────────────────────────────────────────────
@@ -34,6 +34,67 @@ describe('requireWriteAccess', () => {
 
   it('super_admin is allowed', () => {
     expect(requireWriteAccess(superAdmin)).toBeNull()
+  })
+})
+
+// ─── requireChannelWriteAccess (fuentes: el agente SÍ escribe) ────────────────
+
+describe('requireChannelWriteAccess', () => {
+  it('agent is allowed — a diferencia del resto de recursos compartidos', () => {
+    expect(requireChannelWriteAccess(agentA1)).toBeNull()
+    // El contraste con requireWriteAccess es el punto de este guard.
+    expect(requireWriteAccess(agentA1)).not.toBeNull()
+  })
+
+  it('agent_owner and super_admin are allowed', () => {
+    expect(requireChannelWriteAccess(ownerA)).toBeNull()
+    expect(requireChannelWriteAccess(superAdmin)).toBeNull()
+  })
+
+  it('an agent with no linked agents row is denied', () => {
+    // Provisionamiento inválido: sin agent_id la fuente nacería como "Toda la
+    // agencia", que es justo lo contrario de la regla.
+    const huerfano: TenantContext = { ...agentA1, agent_id: null }
+    expect(requireChannelWriteAccess(huerfano)).not.toBeNull()
+  })
+})
+
+// ─── assertCanWriteChannel (fuente propia, nunca la de otro) ──────────────────
+
+describe('assertCanWriteChannel', () => {
+  const canalDeA1     = { tenant_id: 'tenant-a', agent_id: 'agent-a1' }
+  const canalDeA2     = { tenant_id: 'tenant-a', agent_id: 'agent-a2' }
+  const canalDeAgencia = { tenant_id: 'tenant-a', agent_id: null }
+  const canalTenantB  = { tenant_id: 'tenant-b', agent_id: 'agent-b1' }
+
+  it('super_admin can write any channel, any tenant', () => {
+    expect(assertCanWriteChannel(superAdmin, canalDeA1)).toBeNull()
+    expect(assertCanWriteChannel(superAdmin, canalTenantB)).toBeNull()
+    expect(assertCanWriteChannel(superAdmin, canalDeAgencia)).toBeNull()
+  })
+
+  it('agent_owner can write any channel in their tenant, including agency-wide', () => {
+    expect(assertCanWriteChannel(ownerA, canalDeA1)).toBeNull()
+    expect(assertCanWriteChannel(ownerA, canalDeA2)).toBeNull()
+    expect(assertCanWriteChannel(ownerA, canalDeAgencia)).toBeNull()
+  })
+
+  it('agent_owner CANNOT write a channel in another tenant', () => {
+    expect(assertCanWriteChannel(ownerA, canalTenantB)?.error).toBe('No tienes permiso sobre esta fuente')
+  })
+
+  it('agent can write only their own channel', () => {
+    expect(assertCanWriteChannel(agentA1, canalDeA1)).toBeNull()
+    expect(assertCanWriteChannel(agentA1, canalDeA2)).not.toBeNull()
+  })
+
+  it('agent CANNOT write an agency-wide channel — no es de nadie en particular', () => {
+    expect(assertCanWriteChannel(agentA1, canalDeAgencia)).not.toBeNull()
+  })
+
+  it('super_admin acting as a tenant is still super_admin (no tenant scoping)', () => {
+    expect(assertCanWriteChannel(superActingAsA, canalDeAgencia)).toBeNull()
+    expect(assertCanWriteChannel(superActingAsA, canalTenantB)).toBeNull()
   })
 })
 

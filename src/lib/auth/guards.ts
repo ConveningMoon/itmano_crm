@@ -34,6 +34,55 @@ export function requireWriteAccess(ctx: TenantContext): AuthDenial | null {
 }
 
 /**
+ * Gate de escritura para FUENTES de adquisición.
+ *
+ * A diferencia de `requireWriteAccess`, admite al rol 'agent': un agente crea
+ * sus propias fuentes y gestiona las que le pertenecen. Lo que no puede es
+ * tocar la de un colega ni una de "Toda la agencia" — de eso se ocupa
+ * `assertCanWriteChannel`, y en la creación, forzar el propietario a él mismo.
+ *
+ * @returns an AuthDenial to return from the action, or null if allowed.
+ */
+export function requireChannelWriteAccess(ctx: TenantContext): AuthDenial | null {
+  // getCurrentTenantContext ya lanza si un 'agent' no tiene fila de agente, así
+  // que esto no debería ocurrir; sin la comprobación, un agent_id null haría que
+  // la fuente naciera como "Toda la agencia" — justo lo contrario de la regla.
+  if (ctx.role === 'agent' && !ctx.agent_id) {
+    return { ok: false, error: 'Tu cuenta no está vinculada a un agente.' }
+  }
+  return null
+}
+
+/**
+ * Channel-level write gate.
+ *   - super_admin → any channel, any tenant.
+ *   - agent_owner → any channel within their tenant.
+ *   - agent       → only channels attributed to them.
+ *
+ * Una fuente de "Toda la agencia" tiene `agent_id` null y por lo tanto queda
+ * fuera del alcance de cualquier agente: no es de nadie en particular, y sólo
+ * el propietario del equipo (o ITMANO) la administra.
+ *
+ * @returns an AuthDenial to return from the action, or null if allowed.
+ */
+export function assertCanWriteChannel(
+  ctx: TenantContext,
+  channel: { tenant_id: string; agent_id: string | null },
+): AuthDenial | null {
+  if (ctx.role === 'super_admin') return null
+
+  if (channel.tenant_id !== ctx.tenant_id) {
+    return { ok: false, error: 'No tienes permiso sobre esta fuente' }
+  }
+
+  if (ctx.role === 'agent' && channel.agent_id !== ctx.agent_id) {
+    return { ok: false, error: 'No tienes permiso sobre esta fuente' }
+  }
+
+  return null
+}
+
+/**
  * Gate para los campos que un agente escribe SOBRE SÍ MISMO: su descripción y su
  * firma de correo. Los edita su dueño, o el propietario del equipo.
  *

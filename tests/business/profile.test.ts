@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  budgetTierFor, expectedCommission, hasBudgetBands, formatMoney, missingFields,
-  geoFitFor, EMPTY_PROFILE, type BusinessProfile,
+  budgetTierFor, expectedCommission, describeCommission, hasBudgetBands, formatMoney,
+  missingFields, geoFitFor, EMPTY_PROFILE, type BusinessProfile,
 } from '@/lib/business/profile'
 
 // Hampton Roads: casa media ~350k. Barcelona: la misma cifra es de entrada.
@@ -148,6 +148,32 @@ describe('geoFitFor — la zona que nadie había definido', () => {
   it('sin zona del lead tampoco inventa', () => {
     expect(geoFitFor(null, AJ)).toBeNull()
     expect(geoFitFor('   ', AJ)).toBeNull()
+  })
+})
+
+describe('describeCommission — qué se hereda, en palabras', () => {
+  it('describe un porcentaje por los dos lados', () => {
+    expect(describeCommission(AJ, AJ.currency)).toBe('3% compra · 3% venta')
+  })
+
+  it('un monto fijo se escribe con la moneda del perfil', () => {
+    const fijo: BusinessProfile = { ...AJ, commissionModel: 'flat', commissionBuy: 12_000, commissionSell: 15_000 }
+    expect(describeCommission(fijo, fijo.currency)).toBe('$12.000 compra · $15.000 venta')
+  })
+
+  it('omite el lado que la agencia no trabaja', () => {
+    expect(describeCommission({ ...AJ, commissionSell: null }, AJ.currency)).toBe('3% compra')
+  })
+
+  it('sin modelo devuelve null — es el caso "hereda" de un agente', () => {
+    // Sin modelo los números no significan nada, así que la UI no puede
+    // enseñar una cifra: tiene que decir que hereda, a secas.
+    expect(describeCommission(EMPTY_PROFILE, null)).toBeNull()
+    expect(describeCommission({ commissionModel: null, commissionBuy: 4, commissionSell: 4 }, 'USD')).toBeNull()
+  })
+
+  it('con modelo pero sin ninguna cifra también devuelve null', () => {
+    expect(describeCommission({ commissionModel: 'percentage', commissionBuy: null, commissionSell: null }, 'USD')).toBeNull()
   })
 })
 
