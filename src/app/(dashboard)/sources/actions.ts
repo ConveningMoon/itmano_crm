@@ -5,7 +5,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
-import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel } from '@/lib/auth/guards'
+import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel, assertCanWriteLead } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { createPlatformRequest } from '@/lib/services/platform-requests'
@@ -417,15 +417,13 @@ export async function toggleSubmissionResponded(
 ): Promise<{ ok: true; responded: boolean } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
-  if (denied) return denied
 
   const supabase = createAdminClient()
 
-  // Fetch submission (tenant-scoped) + its channel type
+  // Fetch submission (tenant-scoped) + su canal y su lead.
   let q = supabase
     .from('form_submissions')
-    .select('id, responded, acquisition_channels(channel_type)')
+    .select('id, responded, acquisition_channels(channel_type), leads!inner(tenant_id, agent_id)')
     .eq('id', submissionId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
   const { data: sub } = await q.maybeSingle()
@@ -433,6 +431,17 @@ export async function toggleSubmissionResponded(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = sub as any
+
+  // El permiso es el del LEAD, no el de la fuente: "respondida" significa que
+  // alguien le contestó a esa persona, y quien contesta es su agente asignado.
+  // Sirve además para las dos pantallas donde sale el toggle — la ficha del lead
+  // y el detalle de la fuente. `leads.agent_id` es NOT NULL, así que la
+  // comparación no puede pasar por dos nulls iguales.
+  const leadRel = Array.isArray(s.leads) ? s.leads[0] : s.leads
+  if (!leadRel) return { ok: false, error: 'Solicitud no encontrada' }
+  const notMine = assertCanWriteLead(ctx, leadRel)
+  if (notMine) return notMine
+
   const channelRel = Array.isArray(s.acquisition_channels) ? s.acquisition_channels[0] : s.acquisition_channels
   if (channelRel?.channel_type === 'lead_magnet') {
     return { ok: false, error: 'Los lead magnets no usan estado de respuesta' }
