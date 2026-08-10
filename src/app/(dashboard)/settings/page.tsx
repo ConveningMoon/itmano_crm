@@ -8,6 +8,7 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
 import { getBusinessProfile } from '@/lib/data/business-profile'
+import { EMPTY_PROFILE } from '@/lib/business/profile'
 import { getFitEvidence } from '@/lib/data/fit-evidence'
 import type { FitEvidence } from '@/lib/scoring/calibration'
 import { SettingsClient } from './settings-client'
@@ -33,10 +34,15 @@ export default async function SettingsPage() {
   // super_admin: para el resto no se paga la consulta.
   const wantsCalibration = ctx.role === 'super_admin'
 
+  // "Tu negocio" es del equipo, no del agente: sólo owner/super la ven. Para el
+  // rol 'agent' ni se consulta — así no viaja en el payload RSC de una pestaña
+  // que no existe para él.
+  const canSeeBusiness = ctx.role !== 'agent'
+
   const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
-    getBusinessProfile(tenantId),
+    canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
     getEffectiveScoreRules(tenantId),
     getGlobalScoreRules(),
     // Honest "active accesses" = every login profile in this tenant (owner + any
@@ -50,7 +56,7 @@ export default async function SettingsPage() {
   ])
 
   const tenant = tenantRow
-    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null, description: (tenantRow.description as string | null) ?? null }
+    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRow.description as string | null) ?? null) : null }
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
