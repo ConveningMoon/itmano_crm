@@ -11,7 +11,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentCommission, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
 import { openBillingPortal } from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, trialDaysLeft } from '@/lib/plans'
@@ -20,7 +20,7 @@ import { ScoringSection } from './scoring-section'
 import { CalibrationPanel } from './calibration-panel'
 import type { FitEvidence } from '@/lib/scoring/calibration'
 import { BusinessProfileSection } from './business-profile-section'
-import { describeCommission, type AgentCommission, type BusinessProfile } from '@/lib/business/profile'
+import type { BusinessProfile } from '@/lib/business/profile'
 import { Tabs } from '@/components/ui/tabs'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
@@ -254,7 +254,7 @@ function TenantSection({ tenant, canManage }: { tenant: { id: string; name: stri
 
 // ─── Agent edit row ───────────────────────────────────────────────────────────
 
-function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwner, canManageOwner, canDeleteAgents, agencyProfile }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditSelf: boolean; isOwner: boolean; canManageOwner: boolean; canDeleteAgents: boolean; agencyProfile: BusinessProfile }) {
+function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwner, canManageOwner, canDeleteAgents }: { agent: Agent; hasAccess: boolean; canManage: boolean; canLinkSelf: boolean; canEditSelf: boolean; isOwner: boolean; canManageOwner: boolean; canDeleteAgents: boolean }) {
   const router = useRouter()
   const [editing, setEditing]   = useState(false)
   const [name, setName]         = useState(agent.name)
@@ -281,32 +281,6 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
   const [descErr, setDescErr]         = useState<string | null>(null)
   const [descOk, setDescOk]           = useState(false)
   const [descPending, startDesc]      = useTransition()
-
-  // Comisión propia. null en el modelo = hereda la de la agencia, así que un
-  // Partner sólo declara las excepciones. Rangos y zonas NO: esos definen cómo
-  // se mide la calidad y esa vara es una sola para todo el tenant.
-  const [editingCom, setEditingCom] = useState(false)
-  const [com, setCom] = useState({
-    model: agent.commissionModel ?? '',
-    buy:   agent.commissionBuy  === null || agent.commissionBuy  === undefined ? '' : String(agent.commissionBuy),
-    sell:  agent.commissionSell === null || agent.commissionSell === undefined ? '' : String(agent.commissionSell),
-  })
-  // Lo último guardado, para que la línea de la fila no mienta hasta el refresh.
-  const [comSaved, setComSaved] = useState<AgentCommission>({
-    commissionModel: agent.commissionModel ?? null,
-    commissionBuy:   agent.commissionBuy  ?? null,
-    commissionSell:  agent.commissionSell ?? null,
-  })
-  const [comErr, setComErr]         = useState<string | null>(null)
-  const [comOk, setComOk]           = useState(false)
-  const [comPending, startCom]      = useTransition()
-
-  // Herencia visible: sin esto, "Hereda la de la agencia" no dice QUÉ se hereda
-  // y el campo vacío se lee como "sin comisión". La cifra de la agencia sólo
-  // viaja para quien ya ve "Tu negocio" (owner/super): al rol 'agent' la página
-  // le entrega EMPTY_PROFILE, así que aquí queda en null por construcción.
-  const comHeredada = describeCommission(agencyProfile, agencyProfile.currency)
-  const comPropia   = describeCommission(comSaved, agencyProfile.currency)
 
   // Idiomas registrados (definen los emails de cierre del agente — 058).
   const [editingLangs, setEditingLangs] = useState(false)
@@ -356,21 +330,6 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
       setEditingDesc(false)
       setDescOk(true)
       setTimeout(() => setDescOk(false), 2500)
-    })
-  }
-
-  function handleSaveCom() {
-    setComErr(null); setComOk(false)
-    startCom(async () => {
-      const res = await updateAgentCommission(agent.id, com)
-      if (!res.ok) { setComErr(res.error); return }
-      // Espeja lo que la action guarda: sin modelo no hay comisión propia, se
-      // limpia entera y el agente vuelve a heredar.
-      const num = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')))
-      setComSaved(com.model
-        ? { commissionModel: com.model as AgentCommission['commissionModel'], commissionBuy: num(com.buy), commissionSell: num(com.sell) }
-        : { commissionModel: null, commissionBuy: null, commissionSell: null })
-      setEditingCom(false); setComOk(true); setTimeout(() => setComOk(false), 2500)
     })
   }
 
@@ -463,17 +422,6 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               {langsSaved.map(l => LANGUAGE_LABELS[l] ?? l).join(', ')}
             </div>
-            {/* Sólo en las fichas que este usuario puede editar: para un agente,
-                la suya. La comisión de un colega no es asunto suyo. */}
-            {canEditSelf && (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                {comPropia
-                  ? <>Comisión propia: <span style={{ color: 'var(--text-secondary)' }}>{comPropia}</span></>
-                  : comHeredada
-                    ? <>Hereda de la agencia: <span style={{ color: 'var(--text-secondary)' }}>{comHeredada}</span></>
-                    : 'Hereda la comisión de la agencia'}
-              </div>
-            )}
           </div>
 
           {/* Access status badge */}
@@ -490,7 +438,6 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
             {canEditSelf && (
               <>
                 <button onClick={() => { setEditingDesc(v => !v); setDesc(descSaved); setDescErr(null) }} style={BTN_GHOST}>Descripción</button>
-                <button onClick={() => { setEditingCom(v => !v); setComErr(null) }} style={BTN_GHOST}>Comisión</button>
                 <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
               </>
             )}
@@ -594,59 +541,6 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
         {descOk && (
           <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
             Descripción guardada. La IA ya la tiene en cuenta.
-          </div>
-        )}
-
-        {/* Comisión propia del agente */}
-        {editingCom && (
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <label style={{ ...LABEL, marginBottom: 0 }}>Su comisión</label>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Cada agente negocia su split. Déjalo heredando si cobra lo mismo que el resto
-              {comHeredada ? <> — hoy la agencia tiene <strong style={{ color: 'var(--text-secondary)' }}>{comHeredada}</strong></> : null}.
-              Se usa para el valor potencial de sus leads — no toca el score.
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <select
-                value={com.model}
-                onChange={e => setCom(c => ({ ...c, model: e.target.value }))}
-                style={{ ...INPUT, cursor: 'pointer' }}
-              >
-                <option value="">
-                  {comHeredada ? `Hereda la de la agencia (${comHeredada})` : 'Hereda la de la agencia'}
-                </option>
-                <option value="percentage">Porcentaje de la operación</option>
-                <option value="flat">Monto fijo por operación</option>
-              </select>
-              <input
-                inputMode="decimal"
-                value={com.buy}
-                onChange={e => setCom(c => ({ ...c, buy: e.target.value }))}
-                disabled={!com.model}
-                placeholder={com.model === 'flat' ? 'Compra (monto)' : 'Compra (%)'}
-                style={{ ...INPUT, opacity: com.model ? 1 : 0.5 }}
-              />
-              <input
-                inputMode="decimal"
-                value={com.sell}
-                onChange={e => setCom(c => ({ ...c, sell: e.target.value }))}
-                disabled={!com.model}
-                placeholder={com.model === 'flat' ? 'Venta (monto)' : 'Venta (%)'}
-                style={{ ...INPUT, opacity: com.model ? 1 : 0.5 }}
-              />
-            </div>
-            {comErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{comErr}</div>}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={handleSaveCom} disabled={comPending} style={{ ...BTN_PRIMARY, opacity: comPending ? 0.6 : 1 }}>
-                {comPending ? 'Guardando…' : 'Guardar comisión'}
-              </button>
-              <button onClick={() => setEditingCom(false)} style={BTN_GHOST}>Cancelar</button>
-            </div>
-          </div>
-        )}
-        {comOk && (
-          <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
-            Comisión guardada. Se aplica al valor potencial de sus leads.
           </div>
         )}
 
@@ -864,15 +758,12 @@ function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDone: () =
 
 function AgentsSection({
   agents, agentAccess, accessCount, canManage, multiAgent, canLinkSelf, tenantId, isSuper, myAgentId,
-  ownerAgentId, canManageOwner, canDeleteAgents, agencyProfile,
+  ownerAgentId, canManageOwner, canDeleteAgents,
 }: {
   agents: Agent[]
   agentAccess: Record<string, boolean>
   accessCount: number
   canManage: boolean
-  // Perfil del tenant, para mostrar qué comisión hereda cada agente. Llega
-  // vacío para el rol 'agent' — la página no se lo consulta.
-  agencyProfile: BusinessProfile
   // false en Esencial/Growth: un solo agente → sin crear/eliminar otros.
   multiAgent: boolean
   canLinkSelf: boolean
@@ -929,7 +820,6 @@ function AgentsSection({
           isOwner={agent.id === ownerAgentId}
           canManageOwner={canManageOwner}
           canDeleteAgents={canDeleteAgents}
-          agencyProfile={agencyProfile}
         />
       ))}
     </div>
@@ -1531,7 +1421,6 @@ export function SettingsClient({
             ownerAgentId={ownerAgentId}
             canManageOwner={userRole === 'agent_owner' || userRole === 'super_admin'}
             canDeleteAgents={canDeleteAgents}
-            agencyProfile={businessProfile}
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} />,

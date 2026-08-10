@@ -72,7 +72,13 @@ export function budgetTierFor(amount: number | null | undefined, p: BusinessProf
 }
 
 /**
- * Lo que la agencia se llevaría por una operación de ese tamaño.
+ * Lo que FACTURA LA AGENCIA por una operación de ese tamaño.
+ *
+ * Es la comisión del negocio, no el neto del agente. Hubo una comisión por
+ * agente (migraciones 090 → 094) y se retiró: lo que un agente negocia es su
+ * split de esta cifra, y un split es un multiplicador constante que no cambia
+ * el orden de nada dentro de su propia cartera. La UI dice de quién es el
+ * número en vez de insinuar que es del agente.
  *
  * `null` cuando falta el dato — nunca 0. Un cero diría "esta operación no deja
  * nada", que es una afirmación; la ausencia de perfil no lo es.
@@ -163,54 +169,6 @@ export function geoFitFor(area: string | null | undefined, p: BusinessProfile): 
   if (casa(p.primaryAreas))   return 'zona_principal'
   if (casa(p.secondaryAreas)) return 'zona_secundaria'
   return 'fuera_de_zona'
-}
-
-/** La comisión que un agente concreto negoció. null en cada campo = hereda. */
-export interface AgentCommission {
-  commissionModel: CommissionModel | null
-  commissionBuy:   number | null
-  commissionSell:  number | null
-}
-
-/**
- * El perfil que aplica a un lead, con la comisión del agente encima.
- *
- * Sólo la comisión se sobreescribe. Los rangos y las zonas siguen siendo del
- * tenant: definen cómo se mide la CALIDAD de un lead, y esa vara tiene que ser
- * la misma para toda la cartera — si cada agente tuviera la suya, el mismo lead
- * valdría distinto según a quién se le asignara, y los quintiles dejarían de
- * comparar lo mismo.
- *
- * El modelo se hereda entero: mezclar el porcentaje de un agente con el modelo
- * `flat` del tenant daría un número sin sentido.
- */
-export function profileForAgent(p: BusinessProfile, agent: AgentCommission | null): BusinessProfile {
-  if (!agent?.commissionModel) return p
-  return {
-    ...p,
-    commissionModel: agent.commissionModel,
-    commissionBuy:   agent.commissionBuy,
-    commissionSell:  agent.commissionSell,
-  }
-}
-
-/**
- * "10% compra · 10% venta" — cómo se lee una comisión, sea del tenant o de un
- * agente (`BusinessProfile` cumple `AgentCommission` estructuralmente).
- *
- * null cuando no hay modelo: sin él los números no significan nada, y es
- * exactamente el caso "hereda" de un agente. El lado que la agencia no trabaja
- * se omite en vez de escribirse como cero — vacío es "no opero aquí".
- */
-export function describeCommission(c: AgentCommission, currency: Currency | null): string | null {
-  if (!c.commissionModel) return null
-  const lado = (v: number | null, etiqueta: string) => {
-    if (v === null) return null
-    const monto = c.commissionModel === 'percentage' ? `${v}%` : formatMoney(v, currency)
-    return `${monto} ${etiqueta}`
-  }
-  const partes = [lado(c.commissionBuy, 'compra'), lado(c.commissionSell, 'venta')].filter(Boolean)
-  return partes.length > 0 ? partes.join(' · ') : null
 }
 
 /** Qué le falta al perfil para ser útil. Vacío = completo. */
