@@ -23,6 +23,12 @@ interface ChannelActionsProps {
    */
   managedByItmano: boolean
   pageUrl:         string | null
+  /**
+   * agents.id del que mira, sólo para el rol 'agent'. Si llega, la fuente ya es
+   * suya (sólo ve las suyas) y no puede regalarla ni volverla de toda la
+   * agencia: el selector queda fijo. El servidor lo fuerza igual.
+   */
+  myAgentId:       string | null
 }
 
 const INPUT: React.CSSProperties = {
@@ -47,7 +53,7 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences, managedByItmano, pageUrl }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences, managedByItmano, pageUrl, myAgentId }: ChannelActionsProps) {
   const router = useRouter()
   const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
   const [name,       setName]       = useState(channelName)
@@ -237,14 +243,17 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
                 <select
                   value={agId}
                   onChange={e => setAgId(e.target.value)}
+                  disabled={myAgentId !== null}
                   className="ch-act-input"
-                  style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}
+                  style={{ ...INPUT, appearance: 'none', cursor: myAgentId ? 'not-allowed' : 'pointer', opacity: myAgentId ? 0.65 : 1 }}
                 >
-                  <option value="">Toda la agencia</option>
-                  {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {myAgentId === null && <option value="">Toda la agencia</option>}
+                  {(myAgentId ? agents.filter(a => a.id === myAgentId) : agents).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
-                  Atribución de leads de esta fuente. &quot;Toda la agencia&quot; reparte entre los agentes activos.
+                  {myAgentId
+                    ? 'Los leads de esta fuente se atribuyen a ti. Reasignarla es cosa del propietario del equipo.'
+                    : 'Atribución de leads de esta fuente. "Toda la agencia" los atribuye al propietario del equipo.'}
                 </div>
               </div>
 

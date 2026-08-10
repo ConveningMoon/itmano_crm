@@ -371,20 +371,39 @@ type AgentOption = { id: string; name: string; tenantId: string }
 
 // ─── Agent selector (organizational owner; "Toda la agencia" = round-robin) ─────
 
-function AgentSelect({ agents, value, onChange }: {
+function AgentSelect({ agents, value, onChange, locked }: {
   agents:   AgentOption[]
   value:    string
   onChange: (v: string) => void
+  /**
+   * El que crea es un agente: la fuente es suya y el selector queda fijo en su
+   * nombre, sin "Toda la agencia". Es sólo la pantalla — quien lo hace cumplir
+   * es el servidor, que reescribe el propietario pase lo que pase por aquí.
+   */
+  locked:   boolean
 }) {
+  // Si su propia fila no está en la lista (inactiva, o filtrada por tenant), se
+  // sigue mostrando: un desplegable vacío parecería un error de la app.
+  const opciones = locked
+    ? (agents.some(a => a.id === value) ? agents.filter(a => a.id === value) : [{ id: value, name: 'Tú', tenantId: '' }])
+    : agents
+
   return (
     <div>
       <label style={LABEL}>Agente</label>
-      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
-        <option value="">Toda la agencia</option>
-        {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={locked}
+        style={{ ...INPUT, appearance: 'none', cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.65 : 1 }}
+      >
+        {!locked && <option value="">Toda la agencia</option>}
+        {opciones.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
       </select>
       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-        Los leads de esta fuente se atribuyen a este agente. &quot;Toda la agencia&quot; reparte entre los agentes activos.
+        {locked
+          ? 'Los leads de esta fuente se atribuyen a ti. Las fuentes para toda la agencia las crea el propietario del equipo.'
+          : 'Los leads de esta fuente se atribuyen a este agente. "Toda la agencia" los atribuye al propietario del equipo.'}
       </div>
     </div>
   )
@@ -392,18 +411,19 @@ function AgentSelect({ agents, value, onChange }: {
 
 // ─── Lead Magnet modal ─────────────────────────────────────────────────────────
 
-function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
+function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   onClose:     () => void
   isSuperAdmin: boolean
   tenants:     Array<{ id: string; name: string }>
   agents:      AgentOption[]
+  myAgentId:   string | null
 }) {
   const [name,     setName]     = useState('')
   const [slug,     setSlug]     = useState('')
   const [lpUrl,    setLpUrl]    = useState('')
   const [fileUrl,  setFileUrl]  = useState('')
   const [tenantId, setTenantId] = useState(tenants[0]?.id ?? '')
-  const [agentId,  setAgentId]  = useState('')
+  const [agentId,  setAgentId]  = useState(myAgentId ?? '')
   const [error,    setError]    = useState<string | null>(null)
   const [result,   setResult]   = useState<{ publicId: string; slug: string; sequenceId: string; integrationPrompt: string } | null>(null)
   const [pending,  startTransition] = useTransition()
@@ -479,7 +499,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
           </FormSection>
 
           <FormSection title="Material y atribución">
-          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
+          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
           <div>
             <label style={LABEL}>URL de la landing page <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
             <input value={lpUrl} onChange={e => setLpUrl(e.target.value)} style={INPUT} placeholder="https://..." type="url" />
@@ -510,18 +530,19 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
 
 // ─── Event modal ───────────────────────────────────────────────────────────────
 
-function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
+function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   onClose:      () => void
   isSuperAdmin: boolean
   tenants:      Array<{ id: string; name: string }>
   agents:       AgentOption[]
+  myAgentId:    string | null
 }) {
   const [name,      setName]      = useState('')
   const [slug,      setSlug]      = useState('')
   const [eventDate, setEventDate] = useState('')
   const [location,  setLocation]  = useState('')
   const [tenantId,  setTenantId]  = useState(tenants[0]?.id ?? '')
-  const [agentId,   setAgentId]   = useState('')
+  const [agentId,   setAgentId]   = useState(myAgentId ?? '')
   const [error,     setError]     = useState<string | null>(null)
   const [result,    setResult]    = useState<{ publicId: string; slug: string; integrationPrompt: string } | null>(null)
   const [pending,   startTransition] = useTransition()
@@ -598,7 +619,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
           </FormSection>
 
           <FormSection title="Detalles del evento">
-          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
+          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
@@ -631,16 +652,17 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
 
 // ─── Contact Form (Web) modal ──────────────────────────────────────────────────
 
-function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
+function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   onClose:      () => void
   isSuperAdmin: boolean
   tenants:      Array<{ id: string; name: string }>
   agents:       AgentOption[]
+  myAgentId:    string | null
 }) {
   const [name,     setName]     = useState('')
   const [slug,     setSlug]     = useState('')
   const [tenantId, setTenantId] = useState(tenants[0]?.id ?? '')
-  const [agentId,  setAgentId]  = useState('')
+  const [agentId,  setAgentId]  = useState(myAgentId ?? '')
   const [error,    setError]    = useState<string | null>(null)
   const [result,   setResult]   = useState<{ publicId: string; slug: string; integrationPrompt: string } | null>(null)
   const [pending,  startTransition] = useTransition()
@@ -716,7 +738,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
           </FormSection>
 
           <FormSection title="Agente">
-          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
+          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
           </FormSection>
 
           {error && (
@@ -846,10 +868,16 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
 
 // ─── Archived channel card ───────────────────────────────────────────────────
 
-function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
+function ArchivedChannelCard({ ch, isSuperAdmin, tenantName, canDelete }: {
   ch:           ChannelWithMetrics
   isSuperAdmin: boolean
   tenantName?:  string
+  /**
+   * El borrado permanente sigue siendo de owner/super: huerfaniza los leads de
+   * esa fuente. Un agente archiva las suyas, pero aquí sólo vería un botón que
+   * la action va a rechazar.
+   */
+  canDelete:    boolean
 }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
@@ -927,24 +955,26 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={() => setShowDelete(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            fontSize: '12px', fontWeight: 500,
-            color: 'var(--accent-coral)',
-            background: 'transparent',
-            border: '1px solid rgba(224,64,64,0.3)',
-            borderRadius: '6px',
-            padding: '5px 10px',
-            cursor: 'pointer',
-          }}
-        >
-          <Trash2 size={13} />
-          Eliminar permanentemente
-        </button>
-      </div>
+      {canDelete && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => setShowDelete(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              fontSize: '12px', fontWeight: 500,
+              color: 'var(--accent-coral)',
+              background: 'transparent',
+              border: '1px solid rgba(224,64,64,0.3)',
+              borderRadius: '6px',
+              padding: '5px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            <Trash2 size={13} />
+            Eliminar permanentemente
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -960,11 +990,16 @@ interface Props {
   isSuperAdmin:     boolean
   tenants:          Array<{ id: string; name: string }>
   agents:           AgentOption[]
+  /**
+   * agents.id del que mira, sólo para el rol 'agent'. Cuando llega, las fuentes
+   * que cree son suyas: el selector de agente queda fijo y sin "Toda la agencia".
+   */
+  myAgentId:        string | null
   /** tenantId → slug + si ITMANO administra sus páginas. */
   tenantPages:      Record<string, TenantPageInfo>
 }
 
-export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, tenantPages }: Props) {
+export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, myAgentId, tenantPages }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<TabValue>('all')
@@ -995,9 +1030,9 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
         .source-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--shadow-md); transform: translateY(-3px); }
         @media (prefers-reduced-motion: reduce) { .source-card { animation: none !important; transition: none !important; } }
       `}</style>
-      {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
-      {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
-      {openModal === 'contact_form' && <ContactFormModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
+      {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
+      {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
+      {openModal === 'contact_form' && <ContactFormModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
 
       {/* Create buttons */}
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>
@@ -1092,6 +1127,7 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
                   ch={ch}
                   isSuperAdmin={isSuperAdmin}
                   tenantName={tenantName(ch.tenantId)}
+                  canDelete={myAgentId === null}
                 />
               ))
             : display.map((ch, i) => (

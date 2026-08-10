@@ -60,6 +60,9 @@ export default async function SourcesPage({
   // (incluye al super_admin actuando como tenant).
   let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
   if (tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  // Un agente sólo crea fuentes suyas, así que el resto del equipo no tiene por
+  // qué viajar en el payload de una lista que él no puede elegir.
+  if (scope.agentId) agentsQ = agentsQ.eq('id', scope.agentId)
   const { data: agentRows } = await agentsQ
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
@@ -136,6 +139,7 @@ export default async function SourcesPage({
         isSuperAdmin={needsTenantPicker}
         tenants={tenants}
         agents={agents}
+        myAgentId={scope.agentId}
         tenantPages={tenantPages}
       />
     </>

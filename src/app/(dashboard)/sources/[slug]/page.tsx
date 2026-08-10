@@ -131,6 +131,7 @@ export default async function ChannelDetailPage({
           sequences={sequences.filter(s => s.activationType === 'form').map(s => ({ id: s.id, name: s.name }))}
           managedByItmano={pageManaged}
           pageUrl={channel.pageUrl}
+          myAgentId={scope.agentId}
         />
       </div>
 
