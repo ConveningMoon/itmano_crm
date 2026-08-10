@@ -28,7 +28,11 @@ export interface LeadPriority {
   total:       number
 }
 
-/** Lo que deja la operación si cierra. `commission` es null sin perfil de negocio. */
+/**
+ * Lo que deja la operación si cierra. `commission` es lo que FACTURA LA
+ * AGENCIA — no el neto del agente, que depende de un split que el CRM no
+ * guarda. Es null sin perfil de negocio.
+ */
 export interface LeadPotentialValue {
   amount:     number
   commission: number | null
@@ -194,14 +198,14 @@ export function PriorityCard({ priority, breakdown, opportunities, potentialValu
               {formatMoney(potentialValue.amount, potentialValue.currency)}
             </strong>
             {potentialValue.commission !== null ? (
-              <> · deja{' '}
+              <> · la agencia factura{' '}
                 <strong style={{ color: 'var(--accent-green)' }}>
                   {formatMoney(potentialValue.commission, potentialValue.currency)}
                 </strong>
               </>
             ) : (
               <span style={{ color: 'var(--text-muted)' }}>
-                {' '}· configura tu comisión en Ajustes para ver cuánto deja
+                {' '}· configura la comisión en Ajustes para ver cuánto factura
               </span>
             )}
           </span>

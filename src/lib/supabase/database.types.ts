@@ -95,9 +95,6 @@ export type Database = {
           accent_color: string
           active: boolean
           avatar_initials: string
-          commission_buy: number | null
-          commission_model: string | null
-          commission_sell: number | null
           created_at: string | null
           description: string | null
           email: string
@@ -115,9 +112,6 @@ export type Database = {
           accent_color: string
           active?: boolean
           avatar_initials: string
-          commission_buy?: number | null
-          commission_model?: string | null
-          commission_sell?: number | null
           created_at?: string | null
           description?: string | null
           email: string
@@ -135,9 +129,6 @@ export type Database = {
           accent_color?: string
           active?: boolean
           avatar_initials?: string
-          commission_buy?: number | null
-          commission_model?: string | null
-          commission_sell?: number | null
           created_at?: string | null
           description?: string | null
           email?: string

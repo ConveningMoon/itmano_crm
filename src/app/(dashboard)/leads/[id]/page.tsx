@@ -27,7 +27,7 @@ import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { getBusinessProfile } from '@/lib/data/business-profile'
-import { expectedCommission, profileForAgent } from '@/lib/business/profile'
+import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
 
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
@@ -130,20 +130,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // ("si cierra, deja X"), no una probabilidad: no se pondera por calidad ni se
   // mezcla con el score.
   const budgetAmount = typeof lr.metadata?.budget_amount === 'number' ? lr.metadata.budget_amount as number : null
-  // La comisión es del AGENTE asignado (cada uno negocia su split); si no tiene
-  // la suya declarada, hereda la de la agencia. Los rangos y las zonas no se
-  // sobreescriben — ver profileForAgent.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- filas sin tipar
-  const agentRow = (rawAgents ?? []).find((a: any) => a.id === lead.agentId) as any
-  const perfilDelLead = profileForAgent(businessProfile, agentRow ? {
-    commissionModel: (agentRow.commission_model ?? null) as never,
-    commissionBuy:   agentRow.commission_buy  === null || agentRow.commission_buy  === undefined ? null : Number(agentRow.commission_buy),
-    commissionSell:  agentRow.commission_sell === null || agentRow.commission_sell === undefined ? null : Number(agentRow.commission_sell),
-  } : null)
+  // La comisión es una sola, la de la agencia (migración 094). Hubo una por
+  // agente y se retiró: lo que cada agente negocia es su split de esta cifra, y
+  // un split no cambia el orden de su propia cartera. La tarjeta dice de quién
+  // es el número en vez de dejar que se lea como el neto del agente.
   const potentialValue = budgetAmount === null ? null : {
     amount:     budgetAmount,
-    commission: expectedCommission(budgetAmount, perfilDelLead, lr.metadata?.intent === 'sell' ? 'sell' : 'buy'),
-    currency:   perfilDelLead.currency,
+    commission: expectedCommission(budgetAmount, businessProfile, lr.metadata?.intent === 'sell' ? 'sell' : 'buy'),
+    currency:   businessProfile.currency,
   }
   const purchaseProcess: PurchaseProcess | null = rawProcess ? mapPurchaseProcess(rawProcess as PurchaseProcessRow) : null
 

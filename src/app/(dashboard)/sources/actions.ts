@@ -5,7 +5,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
-import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel } from '@/lib/auth/guards'
+import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel, assertCanWriteLead } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { createPlatformRequest } from '@/lib/services/platform-requests'
@@ -14,12 +14,11 @@ import { buildIntegrationPrompt, getFitCatalog } from '@/lib/services/integratio
 import { getBusinessProfile } from '@/lib/data/business-profile'
 
 // ─── Página alojada del canal (constructor — migración 060) ───────────────────
-// Guarda acquisition_channels.hosted_page. Escriben owner/super_admin: la
-// página alojada sigue con `requireWriteAccess`, que bloquea al rol 'agent'.
-// Un agente ya crea y administra SUS fuentes (requireChannelWriteAccess), pero
-// construir la landing es otra cosa — sube imágenes y quema presupuesto de IA
-// del tenant. El slug de la URL es (tenants.slug, channels.slug) — único por
-// construcción.
+// Guarda acquisition_channels.hosted_page. La escribe quien puede escribir la
+// fuente: owner, super_admin, y el agente sobre las suyas — una fuente sin su
+// landing es media fuente, y el agente que la crea es quien sabe qué material
+// está entregando. El slug de la URL es (tenants.slug, channels.slug) — único
+// por construcción.
 
 export async function updateHostedPage(
   channelId: string,
@@ -27,7 +26,7 @@ export async function updateHostedPage(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
 
   const parsed = HostedPageConfigSchema.safeParse(rawConfig)
@@ -38,11 +37,14 @@ export async function updateHostedPage(
   const supabase = createAdminClient()
   let q = supabase
     .from('acquisition_channels')
-    .select('id, channel_type, slug, tenants!inner(slug)')
+    .select('id, tenant_id, agent_id, channel_type, slug, tenants!inner(slug)')
     .eq('id', channelId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
   const { data: channel } = await q.maybeSingle()
   if (!channel) return { ok: false, error: 'Canal no encontrado' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const notMine = assertCanWriteChannel(ctx, channel as any)
+  if (notMine) return notMine
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (!['lead_magnet', 'event', 'contact_form'].includes((channel as any).channel_type)) {
     return { ok: false, error: 'Este tipo de canal no tiene página alojada.' }
@@ -116,7 +118,10 @@ export async function uploadHostedImage(
   formData: FormData,
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
-  const denied = requireWriteAccess(ctx)
+  // Las imágenes van a `<tenant>/hosted/`, no a una carpeta por canal: el
+  // permiso que aplica es el de escribir fuentes, y el aislamiento entre
+  // tenants lo da el prefijo de la ruta.
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return denied
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
 
@@ -156,7 +161,7 @@ export async function deleteHostedImages(
   urls: string[],
 ): Promise<{ ok: true }> {
   const ctx = await getCurrentTenantContext()
-  const denied = requireWriteAccess(ctx)
+  const denied = requireChannelWriteAccess(ctx)
   if (denied) return { ok: true } // sin permiso de escritura: no-op silencioso
   if (!ctx.tenant_id) return { ok: true }
 
@@ -412,15 +417,13 @@ export async function toggleSubmissionResponded(
 ): Promise<{ ok: true; responded: boolean } | { ok: false; error: string }> {
   const ctx = await getCurrentTenantContext()
   if (!ctx.tenant_id && ctx.role !== 'super_admin') return { ok: false, error: 'Acceso no autorizado' }
-  const denied = requireWriteAccess(ctx)
-  if (denied) return denied
 
   const supabase = createAdminClient()
 
-  // Fetch submission (tenant-scoped) + its channel type
+  // Fetch submission (tenant-scoped) + su canal y su lead.
   let q = supabase
     .from('form_submissions')
-    .select('id, responded, acquisition_channels(channel_type)')
+    .select('id, responded, acquisition_channels(channel_type), leads!inner(tenant_id, agent_id)')
     .eq('id', submissionId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
   const { data: sub } = await q.maybeSingle()
@@ -428,6 +431,17 @@ export async function toggleSubmissionResponded(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = sub as any
+
+  // El permiso es el del LEAD, no el de la fuente: "respondida" significa que
+  // alguien le contestó a esa persona, y quien contesta es su agente asignado.
+  // Sirve además para las dos pantallas donde sale el toggle — la ficha del lead
+  // y el detalle de la fuente. `leads.agent_id` es NOT NULL, así que la
+  // comparación no puede pasar por dos nulls iguales.
+  const leadRel = Array.isArray(s.leads) ? s.leads[0] : s.leads
+  if (!leadRel) return { ok: false, error: 'Solicitud no encontrada' }
+  const notMine = assertCanWriteLead(ctx, leadRel)
+  if (notMine) return notMine
+
   const channelRel = Array.isArray(s.acquisition_channels) ? s.acquisition_channels[0] : s.acquisition_channels
   if (channelRel?.channel_type === 'lead_magnet') {
     return { ok: false, error: 'Los lead magnets no usan estado de respuesta' }
