@@ -154,6 +154,8 @@ Las zonas (`primary_areas` / `secondary_areas`, migración 087) hacen lo mismo c
 
 La comisión (porcentaje o monto fijo, y distinta para compra y venta) da el valor potencial del lead — la fila "Si cierra" del detalle. Es un hecho condicional, no una probabilidad: no se pondera por calidad ni entra al score. Necesita `metadata.budget_amount`, que sólo existe si el formulario mandó el monto.
 
+**Es lo que factura la AGENCIA, no el neto del agente,** y la UI lo dice con esas palabras. Hubo una comisión por agente (migración 090) y se retiró en la **094**: guardaba un split como si fuera una tasa alternativa sobre el precio, y modelarlo bien tampoco compensaba — un split es un multiplicador constante, así que no cambia el orden de la cartera de ningún agente, sólo añadiría datos de compensación a `agents`. Si algún día hace falta el neto del agente, va en un reporte de operaciones cerradas, no en la ficha de un lead que no ha cerrado.
+
 **El formulario manda el hecho, el CRM pone el nivel.** El intake acepta `budget_amount` (monto, en cualquier formato) y `area` (zona en palabras) además de los códigos `budget_tier` / `geo_fit`, y cuando llegan los dos **gana el dato en bruto**: un formulario no puede saber qué es "premium" para esa agencia, los cortes del tenant sí. Ver `extractFitDimensions` en `src/lib/services/intake-fit.ts` y el prompt de integración, que ya lo documenta.
 
 ---
