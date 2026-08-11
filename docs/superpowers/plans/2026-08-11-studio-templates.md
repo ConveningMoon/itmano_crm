@@ -1842,6 +1842,25 @@ git push -u origin feat/studio-templates
 
 ---
 
+## Enmienda (durante la ejecución de la Task 5)
+
+**El template NO es obligatorio en el esquema.** La Task 5 lo pedía dentro del
+`superRefine`, y eso rompía las piezas creadas antes de los templates: hay dos
+filas reales de `open_house` con `template` nulo, y `recomposeImage` /
+`regenerateStudioImage` vuelven a pasar su `form_json` por `parseStudioForm`.
+Con el template obligatorio en el esquema, esas piezas dejaban de poder
+recomponerse.
+
+La validación quedó partida en dos, que son cosas distintas:
+
+| Dónde | Qué valida |
+|---|---|
+| `superRefine` del esquema | Si el template **viene**, que exista y sirva para esa receta — integridad del dato |
+| `requireTemplate(form)`, llamada desde `createStudioImage` | Que una pieza **nueva** de casa lo traiga — política de producto |
+
+Las tareas 12 y 13 deben usar `requireTemplate` en el camino de creación, no
+esperar que `parseStudioForm` lo rechace.
+
 ## Notas de ejecución
 
 - **La Task 1 puede matar el plan.** Si satori no puede con el diseño de referencia, para y repórtalo: la salida es coordenadas a mano con menos templates, no forzar la librería.
