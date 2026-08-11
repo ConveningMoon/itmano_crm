@@ -31,6 +31,21 @@ function resolveFontPath(file: string): string {
   throw new Error(`Fuente del carrusel no encontrada: ${file}. Rutas probadas: ${candidates.join(' | ')}`)
 }
 
+const bufferCache = new Map<FontRole, Buffer>()
+
+/**
+ * El .ttf crudo. opentype.js lo parsea para el compositor de bandas; satori lo
+ * quiere sin parsear para los templates del Estudio. La resolución de ruta es la
+ * misma, así que vive aquí y no duplicamos `resolveFontPath`.
+ */
+export function readFontBuffer(role: FontRole): Buffer {
+  const cached = bufferCache.get(role)
+  if (cached) return cached
+  const buf = readFileSync(resolveFontPath(FONT_FILES[role]))
+  bufferCache.set(role, buf)
+  return buf
+}
+
 export function getFont(role: FontRole): opentype.Font {
   const cached = cache.get(role)
   if (cached) return cached
