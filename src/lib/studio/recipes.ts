@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
+import { findTemplate } from './templates/registry'
 import type { ActionResult } from './types'
 
 // Validación por receta, PURA y sin dependencias de servidor: corre antes de
@@ -25,6 +26,12 @@ const common = {
   // elegido. Pedirlo a mano sería retranscribir un dato que el CRM ya tiene,
   // que es exactamente lo que el selector de propiedad viene a evitar.
   agent_id:       z.string().min(1).optional(),
+  // El diseño elegido. Obligatorio en las recetas de casa (ver el superRefine):
+  // sin él no hay dónde poner los datos.
+  template:       z.string().min(1).optional(),
+  // Titular de marketing. La etiqueta fija ("NUEVA DISPONIBLE") describe el
+  // hecho; el titular vende. Sin él, los nueve diseños dirían siempre lo mismo.
+  headline:       z.string().trim().max(60, 'El titular no puede pasar de 60 caracteres').optional(),
 }
 
 const money = z.number({ error: 'La cifra es obligatoria' }).positive('La cifra debe ser mayor que cero')
@@ -89,6 +96,20 @@ const PHOTO_RECIPES = ['open_house', 'new_listing', 'sold']
 const schema = z
   .discriminatedUnion('recipe', [openHouse, newListing, sold, event, openPrompt])
   .superRefine((v, ctx) => {
+    // Las recetas de casa se dibujan con un template; event y open_prompt siguen
+    // con el compositor de bandas y no lo necesitan.
+    if (PHOTO_RECIPES.includes(v.recipe)) {
+      if (!v.template) {
+        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Elige un diseño' })
+      } else {
+        const t = findTemplate(v.template)
+        if (!t) {
+          ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no existe' })
+        } else if (!t.recipes.includes(v.recipe)) {
+          ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no sirve para esta receta' })
+        }
+      }
+    }
     // Una imagen adjunta sin rol declarado es un deseo, no una instrucción: el
     // modelo no puede saber si es la casa, el clima o el encuadre.
     if (v.has_reference && !v.reference_role) {
