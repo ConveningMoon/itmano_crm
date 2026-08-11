@@ -96,18 +96,14 @@ const PHOTO_RECIPES = ['open_house', 'new_listing', 'sold']
 const schema = z
   .discriminatedUnion('recipe', [openHouse, newListing, sold, event, openPrompt])
   .superRefine((v, ctx) => {
-    // Las recetas de casa se dibujan con un template; event y open_prompt siguen
-    // con el compositor de bandas y no lo necesitan.
-    if (PHOTO_RECIPES.includes(v.recipe)) {
-      if (!v.template) {
-        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Elige un diseño' })
-      } else {
-        const t = findTemplate(v.template)
-        if (!t) {
-          ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no existe' })
-        } else if (!t.recipes.includes(v.recipe)) {
-          ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no sirve para esta receta' })
-        }
+    // El template, SI viene, tiene que existir y servir para esta receta. Que
+    // sea obligatorio o no NO se decide aquí: ver `requireTemplate` abajo.
+    if (v.template) {
+      const t = findTemplate(v.template)
+      if (!t) {
+        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no existe' })
+      } else if (!t.recipes.includes(v.recipe)) {
+        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no sirve para esta receta' })
       }
     }
     // Una imagen adjunta sin rol declarado es un deseo, no una instrucción: el
@@ -142,4 +138,20 @@ export function parseStudioForm(input: unknown): ActionResult<StudioForm> {
   if (r.success) return { ok: true, data: r.data }
   const first = r.error.issues[0]
   return { ok: false, error: first?.message ?? 'El formulario tiene datos inválidos' }
+}
+
+/**
+ * Las piezas NUEVAS de casa se dibujan con un template. Esto es política de
+ * producto y va aparte del esquema a propósito:
+ *
+ * las piezas creadas ANTES de los templates se hicieron con el compositor de
+ * bandas y tienen `template` nulo. Recomponerlas o generar una variante vuelve a
+ * pasar su `form_json` por `parseStudioForm` — si el esquema exigiera template,
+ * esas piezas dejarían de poder recomponerse. Exigirlo solo al crear mantiene
+ * el pasado utilizable sin abrir la puerta a piezas nuevas sin diseño.
+ */
+export function requireTemplate(form: StudioForm): { ok: false; error: string } | null {
+  if (!PHOTO_RECIPES.includes(form.recipe)) return null
+  if (form.template) return null
+  return { ok: false, error: 'Elige un diseño' }
 }
