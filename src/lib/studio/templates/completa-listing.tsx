@@ -14,10 +14,13 @@ function Render(p: TemplateProps) {
              style={{ position: 'absolute', top: 0, left: 0, objectFit: 'cover' }} />
       )}
 
-      {/* Degradado: lo que hace legible el texto sobre una foto que nadie controló */}
+      {/* Degradado: lo que hace legible el texto sobre una foto que nadie
+          controló. Los tramos están calculados contra dónde EMPIEZA el bloque de
+          texto (~56% del alto), no repartidos a ojo: con una rampa suave desde el
+          42% el titular caía sobre la parte clara de la fachada y se perdía. */}
       <div style={{
         display: 'flex', position: 'absolute', top: 0, left: 0, width: 1080, height: 1350,
-        backgroundImage: 'linear-gradient(to bottom, rgba(0,0,0,0) 42%, rgba(0,0,0,0.86) 100%)',
+        backgroundImage: 'linear-gradient(to bottom, rgba(0,0,0,0) 28%, rgba(0,0,0,0.45) 52%, rgba(0,0,0,0.78) 70%, rgba(0,0,0,0.94) 100%)',
       }} />
 
       {p.logo && (

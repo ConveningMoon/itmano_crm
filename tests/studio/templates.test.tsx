@@ -1,22 +1,31 @@
 import { describe, it, expect } from 'vitest'
 import sharp from 'sharp'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { renderToPng } from '@/lib/studio/render/satori'
+import { normalizePhoto } from '@/lib/studio/template-props'
 import { TEMPLATES } from '@/lib/studio/templates/registry'
 import type { TemplateProps } from '@/lib/studio/templates/types'
 
 const OUT = process.env.STUDIO_OUT_DIR
 
-async function photo(r: number, g: number, b: number): Promise<string> {
-  const png = await sharp({ create: { width: 600, height: 450, channels: 3, background: { r, g, b } } })
-    .png().toBuffer()
-  return `data:image/png;base64,${png.toString('base64')}`
+// Fotos reales (casas neutras generadas una vez, ver
+// scripts/gen-studio-fixtures.mjs). Con rectángulos de color no se puede juzgar
+// si un diseño es publicable: el contraste del texto sobre una foto de verdad y
+// el peso visual de las miniaturas solo se ven así. Pasan por normalizePhoto,
+// el mismo camino que en producción.
+const FIXTURE_DIR = join(process.cwd(), 'public', 'studio', 'fixtures')
+
+async function photo(name: string): Promise<string> {
+  const uri = await normalizePhoto(readFileSync(join(FIXTURE_DIR, `${name}.webp`)))
+  if (!uri) throw new Error(`No se pudo leer el fixture ${name}`)
+  return uri
 }
 
 async function props(over: Partial<TemplateProps> = {}): Promise<TemplateProps> {
   return {
-    heroPhoto:   await photo(120, 150, 190),
-    thumbPhotos: [await photo(200, 200, 195), await photo(180, 175, 170), await photo(160, 165, 175)],
+    heroPhoto:   await photo('casa-fachada'),
+    thumbPhotos: [await photo('casa-salon'), await photo('casa-comedor'), await photo('casa-atardecer')],
     agentPhoto:  null,
     logo:        null,
     headline:    'Casa elegante y familiar en venta',

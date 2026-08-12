@@ -1,4 +1,5 @@
 import 'server-only'
+import sharp from 'sharp'
 import { circleCrop } from './agent-photo'
 import { formatDate, formatMoney } from './format'
 import type { StudioForm } from './recipes'
@@ -60,6 +61,26 @@ export function toDataUri(buffer: Buffer, mime = 'image/jpeg'): string {
   return `data:${mime};base64,${buffer.toString('base64')}`
 }
 
+/**
+ * Normaliza cualquier foto a JPEG antes de codificarla.
+ *
+ * Las fotos de una propiedad pueden ser JPEG, PNG o WebP, y el data URI declara
+ * un mime: anunciar `image/jpeg` sobre bytes WebP es mentirle al renderizador.
+ * De paso acota el tamaño — un data URI de 4 MB dentro del SVG es gratuito de
+ * evitar. Si la imagen es ilegible devuelve null y el template pinta sin ella.
+ */
+export async function normalizePhoto(buffer: Buffer): Promise<string | null> {
+  try {
+    const jpeg = await sharp(buffer)
+      .resize(1400, 1400, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 84 })
+      .toBuffer()
+    return toDataUri(jpeg, 'image/jpeg')
+  } catch {
+    return null
+  }
+}
+
 async function fetchImage(url: string): Promise<Buffer | null> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 15000)
@@ -84,9 +105,10 @@ export async function buildTemplateProps(params: {
 
   // Las fotos se bajan en paralelo, y una que falle no rompe la pieza: el
   // template pinta lo que haya.
-  const photos = (await Promise.all(params.photoUrls.slice(0, 4).map(fetchImage)))
+  const raw = (await Promise.all(params.photoUrls.slice(0, 4).map(fetchImage)))
     .filter((b): b is Buffer => b !== null)
-    .map(b => toDataUri(b))
+  const photos = (await Promise.all(raw.map(normalizePhoto)))
+    .filter((u): u is string => u !== null)
 
   let agentPhoto: string | null = null
   if (params.agentPhoto) {
