@@ -2,6 +2,7 @@ import 'server-only'
 import sharp from 'sharp'
 import { CANVAS, MARGIN, textBand, resolveZone } from './canvas'
 import { getStudioFont, sanitize, wrap, fit, ellipsize, textPath } from './typeset'
+import { formatDate, formatMoney } from './format'
 import type { StudioForm } from './recipes'
 import type { StudioBrand, TextZone } from './types'
 
@@ -24,21 +25,6 @@ const BADGE: Record<StudioForm['recipe'], string | null> = {
   sold:        'VENDIDA',
   event:       null,   // el título ya manda
   open_prompt: null,
-}
-
-const MONTHS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-]
-
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  if (!y || !m || !d) return iso
-  return `${d} de ${MONTHS[m - 1]} de ${y}`
-}
-
-function formatMoney(n: number): string {
-  return `$${Math.round(n).toLocaleString('en-US')}`
 }
 
 function formatSpecs(f: Extract<StudioForm, { recipe: 'new_listing' }>): string {
