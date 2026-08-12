@@ -1,9 +1,16 @@
 import type { StudioRecipe } from '../types'
 import type { FitReport, StudioTemplate } from './types'
+import { mosaicoListing } from './mosaico-listing'
+import { completaListing } from './completa-listing'
+import { editorialListing } from './editorial-listing'
 
 // El registro es explícito, no un glob: importar por nombre hace que un template
 // roto sea un error de compilación y no una ausencia silenciosa en el selector.
-export const TEMPLATES: StudioTemplate[] = []
+export const TEMPLATES: StudioTemplate[] = [
+  mosaicoListing,
+  completaListing,
+  editorialListing,
+]
 
 export function templatesForRecipe(recipe: StudioRecipe): StudioTemplate[] {
   return TEMPLATES.filter(t => t.recipes.includes(recipe))

@@ -125,14 +125,12 @@ describe('template y headline', () => {
     expect(parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' }).ok).toBe(true)
   })
 
-  // Reactivar en la Task 8, cuando 'mosaico-listing' exista.
-  it.skip('acepta un diseño que declara esa receta y rechaza uno que no', () => {
+  it('acepta un diseño que declara esa receta y rechaza uno que no', () => {
     expect(parseStudioForm({ ...listing, template: 'mosaico-listing' }).ok).toBe(true)
     expect(parseStudioForm({ ...listing, template: 'mosaico-open-house' }).ok).toBe(false)
   })
 
-  // Reactivar en la Task 8.
-  it.skip('headline es opcional y se limita a 60 caracteres', () => {
+  it('headline es opcional y se limita a 60 caracteres', () => {
     const ok = parseStudioForm({ ...listing, template: 'mosaico-listing', headline: 'Casa elegante y familiar en venta' })
     expect(ok.ok).toBe(true)
     if (ok.ok) expect(ok.data.headline).toBe('Casa elegante y familiar en venta')

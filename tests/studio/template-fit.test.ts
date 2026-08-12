@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { templateFit, templatesForRecipe, findTemplate, TEMPLATES } from '@/lib/studio/templates/registry'
 
 describe('registro de templates', () => {
-  // Reactivar en la Task 8 con ['new_listing']; la Task 10 lo devuelve a las
-  // tres recetas. Hasta entonces el registro está vacío a propósito.
-  it.skip('cada receta de casa tiene exactamente tres diseños', () => {
+  // La Task 9 añade open_house y la Task 10 sold; hasta entonces solo new_listing.
+  it('cada receta de casa tiene exactamente tres diseños', () => {
     for (const recipe of ['new_listing'] as const) {
       expect(templatesForRecipe(recipe)).toHaveLength(3)
     }
@@ -26,8 +25,7 @@ describe('registro de templates', () => {
   })
 })
 
-// Reactivar en la Task 8: hasta entonces el registro está vacío a propósito.
-describe.skip('templateFit', () => {
+describe('templateFit', () => {
   const mosaico = findTemplate('mosaico-listing')!
 
   it('sin avisos cuando hay fotos de sobra', () => {
