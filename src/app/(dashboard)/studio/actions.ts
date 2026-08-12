@@ -5,7 +5,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
-import { generateStudioImage, recomposeStudioImage } from '@/lib/studio/generate'
+import { generateStudioImage, recomposeStudioImage, renderTemplatePiece } from '@/lib/studio/generate'
 import { getStudioImage, STUDIO_BUCKET } from '@/lib/data/studio'
 import type { ActionResult, StudioImage } from '@/lib/studio/types'
 
@@ -118,4 +118,39 @@ export async function deleteStudioImage(id: string): Promise<ActionResult<{ id: 
 
   revalidatePath('/studio')
   return { ok: true, data: { id } }
+}
+
+/**
+ * Renderiza y devuelve la imagen SIN escribir en la base ni en el bucket.
+ *
+ * Solo existe en la ruta con diseño, que no llama a ninguna IA: ahí probar es
+ * gratis y el agente puede saltar entre diseños hasta dar con el que quiere. Con
+ * escena generada previsualizar costaría dinero, así que ese camino sigue
+ * creando la fila directamente.
+ *
+ * Sin esta separación, mirar los tres diseños dejaría tres filas de basura en la
+ * biblioteca.
+ */
+export async function previewStudioImage(formData: FormData): Promise<ActionResult<{ dataUri: string }>> {
+  const ctx = await gate()
+  if (!ctx) return { ok: false, error: 'Acceso no autorizado' }
+
+  const raw = formData.get('payload')
+  if (typeof raw !== 'string') return { ok: false, error: 'Faltan los datos del formulario' }
+
+  let parsedJson: unknown
+  try { parsedJson = JSON.parse(raw) } catch { return { ok: false, error: 'Los datos del formulario no son válidos' } }
+
+  const parsed = parseStudioForm(parsedJson)
+  if (!parsed.ok) return parsed
+  if (!parsed.data.template) {
+    return { ok: false, error: 'La previsualización solo existe para las piezas con diseño' }
+  }
+
+  try {
+    const png = await renderTemplatePiece({ ctx, form: parsed.data })
+    return { ok: true, data: { dataUri: `data:image/png;base64,${png.toString('base64')}` } }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo previsualizar' }
+  }
 }

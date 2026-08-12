@@ -2,10 +2,14 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { recordAiUsage, computeCostUsd, IMAGE_UNIT_COST_USD } from '@/lib/services/ai-usage'
-import { getStudioBrand, getStudioImage, getPropertyOptions, STUDIO_BUCKET } from '@/lib/data/studio'
+import { getStudioBrand, getStudioImage, getPropertyOptions, getAgentOptions, STUDIO_BUCKET } from '@/lib/data/studio'
 import { directScene, DIRECTOR_MODEL } from './prompt-director'
 import { resolveBackground } from './background'
 import { composeStudioImage } from './compositor'
+import { buildTemplateProps } from './template-props'
+import { findTemplate } from './templates/registry'
+import { renderToPng } from './render/satori'
+import { CANVAS } from './canvas'
 import type { StudioForm } from './recipes'
 import type { ActionResult, StudioImage, TextZone } from './types'
 import type { TenantContext } from '@/lib/auth/tenant-context'
@@ -38,6 +42,42 @@ async function firstPhotoUrl(tenantId: string, propertyId: string): Promise<stri
   return options.find(p => p.id === propertyId)?.photos[0] ?? null
 }
 
+/**
+ * Renderiza una pieza con template. No persiste nada y no llama a ninguna IA:
+ * las fotos son las reales de la propiedad y el texto sale del formulario. Por
+ * eso la previsualización puede ser gratis e ilimitada.
+ */
+export async function renderTemplatePiece(params: {
+  ctx:  TenantContext
+  form: StudioForm
+}): Promise<Buffer> {
+  const { ctx, form } = params
+  if (!ctx.tenant_id) throw new Error('Selecciona un tenant antes de renderizar')
+  if (!form.template) throw new Error('La pieza no tiene diseño')
+
+  const template = findTemplate(form.template)
+  if (!template) throw new Error('Ese diseño no existe')
+
+  const [brand, properties, agents] = await Promise.all([
+    getStudioBrand(ctx.tenant_id, form.agent_id ?? null),
+    getPropertyOptions(ctx.tenant_id),
+    getAgentOptions(ctx.tenant_id),
+  ])
+
+  const photoUrls = form.property_id
+    ? (properties.find(p => p.id === form.property_id)?.photos ?? [])
+    : []
+
+  const agent = form.agent_id ? agents.find(a => a.id === form.agent_id) : undefined
+  const agentPhoto = agent?.cover_photo_url
+    ? { url: agent.cover_photo_url, cutout: agent.cover_photo_cutout }
+    : null
+
+  const props = await buildTemplateProps({ form, brand, photoUrls, agentPhoto })
+  const { width, height } = CANVAS[form.aspect]
+  return renderToPng(template.render(props), { width, height })
+}
+
 export async function generateStudioImage(params: {
   ctx:       TenantContext
   form:      StudioForm
@@ -46,8 +86,9 @@ export async function generateStudioImage(params: {
   const { ctx, form } = params
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant antes de generar' }
 
-  // 'photo' no llama a ninguna IA, así que tampoco consume presupuesto.
-  if (form.source_mode === 'generate') {
+  // Ni el modo 'photo' ni una pieza con diseño llaman a la IA, así que tampoco
+  // consumen presupuesto. Solo la escena generada pasa por el gate.
+  if (!form.template && form.source_mode === 'generate') {
     const blocked = await assertAiWithinLimit(ctx)
     if (blocked) return blocked
   }
@@ -56,6 +97,7 @@ export async function generateStudioImage(params: {
   const brand = await getStudioBrand(ctx.tenant_id, form.agent_id ?? null)
 
   const { data: row, error: insErr } = await db.from('studio_images').insert({
+    template:       form.template ?? null,
     tenant_id:      ctx.tenant_id,
     agent_id:       form.agent_id ?? null,
     created_by:     ctx.user_id,
@@ -76,6 +118,25 @@ export async function generateStudioImage(params: {
   let costUsd = 0
 
   try {
+    // ── Camino con diseño: sin IA, sin costo ─────────────────────────────────
+    // Las fotos son las reales y el texto sale del formulario, así que no hay
+    // escena que generar ni prompt que dirigir.
+    if (form.template) {
+      const png = await renderTemplatePiece({ ctx, form })
+      const renderedPath = await uploadPng(`${base}/final.png`, png)
+
+      await db.from('studio_images').update({
+        rendered_path: renderedPath,
+        status:        'ready',
+        error_message: null,
+        cost_usd:      0,
+        updated_at:    new Date().toISOString(),
+      }).eq('id', id)
+
+      const ready = await getStudioImage(id)
+      return ready ? { ok: true, data: ready } : { ok: false, error: 'La imagen se generó pero no se pudo leer' }
+    }
+
     // La referencia se guarda ANTES de usarse: si algo falla después, queda el
     // rastro de con qué se pidió.
     let referencePath: string | null = null
@@ -162,6 +223,19 @@ export async function recomposeStudioImage(
 
   const db = createAdminClient()
   try {
+    // Con diseño no hay fondo que reutilizar: el template se vuelve a dibujar
+    // entero, y no cuesta nada.
+    if (form.template) {
+      const png = await renderTemplatePiece({ ctx, form })
+      const renderedPath = await uploadPng(`${existing.tenant_id}/${id}/final.png`, png)
+      await db.from('studio_images').update({
+        form_json: form, template: form.template, rendered_path: renderedPath,
+        status: 'ready', error_message: null, updated_at: new Date().toISOString(),
+      }).eq('id', id)
+      const ready = await getStudioImage(id)
+      return ready ? { ok: true, data: ready } : { ok: false, error: 'No se pudo leer la imagen recompuesta' }
+    }
+
     let bg: Buffer | null = null
     if (existing.background_path) {
       const { data: blob } = await db.storage.from(STUDIO_BUCKET).download(existing.background_path)

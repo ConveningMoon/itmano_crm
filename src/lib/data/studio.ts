@@ -21,7 +21,7 @@ const PROPERTY_COLUMNS = columns('properties', [
   'image_url', 'gallery', 'status', 'created_at',
 ])
 
-const AGENT_COLUMNS = columns('agents', ['id', 'name', 'phone', 'active'])
+const AGENT_COLUMNS = columns('agents', ['id', 'name', 'phone', 'active', 'cover_photo_url', 'cover_photo_cutout'])
 
 export interface PropertyOption {
   id:         string
@@ -35,7 +35,16 @@ export interface PropertyOption {
   photos:     string[]
 }
 
-export interface AgentOption { id: string; name: string; phone: string | null }
+export interface AgentOption {
+  id:    string
+  name:  string
+  phone: string | null
+  // La portada la usan los templates que tienen slot para ella. `cutout` dice si
+  // el archivo traía transparencia real: con ella se usa recortada, sin ella el
+  // compositor la mete en un círculo.
+  cover_photo_url:    string | null
+  cover_photo_cutout: boolean
+}
 
 function publicUrl(path: string | null): string | null {
   if (!path) return null
@@ -95,7 +104,13 @@ export async function getAgentOptions(tenantId: string): Promise<AgentOption[]> 
     .from('agents').select(AGENT_COLUMNS)
     .eq('tenant_id', tenantId).eq('active', true).order('name')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reason: ídem toImage
-  return ((data ?? []) as any[]).map((a) => ({ id: a.id, name: a.name, phone: a.phone ?? null }))
+  return ((data ?? []) as any[]).map((a) => ({
+    id: a.id,
+    name: a.name,
+    phone: a.phone ?? null,
+    cover_photo_url: a.cover_photo_url ?? null,
+    cover_photo_cutout: a.cover_photo_cutout === true,
+  }))
 }
 
 /** La marca con la que se compone. Sale de la base, nunca del código. */

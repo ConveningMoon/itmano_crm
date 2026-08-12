@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles, Eye } from 'lucide-react'
 import { STYLES } from '@/lib/studio/styles'
-import { createStudioImage } from './actions'
+import { createStudioImage, previewStudioImage } from './actions'
+import { TemplatePicker } from './template-picker'
+import { templatesForRecipe } from '@/lib/studio/templates/registry'
 import { Field, TextInput, TextArea, Select, Toggle, ColorTags } from './field-inputs'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
@@ -65,12 +67,17 @@ export function RecipeForm({ properties, agents, onCreated }: {
   const [agentId, setAgentId] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [referenceRole, setReferenceRole] = useState('subject')
+  const [template, setTemplate] = useState('')
+  const [headline, setHeadline] = useState('')
+  const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   const isHouse = HOUSE_RECIPES.includes(recipe)
   const property = useMemo(() => properties.find(p => p.id === propertyId) ?? null, [properties, propertyId])
   const canUsePhoto = isHouse && !!property?.photos.length
+  const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
+  const agent = agents.find(a => a.id === agentId)
 
   function set(key: string, value: unknown) {
     setFields(prev => ({ ...prev, [key]: value }))
@@ -98,27 +105,50 @@ export function RecipeForm({ properties, agents, onCreated }: {
     setFields({})
     setPropertyId('')
     setSourceMode('generate')
+    // Un diseño solo sirve para las recetas que declara: al cambiar de receta
+    // deja de ser válido y el selector vuelve a estar sin elegir.
+    setTemplate('')
+    setPreview(null)
   }
 
-  function submit() {
-    setError(null)
-    const payload = {
+  function buildPayload() {
+    return {
       ...fields,
       recipe, style, aspect, palette,
       source_mode:    sourceMode,
+      template:       template || undefined,
+      headline:       headline || undefined,
       scene_notes:    sceneNotes || undefined,
       property_id:    propertyId || undefined,
       agent_id:       agentId || undefined,
       has_reference:  !!referenceFile,
       reference_role: referenceFile ? referenceRole : undefined,
     }
-    const data = new FormData()
-    data.set('payload', JSON.stringify(payload))
-    if (referenceFile) data.set('reference', referenceFile)
+  }
 
+  function formData(): FormData {
+    const data = new FormData()
+    data.set('payload', JSON.stringify(buildPayload()))
+    if (referenceFile) data.set('reference', referenceFile)
+    return data
+  }
+
+  // Previsualizar no persiste nada y con diseño no cuesta: el agente puede
+  // saltar entre los tres hasta dar con el que quiere.
+  function doPreview() {
+    setError(null)
     startTransition(async () => {
-      const r = await createStudioImage(data)
-      if (r.ok) onCreated(r.data)
+      const r = await previewStudioImage(formData())
+      if (r.ok) setPreview(r.data.dataUri)
+      else setError(r.error)
+    })
+  }
+
+  function submit() {
+    setError(null)
+    startTransition(async () => {
+      const r = await createStudioImage(formData())
+      if (r.ok) { onCreated(r.data); setPreview(null) }
       else setError(r.error)
     })
   }
@@ -177,6 +207,28 @@ export function RecipeForm({ properties, agents, onCreated }: {
               { value: 'generate', label: 'Generar escena con IA' },
               { value: 'photo',    label: 'Usar la foto tal cual' },
             ]}
+          />
+        </Field>
+      )}
+
+      {/* Diseño: se elige mirando, no de una lista de nombres */}
+      {isHouse && (
+        <TemplatePicker
+          templates={templates}
+          value={template}
+          onChange={setTemplate}
+          photoCount={property?.photos.length ?? 0}
+          hasAgentPhoto={!!agent?.cover_photo_url}
+        />
+      )}
+
+      {isHouse && (
+        <Field label="Titular" hint="Opcional. Sin él se usa uno por defecto según la receta.">
+          <TextInput
+            value={headline}
+            maxLength={60}
+            onChange={e => setHeadline(e.target.value)}
+            placeholder="Casa elegante y familiar en venta"
           />
         </Field>
       )}
@@ -341,6 +393,25 @@ export function RecipeForm({ properties, agents, onCreated }: {
         <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>
       )}
 
+      {template && (
+        <button
+          type="button"
+          className="studio-generate"
+          disabled={pending}
+          onClick={doPreview}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            width: '100%', padding: '11px', fontSize: '13px', fontWeight: 500,
+            borderRadius: '8px', cursor: pending ? 'default' : 'pointer', marginBottom: '10px',
+            background: 'transparent', border: '1px solid var(--border-subtle)',
+            color: 'var(--text-secondary)', opacity: pending ? 0.6 : 1,
+            transition: 'background-color var(--dur-fast), color var(--dur-fast)',
+          }}
+        >
+          <Eye size={14} /> Previsualizar
+        </button>
+      )}
+
       <button
         type="button"
         className="studio-generate"
@@ -357,8 +428,18 @@ export function RecipeForm({ properties, agents, onCreated }: {
       >
         {pending
           ? <><Loader2 size={14} className="animate-spin" /> Generando…</>
-          : <><Sparkles size={14} /> Generar imagen</>}
+          : <><Sparkles size={14} /> {template ? 'Guardar en la biblioteca' : 'Generar imagen'}</>}
       </button>
+
+      {preview && (
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+            Previsualización · todavía no está guardada
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element -- reason: data URI en memoria, no hay host que optimizar */}
+          <img src={preview} alt="Previsualización" style={{ width: '100%', display: 'block', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+        </div>
+      )}
     </div>
   )
 }
