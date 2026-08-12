@@ -12,6 +12,7 @@ import {
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
 import { recalibrate } from '@/lib/scoring/calibration'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
+import { detectCutout } from '@/lib/studio/agent-photo'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { PLANS } from '@/lib/plans'
 
@@ -1044,6 +1045,107 @@ export async function saveBusinessProfile(
 
   const res = await persistBusinessProfile(tenantId, input)
   if (!res.ok) return res
+
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
+// ─── Portada del agente (bucket tenant-assets) ────────────────────────────────
+// Ruta: <tenant_id>/agents/<agent_id>/cover-<uuid>.<ext>. La sube el propio
+// agente (requireSelfOrManager), igual que su descripción: es su foto.
+//
+// Se guarda si el archivo traía transparencia real para no reanalizarlo en cada
+// render — el Estudio decide con eso entre usarla recortada o dentro de un
+// círculo. Reusa LOGO_BUCKET y removeOldLogoObject: es el mismo bucket.
+
+const MAX_COVER_BYTES = 4 * 1024 * 1024 // 4 MB
+const COVER_EXT_BY_TYPE: Record<string, string> = {
+  'image/png':  'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+}
+
+export async function updateAgentCoverPhoto(
+  formData: FormData,
+): Promise<{ ok: true; url: string; cutout: boolean } | { ok: false; error: string }> {
+  const agentId = formData.get('agentId')
+  if (typeof agentId !== 'string' || !agentId) return { ok: false, error: 'Agente no válido' }
+
+  const ctx = await getCurrentTenantContext()
+  const denied = requireSelfOrManager(ctx, agentId)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const file = formData.get('file')
+  if (!(file instanceof File)) return { ok: false, error: 'Archivo no válido' }
+  if (!COVER_EXT_BY_TYPE[file.type]) return { ok: false, error: 'La foto debe ser PNG, JPG o WebP.' }
+  if (file.size > MAX_COVER_BYTES) return { ok: false, error: 'La foto supera el tamaño máximo de 4 MB.' }
+
+  const supabase = createAdminClient()
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('id, cover_photo_url')
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  if (!agent) return { ok: false, error: 'El agente no existe.' }
+
+  const bytes  = Buffer.from(await file.arrayBuffer())
+  const cutout = await detectCutout(bytes)
+  const path   = `${tenantId}/agents/${agentId}/cover-${crypto.randomUUID()}.${COVER_EXT_BY_TYPE[file.type]}`
+
+  const { error: uploadErr } = await supabase.storage
+    .from(LOGO_BUCKET)
+    .upload(path, bytes, { contentType: file.type, upsert: false })
+  if (uploadErr) return { ok: false, error: uploadErr.message }
+
+  const { data: pub } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path)
+
+  const { error: updateErr } = await supabase
+    .from('agents')
+    .update({ cover_photo_url: pub.publicUrl, cover_photo_cutout: cutout })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+  if (updateErr) {
+    // No dejar el archivo huérfano si la fila no se pudo actualizar.
+    await supabase.storage.from(LOGO_BUCKET).remove([path])
+    return { ok: false, error: updateErr.message }
+  }
+
+  await removeOldLogoObject(supabase, (agent as { cover_photo_url: string | null }).cover_photo_url)
+
+  revalidatePath('/settings')
+  return { ok: true, url: pub.publicUrl, cutout }
+}
+
+export async function removeAgentCoverPhoto(
+  agentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireSelfOrManager(ctx, agentId)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const supabase = createAdminClient()
+  const { data: agent } = await supabase
+    .from('agents')
+    .select('cover_photo_url')
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+
+  const { error } = await supabase
+    .from('agents')
+    .update({ cover_photo_url: null, cover_photo_cutout: false })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  await removeOldLogoObject(supabase, (agent as { cover_photo_url: string | null } | null)?.cover_photo_url ?? null)
 
   revalidatePath('/settings')
   return { ok: true }

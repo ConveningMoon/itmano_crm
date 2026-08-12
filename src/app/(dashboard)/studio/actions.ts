@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { parseStudioForm } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
 import { generateStudioImage, recomposeStudioImage } from '@/lib/studio/generate'
 import { getStudioImage, STUDIO_BUCKET } from '@/lib/data/studio'
 import type { ActionResult, StudioImage } from '@/lib/studio/types'
@@ -34,6 +34,10 @@ export async function createStudioImage(formData: FormData): Promise<ActionResul
 
   const parsed = parseStudioForm(parsedJson)
   if (!parsed.ok) return parsed
+
+  // Solo al CREAR: las piezas viejas sin template siguen recomponiéndose.
+  const noTemplate = requireTemplate(parsed.data)
+  if (noTemplate) return noTemplate
 
   let reference: { data: Buffer; mimeType: string } | null = null
   const file = formData.get('reference')

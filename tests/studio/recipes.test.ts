@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseStudioForm } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
 
 const base = { style: 'editorial', aspect: '4:5', palette: ['#1B2A41'] }
@@ -87,5 +87,55 @@ describe('styles', () => {
   it('los seis estilos tienen dirección de arte no vacía', () => {
     expect(STYLE_KEYS).toHaveLength(6)
     for (const k of STYLE_KEYS) expect(styleDirection(k).length).toBeGreaterThan(40)
+  })
+})
+
+describe('template y headline', () => {
+  const listing = { ...base, recipe: 'new_listing', address: '9 Bay St', price: 450000 }
+
+  it('el esquema acepta una receta de casa sin diseño: las piezas viejas se recomponen', () => {
+    // Exigir el template en el esquema dejaría sin recomponer las piezas hechas
+    // antes de los templates, que tienen template nulo en form_json.
+    expect(parseStudioForm(listing).ok).toBe(true)
+  })
+
+  it('crear una pieza nueva de casa SÍ exige diseño', () => {
+    const r = parseStudioForm(listing)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const denied = requireTemplate(r.data)
+      expect(denied).not.toBeNull()
+      expect(denied!.error).toContain('diseño')
+    }
+  })
+
+  it('event y open_prompt nunca exigen diseño', () => {
+    const r = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(requireTemplate(r.data)).toBeNull()
+  })
+
+  it('rechaza una clave de diseño inventada', () => {
+    const r = parseStudioForm({ ...listing, template: 'no-existe' })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('diseño')
+  })
+
+  it('event y open_prompt no piden diseño', () => {
+    expect(parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' }).ok).toBe(true)
+  })
+
+  // Reactivar en la Task 8, cuando 'mosaico-listing' exista.
+  it.skip('acepta un diseño que declara esa receta y rechaza uno que no', () => {
+    expect(parseStudioForm({ ...listing, template: 'mosaico-listing' }).ok).toBe(true)
+    expect(parseStudioForm({ ...listing, template: 'mosaico-open-house' }).ok).toBe(false)
+  })
+
+  // Reactivar en la Task 8.
+  it.skip('headline es opcional y se limita a 60 caracteres', () => {
+    const ok = parseStudioForm({ ...listing, template: 'mosaico-listing', headline: 'Casa elegante y familiar en venta' })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) expect(ok.data.headline).toBe('Casa elegante y familiar en venta')
+    expect(parseStudioForm({ ...listing, template: 'mosaico-listing', headline: 'x'.repeat(61) }).ok).toBe(false)
   })
 })

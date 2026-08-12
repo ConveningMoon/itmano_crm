@@ -95,6 +95,8 @@ export type Database = {
           accent_color: string
           active: boolean
           avatar_initials: string
+          cover_photo_cutout: boolean
+          cover_photo_url: string | null
           created_at: string | null
           description: string | null
           email: string
@@ -112,6 +114,8 @@ export type Database = {
           accent_color: string
           active?: boolean
           avatar_initials: string
+          cover_photo_cutout?: boolean
+          cover_photo_url?: string | null
           created_at?: string | null
           description?: string | null
           email: string
@@ -129,6 +133,8 @@ export type Database = {
           accent_color?: string
           active?: boolean
           avatar_initials?: string
+          cover_photo_cutout?: boolean
+          cover_photo_url?: string | null
           created_at?: string | null
           description?: string | null
           email?: string
