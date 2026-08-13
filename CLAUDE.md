@@ -409,6 +409,7 @@ Suites de tests (Vitest):
 
 ```
 npm run test:unit       # TODAS las suites que no tocan la BD — 6 s, sin secretos
+npm run test:schema     # deriva entre el repo y las bases (ver abajo)
 npm run test:rls        # aislamiento por tenant (pega a la BD remota: nunca en paralelo)
 npm run test:scoring    # triggers de scoring y decay (BD remota)
 npm run test:ai-limits  # presupuesto de IA (BD remota)
@@ -432,6 +433,25 @@ proyecto lo permite —el sandbox sí— y sólo cae a firmar un HS256 con
 `SUPABASE_JWT_SECRET` cuando no (producción, que es Magic Link puro). El token
 real trae los mismos claims que tendría en la app, en vez de los que decidamos
 ponerle a mano.
+
+**`test:schema` vigila que el repo y las bases no se separen** (`tests/schema/parity.test.ts`),
+que es la causa raíz de casi todo lo que se documenta aquí como "se rompió y
+nadie se enteró". Hace dos cosas:
+
+1. Cruza lo aplicado en la base con `supabase/migrations/`: si alguien aplicó SQL
+   sin dejar el archivo, falla. Corre siempre.
+2. Compara el esquema de los dos proyectos (tablas, columnas, policies y
+   funciones). Sólo si le das las credenciales del segundo en
+   `PARITY_SUPABASE_URL` y `PARITY_SUPABASE_SERVICE_ROLE_KEY`; si no, se salta.
+
+Las huellas salen de `schema_snapshot()` (migración 100). **Los dos lados tienen
+que usar esa función**, no una consulta equivalente escrita a mano:
+`pg_policies.qual` se renderiza según el `search_path` de quien pregunta, y
+comparar una cosa con la otra da 31 tablas "distintas" que son idénticas.
+
+Las diferencias legítimas —una rama en curso aplicada sólo al sandbox— se
+declaran en las listas del propio test, con motivo. **Vacíalas al mergear**: una
+excepción que se queda deja de vigilar una migración de verdad.
 
 **En CI siguen yendo a donde apunten los secrets del repositorio en GitHub**
 (hoy, producción): allí las variables llegan por `env:` y ya están en
