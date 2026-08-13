@@ -41,19 +41,6 @@ export interface Agent {
   description?: string | null
 }
 
-export interface LeadMagnet {
-  id: string
-  tenantId: string
-  agentId: string
-  title: string
-  subtitle: string
-  language: Language
-  monthYear: string
-  pageUrl: string
-  coverEmoji: string
-  active: boolean
-}
-
 export interface Lead {
   id: string
   tenantId: string

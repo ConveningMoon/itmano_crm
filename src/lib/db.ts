@@ -1,4 +1,4 @@
-import type { Agent, Lead, LeadEvent, LeadMagnet, PurchaseProcess } from './types'
+import type { Agent, Lead, LeadEvent, PurchaseProcess } from './types'
 
 // ─── DB row shapes ────────────────────────────────────────────────────────────
 
@@ -42,21 +42,6 @@ export interface LeadRow {
   metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string
-}
-
-export interface LeadMagnetRow {
-  id: string
-  tenant_id: string
-  agent_id: string
-  title: string
-  subtitle: string
-  language: string
-  month_year: string
-  cover_emoji: string
-  page_url: string
-  active: boolean
-  created_at: string
-  agents?: AgentRow | null
 }
 
 export interface LeadEventRow {
@@ -138,21 +123,6 @@ export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
     notes: r.notes ?? undefined,
     completedAt: r.completed_at ?? null,
     createdAt: r.created_at,
-  }
-}
-
-export function mapLeadMagnet(r: LeadMagnetRow): LeadMagnet {
-  return {
-    id: r.id,
-    tenantId: r.tenant_id,
-    agentId: r.agent_id,
-    title: r.title,
-    subtitle: r.subtitle,
-    language: r.language as LeadMagnet['language'],
-    monthYear: r.month_year,
-    pageUrl: r.page_url,
-    coverEmoji: r.cover_emoji,
-    active: r.active,
   }
 }
 
