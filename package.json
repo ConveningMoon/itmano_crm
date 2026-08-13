@@ -20,6 +20,7 @@
     "test:billing": "vitest run tests/billing",
     "test:sources": "vitest run tests/sources",
     "types:db": "node scripts/gen-db-types.mjs",
+    "types:db:sandbox": "node scripts/gen-db-types.mjs sandbox",
     "test:business": "vitest run tests/business"
   },
   "dependencies": {

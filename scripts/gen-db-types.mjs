@@ -7,7 +7,21 @@
 import { execSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 
-const PROJECT_ID = 'kvmjlrvlnhiarrqxulkr'
+// Los dos proyectos Supabase. El esquema deberia ser el mismo en ambos, pero
+// mientras una migracion vive solo en el sandbox (que es donde se estrena) los
+// tipos hay que sacarlos de ahi o el archivo no reflejaria las columnas nuevas.
+//
+//   npm run types:db            -> produccion (por defecto)
+//   npm run types:db:sandbox    -> sandbox
+//   node scripts/gen-db-types.mjs <ref>   -> cualquier otro proyecto
+const PROYECTOS = {
+  prod:    'kvmjlrvlnhiarrqxulkr',
+  sandbox: 'xpaixcowvyksgluazwzn',
+}
+
+const arg        = process.argv[2] ?? 'prod'
+const PROJECT_ID = PROYECTOS[arg] ?? arg
+const ETIQUETA   = PROYECTOS[arg] ? arg : `ref ${arg}`
 const DESTINO    = 'src/lib/supabase/database.types.ts'
 
 const CABECERA = `// GENERADO — no editar a mano. Se regenera con \`npm run types:db\`.
@@ -26,4 +40,4 @@ const salida = execSync(
 )
 
 writeFileSync(DESTINO, CABECERA + salida, 'utf8')
-console.log(`${DESTINO} regenerado (${salida.length} bytes del esquema)`)
+console.log(`${DESTINO} regenerado desde ${ETIQUETA} (${salida.length} bytes del esquema)`)
