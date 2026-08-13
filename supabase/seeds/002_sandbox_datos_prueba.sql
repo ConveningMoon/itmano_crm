@@ -12,6 +12,13 @@
 -- Los scores NO se escriben a mano: se insertan los eventos y el trigger de
 -- scoring los calcula, que es justo lo que interesa poder probar.
 
+-- OJO con los usuarios de auth: si los creas con rls_test_create_user (helper de
+-- la 008), quedan con instance_id y los campos de token en NULL. Sirven para los
+-- tests RLS —que solo mintean un JWT— pero NO para iniciar sesion: GoTrue lee
+-- esas columnas como texto no-nulo, falla al leer la fila, intenta crear el
+-- usuario de nuevo y choca con el email unico ("Database error saving new
+-- user"). El bloque del final de este archivo los deja utilizables.
+--
 -- ── Guarda ────────────────────────────────────────────────────────────────────
 -- Si esto corre por error contra produccion, aborta antes de escribir nada.
 do $$
@@ -164,3 +171,44 @@ select l.id, l.tenant_id, 'email_spam_complaint', 'Marco el correo como spam',
        now() - interval '4 days', -100, null
 from leads l
 where l.tenant_id = 'tenant-tenant-test' and l.email = 'lead44@example.com';
+
+-- ── Assets: cortar toda dependencia del storage de produccion ─────────────────
+-- El tenant copiado trae logo, portadas de paginas alojadas y fotos de la
+-- propiedad apuntando al bucket del proyecto de PRODUCCION. Dos razones para
+-- limpiarlas y no para agregar ese host a next.config.ts:
+--
+--   1. Un entorno de pruebas que lee archivos de produccion no esta aislado.
+--   2. next/image rechaza cualquier host que no este en images.remotePatterns,
+--      asi que /dashboard responde 500 hasta que se quitan. Es el mismo tropiezo
+--      que documenta el CLAUDE.md sobre remotePatterns.
+--
+-- Se quedan sin imagen y el CRM muestra sus vacios, que tambien conviene ver.
+update tenants
+set logo_url = null
+where logo_url like '%kvmjlrvlnhiarrqxulkr%';
+
+update acquisition_channels
+set hosted_page = regexp_replace(hosted_page::text, 'https://kvmjlrvlnhiarrqxulkr\.supabase\.co[^"]*', '', 'g')::jsonb
+where hosted_page::text like '%kvmjlrvlnhiarrqxulkr%';
+
+update properties
+set image_url = null, gallery = '{}', floor_plans = '{}', detail_pdf_url = null
+where image_url like '%kvmjlrvlnhiarrqxulkr%'
+   or gallery::text like '%kvmjlrvlnhiarrqxulkr%'
+   or floor_plans::text like '%kvmjlrvlnhiarrqxulkr%'
+   or detail_pdf_url like '%kvmjlrvlnhiarrqxulkr%';
+
+-- ── Usuarios de auth utilizables por GoTrue ───────────────────────────────────
+-- rls_test_create_user deja estas columnas en NULL; GoTrue las espera como
+-- cadena vacia. Sin esto, /api/dev/login devuelve 502 aunque el usuario exista.
+update auth.users
+set instance_id                = coalesce(instance_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    confirmation_token         = coalesce(confirmation_token, ''),
+    recovery_token             = coalesce(recovery_token, ''),
+    email_change               = coalesce(email_change, ''),
+    email_change_token_new     = coalesce(email_change_token_new, ''),
+    email_change_token_current = coalesce(email_change_token_current, ''),
+    phone_change               = coalesce(phone_change, ''),
+    phone_change_token         = coalesce(phone_change_token, ''),
+    reauthentication_token     = coalesce(reauthentication_token, '')
+where instance_id is null or confirmation_token is null or recovery_token is null;
