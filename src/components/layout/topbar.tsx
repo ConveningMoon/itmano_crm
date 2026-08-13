@@ -58,7 +58,6 @@ function AiLimitBadge({ status, onClick }: { status: AiLimitIndicator; onClick: 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
   '/leads':         'Leads',
-  '/lead-magnets':  'Lead Magnets',
   '/analytics':     'Analytics',
   '/activity':      'Actividad',
   '/notifications': 'Notificaciones',

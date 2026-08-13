@@ -15,7 +15,6 @@ export default function robots(): MetadataRoute.Robots {
           '/emails',
           '/sources',
           '/analytics',
-          '/lead-magnets',
           '/notifications',
           '/activity',
           '/admin',
