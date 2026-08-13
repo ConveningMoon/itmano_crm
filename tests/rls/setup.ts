@@ -7,10 +7,14 @@ const ws = require('ws') as typeof WebSocket
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!
-// JWT secret — used to sign test tokens via the rls_test_mint_jwt(email, secret) RPC.
-// Source: Supabase Dashboard → Settings → API → JWT Settings → JWT Secret.
-// Store in .env.local as SUPABASE_JWT_SECRET (never commit the actual value).
+// Sólo se usa como respaldo, cuando el proyecto no acepta password auth (ver
+// tokenMinteado más abajo). Contra el sandbox no hace falta.
+// Fuente: Supabase Dashboard → Settings → API → JWT Settings → JWT Secret.
 const JWT_SECRET   = process.env.SUPABASE_JWT_SECRET!
+
+// A qué proyecto pegan estas suites lo decide vitest.config.ts, que carga
+// .env.test.local → .env.development.local → .env.local en ese orden. Con el
+// sandbox configurado, los fixtures dejan de crearse en la base de A&J.
 
 // Shared options for all clients created in this test module
 const clientOptions = {
@@ -23,40 +27,52 @@ export const adminClient = createClient(SUPABASE_URL, SERVICE_KEY, clientOptions
 // Per-run cache: email → minted JWT (so we call rls_test_mint_jwt once per email)
 const _jwtCache = new Map<string, string>()
 
-// Returns a Supabase client authenticated as the given user.
+// Token real emitido por GoTrue. Es el camino preferido: los fixtures se crean
+// con contraseña (rls_test_create_user), así que si el proyecto tiene el
+// proveedor de email habilitado —el sandbox lo tiene— podemos iniciar sesión de
+// verdad. El token trae exactamente los claims que tendría en producción, en vez
+// de los que nosotros decidamos ponerle a un JWT firmado a mano.
 //
-// This project uses Magic Link only — password auth is disabled, and the Admin
-// API's generateLink endpoint is also blocked at the project level. Instead we
-// call rls_test_mint_jwt(email, secret) (a SECURITY DEFINER Postgres function,
-// service_role only) which signs a valid HS256 JWT using the secret passed from
-// SUPABASE_JWT_SECRET in .env.local. The JWT is cached for the life of the test
-// process so we only hit the DB once per user per run.
+// Devuelve null si el proyecto no permite password auth, para que el llamador
+// caiga al minteo manual.
+async function tokenDeGoTrue(email: string, password: string): Promise<string | null> {
+  const cliente = createClient(SUPABASE_URL, ANON_KEY, clientOptions)
+  const { data, error } = await cliente.auth.signInWithPassword({ email, password })
+  if (error || !data.session) return null
+  return data.session.access_token
+}
+
+// Respaldo para proyectos con el password auth deshabilitado (producción lo
+// está: el login del CRM es Magic Link puro). rls_test_mint_jwt es una función
+// SECURITY DEFINER, sólo service_role, que firma un HS256 válido con el secreto
+// que le pasamos desde SUPABASE_JWT_SECRET.
+async function tokenMinteado(email: string): Promise<string> {
+  if (!JWT_SECRET) {
+    throw new Error(
+      `asUser(${email}): el proyecto no acepta password auth y no hay SUPABASE_JWT_SECRET ` +
+      'para firmar el token a mano. Añádelo al .env que corresponda — está en: ' +
+      'Supabase Dashboard → Settings → API → JWT Settings → JWT Secret'
+    )
+  }
+  const { data, error } = await adminClient.rpc('rls_test_mint_jwt', {
+    p_email:  email,
+    p_secret: JWT_SECRET,
+  })
+  if (error || !data) {
+    throw new Error(`asUser: rls_test_mint_jwt(${email}) falló: ${error?.message ?? 'null'}`)
+  }
+  return data as string
+}
+
+// Devuelve un cliente de Supabase autenticado como ese usuario.
 //
-// Prerequisite: add SUPABASE_JWT_SECRET to .env.local.
-// JWT secret value: Supabase Dashboard → Settings → API → JWT Settings → JWT Secret.
-//
-// The second argument is kept for API compatibility but is unused.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function asUser(email: string, _password: string) {
+// El token se cachea durante el proceso de test, así que cada usuario se
+// autentica una sola vez por corrida.
+export async function asUser(email: string, password: string = TEST_PASSWORD) {
   let accessToken = _jwtCache.get(email)
 
   if (!accessToken) {
-    if (!JWT_SECRET) {
-      throw new Error(
-        'asUser: SUPABASE_JWT_SECRET is not set. ' +
-        'Add it to .env.local — find it at: Supabase Dashboard → Settings → API → JWT Settings → JWT Secret'
-      )
-    }
-    const { data, error } = await adminClient.rpc('rls_test_mint_jwt', {
-      p_email: email,
-      p_secret: JWT_SECRET,
-    })
-    if (error || !data) {
-      throw new Error(
-        `asUser: rls_test_mint_jwt(${email}) failed: ${error?.message ?? 'null'}`
-      )
-    }
-    accessToken = data as string
+    accessToken = (await tokenDeGoTrue(email, password)) ?? (await tokenMinteado(email))
     _jwtCache.set(email, accessToken)
   }
 

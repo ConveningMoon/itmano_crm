@@ -104,7 +104,7 @@ El tenant Test copiado de producción (perfil de negocio completo, 4 canales con
 
 Los correos de esos leads son `@example.com` a propósito: si una secuencia se dispara desde local, **no puede alcanzar a una persona real**.
 
-Los usuarios de login del sandbox son `dj.vergara54321@gmail.com` (agent_owner) y `dj.vergara@hotmail.com` (super_admin).
+Los usuarios de login del sandbox son `dj.vergara54321@gmail.com` (agent_owner) y `dj.vergara@hotmail.com` (super_admin). Para crear más, `rls_test_create_user(email, password)` — desde la **099** los deja utilizables por GoTrue, así que sirven tanto para los tests como para iniciar sesión. Antes nacían con `instance_id` y los campos de token en `NULL`, y GoTrue no podía leer la fila: fallaba con un opaco "Database error saving new user" sobre un usuario que sí existía.
 
 ### Cómo se entra en local
 
@@ -418,11 +418,25 @@ npm run test:ai-limits  # presupuesto de IA (BD remota)
 remota compartida y **usan los mismos fixtures** (`tests/rls/setup.ts`): córrelas
 de una en una, nunca en paralelo entre sí ni con un build.
 
-**Ojo: esas tres siguen apuntando a PRODUCCIÓN**, no al sandbox. Vitest carga
-`.env.local` (no `.env.development.local`), así que crean y borran sus fixtures
-en la base real aunque `npm run dev` esté contra el sandbox. Es el
-comportamiento de siempre y los fixtures están acotados a sus propios tenants
-de prueba, pero tenlo presente antes de correrlas.
+**Esas tres corren contra el SANDBOX en local.** `vitest.config.ts` carga
+`.env.test.local` → `.env.development.local` → `.env.local` y gana el primero
+que define cada variable, así que con el sandbox configurado los fixtures dejan
+de crearse en la base de A&J. Si no existe ninguno de los dos primeros archivos,
+todo sigue como antes (producción).
+
+Usa `.env.test.local` sólo si quieres que los tests apunten a un proyecto
+distinto al de `npm run dev`.
+
+`asUser()` obtiene un token **real de GoTrue** con `signInWithPassword` cuando el
+proyecto lo permite —el sandbox sí— y sólo cae a firmar un HS256 con
+`SUPABASE_JWT_SECRET` cuando no (producción, que es Magic Link puro). El token
+real trae los mismos claims que tendría en la app, en vez de los que decidamos
+ponerle a mano.
+
+**En CI siguen yendo a donde apunten los secrets del repositorio en GitHub**
+(hoy, producción): allí las variables llegan por `env:` y ya están en
+`process.env`, que gana sobre cualquier archivo. Para mover CI al sandbox hay
+que cambiar esos secrets.
 
 Las suites sueltas siguen existiendo (`test:leads`, `test:visibility`,
 `test:import`, `test:routing`, `test:billing`, `test:auth`, `test:carousels`,
