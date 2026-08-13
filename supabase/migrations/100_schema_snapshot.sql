@@ -63,7 +63,18 @@ as $function$
       select jsonb_object_agg(f.nombre, f.huella)
       from (
         select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as nombre,
-               md5(pg_get_functiondef(p.oid)) as huella
+               -- Sin comentarios y con los espacios colapsados: la MISMA funcion
+               -- puede tener texto distinto en cada proyecto porque en uno se
+               -- aplico el archivo del repo y en otro una version resumida por
+               -- MCP. Comparar el texto crudo marcaria como distintas 20
+               -- funciones que hacen exactamente lo mismo; lo que interesa es
+               -- que cambie el CODIGO, no el comentario.
+               md5(
+                 regexp_replace(
+                   regexp_replace(pg_get_functiondef(p.oid), '--[^' || chr(10) || ']*', '', 'g'),
+                   '\s+', ' ', 'g'
+                 )
+               ) as huella
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public'
