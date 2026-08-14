@@ -1,4 +1,4 @@
-import { Band, Badge, Headline, StatRow, PhotoCard } from './primitives'
+import { Band, Badge, Headline, StatRow, PhotoCard, AgentBadge } from './primitives'
 import type { StudioTemplate, TemplateProps } from './types'
 
 // Editorial — manda la tipografía sobre un bloque de color, y la foto es
@@ -46,6 +46,8 @@ function Render(p: TemplateProps) {
         </span>
       </Band>
 
+      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={190} ring={p.palette.surface} right={70} bottom={130} />}
+
       {p.logo && (
         // eslint-disable-next-line @next/next/no-img-element -- reason: satori rasteriza a SVG
         <img src={p.logo} width={90} height={90} alt=""
@@ -64,7 +66,7 @@ export const editorialListing: StudioTemplate = {
   idealPhotos: 1,
   slots: {
     required: ['text.headline', 'text.price'],
-    optional: ['photo.hero', 'stats', 'text.address', 'text.phone', 'logo.tenant'],
+    optional: ['photo.hero', 'photo.agent', 'stats', 'text.address', 'text.phone', 'logo.tenant'],
   },
   render: Render,
 }

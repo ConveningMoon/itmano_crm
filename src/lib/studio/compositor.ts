@@ -54,7 +54,6 @@ function piecesFor(form: StudioForm): Piece[] {
       out.push({ text: form.address, role: 'lead' })
       const specs = formatSpecs(form)
       if (specs) out.push({ text: specs, role: 'detail' })
-      if (form.highlights.length) out.push({ text: form.highlights.join('  ·  '), role: 'detail' })
       break
     }
     case 'sold':

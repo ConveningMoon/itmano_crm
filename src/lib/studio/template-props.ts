@@ -114,10 +114,10 @@ export async function buildTemplateProps(params: {
   if (params.agentPhoto) {
     const raw = await fetchImage(params.agentPhoto.url)
     if (raw) {
-      // Recorte real → tal cual. Foto normal → círculo.
-      agentPhoto = params.agentPhoto.cutout
-        ? toDataUri(raw, 'image/png')
-        : toDataUri(await circleCrop(raw, 480), 'image/png')
+      // SIEMPRE en círculo, venga recortada o no. Antes se usaba tal cual si el
+      // PNG traía transparencia, y el resultado dependía de lo bien editada que
+      // estuviera la foto de cada agente. El diseño no puede depender de eso.
+      agentPhoto = toDataUri(await circleCrop(raw, 560), 'image/png')
     }
   }
 

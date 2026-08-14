@@ -9,6 +9,10 @@ import type { ActionResult } from './types'
 // datos incompletos — el requisito central del Estudio: el formulario correcto
 // para cada caso, completo, para evitar imprecisiones y desgaste de tokens.
 
+/** Tope del titular. Lo comparte la UI para pintar el contador: un límite que
+ *  el usuario no ve solo se descubre chocando con él. */
+export const HEADLINE_MAX = 60
+
 const HEX  = /^#[0-9a-fA-F]{6}$/
 
 const hex = z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')
@@ -49,7 +53,7 @@ const common = {
   template:       z.string().min(1).optional(),
   // Titular de marketing. La etiqueta fija ("NUEVA DISPONIBLE") describe el
   // hecho; el titular vende. Sin él, los nueve diseños dirían siempre lo mismo.
-  headline:       z.string().trim().max(60, 'El titular no puede pasar de 60 caracteres').optional(),
+  headline:       z.string().trim().max(HEADLINE_MAX, `El titular no puede pasar de ${HEADLINE_MAX} caracteres`).optional(),
 }
 
 const money = z.number({ error: 'La cifra es obligatoria' }).positive('La cifra debe ser mayor que cero')
@@ -77,7 +81,6 @@ const newListing = z.object({
   bedrooms:   z.number().int().nonnegative().optional(),
   bathrooms:  z.number().nonnegative().optional(),
   sqft:       z.number().int().positive().optional(),
-  highlights: z.array(z.string().trim().min(1).max(40)).max(3).default([]),
 })
 
 const sold = z.object({

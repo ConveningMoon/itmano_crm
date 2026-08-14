@@ -6,7 +6,8 @@ import { STYLES } from '@/lib/studio/styles'
 import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
 import { Lightbox } from './lightbox'
-import { templatesForRecipe } from '@/lib/studio/templates/registry'
+import { templatesForRecipe, findTemplate } from '@/lib/studio/templates/registry'
+import { HEADLINE_MAX } from '@/lib/studio/recipes'
 import { Field, TextInput, TextArea, Select, Toggle, Section } from './field-inputs'
 import { PalettePicker } from './palette-picker'
 import { DEFAULT_PALETTE, tenantPreset, paletteLabel, type StudioPalette } from '@/lib/studio/palettes'
@@ -93,6 +94,12 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const canUsePhoto = isHouse && !!property?.photos.length
   const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
   const agent = agents.find(a => a.id === agentId)
+  // Los formatos que admite el diseño elegido. Sin diseño (camino con IA) valen
+  // los tres: ahí el lienzo lo compone el compositor de bandas, que sí es
+  // sensible al formato.
+  const allowedAspects: string[] = template
+    ? (findTemplate(template)?.aspects as string[] | undefined) ?? ['4:5']
+    : ASPECTS.map(a => a.value)
   const templateLabel = templates.find(t => t.key === template)?.label
   const contentSummary =
     [property?.address ?? (fields.address ? String(fields.address) : null), agent?.name]
@@ -119,6 +126,15 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
       bathrooms: p.bathrooms ?? undefined,
       sqft:      p.sqft ?? undefined,
     }))
+  }
+
+  function chooseTemplate(key: string) {
+    setTemplate(key)
+    setPreview(null)
+    // Si el formato actual no lo admite el diseño nuevo, se corrige solo en vez
+    // de dejar una combinación que produciría una pieza recortada.
+    const allowed = (findTemplate(key)?.aspects as string[] | undefined) ?? ['4:5']
+    if (!allowed.includes(aspect)) setAspect(allowed[0])
   }
 
   function changeRecipe(key: string) {
@@ -234,10 +250,13 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
       )}
 
       {isHouse && (
-        <Field label="Titular" hint="Opcional. Sin él se usa uno por defecto según la receta.">
+        <Field
+          label="Titular"
+          hint={`Opcional. Sin él se usa uno por defecto según la receta. ${headline.length}/${HEADLINE_MAX}`}
+        >
           <TextInput
             value={headline}
-            maxLength={60}
+            maxLength={HEADLINE_MAX}
             onChange={e => setHeadline(e.target.value)}
             placeholder="Casa elegante y familiar en venta"
           />
@@ -284,13 +303,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
               <TextInput inputMode="numeric" value={fields.sqft === undefined ? '' : String(fields.sqft)} onChange={e => set('sqft', num(e.target.value))} />
             </Field>
           </div>
-          <Field label="Destacados" hint="Hasta tres, separados por coma.">
-            <TextInput
-              value={Array.isArray(fields.highlights) ? (fields.highlights as string[]).join(', ') : ''}
-              onChange={e => set('highlights', e.target.value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3))}
-              placeholder="Piscina, Cocina nueva"
-            />
-          </Field>
         </>
       )}
 
@@ -366,15 +378,25 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         <TemplatePicker
           templates={templates}
           value={template}
-          onChange={setTemplate}
+          onChange={chooseTemplate}
           photoCount={property?.photos.length ?? 0}
           hasAgentPhoto={!!agent?.cover_photo_url}
           showFit={!!propertyId}
         />
       )}
 
-      <Field label="Formato">
-        <Select value={aspect} onChange={e => setAspect(e.target.value)} options={ASPECTS} />
+      {/* Solo los formatos que el diseño declara soportar. Los templates de esta
+          entrega están compuestos para 4:5: ofrecer 1:1 o 9:16 recortaba la pieza
+          en silencio, porque el lienzo cambiaba y el contenido no. */}
+      <Field
+        label="Formato"
+        hint={allowedAspects.length === 1 ? 'Este diseño está compuesto para 4:5.' : undefined}
+      >
+        <Select
+          value={aspect}
+          onChange={e => setAspect(e.target.value)}
+          options={ASPECTS.filter(a => allowedAspects.includes(a.value))}
+        />
       </Field>
 
       </Section>

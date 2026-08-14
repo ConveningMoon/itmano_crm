@@ -1,4 +1,4 @@
-import { Badge, Headline, StatRow, AgentCutout } from './primitives'
+import { Badge, Headline, StatRow, AgentBadge } from './primitives'
 import type { StudioTemplate, TemplateProps } from './types'
 
 // Foto completa — la foto ocupa el lienzo entero y el texto vive sobre un
@@ -52,7 +52,7 @@ function Render(p: TemplateProps) {
         )}
       </div>
 
-      {p.agentPhoto && <AgentCutout src={p.agentPhoto} width={260} height={440} />}
+      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={190} ring="#FFFFFF" right={70} bottom={110} />}
     </div>
   )
 }

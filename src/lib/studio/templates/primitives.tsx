@@ -90,11 +90,27 @@ export function StatRow({ stats, color }: { stats: Stat[]; color: string }) {
   )
 }
 
-/** La portada del agente, ya recortada o encerrada en círculo por template-props. */
-export function AgentCutout({ src, width, height }: { src: string; width: number; height: number }) {
+/**
+ * La portada del agente, SIEMPRE dentro de un círculo que llena su hueco.
+ *
+ * Antes se usaba tal cual cuando el PNG traía transparencia, pero no todas las
+ * fotos vienen bien recortadas y el resultado dependía de la calidad del archivo
+ * que subiera cada agente. Un círculo con objectFit cover se ve igual de bien
+ * con cualquier foto y no deja huecos: el diseño no puede depender de que el
+ * usuario sepa editar imágenes.
+ */
+export function AgentBadge({ src, size, ring, right, bottom }: {
+  src: string; size: number; ring: string; right: number; bottom: number
+}) {
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- reason: ídem PhotoCard
-    <img src={src} width={width} height={height} alt=""
-         style={{ position: 'absolute', right: 20, bottom: 0, objectFit: 'contain' }} />
+    <div style={{
+      display: 'flex', position: 'absolute', right, bottom,
+      width: size, height: size, borderRadius: size / 2,
+      border: `6px solid ${ring}`, overflow: 'hidden',
+    }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- reason: ídem PhotoCard */}
+      <img src={src} width={size} height={size} alt=""
+           style={{ objectFit: 'cover', borderRadius: size / 2 }} />
+    </div>
   )
 }

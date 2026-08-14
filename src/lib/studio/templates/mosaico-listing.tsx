@@ -1,4 +1,4 @@
-import { Band, Badge, Headline, StatRow, PhotoCard, AgentCutout } from './primitives'
+import { Band, Badge, Headline, StatRow, PhotoCard, AgentBadge } from './primitives'
 import { darken } from '../palettes'
 import type { StudioTemplate, TemplateProps } from './types'
 
@@ -44,13 +44,22 @@ function Render(p: TemplateProps) {
         <StatRow stats={p.stats} color="#FFFFFF" />
       </Band>
 
+      {/* Precio y agente conviven: antes el nombre solo salía si NO había precio,
+          así que en una pieza de venta el agente no aparecía nunca. */}
       <Band color={darken(p.palette.brand)} height={130} bottom={0}>
-        <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 62, color: '#FFFFFF' }}>
-          {p.price ?? p.agentName ?? ''}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {p.price && (
+            <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 56, color: '#FFFFFF' }}>{p.price}</span>
+          )}
+          {p.agentName && (
+            <span style={{ fontFamily: 'Marcellus', fontSize: 22, letterSpacing: 2, color: '#FFFFFF', opacity: 0.85 }}>
+              {[p.agentName, p.phone].filter(Boolean).join('  ·  ')}
+            </span>
+          )}
+        </div>
       </Band>
 
-      {p.agentPhoto && <AgentCutout src={p.agentPhoto} width={300} height={520} />}
+      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={250} ring={p.palette.brand} right={50} bottom={150} />}
     </div>
   )
 }

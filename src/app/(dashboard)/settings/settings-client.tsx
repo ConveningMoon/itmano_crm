@@ -582,9 +582,9 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <label style={{ ...LABEL, marginBottom: 0 }}>Tu portada</label>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Aparece en los diseños del Estudio que tienen espacio para ti. Si subes un PNG con el
-              fondo ya recortado, saldrá de cuerpo completo sobre el diseño. Si no, se usará dentro
-              de un círculo.
+              Aparece dentro de un círculo en los diseños del Estudio que tienen espacio para ti.
+              Sube una foto donde se te vea de cerca y centrado: el recorte toma el centro de
+              atención de la imagen.
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -615,9 +615,7 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
                 />
                 {coverUrl && (
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                    {coverCutout
-                      ? 'Tiene el fondo recortado: saldrá de cuerpo completo.'
-                      : 'Sin fondo recortado: se usará dentro de un círculo.'}
+                    Así se verá en los diseños.
                   </div>
                 )}
               </div>
