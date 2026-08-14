@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
+import { DEFAULT_PALETTE } from '@/lib/studio/palettes'
 
-const base = { style: 'editorial', aspect: '4:5', palette: ['#1B2A41'] }
+const base = { style: 'editorial', aspect: '4:5', palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } }
 
 describe('parseStudioForm', () => {
   it('acepta una casa abierta completa', () => {
@@ -63,7 +64,30 @@ describe('parseStudioForm', () => {
 
   it('rechaza un estilo inexistente y colores que no son hex', () => {
     expect(parseStudioForm({ ...base, style: 'vaporwave', recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' }).ok).toBe(false)
-    expect(parseStudioForm({ ...base, palette: ['azul'], recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' }).ok).toBe(false)
+    expect(parseStudioForm({ ...base, palette: { brand: 'azul', surface: '#FFFFFF', ink: '#000000' }, recipe: 'open_prompt', prompt: 'x y z' }).ok).toBe(false)
+  })
+
+  it('acepta la paleta vieja (array de hex) y la traduce a roles', () => {
+    // Las piezas guardadas antes de los roles tienen `palette: ['#hex']` en su
+    // form_json: sin esto, recomponerlas fallaría.
+    const r = parseStudioForm({
+      style: 'editorial', aspect: '4:5', palette: ['#8C4A32'],
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.data.palette.brand).toBe('#8C4A32')
+      expect(r.data.palette.surface).toBe(DEFAULT_PALETTE.surface)
+    }
+  })
+
+  it('una paleta vacía cae a los valores por defecto', () => {
+    const r = parseStudioForm({
+      style: 'editorial', aspect: '4:5', palette: [],
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.palette).toEqual(DEFAULT_PALETTE)
   })
 
   it('scene_notes es opcional y se conserva', () => {
@@ -77,7 +101,7 @@ describe('parseStudioForm', () => {
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.data.source_mode).toBe('generate')
-      expect(r.data.palette).toEqual([])
+      expect(r.data.palette).toEqual(DEFAULT_PALETTE)
       expect(r.data.has_reference).toBe(false)
     }
   })

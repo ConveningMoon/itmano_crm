@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { styleDirection } from './styles'
 import { allowedZones } from './canvas'
+import { paletteHexes } from './palettes'
 import type { StudioForm } from './recipes'
 import type { StudioBrand, TextZone } from './types'
 
@@ -78,9 +79,10 @@ export function buildSystemPrompt(form: StudioForm, brand: StudioBrand): string 
   if (form.has_reference && form.reference_role) {
     parts.push('REFERENCE IMAGE:', REFERENCE_RULES[form.reference_role], '')
   }
-  if (form.palette.length) {
-    parts.push(`Preferred colors, used as accents and grading, never as flat overlays: ${form.palette.join(', ')}.`, '')
-  }
+  parts.push(
+    `Preferred colors, used as accents and grading, never as flat overlays: ${paletteHexes(form.palette).join(', ')}.`,
+    '',
+  )
   parts.push(
     hardRules(zones),
     '',

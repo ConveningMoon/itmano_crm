@@ -41,7 +41,7 @@ async function props(over: Partial<TemplateProps> = {}): Promise<TemplateProps> 
       { icon: 'bath',  value: '2 baños' },
     ],
     agentName: 'Adriana Melendez',
-    palette:   { primary: '#1B2A41', ink: '#FFFFFF', surface: '#FBF6EE' },
+    palette:   { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' },
     ...over,
   }
 }

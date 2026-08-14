@@ -7,7 +7,9 @@ import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
 import { Lightbox } from './lightbox'
 import { templatesForRecipe } from '@/lib/studio/templates/registry'
-import { Field, TextInput, TextArea, Select, Toggle, ColorTags } from './field-inputs'
+import { Field, TextInput, TextArea, Select, Toggle } from './field-inputs'
+import { PalettePicker } from './palette-picker'
+import { DEFAULT_PALETTE, tenantPreset, type StudioPalette } from '@/lib/studio/palettes'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
 
@@ -52,15 +54,17 @@ function num(v: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
-export function RecipeForm({ properties, agents, onCreated }: {
-  properties: PropertyOption[]
-  agents:     AgentOption[]
-  onCreated:  (image: StudioImage) => void
+export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
+  properties:  PropertyOption[]
+  agents:      AgentOption[]
+  /** tenants.primary_color — el preset "Marca del equipo". Dato, no código. */
+  tenantColor: string
+  onCreated:   (image: StudioImage) => void
 }) {
   // Arranca en la única receta que ya tiene diseños; con las nueve dará igual.
   const [recipe, setRecipe] = useState('new_listing')
   const [fields, setFields] = useState<Fields>({})
-  const [palette, setPalette] = useState<string[]>([])
+  const [palette, setPalette] = useState<StudioPalette>(tenantColor ? tenantPreset(tenantColor).palette : DEFAULT_PALETTE)
   const [style, setStyle] = useState(STYLES[0].key)
   const [aspect, setAspect] = useState('4:5')
   const [sourceMode, setSourceMode] = useState('generate')
@@ -342,7 +346,7 @@ export function RecipeForm({ properties, agents, onCreated }: {
       )}
 
       {/* Comunes */}
-      {recipe !== 'open_prompt' && (
+      {recipe !== 'open_prompt' && !template && (
         <Field label="¿Cómo es la casa? ¿Qué quieres que se vea?" hint="Opcional. Se suma como contexto de la escena; no cambia el diseño ni los datos.">
           <TextArea value={sceneNotes} onChange={e => setSceneNotes(e.target.value)} placeholder="colonial de ladrillo con porche, frente al agua…" />
         </Field>
@@ -358,6 +362,9 @@ export function RecipeForm({ properties, agents, onCreated }: {
         </Field>
       )}
 
+      {/* El estilo es dirección de arte PARA EL MODELO. Con un diseño elegido no
+          hay escena que generar, así que no dirige nada y solo estorba. */}
+      {!template && (
       <Field label="Estilo" hint={STYLES.find(s => s.key === style)?.hint}>
         <Select
           value={style}
@@ -365,11 +372,11 @@ export function RecipeForm({ properties, agents, onCreated }: {
           options={STYLES.map(s => ({ value: s.key, label: s.label }))}
         />
       </Field>
+      )}
 
-      <Field label="Colores">
-        <ColorTags value={palette} onChange={setPalette} />
-      </Field>
+      <PalettePicker value={palette} onChange={setPalette} tenantColor={tenantColor} />
 
+      {!template && (
       <Field label="Imagen de referencia">
         <input
           type="file"
@@ -378,8 +385,9 @@ export function RecipeForm({ properties, agents, onCreated }: {
           style={{ fontSize: '12px', color: 'var(--text-muted)' }}
         />
       </Field>
+      )}
 
-      {referenceFile && (
+      {!template && referenceFile && (
         <Field label="¿Qué es esa imagen?" hint={REFERENCE_ROLES.find(r => r.value === referenceRole)?.hint}>
           <Select
             value={referenceRole}

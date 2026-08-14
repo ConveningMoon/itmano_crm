@@ -1,4 +1,5 @@
 import type { StudioRecipe, Aspect } from '../types'
+import type { StudioPalette } from '../palettes'
 
 // Un template declara QUÉ NECESITA y CÓMO SE DIBUJA. La declaración no es
 // documentación: el formulario pide solo los slots que el diseño usa, y el
@@ -37,7 +38,7 @@ export interface TemplateProps {
   stats:    Stat[]
 
   agentName: string | null
-  palette:   { primary: string; ink: string; surface: string }
+  palette:   StudioPalette
 }
 
 export interface StudioTemplate {

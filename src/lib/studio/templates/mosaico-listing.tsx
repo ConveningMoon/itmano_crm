@@ -1,5 +1,5 @@
 import { Band, Badge, Headline, StatRow, PhotoCard, AgentCutout } from './primitives'
-import { darken } from './shared'
+import { darken } from '../palettes'
 import type { StudioTemplate, TemplateProps } from './types'
 
 // Mosaico — el diseño de la referencia. Hero grande, tres miniaturas
@@ -31,20 +31,20 @@ function Render(p: TemplateProps) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: 830, left: 60, width: 700 }}>
-        <Badge text={p.badge} color={p.palette.primary} />
+        <Badge text={p.badge} color={p.palette.brand} />
         <div style={{ display: 'flex', marginTop: 14 }}>
-          <Headline text={p.headline} color="#1B2A41" size={58} />
+          <Headline text={p.headline} color={p.palette.ink} size={58} />
         </div>
         {p.address && (
-          <span style={{ fontFamily: 'Spectral', fontSize: 26, color: '#33415A', marginTop: 16 }}>{p.address}</span>
+          <span style={{ fontFamily: 'Spectral', fontSize: 26, color: p.palette.ink, opacity: 0.75, marginTop: 16 }}>{p.address}</span>
         )}
       </div>
 
-      <Band color={p.palette.primary} height={110} bottom={130}>
+      <Band color={p.palette.brand} height={110} bottom={130}>
         <StatRow stats={p.stats} color="#FFFFFF" />
       </Band>
 
-      <Band color={darken(p.palette.primary)} height={130} bottom={0}>
+      <Band color={darken(p.palette.brand)} height={130} bottom={0}>
         <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 62, color: '#FFFFFF' }}>
           {p.price ?? p.agentName ?? ''}
         </span>

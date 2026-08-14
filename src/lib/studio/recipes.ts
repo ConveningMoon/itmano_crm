@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
+import { DEFAULT_PALETTE } from './palettes'
 import { findTemplate } from './templates/registry'
 import type { ActionResult } from './types'
 
@@ -9,6 +10,19 @@ import type { ActionResult } from './types'
 // para cada caso, completo, para evitar imprecisiones y desgaste de tokens.
 
 const HEX  = /^#[0-9a-fA-F]{6}$/
+
+const hex = z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')
+
+const paletteSchema = z.union([
+  z.object({ brand: hex, surface: hex, ink: hex }),
+  // Legado: array de hex. El primero era el color de marca y el resto se
+  // descartaba, así que se traduce a ese rol y los otros dos a sus defaults.
+  z.array(hex).max(4).transform(arr => ({
+    brand:   arr[0] ?? DEFAULT_PALETTE.brand,
+    surface: DEFAULT_PALETTE.surface,
+    ink:     DEFAULT_PALETTE.ink,
+  })),
+]).default(DEFAULT_PALETTE)
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -17,7 +31,11 @@ const common = {
   source_mode:    z.enum(['generate', 'photo']).default('generate'),
   scene_notes:    z.string().trim().max(500).optional(),
   style:          z.enum(STYLE_KEYS as [string, ...string[]]),
-  palette:        z.array(z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')).max(4).default([]),
+  // Colores POR ROL. Antes era un array de hasta cuatro hex del que solo se usaba
+  // el primero — nadie podía saber para qué servía cada uno porque casi ninguno
+  // servía para nada. Se acepta también el formato viejo para que las piezas ya
+  // guardadas se sigan recomponiendo.
+  palette:        paletteSchema,
   aspect:         z.enum(['1:1', '4:5', '9:16']),
   has_reference:  z.boolean().default(false),
   reference_role: z.enum(['subject', 'style', 'composition']).optional(),

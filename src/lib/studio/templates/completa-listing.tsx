@@ -7,7 +7,7 @@ import type { StudioTemplate, TemplateProps } from './types'
 
 function Render(p: TemplateProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: 1080, height: 1350, backgroundColor: p.palette.primary, position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: 1080, height: 1350, backgroundColor: p.palette.brand, position: 'relative' }}>
       {p.heroPhoto && (
         // eslint-disable-next-line @next/next/no-img-element -- reason: satori rasteriza a SVG
         <img src={p.heroPhoto} width={1080} height={1350} alt=""

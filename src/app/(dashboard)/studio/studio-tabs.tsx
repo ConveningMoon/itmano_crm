@@ -10,11 +10,12 @@ import type { StudioImage } from '@/lib/studio/types'
 // Envoltura del Estudio: Imágenes · Carruseles. El motor de carruseles entra
 // entero como nodo ya renderizado por el servidor (patrón isla), con sus propios
 // sub-tabs adentro — no se refactoriza para que quepa aquí.
-export function StudioTabs({ images, properties, agents, carousels }: {
-  images:     StudioImage[]
-  properties: PropertyOption[]
-  agents:     AgentOption[]
-  carousels:  React.ReactNode
+export function StudioTabs({ images, properties, agents, tenantColor, carousels }: {
+  images:      StudioImage[]
+  properties:  PropertyOption[]
+  agents:      AgentOption[]
+  tenantColor: string
+  carousels:   React.ReactNode
 }) {
   const [items, setItems] = useState(images)
 
@@ -33,6 +34,7 @@ export function StudioTabs({ images, properties, agents, carousels }: {
             <RecipeForm
               properties={properties}
               agents={agents}
+              tenantColor={tenantColor}
               onCreated={img => setItems(prev => [img, ...prev])}
             />
             <Library

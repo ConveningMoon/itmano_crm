@@ -12,7 +12,7 @@ function Render(p: TemplateProps) {
       {/* Bloque de color superior con todo el peso tipográfico */}
       <div style={{
         display: 'flex', flexDirection: 'column', width: 1080, height: 520,
-        backgroundColor: p.palette.primary, paddingLeft: 70, paddingRight: 70, paddingTop: 70,
+        backgroundColor: p.palette.brand, paddingLeft: 70, paddingRight: 70, paddingTop: 70,
       }}>
         <Badge text={p.badge} color="#E8E3DA" />
         <div style={{ display: 'flex', marginTop: 18 }}>
@@ -33,14 +33,14 @@ function Render(p: TemplateProps) {
 
       <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: 1020, left: 70, width: 900 }}>
         {p.address && (
-          <span style={{ fontFamily: 'Spectral', fontSize: 30, color: '#1B2A41' }}>{p.address}</span>
+          <span style={{ fontFamily: 'Spectral', fontSize: 30, color: p.palette.ink }}>{p.address}</span>
         )}
         <div style={{ display: 'flex', marginTop: 18 }}>
           <StatRow stats={p.stats} color="#33415A" />
         </div>
       </div>
 
-      <Band color={p.palette.primary} height={110} bottom={0}>
+      <Band color={p.palette.brand} height={110} bottom={0}>
         <span style={{ fontFamily: 'Marcellus', fontSize: 26, letterSpacing: 3, color: '#FFFFFF' }}>
           {[p.agentName, p.phone].filter(Boolean).join('  ·  ')}
         </span>

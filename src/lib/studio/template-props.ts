@@ -137,10 +137,9 @@ export async function buildTemplateProps(params: {
     badge:       badgeFor(form.recipe),
     stats:       statsFor(form),
     agentName:   brand.agent_name,
-    palette: {
-      primary: form.palette[0] ?? brand.primary_color,
-      ink:     '#FFFFFF',
-      surface: '#FBF6EE',
-    },
+    // Los colores ya vienen por rol desde el formulario; aquí no se reinterpreta
+    // nada. El texto sobre `brand` es siempre blanco y la banda secundaria es
+    // `brand` oscurecido: eso lo derivan los templates.
+    palette: form.palette,
   }
 }
