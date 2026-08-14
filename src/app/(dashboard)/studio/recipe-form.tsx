@@ -385,19 +385,22 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         />
       )}
 
-      {/* Solo los formatos que el diseño declara soportar. Los templates de esta
-          entrega están compuestos para 4:5: ofrecer 1:1 o 9:16 recortaba la pieza
-          en silencio, porque el lienzo cambiaba y el contenido no. */}
-      <Field
-        label="Formato"
-        hint={allowedAspects.length === 1 ? 'Este diseño está compuesto para 4:5.' : undefined}
-      >
-        <Select
-          value={aspect}
-          onChange={e => setAspect(e.target.value)}
-          options={ASPECTS.filter(a => allowedAspects.includes(a.value))}
-        />
-      </Field>
+      {/* El selector solo aparece si hay algo que elegir. Los diseños de esta
+          entrega están compuestos para 4:5, así que con uno elegido el campo
+          tendría una sola opción: un control que no decide nada es ruido. */}
+      {allowedAspects.length > 1 ? (
+        <Field label="Formato">
+          <Select
+            value={aspect}
+            onChange={e => setAspect(e.target.value)}
+            options={ASPECTS.filter(a => allowedAspects.includes(a.value))}
+          />
+        </Field>
+      ) : (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.45 }}>
+          Formato {aspect} — el que compone este diseño.
+        </p>
+      )}
 
       </Section>
 

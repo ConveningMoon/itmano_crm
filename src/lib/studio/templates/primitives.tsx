@@ -102,15 +102,22 @@ export function StatRow({ stats, color }: { stats: Stat[]; color: string }) {
 export function AgentBadge({ src, size, ring, right, bottom }: {
   src: string; size: number; ring: string; right: number; bottom: number
 }) {
+  // El borde va POR DENTRO del diámetro, no encima: satori no aplica
+  // box-sizing:border-box, así que una imagen de `size` dentro de un contenedor
+  // de `size` con borde de 6px se desborda por los cuatro lados y el recorte
+  // circular queda descentrado. La imagen mide el hueco interior exacto.
+  const ringWidth = 8
+  const inner = size - ringWidth * 2
+
   return (
     <div style={{
       display: 'flex', position: 'absolute', right, bottom,
-      width: size, height: size, borderRadius: size / 2,
-      border: `6px solid ${ring}`, overflow: 'hidden',
+      width: inner, height: inner, borderRadius: inner / 2,
+      border: `${ringWidth}px solid ${ring}`, overflow: 'hidden',
     }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- reason: ídem PhotoCard */}
-      <img src={src} width={size} height={size} alt=""
-           style={{ objectFit: 'cover', borderRadius: size / 2 }} />
+      <img src={src} width={inner} height={inner} alt=""
+           style={{ objectFit: 'cover', borderRadius: inner / 2 }} />
     </div>
   )
 }

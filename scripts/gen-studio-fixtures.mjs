@@ -44,6 +44,11 @@ const FIXTURES = [
   ['casa-salon',     'Editorial interior photograph of a bright living room with a white brick fireplace, a light sectional sofa, a patterned rug and large windows with sheer curtains, warm afternoon light.'],
   ['casa-comedor',   'Editorial interior photograph of a dining room with a wooden table, upholstered chairs, a pendant chandelier and an open kitchen behind it, natural light from a large window.'],
   ['casa-atardecer', 'Editorial exterior photograph of a suburban house at blue hour, warm interior lights glowing through the windows against a deep blue sky, wet driveway reflecting the light.'],
+  // Retrato y marca de ejemplo: existen para que las MINIATURAS del selector
+  // muestren dónde caen la foto del agente y el logo. Sin ellos las tarjetas
+  // enseñan un diseño con dos huecos invisibles.
+  ['agente-ejemplo', 'Studio portrait of a friendly professional real estate agent in a dark suit, plain light gray background, soft even lighting, head and shoulders, centered, looking at the camera.'],
+  ['logo-ejemplo',   'A minimal geometric real estate logo mark: a simple arch silhouette in a single flat dark navy color, centered on a fully transparent background, no text, no letters, vector-like, clean edges.'],
 ]
 
 async function generate(prompt) {

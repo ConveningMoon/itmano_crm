@@ -48,10 +48,13 @@ function Render(p: TemplateProps) {
 
       {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={190} ring={p.palette.surface} right={70} bottom={130} />}
 
+      {/* El logo va sobre el fondo claro, NO sobre la banda de marca: como se
+          tiñe con el color de marca, ahí sería del mismo color que la banda y
+          desaparecería. */}
       {p.logo && (
         // eslint-disable-next-line @next/next/no-img-element -- reason: satori rasteriza a SVG
-        <img src={p.logo} width={90} height={90} alt=""
-             style={{ position: 'absolute', bottom: 10, right: 40, objectFit: 'contain' }} />
+        <img src={p.logo} width={86} height={86} alt=""
+             style={{ position: 'absolute', bottom: 140, left: 70, objectFit: 'contain' }} />
       )}
     </div>
   )

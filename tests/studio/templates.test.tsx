@@ -26,8 +26,13 @@ async function props(over: Partial<TemplateProps> = {}): Promise<TemplateProps> 
   return {
     heroPhoto:   await photo('casa-fachada'),
     thumbPhotos: [await photo('casa-salon'), await photo('casa-comedor'), await photo('casa-atardecer')],
-    agentPhoto:  null,
-    logo:        null,
+    // Con null, las MINIATURAS del selector enseñaban un diseño con dos huecos
+    // invisibles: no se veía dónde caen la foto del agente ni el logo.
+    agentPhoto:  await photo('agente-ejemplo'),
+    // El logo NO pasa por normalizePhoto: eso convierte a JPEG y el JPEG no tiene
+    // canal alfa, así que la marca acababa sobre un cuadro negro. En producción
+    // el logo va por tintLogo, que sí conserva la transparencia.
+    logo:        `data:image/webp;base64,${readFileSync(join(FIXTURE_DIR, 'logo-ejemplo.webp')).toString('base64')}`,
     headline:    'Casa elegante y familiar en venta',
     price:       '$274,400',
     when:        '15 de agosto de 2026 · 11:00–14:00',

@@ -81,6 +81,40 @@ export async function normalizePhoto(buffer: Buffer): Promise<string | null> {
   }
 }
 
+/**
+ * Repinta el logo con el color de marca para que la pieza sea armónica.
+ *
+ * Solo se tiñe si el archivo tiene transparencia real: la silueta se rellena con
+ * el color y el fondo sigue vacío. Un logo SIN transparencia (fondo blanco) NO
+ * se toca — teñirlo lo convertiría en un rectángulo de color sólido, que es peor
+ * que dejarlo con sus colores originales.
+ */
+export async function tintLogo(buffer: Buffer, color: string): Promise<string | null> {
+  try {
+    const img = sharp(buffer)
+    const { isOpaque } = await img.stats()
+    if (isOpaque !== false) {
+      // Sin transparencia no hay silueta que rellenar: se usa tal cual.
+      return toDataUri(await img.png().toBuffer(), 'image/png')
+    }
+
+    const { width = 0, height = 0 } = await img.metadata()
+    if (!width || !height) return toDataUri(await img.png().toBuffer(), 'image/png')
+
+    // El canal alfa del logo hace de máscara sobre un lienzo del color de marca.
+    const alpha = await sharp(buffer).ensureAlpha().extractChannel('alpha').toBuffer()
+    const tinted = await sharp({
+      create: { width, height, channels: 3, background: color },
+    })
+      .joinChannel(alpha)
+      .png()
+      .toBuffer()
+    return toDataUri(tinted, 'image/png')
+  } catch {
+    return null
+  }
+}
+
 async function fetchImage(url: string): Promise<Buffer | null> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 15000)
@@ -122,12 +156,13 @@ export async function buildTemplateProps(params: {
   }
 
   const logoBuf = brand.logo_url ? await fetchImage(brand.logo_url) : null
+  const logo = logoBuf ? await tintLogo(logoBuf, form.palette.brand) : null
 
   return {
     heroPhoto:   photos[0] ?? null,
     thumbPhotos: photos.slice(1),
     agentPhoto,
-    logo:        logoBuf ? toDataUri(logoBuf, 'image/png') : null,
+    logo,
     headline:    defaultHeadline(form),
     price:       priceFor(form),
     when:        whenFor(form),
