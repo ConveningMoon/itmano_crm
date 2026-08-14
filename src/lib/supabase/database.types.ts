@@ -1756,8 +1756,8 @@ export type Database = {
           scene_prompt: string | null
           source_mode: string
           status: string
-          template: string | null
           style: string
+          template: string | null
           tenant_id: string
           text_zone: string | null
           updated_at: string
@@ -1780,9 +1780,9 @@ export type Database = {
           rendered_path?: string | null
           scene_prompt?: string | null
           source_mode?: string
-          status?: string | null
-          template?: string | null
+          status?: string
           style: string
+          template?: string | null
           tenant_id: string
           text_zone?: string | null
           updated_at?: string
@@ -1805,9 +1805,9 @@ export type Database = {
           rendered_path?: string | null
           scene_prompt?: string | null
           source_mode?: string
-          status?: string | null
-          template?: string | null
+          status?: string
           style?: string
+          template?: string | null
           tenant_id?: string
           text_zone?: string | null
           updated_at?: string
@@ -1872,8 +1872,7 @@ export type Database = {
           plan?: string
           requested_plan?: string | null
           started_at?: string
-          status?: string | null
-          template?: string | null
+          status?: string
           tenant_id: string
           trial_ends_at?: string | null
           updated_at?: string
@@ -1893,8 +1892,7 @@ export type Database = {
           plan?: string
           requested_plan?: string | null
           started_at?: string
-          status?: string | null
-          template?: string | null
+          status?: string
           tenant_id?: string
           trial_ends_at?: string | null
           updated_at?: string
@@ -2179,6 +2177,7 @@ export type Database = {
       rls_test_mint_jwt:
         | { Args: { p_email: string }; Returns: string }
         | { Args: { p_email: string; p_secret: string }; Returns: string }
+      schema_snapshot: { Args: never; Returns: Json }
       sequence_eligible_leads: {
         Args: {
           p_agent_filter?: string

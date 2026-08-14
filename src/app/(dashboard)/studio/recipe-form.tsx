@@ -5,6 +5,7 @@ import { Loader2, Sparkles, Eye } from 'lucide-react'
 import { STYLES } from '@/lib/studio/styles'
 import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
+import { Lightbox } from './lightbox'
 import { templatesForRecipe } from '@/lib/studio/templates/registry'
 import { Field, TextInput, TextArea, Select, Toggle, ColorTags } from './field-inputs'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
@@ -56,7 +57,8 @@ export function RecipeForm({ properties, agents, onCreated }: {
   agents:     AgentOption[]
   onCreated:  (image: StudioImage) => void
 }) {
-  const [recipe, setRecipe] = useState('open_house')
+  // Arranca en la única receta que ya tiene diseños; con las nueve dará igual.
+  const [recipe, setRecipe] = useState('new_listing')
   const [fields, setFields] = useState<Fields>({})
   const [palette, setPalette] = useState<string[]>([])
   const [style, setStyle] = useState(STYLES[0].key)
@@ -70,6 +72,7 @@ export function RecipeForm({ properties, agents, onCreated }: {
   const [template, setTemplate] = useState('')
   const [headline, setHeadline] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
+  const [zoomPreview, setZoomPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -219,6 +222,7 @@ export function RecipeForm({ properties, agents, onCreated }: {
           onChange={setTemplate}
           photoCount={property?.photos.length ?? 0}
           hasAgentPhoto={!!agent?.cover_photo_url}
+          showFit={!!propertyId}
         />
       )}
 
@@ -412,6 +416,23 @@ export function RecipeForm({ properties, agents, onCreated }: {
         </button>
       )}
 
+      {template && (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          Este diseño usa las fotos y los datos de la propiedad: no consume generación con IA.
+          Previsualiza las veces que quieras.
+        </p>
+      )}
+      {!template && isHouse && (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          Elige un diseño para componer la pieza sin costo.
+        </p>
+      )}
+      {!isHouse && (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          Esta receta genera la escena con IA y consume presupuesto de generación.
+        </p>
+      )}
+
       <button
         type="button"
         className="studio-generate"
@@ -437,8 +458,20 @@ export function RecipeForm({ properties, agents, onCreated }: {
             Previsualización · todavía no está guardada
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element -- reason: data URI en memoria, no hay host que optimizar */}
-          <img src={preview} alt="Previsualización" style={{ width: '100%', display: 'block', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+          <img
+            src={preview}
+            alt="Previsualización"
+            onClick={() => setZoomPreview(true)}
+            style={{ width: '100%', display: 'block', borderRadius: '8px', border: '1px solid var(--border-subtle)', cursor: 'zoom-in' }}
+          />
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Clic para verla en grande
+          </div>
         </div>
+      )}
+
+      {zoomPreview && preview && (
+        <Lightbox src={preview} alt="Previsualización" onClose={() => setZoomPreview(false)} />
       )}
     </div>
   )

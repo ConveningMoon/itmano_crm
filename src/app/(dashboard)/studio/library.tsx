@@ -1,8 +1,9 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { deleteStudioImage, recomposeImage, regenerateStudioImage } from './actions'
 import { styleLabel } from '@/lib/studio/styles'
+import { Lightbox } from './lightbox'
 import type { StudioImage } from '@/lib/studio/types'
 
 const RECIPE_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
   onDeleted: (id: string) => void
 }) {
   const [pending, startTransition] = useTransition()
+  const [zoom, setZoom] = useState<StudioImage | null>(null)
 
   if (images.length === 0) {
     return (
@@ -58,7 +60,8 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
             <img
               src={img.rendered_url}
               alt={RECIPE_LABELS[img.recipe] ?? img.recipe}
-              style={{ width: '100%', display: 'block', aspectRatio: img.aspect.replace(':', '/'), objectFit: 'cover' }}
+              onClick={() => setZoom(img)}
+              style={{ width: '100%', display: 'block', aspectRatio: img.aspect.replace(':', '/'), objectFit: 'cover', cursor: 'zoom-in' }}
             />
           ) : (
             <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -77,9 +80,9 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
               {img.rendered_url && (
-                <a href={img.rendered_url} download style={{ fontSize: '11px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
-                  Descargar
-                </a>
+                <button type="button" onClick={() => setZoom(img)} style={{ ...actionStyle, color: 'var(--accent-gold)' }}>
+                  Ver
+                </button>
               )}
               {/* Variante: crea una fila nueva, no pisa esta. */}
               <button
@@ -123,6 +126,15 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
           </div>
         </div>
       ))}
+
+      {zoom?.rendered_url && (
+        <Lightbox
+          src={zoom.rendered_url}
+          alt={RECIPE_LABELS[zoom.recipe] ?? zoom.recipe}
+          downloadName={`${zoom.recipe}-${zoom.id.slice(0, 8)}.png`}
+          onClose={() => setZoom(null)}
+        />
+      )}
     </div>
   )
 }
