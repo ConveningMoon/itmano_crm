@@ -16,6 +16,9 @@ name: RLS Tests
 # Correrlas siempre cuesta ~2,5 min y cierra esa ventana ciega.
 on:
   pull_request:
+  # Para poder lanzarlo a mano desde la pestaña Actions: sirve para comprobar
+  # que los secrets apuntan a donde deben sin tener que abrir un PR.
+  workflow_dispatch:
 
 # All runs share one remote Supabase database with fixed fixture IDs
 # (tests/rls/setup.ts). Two concurrent runs interleave createFixtures/

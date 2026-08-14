@@ -89,20 +89,14 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   'funcion:agent_api_rate_limit(p_token_id uuid, p_bucket text, p_limit integer, p_window_s integer)': 'migración 096 (agent_api): sólo en sandbox',
 }
 
-// Divergencias REALES entre los dos proyectos, pendientes de cerrar. No son
-// aceptables a largo plazo: están aquí para que el test sea utilizable mientras
-// se deciden, no para taparlas. Cada una se comprobó carácter a carácter.
+// Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
+// aquí, es deuda, no una excepción permanente. Se cierran aplicando a producción
+// la versión del repo (la que corre en el sandbox).
 //
-// Se cierran aplicando a producción la versión del repo (la del sandbox).
-const DIVERGENCIAS_PENDIENTES: Record<string, string> = {
-  'funcion:recompute_lead_score(p_lead_id text)':
-    'sólo una tilde: el sandbox notifica "alcanzó score" y producción "alcanzo score". ' +
-    'Misma longitud y misma lógica — es copy, no comportamiento.',
-  'funcion:rls_jwt_sign(payload json, secret text)':
-    'helper de test (008), 10 caracteres de diferencia. No lo usa la aplicación.',
-  'funcion:rls_test_mint_jwt(p_email text)':
-    'helper de test (008), variante por vault, 9 caracteres de diferencia. No lo usa la aplicación.',
-}
+// Las tres que había —una tilde en el texto de notificación de
+// recompute_lead_score y dos helpers de test de la 008— se alinearon en
+// producción en vez de declararlas.
+const DIVERGENCIAS_PENDIENTES: Record<string, string> = {}
 
 const IGNORADAS = { ...POR_RAMA_EN_CURSO, ...DIVERGENCIAS_PENDIENTES }
 
