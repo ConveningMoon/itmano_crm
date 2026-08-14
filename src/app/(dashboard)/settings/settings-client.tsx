@@ -11,7 +11,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription, updateAgentCoverPhoto, removeAgentCoverPhoto } from './actions'
 import { openBillingPortal } from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, trialDaysLeft } from '@/lib/plans'
@@ -282,6 +282,15 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
   const [descOk, setDescOk]           = useState(false)
   const [descPending, startDesc]      = useTransition()
 
+  // Portada del agente (095). Es su foto, así que la sube él: mismo permiso que
+  // la descripción. El sistema detecta solo si el archivo trae transparencia —
+  // al agente no se le pregunta por canales alfa, se le enseña el resultado.
+  const [editingCover, setEditingCover] = useState(false)
+  const [coverUrl, setCoverUrl]         = useState(agent.coverPhotoUrl ?? null)
+  const [coverCutout, setCoverCutout]   = useState(agent.coverPhotoCutout === true)
+  const [coverErr, setCoverErr]         = useState<string | null>(null)
+  const [coverPending, startCover]      = useTransition()
+
   // Idiomas registrados (definen los emails de cierre del agente — 058).
   const [editingLangs, setEditingLangs] = useState(false)
   const [langs, setLangs]               = useState<string[]>(agent.languages)
@@ -330,6 +339,29 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
       setEditingDesc(false)
       setDescOk(true)
       setTimeout(() => setDescOk(false), 2500)
+    })
+  }
+
+  function handleCoverUpload(file: File) {
+    setCoverErr(null)
+    const data = new FormData()
+    data.set('agentId', agent.id)
+    data.set('file', file)
+    startCover(async () => {
+      const res = await updateAgentCoverPhoto(data)
+      if (!res.ok) { setCoverErr(res.error); return }
+      setCoverUrl(res.url)
+      setCoverCutout(res.cutout)
+    })
+  }
+
+  function handleCoverRemove() {
+    setCoverErr(null)
+    startCover(async () => {
+      const res = await removeAgentCoverPhoto(agent.id)
+      if (!res.ok) { setCoverErr(res.error); return }
+      setCoverUrl(null)
+      setCoverCutout(false)
     })
   }
 
@@ -438,6 +470,7 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
             {canEditSelf && (
               <>
                 <button onClick={() => { setEditingDesc(v => !v); setDesc(descSaved); setDescErr(null) }} style={BTN_GHOST}>Descripción</button>
+                <button onClick={() => { setEditingCover(v => !v); setCoverErr(null) }} style={BTN_GHOST}>Portada</button>
                 <button onClick={() => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }} style={BTN_GHOST}>Idiomas</button>
               </>
             )}
@@ -541,6 +574,64 @@ function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf, isOwn
         {descOk && (
           <div style={{ fontSize: '12px', color: 'var(--accent-green)', background: 'rgba(107,163,104,0.10)', border: '1px solid rgba(107,163,104,0.25)', borderRadius: '8px', padding: '10px 12px' }}>
             Descripción guardada. La IA ya la tiene en cuenta.
+          </div>
+        )}
+
+        {/* Portada del agente — la usan los diseños del Estudio */}
+        {editingCover && (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ ...LABEL, marginBottom: 0 }}>Tu portada</label>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Aparece en los diseños del Estudio que tienen espacio para ti. Si subes un PNG con el
+              fondo ya recortado, saldrá de cuerpo completo sobre el diseño. Si no, se usará dentro
+              de un círculo.
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {coverUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- reason: bucket público con host variable por entorno
+                <img
+                  src={coverUrl}
+                  alt=""
+                  style={{
+                    width: '72px', height: '72px', objectFit: 'cover', flexShrink: 0,
+                    // El recorte se enseña tal cual; la foto normal, en círculo,
+                    // que es exactamente como saldrá en la pieza.
+                    borderRadius: coverCutout ? '8px' : '50%',
+                    background: coverCutout ? 'var(--bg-base)' : undefined,
+                  }}
+                />
+              ) : (
+                <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: 'var(--bg-base)', border: '1px dashed var(--border-subtle)', flexShrink: 0 }} />
+              )}
+
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={coverPending}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleCoverUpload(f) }}
+                  style={{ fontSize: '12px', color: 'var(--text-muted)', maxWidth: '100%' }}
+                />
+                {coverUrl && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                    {coverCutout
+                      ? 'Tiene el fondo recortado: saldrá de cuerpo completo.'
+                      : 'Sin fondo recortado: se usará dentro de un círculo.'}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {coverPending && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Subiendo…</div>}
+            {coverErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{coverErr}</div>}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {coverUrl && (
+                <button onClick={handleCoverRemove} disabled={coverPending} style={BTN_GHOST}>Quitar portada</button>
+              )}
+              <button onClick={() => setEditingCover(false)} style={BTN_GHOST}>Cerrar</button>
+            </div>
           </div>
         )}
 

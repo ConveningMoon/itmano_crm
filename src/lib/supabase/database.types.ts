@@ -1756,6 +1756,7 @@ export type Database = {
           scene_prompt: string | null
           source_mode: string
           status: string
+          template: string | null
           style: string
           tenant_id: string
           text_zone: string | null
@@ -1779,7 +1780,8 @@ export type Database = {
           rendered_path?: string | null
           scene_prompt?: string | null
           source_mode?: string
-          status?: string
+          status?: string | null
+          template?: string | null
           style: string
           tenant_id: string
           text_zone?: string | null
@@ -1803,7 +1805,8 @@ export type Database = {
           rendered_path?: string | null
           scene_prompt?: string | null
           source_mode?: string
-          status?: string
+          status?: string | null
+          template?: string | null
           style?: string
           tenant_id?: string
           text_zone?: string | null
@@ -1869,7 +1872,8 @@ export type Database = {
           plan?: string
           requested_plan?: string | null
           started_at?: string
-          status?: string
+          status?: string | null
+          template?: string | null
           tenant_id: string
           trial_ends_at?: string | null
           updated_at?: string
@@ -1889,7 +1893,8 @@ export type Database = {
           plan?: string
           requested_plan?: string | null
           started_at?: string
-          status?: string
+          status?: string | null
+          template?: string | null
           tenant_id?: string
           trial_ends_at?: string | null
           updated_at?: string

@@ -16,6 +16,8 @@ export interface AgentRow {
   created_at: string
   email_signature: string | null
   description?: string | null
+  cover_photo_url?: string | null
+  cover_photo_cutout?: boolean | null
 }
 
 export interface LeadRow {
@@ -83,6 +85,8 @@ export function mapAgent(r: AgentRow): Agent {
     active: r.active,
     emailSignature: r.email_signature ?? null,
     description: r.description ?? null,
+    coverPhotoUrl: r.cover_photo_url ?? null,
+    coverPhotoCutout: r.cover_photo_cutout === true,
   }
 }
 

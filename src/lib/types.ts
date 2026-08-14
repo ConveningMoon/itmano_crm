@@ -39,6 +39,10 @@ export interface Agent {
   emailSignature?: string | null
   /** Descripción del agente para personalizar el análisis de fit con IA (064). */
   description?: string | null
+  /** Portada del agente (095). La usan los diseños del Estudio; siempre opcional. */
+  coverPhotoUrl?: string | null
+  /** true si el archivo traía transparencia real → se usa recortada, no en círculo. */
+  coverPhotoCutout?: boolean
 }
 
 export interface Lead {
