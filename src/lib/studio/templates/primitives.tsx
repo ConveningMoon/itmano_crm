@@ -81,9 +81,11 @@ export function StatRow({ stats, color }: { stats: Stat[]; color: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center' }}>
       {stats.map((s, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', marginRight: 40 }}>
-          <Icon path={ICONS[s.icon] ?? ICONS.ruler} color={color} />
-          <span style={{ fontFamily: 'Spectral', fontSize: 27, color, marginLeft: 10 }}>{s.value}</span>
+        <div key={i} style={{ display: 'flex', alignItems: 'center', marginRight: 44 }}>
+          {/* Los íconos de metros, habitaciones y baños son de los pocos datos
+              que se leen de un vistazo en el feed: a 26px se perdían. */}
+          <Icon path={ICONS[s.icon] ?? ICONS.ruler} color={color} size={40} />
+          <span style={{ fontFamily: 'Spectral', fontSize: 31, color, marginLeft: 12 }}>{s.value}</span>
         </div>
       ))}
     </div>
@@ -102,18 +104,23 @@ export function StatRow({ stats, color }: { stats: Stat[]; color: string }) {
 export function AgentBadge({ src, size, ring, right, bottom }: {
   src: string; size: number; ring: string; right: number; bottom: number
 }) {
-  // El borde va POR DENTRO del diámetro, no encima: satori no aplica
-  // box-sizing:border-box, así que una imagen de `size` dentro de un contenedor
-  // de `size` con borde de 6px se desborda por los cuatro lados y el recorte
-  // circular queda descentrado. La imagen mide el hueco interior exacto.
+  // El anillo es el FONDO del contenedor, no un `border`, y no se recorta nada.
+  //
+  // Antes esto era un div con `border` + `overflow: hidden` + `borderRadius`, y
+  // la foto se salía por el borde: satori no recorta de forma fiable con
+  // overflow sobre esquinas redondeadas, así que quedaba un arco desbordado.
+  // La imagen YA viene circular con las esquinas transparentes desde sharp
+  // (circleCrop), así que no hace falta recortar: basta centrarla sobre un
+  // círculo de color un poco más grande.
   const ringWidth = 8
   const inner = size - ringWidth * 2
 
   return (
     <div style={{
       display: 'flex', position: 'absolute', right, bottom,
-      width: inner, height: inner, borderRadius: inner / 2,
-      border: `${ringWidth}px solid ${ring}`, overflow: 'hidden',
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: ring,
+      alignItems: 'center', justifyContent: 'center',
     }}>
       {/* eslint-disable-next-line @next/next/no-img-element -- reason: ídem PhotoCard */}
       <img src={src} width={inner} height={inner} alt=""
