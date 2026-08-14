@@ -16,6 +16,9 @@ name: RLS Tests
 # Correrlas siempre cuesta ~2,5 min y cierra esa ventana ciega.
 on:
   pull_request:
+  # Para poder lanzarlo a mano desde la pestaña Actions: sirve para comprobar
+  # que los secrets apuntan a donde deben sin tener que abrir un PR.
+  workflow_dispatch:
 
 # All runs share one remote Supabase database with fixed fixture IDs
 # (tests/rls/setup.ts). Two concurrent runs interleave createFixtures/
@@ -43,13 +46,30 @@ jobs:
       # Secuenciales a propósito: scoring y ai-limits usan los MISMOS fixtures
       # que rls (tests/rls/setup.ts). En paralelo se pisarían entre sí igual que
       # dos corridas simultáneas.
+      #
+      # Qué proyecto Supabase debe haber detrás de cada secret:
+      #
+      #   NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY / SUPABASE_SERVICE_ROLE_KEY
+      #     → el SANDBOX. Estas suites crean y borran usuarios, tenants y leads;
+      #       no tienen por qué hacerlo en la base de un cliente.
+      #
+      #   PARITY_SUPABASE_URL / PARITY_SUPABASE_SERVICE_ROLE_KEY
+      #     → PRODUCCIÓN, sólo para leer el catálogo y comparar esquemas. Si no
+      #       existen, test:schema se salta esa comparación en vez de fallar.
+      #
+      #   SUPABASE_JWT_SECRET
+      #     → sólo hace falta si el proyecto no acepta password auth; contra el
+      #       sandbox, asUser() pide el token a GoTrue y no lo usa.
       - name: Run DB-backed tests
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          PARITY_SUPABASE_URL: ${{ secrets.PARITY_SUPABASE_URL }}
+          PARITY_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PARITY_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
+          npm run test:schema
           npm run test:rls
           npm run test:scoring
           npm run test:ai-limits

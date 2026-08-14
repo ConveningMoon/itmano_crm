@@ -15,11 +15,24 @@ Estas reglas aplican a **toda** sesión, sin excepción y sin necesidad de recor
 
 Investiga y analiza a fondo antes de actuar. Si algo no está verificado, verifícalo: lee el archivo, consulta el grafo, consulta la base de datos. Si tras investigar quedan dudas que cambian el resultado, **detente y pregunta**. Una pregunta de 30 segundos vale más que una hora de trabajo equivocado.
 
-### 2. Base de datos: siempre por el MCP de Supabase
+### 2. Base de datos: siempre por el MCP de Supabase, y por defecto contra el SANDBOX
 
 Cualquier tarea que implique leer o escribir en la base de datos se hace **directamente por el MCP de Supabase**, no por suposición ni por lo que diga un archivo. Si no tienes acceso al MCP, **detente y solicita acceso** — no improvises ni infieras el estado de la BD desde el código o desde este documento.
 
 La información debe ser siempre la actual. Este archivo puede quedar desactualizado; la base de datos no.
+
+**Hay DOS proyectos Supabase y elegir mal tiene consecuencias reales.** Producción tiene los datos de un cliente que paga.
+
+| | `project_id` | Para qué |
+|---|---|---|
+| **Sandbox** | `xpaixcowvyksgluazwzn` | **El de por defecto.** Desarrollo, pruebas, migraciones nuevas, datos de juguete |
+| **Producción** | `kvmjlrvlnhiarrqxulkr` | A&J y Tenant Test. Datos reales |
+
+**Tienes permiso para usar producción SOLO cuando sea realmente necesario.** La mayoría del trabajo —rediseños, componentes, refactors, features nuevas— no lo necesita: el sandbox tiene el mismo esquema y datos suficientes.
+
+Producción se justifica para: **leer** el estado real cuando la pregunta es sobre datos reales (cuántos leads tiene A&J, qué dice `lead_score_rules`), aplicar una migración **ya probada en el sandbox**, o diagnosticar un problema que sólo ocurre allí. Fuera de eso, usa el sandbox.
+
+**Antes de cualquier ESCRITURA en producción** —`apply_migration`, `update`, `insert`, `delete`, DDL— **pregunta primero**, aunque creas que es inofensiva. Explica qué cambia y qué efecto tiene. Leer no necesita permiso.
 
 ### 3. Branches y commits
 
@@ -74,8 +87,55 @@ El copy de producto (UI, emails, páginas) sigue las reglas de voz de marca más
 | Hosting | Vercel · crons horarios vía cron-job.org |
 | Branch por defecto | `main` — nunca commits directos |
 | Super admin | Dylan · `dj.vergara@hotmail.com` |
+| Supabase producción | `kvmjlrvlnhiarrqxulkr` — datos reales, permiso restringido |
+| Supabase sandbox | `xpaixcowvyksgluazwzn` — el de por defecto para desarrollar |
 
 **Prohibido en el stack:** AOS, jQuery y cualquier librería que mute el DOM — rompen SSR.
+
+---
+
+## Entornos: sandbox y producción
+
+Existen dos proyectos Supabase con el **mismo esquema**. El sandbox está para que el desarrollo deje de tocar los datos de A&J.
+
+### Qué tiene el sandbox
+
+El tenant Test copiado de producción (perfil de negocio completo, 4 canales con sus páginas alojadas, 2 secuencias, 1 propiedad) más **45 leads ficticios** sembrados por `supabase/seeds/002_sandbox_datos_prueba.sql`. Suficiente para que los quintiles de calidad se activen (necesitan 20 leads activos), el pipeline tenga las 5 etapas y analytics tenga serie temporal.
+
+Los correos de esos leads son `@example.com` a propósito: si una secuencia se dispara desde local, **no puede alcanzar a una persona real**.
+
+Los usuarios de login del sandbox son `dj.vergara54321@gmail.com` (agent_owner) y `dj.vergara@hotmail.com` (super_admin). Para crear más, `rls_test_create_user(email, password)` — desde la **099** los deja utilizables por GoTrue, así que sirven tanto para los tests como para iniciar sesión. Antes nacían con `instance_id` y los campos de token en `NULL`, y GoTrue no podía leer la fila: fallaba con un opaco "Database error saving new user" sobre un usuario que sí existía.
+
+### Cómo se entra en local
+
+`npm run dev` apunta al sandbox mediante `.env.development.local`, que **gana sobre `.env.local`** (Next resuelve `.env.$(NODE_ENV).local` antes; ver `node_modules/next/dist/docs/01-app/02-guides/environment-variables.md`). `.env.local` conserva producción para `npm run build` y para los tests.
+
+El login del CRM es Magic Link puro, así que en local se entra por `/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=<correo>`. Esa ruta pide el token a Supabase y lo entrega al **mismo `/auth/callback`** del enlace real — no crea la sesión por su cuenta. Responde 404 salvo que se cumplan sus cinco cierres, y el que importa es que la app apunte al sandbox: si `NEXT_PUBLIC_SUPABASE_URL` mira a producción, se niega aunque el secreto sea correcto. Lógica en `src/lib/auth/dev-login.ts`, cerrada por `tests/auth/dev-login.test.ts`.
+
+### Lo que NO es de mentira cuando desarrollas en local
+
+`.env.development.local` sólo redefine las variables de Supabase. **Todo servicio externo sigue usando las llaves reales** heredadas de `.env.local`:
+
+- **Anthropic y Google AI**: cada generación se **cobra de verdad** a la cuenta de ITMANO. Y como `ai_usage_events` se escribe en el sandbox (que arranca en cero), el presupuesto que ve el CRM no refleja el gasto real: **el límite de IA no protege el bolsillo en local**. No generes imágenes ni análisis en volumen para "probar".
+- **Resend**: los correos salen de verdad.
+- **Telegram**: las notificaciones llegan al chat real.
+
+Para cortarlo, esas variables se pueden definir vacías en `.env.development.local`; el precio es no poder probar esas funciones.
+
+### Assets y storage
+
+Los cuatro buckets existen en ambos proyectos, así que lo que subas desde local se guarda en el sandbox. **Nunca dejes URLs del storage de producción en filas del sandbox**: además de romper el aislamiento, `next/image` rechaza cualquier host fuera de `images.remotePatterns` y la página revienta con un 500. El seed las limpia.
+
+### Migraciones: sandbox primero, producción después
+
+El archivo se escribe **una vez** en `supabase/migrations/`, pero se aplica a **cada proyecto por separado** — son bases independientes.
+
+1. **Sandbox primero.** Ahí se estrena; si rompe, rompió datos de juguete.
+2. **Producción después**, ya probada, y **preguntando antes** (regla de sesión 2).
+
+Aplicar sólo a producción deja el sandbox atrás y produce errores fantasma en local. Aplicar sólo al sandbox y olvidar producción deja la feature muerta al desplegar.
+
+Tras la migración, regenera los tipos **desde el proyecto que tenga el esquema nuevo**: `npm run types:db` lee producción y `npm run types:db:sandbox` lee el sandbox.
 
 ---
 
@@ -203,6 +263,8 @@ Cada regla tiene `category`, `dimension`, `match_value`, `points`, `decays`, `is
 Etapas: `nuevo` · `nutricion` · `en_proceso` · `cerrado` · `perdido`. Vocabulario y etiquetas en `src/lib/scoring/priority.ts`.
 
 **La banda de calidad son QUINTILES de la cartera activa del tenant**, no umbrales fijos: "Alta" = el 20% mejor de lo que ese tenant tiene ahora. Se recalculan 1×/día en `tenant_quality_bands` (dentro del cron de decay). Por debajo de 20 leads activos los quintiles no significan nada y se cae a cortes fijos (80/60/35/15), espejados en `src/lib/scoring/score-bands.ts`.
+
+**Si tocas el vocabulario de etapas, revisa `refresh_quality_bands()`.** Esa función quedó rota desde la 083 —que borró `leads.status`— hasta la **098**, y nadie se enteró: el cron la llama por RPC, loguea el error y sigue, así que `tenant_quality_bands` simplemente dejó de recalcularse durante semanas y las bandas cayeron a los cortes fijos sin ningún síntoma visible. Un fallo silencioso en el cron es indistinguible de que todo va bien; si cambias etapas, comprueba `computed_at` en esa tabla.
 
 **Para contar leads buenos usa la banda (`quality_band = 'alta'`), nunca un umbral de score.** Un literal `>= 70` regado por la UI fue exactamente el bug que hacía que la tarjeta dijera 5 y la lista mostrara 2.
 
@@ -332,17 +394,22 @@ Aplica a todo string que vea el cliente: copy de páginas, labels, emails, estad
 ## Comandos
 
 ```
-npm run dev       # servidor de desarrollo
-npm run build     # build de producción — debe pasar antes de pushear
-npm run lint      # ESLint
-npx tsc --noEmit  # chequeo de tipos
-npm run types:db  # regenera src/lib/supabase/database.types.ts desde la BD
+npm run dev              # servidor de desarrollo — apunta al SANDBOX
+npm run build            # build de producción — debe pasar antes de pushear
+npm run lint             # ESLint
+npx tsc --noEmit         # chequeo de tipos
+npm run types:db         # regenera database.types.ts desde PRODUCCIÓN
+npm run types:db:sandbox # ídem desde el SANDBOX (cuando la migración sólo está ahí)
 ```
+
+Para entrar al CRM en local sin esperar el Magic Link:
+`/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=<correo>` (ver la sección de entornos).
 
 Suites de tests (Vitest):
 
 ```
 npm run test:unit       # TODAS las suites que no tocan la BD — 6 s, sin secretos
+npm run test:schema     # deriva entre el repo y las bases (ver abajo)
 npm run test:rls        # aislamiento por tenant (pega a la BD remota: nunca en paralelo)
 npm run test:scoring    # triggers de scoring y decay (BD remota)
 npm run test:ai-limits  # presupuesto de IA (BD remota)
@@ -351,6 +418,45 @@ npm run test:ai-limits  # presupuesto de IA (BD remota)
 `test:unit` es lo que hay que correr casi siempre. Las otras tres pegan a la BD
 remota compartida y **usan los mismos fixtures** (`tests/rls/setup.ts`): córrelas
 de una en una, nunca en paralelo entre sí ni con un build.
+
+**Esas tres corren contra el SANDBOX en local.** `vitest.config.ts` carga
+`.env.test.local` → `.env.development.local` → `.env.local` y gana el primero
+que define cada variable, así que con el sandbox configurado los fixtures dejan
+de crearse en la base de A&J. Si no existe ninguno de los dos primeros archivos,
+todo sigue como antes (producción).
+
+Usa `.env.test.local` sólo si quieres que los tests apunten a un proyecto
+distinto al de `npm run dev`.
+
+`asUser()` obtiene un token **real de GoTrue** con `signInWithPassword` cuando el
+proyecto lo permite —el sandbox sí— y sólo cae a firmar un HS256 con
+`SUPABASE_JWT_SECRET` cuando no (producción, que es Magic Link puro). El token
+real trae los mismos claims que tendría en la app, en vez de los que decidamos
+ponerle a mano.
+
+**`test:schema` vigila que el repo y las bases no se separen** (`tests/schema/parity.test.ts`),
+que es la causa raíz de casi todo lo que se documenta aquí como "se rompió y
+nadie se enteró". Hace dos cosas:
+
+1. Cruza lo aplicado en la base con `supabase/migrations/`: si alguien aplicó SQL
+   sin dejar el archivo, falla. Corre siempre.
+2. Compara el esquema de los dos proyectos (tablas, columnas, policies y
+   funciones). Sólo si le das las credenciales del segundo en
+   `PARITY_SUPABASE_URL` y `PARITY_SUPABASE_SERVICE_ROLE_KEY`; si no, se salta.
+
+Las huellas salen de `schema_snapshot()` (migración 100). **Los dos lados tienen
+que usar esa función**, no una consulta equivalente escrita a mano:
+`pg_policies.qual` se renderiza según el `search_path` de quien pregunta, y
+comparar una cosa con la otra da 31 tablas "distintas" que son idénticas.
+
+Las diferencias legítimas —una rama en curso aplicada sólo al sandbox— se
+declaran en las listas del propio test, con motivo. **Vacíalas al mergear**: una
+excepción que se queda deja de vigilar una migración de verdad.
+
+**En CI siguen yendo a donde apunten los secrets del repositorio en GitHub**
+(hoy, producción): allí las variables llegan por `env:` y ya están en
+`process.env`, que gana sobre cualquier archivo. Para mover CI al sandbox hay
+que cambiar esos secrets.
 
 Las suites sueltas siguen existiendo (`test:leads`, `test:visibility`,
 `test:import`, `test:routing`, `test:billing`, `test:auth`, `test:carousels`,
@@ -371,7 +477,7 @@ Si cambias el matcher de `src/proxy.ts`, actualiza `tests/auth/middleware-matche
 
 ## Columnas de la base en el código
 
-**Tras cualquier migración que cambie columnas, corre `npm run types:db`.** Regenera `src/lib/supabase/database.types.ts`, que es el espejo del esquema real.
+**Tras cualquier migración que cambie columnas, regenera los tipos.** `npm run types:db` los saca de producción y `npm run types:db:sandbox` del sandbox — usa el proyecto donde ya esté aplicada la migración, o `database.types.ts` no reflejará las columnas nuevas. Ese archivo es el espejo del esquema real.
 
 **Toda lista de columnas de un `.select()` se arma con `columns()`** (`src/lib/supabase/columns.ts`), nunca con un string suelto:
 
@@ -392,7 +498,8 @@ Esto existe porque la migración 082 quitó `attention_when` de `leads_list`, el
 | Si trabajas en… | Consulta primero |
 |---|---|
 | Cualquier cosa | `graphify query "<pregunta>"` |
-| Cualquier dato de la BD | El MCP de Supabase — nunca este archivo |
+| Cualquier dato de la BD | El MCP de Supabase — nunca este archivo. **Sandbox por defecto**; producción sólo si hace falta de verdad |
+| Probar algo en el navegador | El sandbox y `/api/dev/login` — ver la sección de entornos |
 | Leads, agentes, canales, lead magnets | `src/lib/types.ts`, `src/lib/config.ts`, el `src/lib/data/*.ts` correspondiente |
 | Planes, precios, límites, trial | `src/lib/plans.ts` (fuente de verdad), `src/lib/subscriptions.ts` |
 | Perfil de negocio del tenant | `src/lib/business/profile.ts` (puro) + `src/lib/data/business-profile.ts` |
