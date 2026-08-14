@@ -105,3 +105,54 @@ export function ColorTags({ value, onChange }: { value: string[]; onChange: (v: 
     </div>
   )
 }
+
+/**
+ * Bloque plegable. El resumen es lo que hace que cerrar no sea esconder: con la
+ * sección cerrada sigues viendo qué elegiste, así que el formulario cabe en una
+ * pantalla sin perder de vista lo que decidiste.
+ */
+export function Section({ title, summary, open, onToggle, children }: {
+  title:    string
+  summary?: string
+  open:     boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div style={{
+      border: '1px solid var(--border-subtle)', borderRadius: '10px',
+      marginBottom: '10px', overflow: 'hidden', background: 'var(--bg-surface)',
+    }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+          padding: '10px 12px', cursor: 'pointer', textAlign: 'left',
+          background: 'transparent', border: 'none',
+        }}
+      >
+        <span style={{
+          fontSize: '11px', color: 'var(--text-muted)', width: '10px', flexShrink: 0,
+          transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--dur-fast)',
+        }}>
+          ›
+        </span>
+        <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)', flexShrink: 0 }}>
+          {title}
+        </span>
+        {!open && summary && (
+          <span style={{
+            fontSize: '11px', color: 'var(--text-muted)', marginLeft: 'auto',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {summary}
+          </span>
+        )}
+      </button>
+
+      {open && <div style={{ padding: '4px 12px 14px' }}>{children}</div>}
+    </div>
+  )
+}

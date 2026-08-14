@@ -69,3 +69,11 @@ export function darken(hex: string, factor = 0.62): string {
   const b = Math.round((n & 255) * factor)
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
 }
+
+/** El nombre del preset que coincide, o "Personalizada". Un resumen con tres
+ *  hex crudos no le dice nada a nadie. */
+export function paletteLabel(p: StudioPalette, tenantColor: string): string {
+  const match = [tenantPreset(tenantColor), ...PALETTE_PRESETS]
+    .find(x => x.palette.brand === p.brand && x.palette.surface === p.surface && x.palette.ink === p.ink)
+  return match?.label ?? 'Personalizada'
+}

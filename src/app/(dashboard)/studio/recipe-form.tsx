@@ -7,9 +7,9 @@ import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
 import { Lightbox } from './lightbox'
 import { templatesForRecipe } from '@/lib/studio/templates/registry'
-import { Field, TextInput, TextArea, Select, Toggle } from './field-inputs'
+import { Field, TextInput, TextArea, Select, Toggle, Section } from './field-inputs'
 import { PalettePicker } from './palette-picker'
-import { DEFAULT_PALETTE, tenantPreset, type StudioPalette } from '@/lib/studio/palettes'
+import { DEFAULT_PALETTE, tenantPreset, paletteLabel, type StudioPalette } from '@/lib/studio/palettes'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
 
@@ -77,6 +77,14 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const [headline, setHeadline] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const [zoomPreview, setZoomPreview] = useState(false)
+  // Qué bloque está abierto. Contenido y Diseño arrancan abiertos porque son las
+  // decisiones que se tocan siempre; Colores y Escena, cerrados con su resumen a
+  // la vista, para que cerrado no signifique escondido.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    contenido: true, diseno: true, colores: false, escena: false,
+  })
+  const toggle = (k: string) => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
+
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -85,6 +93,12 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const canUsePhoto = isHouse && !!property?.photos.length
   const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
   const agent = agents.find(a => a.id === agentId)
+  const templateLabel = templates.find(t => t.key === template)?.label
+  const contentSummary =
+    [property?.address ?? (fields.address ? String(fields.address) : null), agent?.name]
+      .filter(Boolean).join(' · ') || 'Sin completar'
+  const designSummary = `${templateLabel ?? 'Sin diseño'} · ${aspect}`
+  const colorSummary  = paletteLabel(palette, tenantColor)
 
   function set(key: string, value: unknown) {
     setFields(prev => ({ ...prev, [key]: value }))
@@ -191,6 +205,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         })}
       </div>
 
+      <Section title="Contenido" summary={contentSummary} open={openSections.contenido} onToggle={() => toggle('contenido')}>
       {/* Selector de propiedad */}
       {isHouse && properties.length > 0 && (
         <Field label="Propiedad" hint="Rellena los datos desde el CRM. Puedes editarlos o saltarte el selector.">
@@ -216,18 +231,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
             ]}
           />
         </Field>
-      )}
-
-      {/* Diseño: se elige mirando, no de una lista de nombres */}
-      {isHouse && (
-        <TemplatePicker
-          templates={templates}
-          value={template}
-          onChange={setTemplate}
-          photoCount={property?.photos.length ?? 0}
-          hasAgentPhoto={!!agent?.cover_photo_url}
-          showFit={!!propertyId}
-        />
       )}
 
       {isHouse && (
@@ -345,13 +348,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         </Field>
       )}
 
-      {/* Comunes */}
-      {recipe !== 'open_prompt' && !template && (
-        <Field label="¿Cómo es la casa? ¿Qué quieres que se vea?" hint="Opcional. Se suma como contexto de la escena; no cambia el diseño ni los datos.">
-          <TextArea value={sceneNotes} onChange={e => setSceneNotes(e.target.value)} placeholder="colonial de ladrillo con porche, frente al agua…" />
-        </Field>
-      )}
-
       {agents.length > 0 && (
         <Field label="Agente">
           <Select
@@ -359,6 +355,43 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
             onChange={e => setAgentId(e.target.value)}
             options={[{ value: '', label: 'Sin agente' }, ...agents.map(a => ({ value: a.id, label: a.name }))]}
           />
+        </Field>
+      )}
+
+      </Section>
+
+      <Section title="Diseño" summary={designSummary} open={openSections.diseno} onToggle={() => toggle('diseno')}>
+      {/* Diseño: se elige mirando, no de una lista de nombres */}
+      {isHouse && (
+        <TemplatePicker
+          templates={templates}
+          value={template}
+          onChange={setTemplate}
+          photoCount={property?.photos.length ?? 0}
+          hasAgentPhoto={!!agent?.cover_photo_url}
+          showFit={!!propertyId}
+        />
+      )}
+
+      <Field label="Formato">
+        <Select value={aspect} onChange={e => setAspect(e.target.value)} options={ASPECTS} />
+      </Field>
+
+      </Section>
+
+      <Section title="Colores" summary={colorSummary} open={openSections.colores} onToggle={() => toggle('colores')}>
+      <PalettePicker value={palette} onChange={setPalette} tenantColor={tenantColor} />
+
+      </Section>
+
+      {/* Escena con IA: solo existe sin diseño elegido. Con un template no hay
+          escena que dirigir, así que el bloque entero desaparece. */}
+      {!template && (
+        <Section title="Escena con IA" summary="Estilo y referencia" open={openSections.escena} onToggle={() => toggle('escena')}>
+      {/* Comunes */}
+      {recipe !== 'open_prompt' && !template && (
+        <Field label="¿Cómo es la casa? ¿Qué quieres que se vea?" hint="Opcional. Se suma como contexto de la escena; no cambia el diseño ni los datos.">
+          <TextArea value={sceneNotes} onChange={e => setSceneNotes(e.target.value)} placeholder="colonial de ladrillo con porche, frente al agua…" />
         </Field>
       )}
 
@@ -373,8 +406,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         />
       </Field>
       )}
-
-      <PalettePicker value={palette} onChange={setPalette} tenantColor={tenantColor} />
 
       {!template && (
       <Field label="Imagen de referencia">
@@ -397,9 +428,8 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         </Field>
       )}
 
-      <Field label="Formato">
-        <Select value={aspect} onChange={e => setAspect(e.target.value)} options={ASPECTS} />
-      </Field>
+        </Section>
+      )}
 
       {error && (
         <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>
