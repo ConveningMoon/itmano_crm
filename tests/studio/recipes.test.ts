@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
-import { DEFAULT_PALETTE } from '@/lib/studio/palettes'
+import { DEFAULT_PALETTE, paletteRow } from '@/lib/studio/palettes'
 
 const base = { style: 'editorial', aspect: '4:5', palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } }
 
@@ -136,6 +136,16 @@ describe('parseStudioForm', () => {
     })
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.data.palette).toEqual(DEFAULT_PALETTE)
+  })
+
+  it('la paleta que va a la columna es una lista plana, no el objeto de roles', () => {
+    // `studio_images.palette` es text[]. Insertar ahí el objeto de roles hacía
+    // fallar TODO guardado con "expected JSON array", y no se veía porque
+    // previsualizar no escribe en la base.
+    const row = paletteRow(DEFAULT_PALETTE)
+    expect(Array.isArray(row)).toBe(true)
+    expect(row).toHaveLength(4)
+    row.forEach(hex => expect(hex).toMatch(/^#[0-9A-F]{6}$/i))
   })
 
   it('scene_notes es opcional y se conserva', () => {

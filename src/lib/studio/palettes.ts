@@ -74,6 +74,20 @@ export function paletteHexes(p: StudioPalette): string[] {
   return [p.brand, p.surface, p.ink]
 }
 
+/**
+ * La paleta como la guarda la columna `studio_images.palette`, que es `text[]`
+ * desde la migración 093 y sigue siéndolo.
+ *
+ * Cuando los colores pasaron a tener roles, el pipeline empezó a insertar el
+ * objeto entero en esa columna y CADA guardado fallaba con "expected JSON
+ * array" — sin que se notara, porque previsualizar no escribe en la base. Los
+ * roles viven en `form_json`, que es jsonb; esta columna es la lista plana para
+ * inspección, en orden de rol.
+ */
+export function paletteRow(p: StudioPalette): string[] {
+  return [p.brand, p.surface, p.ink, p.logo]
+}
+
 /** El mismo color, más oscuro. La segunda banda se deriva, no se pide. */
 export function darken(hex: string, factor = 0.62): string {
   const n = parseInt(hex.replace('#', ''), 16)

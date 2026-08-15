@@ -7,6 +7,7 @@ import { directScene, DIRECTOR_MODEL } from './prompt-director'
 import { resolveBackground } from './background'
 import { composeStudioImage } from './compositor'
 import { buildTemplateProps } from './template-props'
+import { paletteRow } from './palettes'
 import { findTemplate } from './templates/registry'
 import { renderToPng } from './render/satori'
 import { CANVAS } from './canvas'
@@ -106,7 +107,8 @@ export async function generateStudioImage(params: {
     form_json:      form,
     source_mode:    form.source_mode,
     style:          form.style,
-    palette:        form.palette,
+    // La columna es text[]: los roles van en form_json (jsonb). Ver paletteRow.
+    palette:        paletteRow(form.palette),
     aspect:         form.aspect,
     reference_role: form.reference_role ?? null,
     status:         'generating',
