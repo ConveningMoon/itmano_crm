@@ -4,29 +4,37 @@
 // resto se descartaba en silencio y nada decía para qué servía ninguno. "Elige
 // colores" no es una pregunta respondible — "¿de qué color son las bandas?" sí.
 //
-// Tres roles, que es lo que los diseños realmente pintan:
+// Cuatro roles, que es lo que los diseños realmente pintan:
 //   brand   → bandas y bloques de color. El color con el que se reconoce la marca.
-//   surface → el fondo claro sobre el que se lee el texto.
+//   surface → el fondo sobre el que se lee el texto.
 //   ink     → el texto sobre ese fondo.
+//   logo    → con qué color se tiñe el logo del equipo.
 // El texto sobre `brand` es siempre blanco y la segunda banda es `brand`
 // oscurecido: son derivados, no decisiones del usuario.
+//
+// `logo` es aparte de `brand` porque el logo casi nunca va sobre el color de
+// marca —ahí desaparecería— y hay marcas cuyo isotipo pide su propio color.
+// Por defecto sigue al primario, que es como se teñía antes de existir el rol.
 
 export interface StudioPalette {
   brand:   string
   surface: string
   ink:     string
+  logo:    string
 }
 
 export const PALETTE_ROLES: { key: keyof StudioPalette; label: string; hint: string }[] = [
-  { key: 'brand',   label: 'Color de marca', hint: 'Bandas y bloques de color' },
-  { key: 'surface', label: 'Fondo',          hint: 'La zona clara donde va el texto' },
-  { key: 'ink',     label: 'Texto',          hint: 'Sobre el fondo claro' },
+  { key: 'brand',   label: 'Color primario',   hint: 'Bandas y bloques de color' },
+  { key: 'surface', label: 'Color secundario', hint: 'El fondo donde va el texto' },
+  { key: 'ink',     label: 'Texto',            hint: 'Sobre el fondo' },
+  { key: 'logo',    label: 'Color de logo',    hint: 'Con el que se tiñe el logo del equipo' },
 ]
 
 export const DEFAULT_PALETTE: StudioPalette = {
   brand:   '#1B2A41',
   surface: '#FBF6EE',
   ink:     '#1B2A41',
+  logo:    '#1B2A41',
 }
 
 export interface PalettePreset {
@@ -39,11 +47,11 @@ export interface PalettePreset {
 // tres decisiones de diseño. "Marca del equipo" no está aquí: se arma en runtime
 // con tenants.primary_color, porque es dato del tenant y no puede vivir en código.
 export const PALETTE_PRESETS: PalettePreset[] = [
-  { key: 'navy',    label: 'Navy y crema',    palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } },
-  { key: 'carbon',  label: 'Carbón y arena',  palette: { brand: '#2B2B28', surface: '#F2EDE4', ink: '#2B2B28' } },
-  { key: 'bosque',  label: 'Verde bosque',    palette: { brand: '#24433A', surface: '#F1F0E7', ink: '#1E3A32' } },
-  { key: 'terra',   label: 'Terracota',       palette: { brand: '#8C4A32', surface: '#FAF1E8', ink: '#4A2318' } },
-  { key: 'noche',   label: 'Azul noche',      palette: { brand: '#152238', surface: '#E9EDF2', ink: '#152238' } },
+  { key: 'navy',    label: 'Navy y crema',    palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41', logo: '#1B2A41' } },
+  { key: 'carbon',  label: 'Carbón y arena',  palette: { brand: '#2B2B28', surface: '#F2EDE4', ink: '#2B2B28', logo: '#2B2B28' } },
+  { key: 'bosque',  label: 'Verde bosque',    palette: { brand: '#24433A', surface: '#F1F0E7', ink: '#1E3A32', logo: '#24433A' } },
+  { key: 'terra',   label: 'Terracota',       palette: { brand: '#8C4A32', surface: '#FAF1E8', ink: '#4A2318', logo: '#8C4A32' } },
+  { key: 'noche',   label: 'Azul noche',      palette: { brand: '#152238', surface: '#E9EDF2', ink: '#152238', logo: '#152238' } },
 ]
 
 /** El preset del tenant, armado con su color de marca. Siempre el primero. */
@@ -51,11 +59,17 @@ export function tenantPreset(primaryColor: string): PalettePreset {
   return {
     key: 'tenant',
     label: 'Marca del equipo',
-    palette: { brand: primaryColor, surface: DEFAULT_PALETTE.surface, ink: DEFAULT_PALETTE.ink },
+    palette: {
+      brand:   primaryColor,
+      surface: DEFAULT_PALETTE.surface,
+      ink:     DEFAULT_PALETTE.ink,
+      logo:    primaryColor,
+    },
   }
 }
 
-/** Los hex sueltos, para el prompt de escena del camino con IA. */
+/** Los hex sueltos, para el prompt de escena del camino con IA. `logo` no entra:
+ *  el logo lo pinta el compositor, la escena no lo ve. */
 export function paletteHexes(p: StudioPalette): string[] {
   return [p.brand, p.surface, p.ink]
 }
@@ -73,7 +87,11 @@ export function darken(hex: string, factor = 0.62): string {
 /** El nombre del preset que coincide, o "Personalizada". Un resumen con tres
  *  hex crudos no le dice nada a nadie. */
 export function paletteLabel(p: StudioPalette, tenantColor: string): string {
-  const match = [tenantPreset(tenantColor), ...PALETTE_PRESETS]
-    .find(x => x.palette.brand === p.brand && x.palette.surface === p.surface && x.palette.ink === p.ink)
+  const match = [tenantPreset(tenantColor), ...PALETTE_PRESETS].find(x => samePalette(x.palette, p))
   return match?.label ?? 'Personalizada'
+}
+
+/** Dos paletas son la misma si coinciden los CUATRO roles. */
+export function samePalette(a: StudioPalette, b: StudioPalette): boolean {
+  return a.brand === b.brand && a.surface === b.surface && a.ink === b.ink && a.logo === b.logo
 }

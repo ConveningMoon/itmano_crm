@@ -156,7 +156,9 @@ export async function buildTemplateProps(params: {
   }
 
   const logoBuf = brand.logo_url ? await fetchImage(brand.logo_url) : null
-  const logo = logoBuf ? await tintLogo(logoBuf, form.palette.brand) : null
+  // El logo se tiñe con SU rol, no con el primario: en los diseños va sobre el
+  // fondo claro, y si fuera del color de las bandas se confundiría con ellas.
+  const logo = logoBuf ? await tintLogo(logoBuf, form.palette.logo) : null
 
   return {
     heroPhoto:   photos[0] ?? null,

@@ -78,7 +78,31 @@ describe('parseStudioForm', () => {
     if (r.ok) {
       expect(r.data.palette.brand).toBe('#8C4A32')
       expect(r.data.palette.surface).toBe(DEFAULT_PALETTE.surface)
+      expect(r.data.palette.logo).toBe('#8C4A32')
     }
+  })
+
+  it('una paleta sin color de logo lo hereda del primario', () => {
+    // `logo` es un rol posterior al resto: las piezas guardadas antes de que
+    // existiera traen solo tres colores y tienen que recomponerse igual que se
+    // veían — entonces el logo se teñía con el primario.
+    const r = parseStudioForm({
+      style: 'editorial', aspect: '4:5',
+      palette: { brand: '#8C4A32', surface: '#FAF1E8', ink: '#4A2318' },
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.palette.logo).toBe('#8C4A32')
+  })
+
+  it('conserva el color de logo cuando viene declarado', () => {
+    const r = parseStudioForm({
+      ...base,
+      palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41', logo: '#C9A227' },
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.palette.logo).toBe('#C9A227')
   })
 
   it('una paleta vacía cae a los valores por defecto', () => {

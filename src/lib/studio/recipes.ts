@@ -18,13 +18,18 @@ const HEX  = /^#[0-9a-fA-F]{6}$/
 const hex = z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')
 
 const paletteSchema = z.union([
-  z.object({ brand: hex, surface: hex, ink: hex }),
+  // `logo` es un rol posterior: las piezas guardadas antes de que existiera solo
+  // traen tres colores y tienen que poder recomponerse. Si falta, sigue al
+  // primario — que es exactamente con lo que se teñía el logo entonces.
+  z.object({ brand: hex, surface: hex, ink: hex, logo: hex.optional() })
+    .transform(p => ({ ...p, logo: p.logo ?? p.brand })),
   // Legado: array de hex. El primero era el color de marca y el resto se
   // descartaba, así que se traduce a ese rol y los otros dos a sus defaults.
   z.array(hex).max(4).transform(arr => ({
     brand:   arr[0] ?? DEFAULT_PALETTE.brand,
     surface: DEFAULT_PALETTE.surface,
     ink:     DEFAULT_PALETTE.ink,
+    logo:    arr[0] ?? DEFAULT_PALETTE.logo,
   })),
 ]).default(DEFAULT_PALETTE)
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/

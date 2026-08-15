@@ -1,14 +1,10 @@
 'use client'
 
-import { PALETTE_PRESETS, PALETTE_ROLES, tenantPreset, type StudioPalette } from '@/lib/studio/palettes'
+import { PALETTE_PRESETS, PALETTE_ROLES, samePalette, tenantPreset, type StudioPalette } from '@/lib/studio/palettes'
 
 // Los colores por ROL, con presets. "Elige colores" no es una pregunta
 // respondible; "¿de qué color son las bandas?" sí. Los presets resuelven el caso
-// normal de un clic y los tres selectores quedan para quien quiera afinar.
-
-function samePalette(a: StudioPalette, b: StudioPalette): boolean {
-  return a.brand === b.brand && a.surface === b.surface && a.ink === b.ink
-}
+// normal de un clic y los selectores quedan para quien quiera afinar.
 
 export function PalettePicker({ value, onChange, tenantColor }: {
   value:       StudioPalette

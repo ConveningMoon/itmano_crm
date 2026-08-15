@@ -55,6 +55,18 @@ function num(v: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
+/**
+ * El diseño con el que arranca una receta: el primero que la declara, y cadena
+ * vacía cuando no tiene ninguno (evento y prompt abierto, que van con IA).
+ *
+ * Abrir SIN diseño dejaba el formulario en el camino con IA —el que cuesta— y
+ * sin previsualización, y eso se leía como que la previsualización había
+ * desaparecido. El camino gratis tiene que ser el que se encuentra sin buscarlo.
+ */
+function firstTemplateFor(recipe: string): string {
+  return templatesForRecipe(recipe as never)[0]?.key ?? ''
+}
+
 export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   properties:  PropertyOption[]
   agents:      AgentOption[]
@@ -74,7 +86,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const [agentId, setAgentId] = useState('')
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [referenceRole, setReferenceRole] = useState('subject')
-  const [template, setTemplate] = useState('')
+  const [template, setTemplate] = useState(() => firstTemplateFor('new_listing'))
   const [headline, setHeadline] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const [zoomPreview, setZoomPreview] = useState(false)
@@ -128,13 +140,18 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     }))
   }
 
-  function chooseTemplate(key: string) {
+  function applyTemplate(key: string) {
     setTemplate(key)
-    setPreview(null)
+    if (!key) return
     // Si el formato actual no lo admite el diseño nuevo, se corrige solo en vez
     // de dejar una combinación que produciría una pieza recortada.
     const allowed = (findTemplate(key)?.aspects as string[] | undefined) ?? ['4:5']
     if (!allowed.includes(aspect)) setAspect(allowed[0])
+  }
+
+  function chooseTemplate(key: string) {
+    applyTemplate(key)
+    setPreview(null)
   }
 
   function changeRecipe(key: string) {
@@ -143,8 +160,8 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     setPropertyId('')
     setSourceMode('generate')
     // Un diseño solo sirve para las recetas que declara: al cambiar de receta
-    // deja de ser válido y el selector vuelve a estar sin elegir.
-    setTemplate('')
+    // deja de ser válido y se pasa al primero de la nueva.
+    applyTemplate(firstTemplateFor(key))
     setPreview(null)
   }
 
