@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
 import { DEFAULT_PALETTE } from '@/lib/studio/palettes'
 
@@ -44,12 +44,36 @@ describe('parseStudioForm', () => {
     expect(parseStudioForm({ ...base, recipe: 'open_prompt', prompt: '' }).ok).toBe(false)
   })
 
-  it('una referencia sin rol declarado no pasa', () => {
+  it('una referencia ya no necesita rol declarado', () => {
+    // El rol se preguntaba cuando la referencia vivía en la pestaña de recetas.
+    // Ahora vive en "Mi Imagen", donde el prompt dice qué hacer con ella.
     const r = parseStudioForm({
-      ...base, recipe: 'new_listing', address: '9 Bay St', price: 450000, has_reference: true,
+      ...base, recipe: 'open_prompt', prompt: 'la casa de la foto al atardecer', reference_count: 1,
     })
+    expect(r.ok).toBe(true)
+  })
+
+  it('cuenta las referencias en los dos formatos', () => {
+    const legacy = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'una llave dorada', has_reference: true })
+    expect(legacy.ok).toBe(true)
+    // Las piezas viejas declaran un booleano; sin esto, su variante saldría sin
+    // las reglas de referencia en el prompt.
+    if (legacy.ok) expect(referenceCount(legacy.data)).toBe(1)
+
+    const fresh = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'una llave dorada', reference_count: 3 })
+    expect(fresh.ok).toBe(true)
+    if (fresh.ok) expect(referenceCount(fresh.data)).toBe(3)
+  })
+
+  it('no acepta más referencias de las que caben', () => {
+    const r = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'una llave dorada', reference_count: MAX_REFERENCES + 1 })
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toContain('referencia')
+  })
+
+  it('el estilo tiene default: dejó de pedirse en el formulario', () => {
+    const r = parseStudioForm({ aspect: '4:5', recipe: 'open_prompt', prompt: 'una llave dorada sobre mármol' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(STYLE_KEYS).toContain(r.data.style)
   })
 
   it('el modo foto exige una propiedad y no aplica a evento ni prompt abierto', () => {

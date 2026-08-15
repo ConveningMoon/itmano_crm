@@ -59,6 +59,33 @@ describe('buildSystemPrompt', () => {
   })
 })
 
+// "Mi Imagen" es el caso sin compositor: la imagen que devuelve el modelo es la
+// final, así que las reglas que protegen la composición no aplican.
+describe('buildSystemPrompt · imagen libre', () => {
+  const free = (over: Record<string, unknown> = {}) =>
+    buildSystemPrompt(form({ recipe: 'open_prompt', prompt: 'una llave dorada sobre mármol', ...over }), brand)
+
+  it('no impone la paleta de la marca', () => {
+    // La paleta tiñe las piezas de marca; en una imagen libre pintaría de navy
+    // algo que el usuario no pidió así.
+    expect(free()).not.toContain('#1B2A41')
+    expect(buildSystemPrompt(listing, brand)).toContain('#1B2A41')
+  })
+
+  it('no prohíbe el texto ni exige zona limpia: encima no se compone nada', () => {
+    const p = free()
+    expect(p).not.toContain('No text, no letters')
+    expect(p).not.toContain('clean area')
+    expect(p).toContain('ONLY if the user explicitly asked')
+  })
+
+  it('declara cuántas referencias hay, sin pedir un rol para cada una', () => {
+    expect(free({ reference_count: 3 })).toContain('3 reference images are attached')
+    expect(free({ reference_count: 1 })).toContain('One reference image is attached')
+    expect(free()).not.toContain('reference image')
+  })
+})
+
 describe('buildUserPrompt', () => {
   it('pasa scene_notes como contexto de la escena', () => {
     const withNotes = form({

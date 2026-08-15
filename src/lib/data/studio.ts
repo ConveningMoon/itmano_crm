@@ -11,7 +11,7 @@ export const STUDIO_BUCKET = 'studio-images'
 
 const IMAGE_COLUMNS = columns('studio_images', [
   'id', 'tenant_id', 'agent_id', 'recipe', 'property_id', 'form_json', 'source_mode',
-  'style', 'palette', 'aspect', 'reference_path', 'reference_role', 'scene_prompt',
+  'style', 'palette', 'aspect', 'reference_path', 'reference_paths', 'reference_role', 'scene_prompt',
   'text_zone', 'background_path', 'rendered_path', 'status', 'error_message',
   'cost_usd', 'created_at',
 ])
@@ -57,7 +57,11 @@ function toImage(r: any): StudioImage {
     id: r.id, tenant_id: r.tenant_id, agent_id: r.agent_id ?? null, recipe: r.recipe,
     property_id: r.property_id ?? null, form_json: r.form_json ?? {}, source_mode: r.source_mode,
     style: r.style, palette: r.palette ?? null, aspect: r.aspect,
-    reference_path: r.reference_path ?? null, reference_role: r.reference_role ?? null,
+    reference_path: r.reference_path ?? null,
+    // Las filas viejas no tienen el array: su única referencia es la columna
+    // singular, y así el resto del código no necesita saber cuál de las dos usar.
+    reference_paths: r.reference_paths ?? (r.reference_path ? [r.reference_path] : []),
+    reference_role: r.reference_role ?? null,
     scene_prompt: r.scene_prompt ?? null, text_zone: r.text_zone ?? null,
     background_path: r.background_path ?? null, rendered_path: r.rendered_path ?? null,
     rendered_url: publicUrl(r.rendered_path ?? null),

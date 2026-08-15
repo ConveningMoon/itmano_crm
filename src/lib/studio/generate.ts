@@ -79,9 +79,9 @@ export async function renderTemplatePiece(params: {
 }
 
 export async function generateStudioImage(params: {
-  ctx:       TenantContext
-  form:      StudioForm
-  reference: { data: Buffer; mimeType: string } | null
+  ctx:        TenantContext
+  form:       StudioForm
+  references: Array<{ data: Buffer; mimeType: string }>
 }): Promise<ActionResult<StudioImage>> {
   const { ctx, form } = params
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant antes de generar' }
@@ -137,11 +137,11 @@ export async function generateStudioImage(params: {
       return ready ? { ok: true, data: ready } : { ok: false, error: 'La imagen se generó pero no se pudo leer' }
     }
 
-    // La referencia se guarda ANTES de usarse: si algo falla después, queda el
-    // rastro de con qué se pidió.
-    let referencePath: string | null = null
-    if (params.reference) {
-      referencePath = await uploadPng(`${base}/ref.png`, params.reference.data)
+    // Las referencias se guardan ANTES de usarse: si algo falla después, queda
+    // el rastro de con qué se pidió.
+    const referencePaths: string[] = []
+    for (const [i, ref] of params.references.entries()) {
+      referencePaths.push(await uploadPng(`${base}/ref-${i}.png`, ref.data))
     }
 
     // 1. Dirección de escena (solo en modo generate).
@@ -164,7 +164,7 @@ export async function generateStudioImage(params: {
     const bg = await resolveBackground({
       sourceMode:  form.source_mode,
       scenePrompt,
-      reference:   params.reference,
+      references:  params.references,
       photoUrl,
     })
 
@@ -186,7 +186,10 @@ export async function generateStudioImage(params: {
     const renderedPath = await uploadPng(`${base}/final.png`, png)
 
     await db.from('studio_images').update({
-      reference_path:  referencePath,
+      // `reference_path` repite la primera: las lecturas viejas siguen viendo lo
+      // que esperan y la lista completa vive en `reference_paths` (migración 102).
+      reference_path:  referencePaths[0] ?? null,
+      reference_paths: referencePaths.length ? referencePaths : null,
       scene_prompt:    scenePrompt,
       text_zone:       textZone,
       background_path: backgroundPath,

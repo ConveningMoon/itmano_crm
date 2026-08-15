@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { Loader2, Sparkles, Eye } from 'lucide-react'
-import { STYLES } from '@/lib/studio/styles'
 import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
 import { Lightbox } from './lightbox'
@@ -19,21 +18,16 @@ import type { StudioImage } from '@/lib/studio/types'
 // escritos en la imagen, y validarlos completos ANTES de generar es lo que evita
 // imprecisiones y gasto de tokens.
 
+// El prompt abierto ya no es una receta de esta pestaña: vive en "Mi Imagen".
+// Estas cuatro tienen en común que el CRM sabe qué va escrito en la pieza.
 const RECIPES = [
   { key: 'open_house',  label: 'Casa abierta' },
   { key: 'new_listing', label: 'Nueva disponible' },
   { key: 'sold',        label: 'Vendida' },
   { key: 'event',       label: 'Evento' },
-  { key: 'open_prompt', label: 'Prompt abierto' },
 ]
 
 const HOUSE_RECIPES = ['open_house', 'new_listing', 'sold']
-
-const REFERENCE_ROLES = [
-  { value: 'subject',     label: 'Es la casa',        hint: 'Se conserva la arquitectura; solo cambian luz, cielo y encuadre.' },
-  { value: 'style',       label: 'Es el estilo',      hint: 'Se copian la paleta y el clima; el contenido se ignora.' },
-  { value: 'composition', label: 'Es la composición', hint: 'Se conserva el encuadre; el contenido es nuevo.' },
-]
 
 const ASPECTS = [
   { value: '4:5',  label: '4:5 · feed alto' },
@@ -78,14 +72,11 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const [recipe, setRecipe] = useState('new_listing')
   const [fields, setFields] = useState<Fields>({})
   const [palette, setPalette] = useState<StudioPalette>(tenantColor ? tenantPreset(tenantColor).palette : DEFAULT_PALETTE)
-  const [style, setStyle] = useState(STYLES[0].key)
   const [aspect, setAspect] = useState('4:5')
   const [sourceMode, setSourceMode] = useState('generate')
-  const [sceneNotes, setSceneNotes] = useState('')
+  const [extra, setExtra] = useState('')
   const [propertyId, setPropertyId] = useState('')
   const [agentId, setAgentId] = useState('')
-  const [referenceFile, setReferenceFile] = useState<File | null>(null)
-  const [referenceRole, setReferenceRole] = useState('subject')
   const [template, setTemplate] = useState(() => firstTemplateFor('new_listing'))
   const [headline, setHeadline] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
@@ -94,7 +85,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   // decisiones que se tocan siempre; Colores y Escena, cerrados con su resumen a
   // la vista, para que cerrado no signifique escondido.
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    contenido: true, diseno: true, colores: false, escena: false,
+    contenido: true, diseno: true, colores: false, adicional: false,
   })
   const toggle = (k: string) => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
 
@@ -168,22 +159,21 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   function buildPayload() {
     return {
       ...fields,
-      recipe, style, aspect, palette,
-      source_mode:    sourceMode,
-      template:       template || undefined,
-      headline:       headline || undefined,
-      scene_notes:    sceneNotes || undefined,
-      property_id:    propertyId || undefined,
-      agent_id:       agentId || undefined,
-      has_reference:  !!referenceFile,
-      reference_role: referenceFile ? referenceRole : undefined,
+      recipe, aspect, palette,
+      source_mode: sourceMode,
+      template:    template || undefined,
+      headline:    headline || undefined,
+      // El bloque "Adicional" viaja en el campo de siempre: es la clave que las
+      // piezas ya guardadas tienen en su form_json.
+      scene_notes: extra || undefined,
+      property_id: propertyId || undefined,
+      agent_id:    agentId || undefined,
     }
   }
 
   function formData(): FormData {
     const data = new FormData()
     data.set('payload', JSON.stringify(buildPayload()))
-    if (referenceFile) data.set('reference', referenceFile)
     return data
   }
 
@@ -371,12 +361,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         </>
       )}
 
-      {recipe === 'open_prompt' && (
-        <Field label="Prompt">
-          <TextArea value={String(fields.prompt ?? '')} onChange={e => set('prompt', e.target.value)} placeholder="Una llave dorada sobre mármol, luz lateral" />
-        </Field>
-      )}
-
       {agents.length > 0 && (
         <Field label="Agente">
           <Select
@@ -426,52 +410,24 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
 
       </Section>
 
-      {/* Escena con IA: solo existe sin diseño elegido. Con un template no hay
-          escena que dirigir, así que el bloque entero desaparece. */}
-      {!template && (
-        <Section title="Escena con IA" summary="Estilo y referencia" open={openSections.escena} onToggle={() => toggle('escena')}>
-      {/* Comunes */}
-      {recipe !== 'open_prompt' && !template && (
-        <Field label="¿Cómo es la casa? ¿Qué quieres que se vea?" hint="Opcional. Se suma como contexto de la escena; no cambia el diseño ni los datos.">
-          <TextArea value={sceneNotes} onChange={e => setSceneNotes(e.target.value)} placeholder="colonial de ladrillo con porche, frente al agua…" />
-        </Field>
-      )}
-
-      {/* El estilo es dirección de arte PARA EL MODELO. Con un diseño elegido no
-          hay escena que generar, así que no dirige nada y solo estorba. */}
-      {!template && (
-      <Field label="Estilo" hint={STYLES.find(s => s.key === style)?.hint}>
-        <Select
-          value={style}
-          onChange={e => setStyle(e.target.value)}
-          options={STYLES.map(s => ({ value: s.key, label: s.label }))}
-        />
-      </Field>
-      )}
-
-      {!template && (
-      <Field label="Imagen de referencia">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={e => setReferenceFile(e.target.files?.[0] ?? null)}
-          style={{ fontSize: '12px', color: 'var(--text-muted)' }}
-        />
-      </Field>
-      )}
-
-      {!template && referenceFile && (
-        <Field label="¿Qué es esa imagen?" hint={REFERENCE_ROLES.find(r => r.value === referenceRole)?.hint}>
-          <Select
-            value={referenceRole}
-            onChange={e => setReferenceRole(e.target.value)}
-            options={REFERENCE_ROLES.map(r => ({ value: r.value, label: r.label }))}
+      {/* Adicional: lo único que queda del bloque de escena. Un post se arma con
+          los campos de su receta; esto es la salida para lo que no cabe en
+          ninguno, no un segundo formulario. */}
+      <Section title="Adicional" summary={extra ? 'Con indicaciones' : 'Opcional'} open={openSections.adicional} onToggle={() => toggle('adicional')}>
+        <Field
+          label="Algo más que agregar"
+          hint={template
+            ? 'Este diseño compone la pieza con tus datos, así que estas indicaciones no la cambian. Aplican a las recetas cuya escena se genera con IA.'
+            : 'Se suma a lo que ya describe la receta. No cambia los datos de la pieza.'}
+        >
+          <TextArea
+            value={extra}
+            onChange={e => setExtra(e.target.value)}
+            maxLength={500}
+            placeholder="colonial de ladrillo con porche, frente al agua, luz de atardecer…"
           />
         </Field>
-      )}
-
-        </Section>
-      )}
+      </Section>
 
       {error && (
         <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>

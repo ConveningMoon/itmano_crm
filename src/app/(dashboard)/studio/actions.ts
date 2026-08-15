@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { generateStudioImage, recomposeStudioImage, renderTemplatePiece } from '@/lib/studio/generate'
 import { getStudioImage, STUDIO_BUCKET } from '@/lib/data/studio'
 import type { ActionResult, StudioImage } from '@/lib/studio/types'
@@ -39,20 +39,24 @@ export async function createStudioImage(formData: FormData): Promise<ActionResul
   const noTemplate = requireTemplate(parsed.data)
   if (noTemplate) return noTemplate
 
-  let reference: { data: Buffer; mimeType: string } | null = null
-  const file = formData.get('reference')
-  if (file instanceof File && file.size > 0) {
-    if (file.size > MAX_REFERENCE_BYTES) return { ok: false, error: 'La imagen de referencia supera los 8 MB' }
-    if (!file.type.startsWith('image/')) return { ok: false, error: 'La referencia debe ser una imagen' }
-    reference = { data: Buffer.from(await file.arrayBuffer()), mimeType: file.type }
-  }
-  // El formulario declara si adjuntó referencia; si el archivo no llegó, el rol
-  // sobra y no debe condicionar el prompt.
-  if (parsed.data.has_reference && !reference) {
-    return { ok: false, error: 'No llegó la imagen de referencia' }
+  const files = formData.getAll('reference').filter((f): f is File => f instanceof File && f.size > 0)
+  if (files.length > MAX_REFERENCES) {
+    return { ok: false, error: `Como máximo ${MAX_REFERENCES} imágenes de referencia` }
   }
 
-  const result = await generateStudioImage({ ctx, form: parsed.data, reference })
+  const references: Array<{ data: Buffer; mimeType: string }> = []
+  for (const file of files) {
+    if (file.size > MAX_REFERENCE_BYTES) return { ok: false, error: `"${file.name}" supera los 8 MB` }
+    if (!file.type.startsWith('image/')) return { ok: false, error: `"${file.name}" no es una imagen` }
+    references.push({ data: Buffer.from(await file.arrayBuffer()), mimeType: file.type })
+  }
+  // El formulario declara cuántas adjuntó; si los archivos no llegaron, generar
+  // igual produciría una imagen que no es la que el agente pidió.
+  if (referenceCount(parsed.data) !== references.length) {
+    return { ok: false, error: 'No llegaron las imágenes de referencia' }
+  }
+
+  const result = await generateStudioImage({ ctx, form: parsed.data, references })
   if (result.ok) revalidatePath('/studio')
   return result
 }
@@ -87,13 +91,14 @@ export async function regenerateStudioImage(id: string): Promise<ActionResult<St
   const parsed = parseStudioForm(source.form_json)
   if (!parsed.ok) return { ok: false, error: `El formulario original ya no es válido: ${parsed.error}` }
 
-  let reference: { data: Buffer; mimeType: string } | null = null
-  if (source.reference_path) {
-    const { data: blob } = await createAdminClient().storage.from(STUDIO_BUCKET).download(source.reference_path)
-    if (blob) reference = { data: Buffer.from(await blob.arrayBuffer()), mimeType: 'image/png' }
+  const storage = createAdminClient().storage.from(STUDIO_BUCKET)
+  const references: Array<{ data: Buffer; mimeType: string }> = []
+  for (const path of source.reference_paths) {
+    const { data: blob } = await storage.download(path)
+    if (blob) references.push({ data: Buffer.from(await blob.arrayBuffer()), mimeType: 'image/png' })
   }
 
-  const result = await generateStudioImage({ ctx, form: parsed.data, reference })
+  const result = await generateStudioImage({ ctx, form: parsed.data, references })
   if (result.ok) revalidatePath('/studio')
   return result
 }
@@ -109,7 +114,7 @@ export async function deleteStudioImage(id: string): Promise<ActionResult<{ id: 
   }
 
   const db = createAdminClient()
-  const paths = [image.reference_path, image.background_path, image.rendered_path]
+  const paths = [...image.reference_paths, image.background_path, image.rendered_path]
     .filter((p): p is string => !!p)
   if (paths.length) await db.storage.from(STUDIO_BUCKET).remove(paths)
 
