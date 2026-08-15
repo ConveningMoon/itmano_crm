@@ -26,7 +26,7 @@ export interface StudioPalette {
 export const PALETTE_ROLES: { key: keyof StudioPalette; label: string; hint: string }[] = [
   { key: 'brand',   label: 'Color primario',   hint: 'Bandas y bloques de color' },
   { key: 'surface', label: 'Color secundario', hint: 'El fondo donde va el texto' },
-  { key: 'ink',     label: 'Texto',            hint: 'Sobre el fondo' },
+  { key: 'ink',     label: 'Color de texto',   hint: 'Sobre el fondo' },
   { key: 'logo',    label: 'Color de logo',    hint: 'Con el que se tiñe el logo del equipo' },
 ]
 
@@ -96,6 +96,59 @@ export function darken(hex: string, factor = 0.62): string {
   const g = Math.round(((n >> 8) & 255) * factor)
   const b = Math.round((n & 255) * factor)
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
+}
+
+/**
+ * El mismo color con transparencia, para los degradados.
+ *
+ * Existe porque un degradado sobre una foto no puede ser un hex plano: necesita
+ * ir de invisible a opaco. Un hex inválido cae a negro, que es el
+ * comportamiento que tenía el degradado cuando estaba escrito a mano.
+ */
+export function rgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.replace('#', ''), 16)
+  if (!Number.isFinite(n)) return `rgba(0,0,0,${alpha})`
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`
+}
+
+/** Luminancia relativa WCAG. Es la base del contraste; no se usa sola. */
+function luminance(hex: string): number {
+  const n = parseInt(hex.replace('#', ''), 16)
+  if (!Number.isFinite(n)) return 0
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => {
+    const s = v / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+}
+
+/** Razón de contraste entre dos colores: 1 (idénticos) a 21 (negro y blanco). */
+export function contrastRatio(a: string, b: string): number {
+  const la = luminance(a)
+  const lb = luminance(b)
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+}
+
+/** Por debajo de esto el texto deja de leerse. 3:1 es el mínimo de WCAG para
+ *  texto grande, que es todo lo que estos diseños ponen sobre un color. */
+const MIN_CONTRAST = 3
+
+/**
+ * El color que DE VERDAD se lee sobre `bg`: el preferido si contrasta, y si no
+ * el primer alternativo que sí.
+ *
+ * Existe porque los roles pueden coincidir sin que nadie se equivoque: la
+ * paleta por defecto —y el preset del tenant— usan el mismo hex para el
+ * primario y para el texto, así que un diseño que ponga el texto sobre el color
+ * primario lo haría invisible. Preferir el rol pedido y degradar solo cuando no
+ * se lee respeta la elección del usuario sin publicar una pieza ilegible.
+ */
+export function readableOn(bg: string, preferred: string, ...fallbacks: string[]): string {
+  for (const color of [preferred, ...fallbacks]) {
+    if (contrastRatio(bg, color) >= MIN_CONTRAST) return color
+  }
+  // Ninguno sirve: blanco o negro según lo oscuro que sea el fondo.
+  return luminance(bg) > 0.4 ? '#000000' : '#FFFFFF'
 }
 
 /** El nombre del preset que coincide, o "Personalizada". Un resumen con tres

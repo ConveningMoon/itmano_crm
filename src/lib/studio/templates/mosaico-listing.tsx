@@ -1,5 +1,5 @@
 import { Band, Badge, Headline, StatRow, PhotoCard, AgentBadge } from './primitives'
-import { darken } from '../palettes'
+import { darken, readableOn } from '../palettes'
 import type { StudioTemplate, TemplateProps } from './types'
 
 // Mosaico — el diseño de la referencia. Hero grande, tres miniaturas
@@ -7,6 +7,11 @@ import type { StudioTemplate, TemplateProps } from './types'
 // la cifra. Luce cuando el agente tiene sesión fotográfica completa.
 
 function Render(p: TemplateProps) {
+  // Las dos bandas son de colores distintos (la de abajo es el primario
+  // oscurecido), así que el color legible se calcula para cada una.
+  const onBrand = readableOn(p.palette.brand, p.palette.surface, p.palette.ink)
+  const onDark  = readableOn(darken(p.palette.brand), p.palette.surface, p.palette.ink)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: 1080, height: 1350, backgroundColor: p.palette.surface, position: 'relative' }}>
       {p.heroPhoto && (
@@ -40,8 +45,11 @@ function Render(p: TemplateProps) {
         )}
       </div>
 
+      {/* Lo que va sobre las dos bandas —iconos, specs, cifra, agente y
+          teléfono— se pinta con el COLOR SECUNDARIO, no con blanco fijo: es el
+          color que el tenant elige para leerse sobre su color de marca. */}
       <Band color={p.palette.brand} height={110} bottom={130}>
-        <StatRow stats={p.stats} color="#FFFFFF" />
+        <StatRow stats={p.stats} color={onBrand} />
       </Band>
 
       {/* Precio y agente conviven: antes el nombre solo salía si NO había precio,
@@ -49,10 +57,10 @@ function Render(p: TemplateProps) {
       <Band color={darken(p.palette.brand)} height={130} bottom={0}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {p.price && (
-            <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 56, color: '#FFFFFF' }}>{p.price}</span>
+            <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 56, color: onDark }}>{p.price}</span>
           )}
           {p.agentName && (
-            <span style={{ fontFamily: 'Marcellus', fontSize: 22, letterSpacing: 2, color: '#FFFFFF', opacity: 0.85 }}>
+            <span style={{ fontFamily: 'Marcellus', fontSize: 22, letterSpacing: 2, color: onDark }}>
               {[p.agentName, p.phone].filter(Boolean).join('  ·  ')}
             </span>
           )}
