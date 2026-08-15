@@ -1,5 +1,4 @@
-import { Band, Badge, Headline, StatRow, AgentBadge } from './primitives'
-import { readableOn } from '../palettes'
+import { Band, Badge, Headline, StatRow, AgentBadge, textColors } from './primitives'
 import type { StudioTemplate, TemplateProps } from './types'
 
 // Editorial — manda la tipografía sobre un bloque de color, y la foto es
@@ -28,11 +27,8 @@ const LOGO_SIZE  = 120
 const AGENT_SIZE = 230
 
 function Render(p: TemplateProps) {
-  // Etiqueta, titular, cifra, agente y teléfono: SIEMPRE el color secundario.
-  // El color de texto no entra como alternativa —ese rol es para el fondo
-  // claro—; la única salida es blanco o negro, y solo si el secundario no se
-  // lee sobre el primario. Ver readableOn.
-  const onBrand = readableOn(p.palette.brand, p.palette.surface)
+  // Etiqueta, titular, cifra, agente y teléfono van sobre el color primario.
+  const { onBrand } = textColors(p.palette)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: 1080, height: 1350, backgroundColor: p.palette.surface, position: 'relative' }}>

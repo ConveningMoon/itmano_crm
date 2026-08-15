@@ -1,3 +1,4 @@
+import { darken, readableOn, type StudioPalette } from '../palettes'
 import type { Stat } from './types'
 
 // Bloques compartidos por los nueve diseños. Existen para que las tres variantes
@@ -6,6 +7,43 @@ import type { Stat } from './types'
 //
 // RECORDATORIO satori: todo elemento con MÁS DE UN HIJO necesita display:'flex'
 // explícito, o el render lanza.
+
+/**
+ * Qué color lleva el texto según SOBRE QUÉ cae. Es la única fuente de esa
+ * decisión para los nueve diseños.
+ *
+ * Vive aquí y no en cada template porque es una regla de producto, no de
+ * maquetación, y ya se corrigió tres veces: repetida nueve veces, la próxima
+ * corrección se aplicaría a ocho.
+ */
+export function textColors(palette: StudioPalette) {
+  return {
+    // Sobre el primario y sobre el primario oscurecido: SIEMPRE el secundario.
+    // El color de texto no entra como alternativa — ese rol es para el fondo
+    // claro—, así que la única salida es un neutro y solo si el secundario no
+    // se lee. Ver readableOn.
+    onBrand: readableOn(palette.brand, palette.surface),
+    onDark:  readableOn(darken(palette.brand), palette.surface),
+    // Sobre una foto velada por el degradado del primario: ahí sí manda el
+    // color de texto, con el secundario detrás por si coinciden los hex.
+    onPhoto: readableOn(palette.brand, palette.ink, palette.surface),
+  }
+}
+
+/**
+ * La fecha y el horario, en dos líneas.
+ *
+ * `when` llega como "15 de agosto de 2026 · 11:00–14:00": treinta y cinco
+ * caracteres que en una sola línea se meten debajo de la portada del agente, y
+ * con un mes largo —septiembre, diciembre— desbordan el bloque. Partirlo no es
+ * solo defensa: un cartel se lee mejor con el día en una línea y la hora en la
+ * siguiente.
+ */
+export function splitWhen(when: string | null): { day: string; time: string | null } {
+  if (!when) return { day: '', time: null }
+  const [day, time] = when.split(' · ')
+  return { day, time: time ?? null }
+}
 
 export const ICONS: Record<string, string> = {
   ruler: 'M3 12h18M6 9v6M12 9v6M18 9v6',

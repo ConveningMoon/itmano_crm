@@ -2,9 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { templateFit, templatesForRecipe, findTemplate, TEMPLATES } from '@/lib/studio/templates/registry'
 
 describe('registro de templates', () => {
-  // La Task 9 añade open_house y la Task 10 sold; hasta entonces solo new_listing.
   it('cada receta de casa tiene exactamente tres diseños', () => {
-    for (const recipe of ['new_listing'] as const) {
+    for (const recipe of ['new_listing', 'open_house', 'sold'] as const) {
       expect(templatesForRecipe(recipe)).toHaveLength(3)
     }
   })

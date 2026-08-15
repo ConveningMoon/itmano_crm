@@ -1,14 +1,19 @@
-import { Band, Badge, Headline, StatRow, PhotoCard, AgentBadge, textColors } from './primitives'
+import { Band, Badge, Headline, PhotoCard, AgentBadge, textColors } from './primitives'
 import { darken } from '../palettes'
 import type { StudioTemplate, TemplateProps } from './types'
 
-// Mosaico — el diseño de la referencia. Hero grande, tres miniaturas
-// superpuestas, bloque de titular, y dos bandas apiladas abajo con las specs y
-// la cifra. Luce cuando el agente tiene sesión fotográfica completa.
+// Mosaico · vendida — misma estructura que la variante de venta, con las dos
+// diferencias que tiene un cierre:
+//
+//   · La cifra es OPCIONAL. Muchos agentes no publican por cuánto cerraron, así
+//     que sin ella la banda inferior la ocupa el agente, no un hueco.
+//   · La nota ("Vendida en 9 días") ocupa el lugar de las specs, que en un
+//     cierre ya no interesan: la casa no está a la venta.
+//
+// Cuando no hay nota, esa banda no se dibuja. Una franja de color vacía se lee
+// como un error de maquetación, no como espacio.
 
 function Render(p: TemplateProps) {
-  // Las dos bandas son de colores distintos (la de abajo es el primario
-  // oscurecido), así que cada una tiene su color de texto.
   const { onBrand, onDark } = textColors(p.palette)
 
   return (
@@ -44,22 +49,24 @@ function Render(p: TemplateProps) {
         )}
       </div>
 
-      {/* Lo que va sobre las dos bandas —iconos, specs, cifra, agente y
-          teléfono— se pinta con el COLOR SECUNDARIO, no con blanco fijo: es el
-          color que el tenant elige para leerse sobre su color de marca. */}
-      <Band color={p.palette.brand} height={110} bottom={130}>
-        <StatRow stats={p.stats} color={onBrand} />
-      </Band>
+      {p.cta && (
+        <Band color={p.palette.brand} height={110} bottom={130}>
+          <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 36, color: onBrand }}>{p.cta}</span>
+        </Band>
+      )}
 
-      {/* Precio y agente conviven: antes el nombre solo salía si NO había precio,
-          así que en una pieza de venta el agente no aparecía nunca. */}
       <Band color={darken(p.palette.brand)} height={130} bottom={0}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {p.price && (
             <span style={{ fontFamily: 'Spectral', fontWeight: 800, fontSize: 56, color: onDark }}>{p.price}</span>
           )}
           {p.agentName && (
-            <span style={{ fontFamily: 'Marcellus', fontSize: 22, letterSpacing: 2, color: onDark }}>
+            <span style={{
+              fontFamily: 'Marcellus', letterSpacing: 2, color: onDark,
+              // Sin cifra el nombre es lo único que lleva esta banda: si se
+              // quedara en el cuerpo de un subtítulo, la banda parecería vacía.
+              fontSize: p.price ? 22 : 30,
+            }}>
               {[p.agentName, p.phone].filter(Boolean).join('  ·  ')}
             </span>
           )}
@@ -71,16 +78,16 @@ function Render(p: TemplateProps) {
   )
 }
 
-export const mosaicoListing: StudioTemplate = {
-  key: 'mosaico-listing',
+export const mosaicoSold: StudioTemplate = {
+  key: 'mosaico-sold',
   label: 'Mosaico',
   hint: 'Cuatro fotos o más',
-  recipes: ['new_listing'],
+  recipes: ['sold'],
   aspects: ['4:5'],
   idealPhotos: 4,
   slots: {
-    required: ['photo.hero', 'text.headline', 'text.price'],
-    optional: ['photo.thumbs', 'photo.agent', 'stats', 'text.address', 'logo.tenant'],
+    required: ['photo.hero', 'text.headline'],
+    optional: ['photo.thumbs', 'photo.agent', 'text.price', 'text.address', 'text.cta', 'text.phone', 'logo.tenant'],
   },
   render: Render,
 }

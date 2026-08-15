@@ -3,9 +3,10 @@ import sharp from 'sharp'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderToPng } from '@/lib/studio/render/satori'
-import { normalizePhoto } from '@/lib/studio/template-props'
+import { normalizePhoto, badgeFor } from '@/lib/studio/template-props'
 import { TEMPLATES } from '@/lib/studio/templates/registry'
 import type { TemplateProps } from '@/lib/studio/templates/types'
+import type { StudioRecipe } from '@/lib/studio/types'
 
 const OUT = process.env.STUDIO_OUT_DIR
 
@@ -33,7 +34,18 @@ async function photo(name: string): Promise<string> {
   return uri
 }
 
-async function props(over: Partial<TemplateProps> = {}): Promise<TemplateProps> {
+/**
+ * Los datos que el CRM le pasaría a un diseño de ESA receta.
+ *
+ * No es un detalle del test: de aquí salen las miniaturas del selector
+ * (scripts/gen-template-thumbs.mjs). Con un fixture único, los seis diseños de
+ * casa abierta y vendida se anunciaban en el selector como "NUEVA DISPONIBLE" y
+ * enseñaban un precio que esas recetas no tienen.
+ */
+async function props(recipe: StudioRecipe, over: Partial<TemplateProps> = {}): Promise<TemplateProps> {
+  const esVenta  = recipe === 'new_listing'
+  const esCierre = recipe === 'sold'
+
   return {
     heroPhoto:   await photo('casa-fachada'),
     thumbPhotos: [await photo('casa-salon'), await photo('casa-comedor'), await photo('casa-atardecer')],
@@ -41,18 +53,25 @@ async function props(over: Partial<TemplateProps> = {}): Promise<TemplateProps> 
     // invisibles: no se veía dónde caen la foto del agente ni el logo.
     agentPhoto:  await photo('agente-ejemplo'),
     logo:        await logoFixture(),
-    headline:    'Casa elegante y familiar en venta',
-    price:       '$274,400',
-    when:        '15 de agosto de 2026 · 11:00–14:00',
+    headline:    esCierre ? 'Otra familia en su nuevo hogar'
+               : recipe === 'open_house' ? 'Te esperamos este sábado'
+               : 'Casa elegante y familiar en venta',
+    // Casa abierta no lleva cifra; el cierre la lleva solo si el agente la publica.
+    price:       esVenta || esCierre ? '$274,400' : null,
+    when:        recipe === 'open_house' ? '15 de agosto de 2026 · 11:00–14:00' : null,
     address:     '1909 Ocean View Avenue, Norfolk, VA',
     phone:       '+1 757 555 0199',
-    cta:         null,
-    badge:       'NUEVA DISPONIBLE',
-    stats: [
-      { icon: 'ruler', value: '1,548 sqft' },
-      { icon: 'bed',   value: '3 hab' },
-      { icon: 'bath',  value: '2 baños' },
-    ],
+    cta:         esCierre ? 'Vendida en 9 días' : null,
+    badge:       badgeFor(recipe),
+    // Las specs solo existen en la receta de venta: statsFor las devuelve vacías
+    // para las otras dos.
+    stats: esVenta
+      ? [
+          { icon: 'ruler', value: '1,548 sqft' },
+          { icon: 'bed',   value: '3 hab' },
+          { icon: 'bath',  value: '2 baños' },
+        ]
+      : [],
     agentName: 'Adriana Melendez',
     palette:   { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41', logo: '#1B2A41' },
     ...over,
@@ -61,8 +80,11 @@ async function props(over: Partial<TemplateProps> = {}): Promise<TemplateProps> 
 
 describe('templates', () => {
   for (const t of TEMPLATES) {
+    // Un diseño declara para qué recetas sirve; hoy cada uno sirve para una.
+    const recipe = t.recipes[0]
+
     it(`${t.key} rinde 1080x1350`, async () => {
-      const png = await renderToPng(t.render(await props()), { width: 1080, height: 1350 })
+      const png = await renderToPng(t.render(await props(recipe)), { width: 1080, height: 1350 })
       const meta = await sharp(png).metadata()
       expect(meta.width).toBe(1080)
       expect(meta.height).toBe(1350)
@@ -71,12 +93,12 @@ describe('templates', () => {
     })
 
     it(`${t.key} rinde sin portada de agente y sin logo`, async () => {
-      const png = await renderToPng(t.render(await props({ agentPhoto: null, logo: null })), { width: 1080, height: 1350 })
+      const png = await renderToPng(t.render(await props(recipe, { agentPhoto: null, logo: null })), { width: 1080, height: 1350 })
       expect((await sharp(png).metadata()).height).toBe(1350)
     })
 
     it(`${t.key} aguanta un titular y una dirección larguísimos`, async () => {
-      const png = await renderToPng(t.render(await props({
+      const png = await renderToPng(t.render(await props(recipe, {
         headline: 'Una casa absolutamente espectacular y enorme junto al agua con vistas',
         address:  'Un nombre de calle desmesuradamente largo, Virginia Beach, Virginia, Estados Unidos',
       })), { width: 1080, height: 1350 })
@@ -84,13 +106,25 @@ describe('templates', () => {
     })
 
     it(`${t.key} rinde sin miniaturas`, async () => {
-      const png = await renderToPng(t.render(await props({ thumbPhotos: [] })), { width: 1080, height: 1350 })
+      const png = await renderToPng(t.render(await props(recipe, { thumbPhotos: [] })), { width: 1080, height: 1350 })
       expect((await sharp(png).metadata()).width).toBe(1080)
     })
 
     it(`${t.key} rinde sin specs`, async () => {
-      const png = await renderToPng(t.render(await props({ stats: [] })), { width: 1080, height: 1350 })
+      const png = await renderToPng(t.render(await props(recipe, { stats: [] })), { width: 1080, height: 1350 })
       expect((await sharp(png).metadata()).width).toBe(1080)
+    })
+
+    // Un cierre sin cifra es lo normal: muchos agentes no publican por cuánto
+    // vendieron. Y una casa abierta no tiene precio en absoluto.
+    it(`${t.key} rinde sin precio`, async () => {
+      const png = await renderToPng(t.render(await props(recipe, { price: null })), { width: 1080, height: 1350 })
+      expect((await sharp(png).metadata()).height).toBe(1350)
+    })
+
+    it(`${t.key} rinde sin nota y sin fecha`, async () => {
+      const png = await renderToPng(t.render(await props(recipe, { cta: null, when: null })), { width: 1080, height: 1350 })
+      expect((await sharp(png).metadata()).height).toBe(1350)
     })
   }
 })

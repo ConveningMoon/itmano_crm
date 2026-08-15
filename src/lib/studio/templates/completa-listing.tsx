@@ -1,5 +1,5 @@
-import { Badge, Headline, StatRow, AgentBadge } from './primitives'
-import { rgba, readableOn } from '../palettes'
+import { Badge, Headline, StatRow, AgentBadge, textColors } from './primitives'
+import { rgba } from '../palettes'
 import type { StudioTemplate, TemplateProps } from './types'
 
 // Foto completa — la foto manda y el texto vive sobre un degradado en la mitad
@@ -24,10 +24,11 @@ import type { StudioTemplate, TemplateProps } from './types'
 const AGENT_SIZE = 209
 
 function Render(p: TemplateProps) {
-  // El texto va sobre el degradado, que es del color primario: si el color de
-  // texto elegido no se separa de él —y por defecto son el MISMO hex— la pieza
-  // saldría en blanco. Se prefiere el rol pedido y se degrada solo si no se lee.
-  const ink = readableOn(p.palette.brand, p.palette.ink, p.palette.surface)
+  // El texto va sobre el degradado, que es del color primario.
+  const { onPhoto: ink } = textColors(p.palette)
+  // Con portada del agente el bloque se estrecha: el círculo ocupa la derecha y
+  // una dirección larga acabaría cortada por debajo de él.
+  const textWidth = p.agentPhoto ? 700 : 860
 
   return (
     <div style={{
@@ -56,7 +57,7 @@ function Render(p: TemplateProps) {
              style={{ position: 'absolute', top: 50, right: 50, objectFit: 'contain' }} />
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', bottom: 100, left: 70, width: 800 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', bottom: 100, left: 70, width: textWidth }}>
         <Badge text={p.badge} color={ink} />
         <div style={{ display: 'flex', marginTop: 16 }}>
           <Headline text={p.headline} color={ink} size={66} />
