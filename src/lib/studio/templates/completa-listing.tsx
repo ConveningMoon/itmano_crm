@@ -11,18 +11,19 @@ import type { StudioTemplate, TemplateProps } from './types'
 // colores no cambiaba nada de este diseño salvo el logo.
 //
 //   primario   → el degradado que hace legible el texto
-//   secundario → el marco que enmarca la foto
+//   secundario → el anillo de la portada del agente
 //   texto      → todo el texto
 //   logo       → el logo (lo tiñe template-props)
+//
+// La foto va A SANGRE. Hubo un marco del color secundario y se retiró: este
+// diseño existe para que UNA foto excelente ocupe el lienzo entero, y un borde
+// alrededor le quitaba justamente eso.
 
-/** Ancho del marco. Lo justo para leerse como un borde deliberado y no como un
- *  error de encuadre. */
-const FRAME = 26
+/** La portada del agente, la más grande de los tres diseños: aquí no compite
+ *  con miniaturas ni con un bloque de color. */
+const AGENT_SIZE = 209
 
 function Render(p: TemplateProps) {
-  const W = 1080 - FRAME * 2
-  const H = 1350 - FRAME * 2
-
   // El texto va sobre el degradado, que es del color primario: si el color de
   // texto elegido no se separa de él —y por defecto son el MISMO hex— la pieza
   // saldría en blanco. Se prefiere el rol pedido y se degrada solo si no se lee.
@@ -35,8 +36,8 @@ function Render(p: TemplateProps) {
     }}>
       {p.heroPhoto && (
         // eslint-disable-next-line @next/next/no-img-element -- reason: satori rasteriza a SVG
-        <img src={p.heroPhoto} width={W} height={H} alt=""
-             style={{ position: 'absolute', top: FRAME, left: FRAME, objectFit: 'cover' }} />
+        <img src={p.heroPhoto} width={1080} height={1350} alt=""
+             style={{ position: 'absolute', top: 0, left: 0, objectFit: 'cover' }} />
       )}
 
       {/* Degradado: lo que hace legible el texto sobre una foto que nadie
@@ -45,17 +46,17 @@ function Render(p: TemplateProps) {
           42% el titular caía sobre la parte clara de la fachada y se perdía.
           El color es el primario del tenant, no negro. */}
       <div style={{
-        display: 'flex', position: 'absolute', top: FRAME, left: FRAME, width: W, height: H,
+        display: 'flex', position: 'absolute', top: 0, left: 0, width: 1080, height: 1350,
         backgroundImage: `linear-gradient(to bottom, ${rgba(p.palette.brand, 0)} 28%, ${rgba(p.palette.brand, 0.55)} 52%, ${rgba(p.palette.brand, 0.85)} 70%, ${rgba(p.palette.brand, 0.97)} 100%)`,
       }} />
 
       {p.logo && (
         // eslint-disable-next-line @next/next/no-img-element -- reason: ídem
         <img src={p.logo} width={120} height={120} alt=""
-             style={{ position: 'absolute', top: 60, right: 60, objectFit: 'contain' }} />
+             style={{ position: 'absolute', top: 50, right: 50, objectFit: 'contain' }} />
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', bottom: 110, left: 90, width: 800 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', bottom: 100, left: 70, width: 800 }}>
         <Badge text={p.badge} color={ink} />
         <div style={{ display: 'flex', marginTop: 16 }}>
           <Headline text={p.headline} color={ink} size={66} />
@@ -78,9 +79,9 @@ function Render(p: TemplateProps) {
         )}
       </div>
 
-      {/* El anillo es del color del marco: la portada del agente y el borde de la
-          pieza son la misma pieza de diseño. */}
-      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={190} ring={p.palette.surface} right={90} bottom={130} />}
+      {/* El anillo es lo que pinta el color secundario en este diseño: es el
+          único borde que queda, y el que separa la cara del agente del fondo. */}
+      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={AGENT_SIZE} ring={p.palette.surface} right={70} bottom={120} />}
     </div>
   )
 }

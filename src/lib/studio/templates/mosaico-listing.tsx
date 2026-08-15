@@ -7,10 +7,16 @@ import type { StudioTemplate, TemplateProps } from './types'
 // la cifra. Luce cuando el agente tiene sesión fotográfica completa.
 
 function Render(p: TemplateProps) {
+  // Lo que va sobre las bandas es SIEMPRE el color secundario. El color de
+  // texto no entra como alternativa: es el rol del texto sobre el fondo claro,
+  // y colarlo aquí cambiaba el color de las specs sin que nadie lo pidiera.
+  // La única salida es blanco o negro, y solo si el secundario no se lee sobre
+  // el primario — una paleta que nadie querría publicar.
+  //
   // Las dos bandas son de colores distintos (la de abajo es el primario
-  // oscurecido), así que el color legible se calcula para cada una.
-  const onBrand = readableOn(p.palette.brand, p.palette.surface, p.palette.ink)
-  const onDark  = readableOn(darken(p.palette.brand), p.palette.surface, p.palette.ink)
+  // oscurecido), así que se resuelve para cada una.
+  const onBrand = readableOn(p.palette.brand, p.palette.surface)
+  const onDark  = readableOn(darken(p.palette.brand), p.palette.surface)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: 1080, height: 1350, backgroundColor: p.palette.surface, position: 'relative' }}>

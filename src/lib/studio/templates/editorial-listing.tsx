@@ -22,10 +22,17 @@ const PHOTO_H  = 560   // a sangre, sin márgenes ni sombra
 const INFO_Y   = 990   // dirección y specs, sobre el fondo claro
 const BAND_H   = 120   // pie de marca
 
+// Logo y portada del agente son las dos marcas de identidad de la pieza y
+// estaban pidiendo presencia: ambos un 15% por encima de lo que medían.
+const LOGO_SIZE  = 120
+const AGENT_SIZE = 230
+
 function Render(p: TemplateProps) {
-  // Lo que va sobre el bloque de color: el secundario, y si no se separa del
-  // primario, el color de texto. Ver readableOn.
-  const onBrand = readableOn(p.palette.brand, p.palette.surface, p.palette.ink)
+  // Etiqueta, titular, cifra, agente y teléfono: SIEMPRE el color secundario.
+  // El color de texto no entra como alternativa —ese rol es para el fondo
+  // claro—; la única salida es blanco o negro, y solo si el secundario no se
+  // lee sobre el primario. Ver readableOn.
+  const onBrand = readableOn(p.palette.brand, p.palette.surface)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: 1080, height: 1350, backgroundColor: p.palette.surface, position: 'relative' }}>
@@ -73,7 +80,7 @@ function Render(p: TemplateProps) {
 
         {p.logo && (
           // eslint-disable-next-line @next/next/no-img-element -- reason: ídem
-          <img src={p.logo} width={104} height={104} alt="" style={{ objectFit: 'contain' }} />
+          <img src={p.logo} width={LOGO_SIZE} height={LOGO_SIZE} alt="" style={{ objectFit: 'contain' }} />
         )}
       </div>
 
@@ -87,7 +94,7 @@ function Render(p: TemplateProps) {
           foto: es el único punto de la pieza donde sobra espacio a la derecha, y
           la saca del rincón de abajo donde competía con el logo. */}
       {p.agentPhoto && (
-        <AgentBadge src={p.agentPhoto} size={200} ring={p.palette.surface} right={70} bottom={1350 - (PHOTO_Y + 100)} />
+        <AgentBadge src={p.agentPhoto} size={AGENT_SIZE} ring={p.palette.surface} right={70} bottom={1350 - (PHOTO_Y + AGENT_SIZE / 2)} />
       )}
     </div>
   )

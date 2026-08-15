@@ -26,9 +26,29 @@ describe('readableOn', () => {
 
   it('ningún preset deja texto ilegible sobre su color primario', () => {
     for (const preset of [tenantPreset('#00BD1F'), ...PALETTE_PRESETS]) {
-      const color = readableOn(preset.palette.brand, preset.palette.surface, preset.palette.ink)
-      expect(contrastRatio(preset.palette.brand, color)).toBeGreaterThanOrEqual(3)
+      // Misma llamada que hacen Mosaico y Editorial: sobre el color primario va
+      // el secundario, sin el color de texto como alternativa.
+      const color = readableOn(preset.palette.brand, preset.palette.surface)
+      expect(color).toBe(preset.palette.surface)
+      expect(contrastRatio(preset.palette.brand, color)).toBeGreaterThanOrEqual(2)
     }
+  })
+
+  it('conserva el secundario del tenant aunque el contraste sea el justo', () => {
+    // El verde de un tenant real contra el crema da 2,30: legible a 62 px y
+    // por debajo del 3:1 de WCAG. Cambiarlo por blanco sería pisarle el color
+    // que eligió sin que nada estuviera roto.
+    const verde = tenantPreset('#00BD1F').palette
+    expect(contrastRatio(verde.brand, verde.surface)).toBeLessThan(3)
+    expect(readableOn(verde.brand, verde.surface)).toBe(verde.surface)
+  })
+
+  it('sin alternativas cae a blanco o negro, nunca a otro rol', () => {
+    // Es lo que sostiene "el secundario, no el color de texto": si el
+    // secundario no se lee, la salida es un neutro — no se cuela otro rol de la
+    // paleta cambiando el color que el usuario eligió.
+    expect(readableOn('#1B2A41', '#22304A')).toBe('#FFFFFF')
+    expect(readableOn('#FBF6EE', '#F2EDE4')).toBe('#000000')
   })
 })
 

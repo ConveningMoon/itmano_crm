@@ -129,9 +129,20 @@ export function contrastRatio(a: string, b: string): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
 }
 
-/** Por debajo de esto el texto deja de leerse. 3:1 es el mínimo de WCAG para
- *  texto grande, que es todo lo que estos diseños ponen sobre un color. */
-const MIN_CONTRAST = 3
+/**
+ * Por debajo de esto el texto deja de leerse.
+ *
+ * NO es el 3:1 de WCAG: ese mínimo se define para texto de 14–18 pt, y lo que
+ * estos diseños ponen sobre un color son 62–78 px sobre un lienzo de 1080. A
+ * ese tamaño, 3:1 descarta pares perfectamente legibles — el crema sobre el
+ * verde de un tenant real da 2,30 — y descartarlos significa cambiarle el color
+ * que eligió por un blanco que no pidió.
+ *
+ * El fallo que esta guarda existe para evitar no es el contraste justo, es el
+ * contraste NULO: dos roles con el mismo hex, que es lo que trae la paleta por
+ * defecto (primario y color de texto son el mismo navy) y da 1,00.
+ */
+const MIN_CONTRAST = 2
 
 /**
  * El color que DE VERDAD se lee sobre `bg`: el preferido si contrasta, y si no
