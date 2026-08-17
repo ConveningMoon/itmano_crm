@@ -41,13 +41,18 @@ export function defineRoute(opts: RouteOptions) {
       const params  = await routeCtx.params
       const isWrite = opts.scope === 'write'
 
+      // 201 sólo cuando se CREA algo. Un PATCH actualiza un recurso que ya
+      // existía, así que devuelve 200: darle 201 anuncia una creación que no
+      // ocurrió y confunde a cualquiera que lea el contrato.
+      const exito = req.method === 'POST' ? 201 : 200
+
       const run = async (): Promise<Response> => {
         const data = await withDeadline(
           opts.handler(ctx, req, params),
           DEADLINES[opts.kind],
         )
         return new Response(JSON.stringify(data), {
-          status:  isWrite ? 201 : 200,
+          status:  exito,
           headers: { 'content-type': 'application/json', ...rateHeaders },
         })
       }

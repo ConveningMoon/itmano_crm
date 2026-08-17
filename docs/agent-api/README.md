@@ -206,31 +206,27 @@ El servidor corta y devuelve **504 con cuerpo**, nunca deja colgada la petición
 | `search` | 5 s | 10 s |
 | escrituras | 8 s | 15 s |
 
-**Medido contra el despliegue** (12 llamadas por endpoint, cliente en Europa):
+**Medido contra el despliegue**, con las funciones ya en `sfo1` (misma región que
+la base). 12 llamadas por endpoint, cliente en Europa:
 
 | Endpoint | p50 | p95 |
 |---|---|---|
-| whoami | 522 ms | 1055 ms |
-| leads (25) | 586 ms | 937 ms |
-| deals (25) | 553 ms | 649 ms |
+| whoami | 383 ms | 1051 ms |
+| leads (25) | 389 ms | 765 ms |
+| deals (25) | 366 ms | 522 ms |
 
-Con estos números, **10 s de timeout en el cliente sobra** para lectura y 15 s para
+Con estos números, 10 s de timeout en el cliente sobra para lectura y 15 s para
 escritura.
 
-Ahora bien, esos ~520 ms tienen una explicación concreta y son mejorables casi a la
-mitad. El header  devuelve : la función se ejecuta en
-**iad1 (Washington)** mientras la base está en **us-west-1**. Cada viaje cruza
-Estados Unidos, ~130 ms ida y vuelta. Y la cadena de autenticación hace **tres
-viajes antes de la primera query de negocio** (buscar el token, mintear el JWT,
-contar el rate limit), más la query: cuatro viajes ≈ 520 ms, que es exactamente el
-p50 observado.
+Mover la región de `iad1` a `sfo1` recortó un 30-34 %: antes cada viaje a la base
+cruzaba Estados Unidos. Lo que queda son cuatro viajes de ida y vuelta por
+petición — la cadena de autenticación hace **tres antes de la primera query de
+negocio** (buscar el token, mintear el JWT, contar el rate limit), más la query.
 
-De ahí que djver, que no consulta ni un dato de negocio, cueste lo mismo que
-listar 25 leads. Dos palancas, en este orden:
-
-1. **Mover la región de las funciones a US West** ( o ) para que
-   coincida con la base. Es un ajuste en Vercel, sin tocar código.
-2. Fusionar los tres viajes de autenticación en un solo RPC de Postgres.
+Por eso `whoami`, que no consulta ni un dato de negocio, sigue costando casi lo
+mismo que listar 25 leads. Si hiciera falta bajar más, ahí está el margen:
+fusionar los tres viajes en un solo RPC de Postgres. Los p95 altos son arranques
+en frío de la función, no la base.
 
 ## 11. Reseña de la siembra
 

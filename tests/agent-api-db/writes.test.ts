@@ -224,7 +224,8 @@ describe('PATCH /agent/v1/leads/{id}', () => {
 
     const res = await PATCH(patch(`http://x/agent/v1/leads/${id}`, { stage: 'en_proceso' }), conId(id))
 
-    expect(res.status).toBe(201)
+    // 200, no 201: PATCH actualiza, no crea.
+    expect(res.status).toBe(200)
     expect((await res.json()).stage).toBe('en_proceso')
 
     const { data } = await admin.from('lead_status_history')
