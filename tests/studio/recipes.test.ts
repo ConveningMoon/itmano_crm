@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { parseStudioForm, requireTemplate } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
+import { DEFAULT_PALETTE, paletteRow } from '@/lib/studio/palettes'
 
-const base = { style: 'editorial', aspect: '4:5', palette: ['#1B2A41'] }
+const base = { style: 'editorial', aspect: '4:5', palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } }
 
 describe('parseStudioForm', () => {
   it('acepta una casa abierta completa', () => {
@@ -43,12 +44,36 @@ describe('parseStudioForm', () => {
     expect(parseStudioForm({ ...base, recipe: 'open_prompt', prompt: '' }).ok).toBe(false)
   })
 
-  it('una referencia sin rol declarado no pasa', () => {
+  it('una referencia ya no necesita rol declarado', () => {
+    // El rol se preguntaba cuando la referencia vivía en la pestaña de recetas.
+    // Ahora vive en "Mi Imagen", donde el prompt dice qué hacer con ella.
     const r = parseStudioForm({
-      ...base, recipe: 'new_listing', address: '9 Bay St', price: 450000, has_reference: true,
+      ...base, recipe: 'open_prompt', prompt: 'la casa de la foto al atardecer', reference_count: 1,
     })
+    expect(r.ok).toBe(true)
+  })
+
+  it('cuenta las referencias en los dos formatos', () => {
+    const legacy = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'una llave dorada', has_reference: true })
+    expect(legacy.ok).toBe(true)
+    // Las piezas viejas declaran un booleano; sin esto, su variante saldría sin
+    // las reglas de referencia en el prompt.
+    if (legacy.ok) expect(referenceCount(legacy.data)).toBe(1)
+
+    const fresh = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'una llave dorada', reference_count: 3 })
+    expect(fresh.ok).toBe(true)
+    if (fresh.ok) expect(referenceCount(fresh.data)).toBe(3)
+  })
+
+  it('no acepta más referencias de las que caben', () => {
+    const r = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'una llave dorada', reference_count: MAX_REFERENCES + 1 })
     expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toContain('referencia')
+  })
+
+  it('el estilo tiene default: dejó de pedirse en el formulario', () => {
+    const r = parseStudioForm({ aspect: '4:5', recipe: 'open_prompt', prompt: 'una llave dorada sobre mármol' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(STYLE_KEYS).toContain(r.data.style)
   })
 
   it('el modo foto exige una propiedad y no aplica a evento ni prompt abierto', () => {
@@ -63,7 +88,64 @@ describe('parseStudioForm', () => {
 
   it('rechaza un estilo inexistente y colores que no son hex', () => {
     expect(parseStudioForm({ ...base, style: 'vaporwave', recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' }).ok).toBe(false)
-    expect(parseStudioForm({ ...base, palette: ['azul'], recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' }).ok).toBe(false)
+    expect(parseStudioForm({ ...base, palette: { brand: 'azul', surface: '#FFFFFF', ink: '#000000' }, recipe: 'open_prompt', prompt: 'x y z' }).ok).toBe(false)
+  })
+
+  it('acepta la paleta vieja (array de hex) y la traduce a roles', () => {
+    // Las piezas guardadas antes de los roles tienen `palette: ['#hex']` en su
+    // form_json: sin esto, recomponerlas fallaría.
+    const r = parseStudioForm({
+      style: 'editorial', aspect: '4:5', palette: ['#8C4A32'],
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.data.palette.brand).toBe('#8C4A32')
+      expect(r.data.palette.surface).toBe(DEFAULT_PALETTE.surface)
+      expect(r.data.palette.logo).toBe('#8C4A32')
+    }
+  })
+
+  it('una paleta sin color de logo lo hereda del primario', () => {
+    // `logo` es un rol posterior al resto: las piezas guardadas antes de que
+    // existiera traen solo tres colores y tienen que recomponerse igual que se
+    // veían — entonces el logo se teñía con el primario.
+    const r = parseStudioForm({
+      style: 'editorial', aspect: '4:5',
+      palette: { brand: '#8C4A32', surface: '#FAF1E8', ink: '#4A2318' },
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.palette.logo).toBe('#8C4A32')
+  })
+
+  it('conserva el color de logo cuando viene declarado', () => {
+    const r = parseStudioForm({
+      ...base,
+      palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41', logo: '#C9A227' },
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.palette.logo).toBe('#C9A227')
+  })
+
+  it('una paleta vacía cae a los valores por defecto', () => {
+    const r = parseStudioForm({
+      style: 'editorial', aspect: '4:5', palette: [],
+      recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle',
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.data.palette).toEqual(DEFAULT_PALETTE)
+  })
+
+  it('la paleta que va a la columna es una lista plana, no el objeto de roles', () => {
+    // `studio_images.palette` es text[]. Insertar ahí el objeto de roles hacía
+    // fallar TODO guardado con "expected JSON array", y no se veía porque
+    // previsualizar no escribe en la base.
+    const row = paletteRow(DEFAULT_PALETTE)
+    expect(Array.isArray(row)).toBe(true)
+    expect(row).toHaveLength(4)
+    row.forEach(hex => expect(hex).toMatch(/^#[0-9A-F]{6}$/i))
   })
 
   it('scene_notes es opcional y se conserva', () => {
@@ -77,7 +159,7 @@ describe('parseStudioForm', () => {
     expect(r.ok).toBe(true)
     if (r.ok) {
       expect(r.data.source_mode).toBe('generate')
-      expect(r.data.palette).toEqual([])
+      expect(r.data.palette).toEqual(DEFAULT_PALETTE)
       expect(r.data.has_reference).toBe(false)
     }
   })

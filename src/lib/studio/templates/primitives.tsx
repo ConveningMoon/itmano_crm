@@ -1,3 +1,4 @@
+import { darken, readableOn, type StudioPalette } from '../palettes'
 import type { Stat } from './types'
 
 // Bloques compartidos por los nueve diseños. Existen para que las tres variantes
@@ -6,6 +7,43 @@ import type { Stat } from './types'
 //
 // RECORDATORIO satori: todo elemento con MÁS DE UN HIJO necesita display:'flex'
 // explícito, o el render lanza.
+
+/**
+ * Qué color lleva el texto según SOBRE QUÉ cae. Es la única fuente de esa
+ * decisión para los nueve diseños.
+ *
+ * Vive aquí y no en cada template porque es una regla de producto, no de
+ * maquetación, y ya se corrigió tres veces: repetida nueve veces, la próxima
+ * corrección se aplicaría a ocho.
+ */
+export function textColors(palette: StudioPalette) {
+  return {
+    // Sobre el primario y sobre el primario oscurecido: SIEMPRE el secundario.
+    // El color de texto no entra como alternativa — ese rol es para el fondo
+    // claro—, así que la única salida es un neutro y solo si el secundario no
+    // se lee. Ver readableOn.
+    onBrand: readableOn(palette.brand, palette.surface),
+    onDark:  readableOn(darken(palette.brand), palette.surface),
+    // Sobre una foto velada por el degradado del primario: ahí sí manda el
+    // color de texto, con el secundario detrás por si coinciden los hex.
+    onPhoto: readableOn(palette.brand, palette.ink, palette.surface),
+  }
+}
+
+/**
+ * La fecha y el horario, en dos líneas.
+ *
+ * `when` llega como "15 de agosto de 2026 · 11:00–14:00": treinta y cinco
+ * caracteres que en una sola línea se meten debajo de la portada del agente, y
+ * con un mes largo —septiembre, diciembre— desbordan el bloque. Partirlo no es
+ * solo defensa: un cartel se lee mejor con el día en una línea y la hora en la
+ * siguiente.
+ */
+export function splitWhen(when: string | null): { day: string; time: string | null } {
+  if (!when) return { day: '', time: null }
+  const [day, time] = when.split(' · ')
+  return { day, time: time ?? null }
+}
 
 export const ICONS: Record<string, string> = {
   ruler: 'M3 12h18M6 9v6M12 9v6M18 9v6',
@@ -81,20 +119,50 @@ export function StatRow({ stats, color }: { stats: Stat[]; color: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center' }}>
       {stats.map((s, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', marginRight: 40 }}>
-          <Icon path={ICONS[s.icon] ?? ICONS.ruler} color={color} />
-          <span style={{ fontFamily: 'Spectral', fontSize: 27, color, marginLeft: 10 }}>{s.value}</span>
+        <div key={i} style={{ display: 'flex', alignItems: 'center', marginRight: 44 }}>
+          {/* Los íconos de metros, habitaciones y baños son de los pocos datos
+              que se leen de un vistazo en el feed: a 26px se perdían. */}
+          <Icon path={ICONS[s.icon] ?? ICONS.ruler} color={color} size={40} />
+          <span style={{ fontFamily: 'Spectral', fontSize: 31, color, marginLeft: 12 }}>{s.value}</span>
         </div>
       ))}
     </div>
   )
 }
 
-/** La portada del agente, ya recortada o encerrada en círculo por template-props. */
-export function AgentCutout({ src, width, height }: { src: string; width: number; height: number }) {
+/**
+ * La portada del agente, SIEMPRE dentro de un círculo que llena su hueco.
+ *
+ * Antes se usaba tal cual cuando el PNG traía transparencia, pero no todas las
+ * fotos vienen bien recortadas y el resultado dependía de la calidad del archivo
+ * que subiera cada agente. Un círculo con objectFit cover se ve igual de bien
+ * con cualquier foto y no deja huecos: el diseño no puede depender de que el
+ * usuario sepa editar imágenes.
+ */
+export function AgentBadge({ src, size, ring, right, bottom }: {
+  src: string; size: number; ring: string; right: number; bottom: number
+}) {
+  // El anillo es el FONDO del contenedor, no un `border`, y no se recorta nada.
+  //
+  // Antes esto era un div con `border` + `overflow: hidden` + `borderRadius`, y
+  // la foto se salía por el borde: satori no recorta de forma fiable con
+  // overflow sobre esquinas redondeadas, así que quedaba un arco desbordado.
+  // La imagen YA viene circular con las esquinas transparentes desde sharp
+  // (circleCrop), así que no hace falta recortar: basta centrarla sobre un
+  // círculo de color un poco más grande.
+  const ringWidth = 8
+  const inner = size - ringWidth * 2
+
   return (
-    // eslint-disable-next-line @next/next/no-img-element -- reason: ídem PhotoCard
-    <img src={src} width={width} height={height} alt=""
-         style={{ position: 'absolute', right: 20, bottom: 0, objectFit: 'contain' }} />
+    <div style={{
+      display: 'flex', position: 'absolute', right, bottom,
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: ring,
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- reason: ídem PhotoCard */}
+      <img src={src} width={inner} height={inner} alt=""
+           style={{ objectFit: 'cover', borderRadius: inner / 2 }} />
+    </div>
   )
 }

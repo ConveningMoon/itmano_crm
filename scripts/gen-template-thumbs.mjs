@@ -41,7 +41,10 @@ if (pngs.length === 0) {
 for (const f of pngs) {
   const key = f.replace('.png', '')
   await sharp(readFileSync(join(staging, f)))
-    .resize(400)               // 4:5 → 400×500, suficiente para una tarjeta
+    // 800px: la tarjeta la muestra pequeña, pero el visor a pantalla completa
+    // necesita resolución suficiente para juzgar el diseño. Un solo archivo
+    // sirve a los dos usos.
+    .resize(800)
     .webp({ quality: 80 })
     .toFile(join(outDir, `${key}.webp`))
   console.log(`  ${key}.webp`)

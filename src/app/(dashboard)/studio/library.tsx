@@ -1,8 +1,8 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { deleteStudioImage, recomposeImage, regenerateStudioImage } from './actions'
-import { styleLabel } from '@/lib/studio/styles'
+import { Lightbox } from './lightbox'
 import type { StudioImage } from '@/lib/studio/types'
 
 const RECIPE_LABELS: Record<string, string> = {
@@ -10,7 +10,7 @@ const RECIPE_LABELS: Record<string, string> = {
   new_listing: 'Nueva disponible',
   sold:        'Vendida',
   event:       'Evento',
-  open_prompt: 'Prompt abierto',
+  open_prompt: 'Mi Imagen',
 }
 
 function formatDate(iso: string): string {
@@ -22,13 +22,17 @@ const actionStyle: React.CSSProperties = {
   border: 'none', padding: 0, cursor: 'pointer',
 }
 
-export function Library({ images, onCreated, onUpdated, onDeleted }: {
+export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: {
   images:    StudioImage[]
+  /** Qué hacer para llenarla. Cambia por pestaña: no se crean igual un post y
+   *  una imagen libre. */
+  emptyHint: string
   onCreated: (image: StudioImage) => void
   onUpdated: (image: StudioImage) => void
   onDeleted: (id: string) => void
 }) {
   const [pending, startTransition] = useTransition()
+  const [zoom, setZoom] = useState<StudioImage | null>(null)
 
   if (images.length === 0) {
     return (
@@ -40,7 +44,7 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
           Todavía no hay imágenes
         </p>
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-          Elige una receta a la izquierda y genera la primera.
+          {emptyHint}
         </p>
       </div>
     )
@@ -58,7 +62,8 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
             <img
               src={img.rendered_url}
               alt={RECIPE_LABELS[img.recipe] ?? img.recipe}
-              style={{ width: '100%', display: 'block', aspectRatio: img.aspect.replace(':', '/'), objectFit: 'cover' }}
+              onClick={() => setZoom(img)}
+              style={{ width: '100%', display: 'block', aspectRatio: img.aspect.replace(':', '/'), objectFit: 'cover', cursor: 'zoom-in' }}
             />
           ) : (
             <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -70,16 +75,18 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
             <div style={{ fontSize: '12px', color: 'var(--text-primary)', marginBottom: '2px' }}>
               {RECIPE_LABELS[img.recipe] ?? img.recipe}
             </div>
+            {/* El estilo ya no se elige, así que dejó de ser información: lo que
+                distingue a una pieza de otra es su formato y cuándo se hizo. */}
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-              {styleLabel(img.style)} · {img.aspect} · {formatDate(img.created_at)}
+              {img.aspect} · {formatDate(img.created_at)}
               {img.cost_usd > 0 && ` · $${img.cost_usd.toFixed(3)}`}
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
               {img.rendered_url && (
-                <a href={img.rendered_url} download style={{ fontSize: '11px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
-                  Descargar
-                </a>
+                <button type="button" onClick={() => setZoom(img)} style={{ ...actionStyle, color: 'var(--accent-gold)' }}>
+                  Ver
+                </button>
               )}
               {/* Variante: crea una fila nueva, no pisa esta. */}
               <button
@@ -123,6 +130,15 @@ export function Library({ images, onCreated, onUpdated, onDeleted }: {
           </div>
         </div>
       ))}
+
+      {zoom?.rendered_url && (
+        <Lightbox
+          src={zoom.rendered_url}
+          alt={RECIPE_LABELS[zoom.recipe] ?? zoom.recipe}
+          downloadName={`${zoom.recipe}-${zoom.id.slice(0, 8)}.png`}
+          onClose={() => setZoom(null)}
+        />
+      )}
     </div>
   )
 }

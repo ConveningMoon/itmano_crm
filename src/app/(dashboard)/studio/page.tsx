@@ -1,6 +1,6 @@
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
-import { getStudioImages, getPropertyOptions, getAgentOptions } from '@/lib/data/studio'
+import { getStudioImages, getPropertyOptions, getAgentOptions, getStudioBrand } from '@/lib/data/studio'
 import { getBrandProfiles, getRecentJobs, getCarouselCosts, getJobWithSlides } from '@/lib/data/carousels'
 import { V2_COPY_RULES } from '@/lib/carousels/brand'
 import { CarouselsTabs } from '../admin/carousels/carousels-tabs'
@@ -19,9 +19,12 @@ export default async function StudioPage() {
   if (!canUseStudio(ctx)) return <StudioTeaser />
 
   const tenantId = ctx.tenant_id
-  const [images, properties, agents] = tenantId
-    ? await Promise.all([getStudioImages(tenantId), getPropertyOptions(tenantId), getAgentOptions(tenantId)])
-    : [[], [], []]
+  const [images, properties, agents, brand] = tenantId
+    ? await Promise.all([
+        getStudioImages(tenantId), getPropertyOptions(tenantId),
+        getAgentOptions(tenantId), getStudioBrand(tenantId, null),
+      ])
+    : [[], [], [], null]
 
   const [brands, recentJobs, costs] = await Promise.all([
     getBrandProfiles(),
@@ -45,6 +48,7 @@ export default async function StudioPage() {
         images={images}
         properties={properties}
         agents={agents}
+        tenantColor={brand?.primary_color ?? '#1B2A41'}
         carousels={
           <CarouselsTabs
             brands={brands}

@@ -3,13 +3,29 @@ import type { FitReport, StudioTemplate } from './types'
 import { mosaicoListing } from './mosaico-listing'
 import { completaListing } from './completa-listing'
 import { editorialListing } from './editorial-listing'
+import { mosaicoOpenHouse } from './mosaico-open-house'
+import { completaOpenHouse } from './completa-open-house'
+import { editorialOpenHouse } from './editorial-open-house'
+import { mosaicoSold } from './mosaico-sold'
+import { completaSold } from './completa-sold'
+import { editorialSold } from './editorial-sold'
 
 // El registro es explícito, no un glob: importar por nombre hace que un template
 // roto sea un error de compilación y no una ausencia silenciosa en el selector.
+//
+// Tres variantes por receta, en el mismo orden en las tres: el agente que ya
+// eligió "Mosaico" para una casa abierta lo encuentra en el mismo sitio cuando
+// publique la venta.
 export const TEMPLATES: StudioTemplate[] = [
   mosaicoListing,
   completaListing,
   editorialListing,
+  mosaicoOpenHouse,
+  completaOpenHouse,
+  editorialOpenHouse,
+  mosaicoSold,
+  completaSold,
+  editorialSold,
 ]
 
 export function templatesForRecipe(recipe: StudioRecipe): StudioTemplate[] {

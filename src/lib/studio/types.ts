@@ -28,7 +28,10 @@ export interface StudioImage {
   style:           string
   palette:         string[] | null
   aspect:          Aspect
+  // La primera referencia y la lista completa. `reference_path` se conserva
+  // porque las filas anteriores a la migración 102 solo tienen esa.
   reference_path:  string | null
+  reference_paths: string[]
   reference_role:  ReferenceRole | null
   scene_prompt:    string | null
   text_zone:       TextZone | null

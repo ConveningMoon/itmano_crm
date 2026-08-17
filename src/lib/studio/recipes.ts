@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
+import { DEFAULT_PALETTE } from './palettes'
 import { findTemplate } from './templates/registry'
 import type { ActionResult } from './types'
 
@@ -8,18 +9,61 @@ import type { ActionResult } from './types'
 // datos incompletos — el requisito central del Estudio: el formulario correcto
 // para cada caso, completo, para evitar imprecisiones y desgaste de tokens.
 
+/** Tope del titular. Lo comparte la UI para pintar el contador: un límite que
+ *  el usuario no ve solo se descubre chocando con él. */
+export const HEADLINE_MAX = 60
+
+/** Cuántas imágenes de referencia admite una pieza. Tres son suficientes para
+ *  decir "esto, con esto y con este ambiente" y acotan el tamaño del request. */
+export const MAX_REFERENCES = 3
+
 const HEX  = /^#[0-9a-fA-F]{6}$/
+
+const hex = z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')
+
+const paletteSchema = z.union([
+  // `logo` es un rol posterior: las piezas guardadas antes de que existiera solo
+  // traen tres colores y tienen que poder recomponerse. Si falta, sigue al
+  // primario — que es exactamente con lo que se teñía el logo entonces.
+  z.object({ brand: hex, surface: hex, ink: hex, logo: hex.optional() })
+    .transform(p => ({ ...p, logo: p.logo ?? p.brand })),
+  // Legado: array de hex. El primero era el color de marca y el resto se
+  // descartaba, así que se traduce a ese rol y los otros dos a sus defaults.
+  z.array(hex).max(4).transform(arr => ({
+    brand:   arr[0] ?? DEFAULT_PALETTE.brand,
+    surface: DEFAULT_PALETTE.surface,
+    ink:     DEFAULT_PALETTE.ink,
+    logo:    arr[0] ?? DEFAULT_PALETTE.logo,
+  })),
+]).default(DEFAULT_PALETTE)
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 // Campos comunes a las cinco recetas.
 const common = {
   source_mode:    z.enum(['generate', 'photo']).default('generate'),
+  // El texto libre del bloque "Adicional". Conserva el nombre `scene_notes`
+  // porque es la clave que ya tienen guardada las piezas existentes en su
+  // form_json: renombrarla las dejaría sin ese dato al recomponerlas.
   scene_notes:    z.string().trim().max(500).optional(),
-  style:          z.enum(STYLE_KEYS as [string, ...string[]]),
-  palette:        z.array(z.string().regex(HEX, 'Los colores deben ser hex de 6 dígitos')).max(4).default([]),
+  // El estilo dejó de pedirse: los diseños componen la pieza y el prompt libre
+  // dice él mismo qué quiere. Sigue en el esquema con default porque es columna
+  // de la tabla y dirección de arte del director cuando sí hay escena.
+  style:          z.enum(STYLE_KEYS as [string, ...string[]]).default(STYLE_KEYS[0]),
+  // Colores POR ROL. Antes era un array de hasta cuatro hex del que solo se usaba
+  // el primero — nadie podía saber para qué servía cada uno porque casi ninguno
+  // servía para nada. Se acepta también el formato viejo para que las piezas ya
+  // guardadas se sigan recomponiendo.
+  palette:        paletteSchema,
   aspect:         z.enum(['1:1', '4:5', '9:16']),
-  has_reference:  z.boolean().default(false),
+  // Cuántas referencias adjuntó. `has_reference` es el campo viejo —una sola
+  // imagen, booleano— y se sigue leyendo para que las piezas guardadas antes
+  // conserven su referencia al generar una variante. Ver `referenceCount`.
+  reference_count: z.number().int().min(0).max(MAX_REFERENCES).default(0),
+  has_reference:   z.boolean().default(false),
+  // El rol ya no se pide: la referencia vive en "Mi Imagen", donde el prompt
+  // dice qué hacer con ella. Se conserva opcional para las piezas que lo
+  // guardaron, que se recomponen y regeneran con sus reglas de entonces.
   reference_role: z.enum(['subject', 'style', 'composition']).optional(),
   property_id:    z.string().uuid().optional(),
   // El teléfono NO es un campo del formulario: sale de agents.phone del agente
@@ -31,7 +75,7 @@ const common = {
   template:       z.string().min(1).optional(),
   // Titular de marketing. La etiqueta fija ("NUEVA DISPONIBLE") describe el
   // hecho; el titular vende. Sin él, los nueve diseños dirían siempre lo mismo.
-  headline:       z.string().trim().max(60, 'El titular no puede pasar de 60 caracteres').optional(),
+  headline:       z.string().trim().max(HEADLINE_MAX, `El titular no puede pasar de ${HEADLINE_MAX} caracteres`).optional(),
 }
 
 const money = z.number({ error: 'La cifra es obligatoria' }).positive('La cifra debe ser mayor que cero')
@@ -59,7 +103,6 @@ const newListing = z.object({
   bedrooms:   z.number().int().nonnegative().optional(),
   bathrooms:  z.number().nonnegative().optional(),
   sqft:       z.number().int().positive().optional(),
-  highlights: z.array(z.string().trim().min(1).max(40)).max(3).default([]),
 })
 
 const sold = z.object({
@@ -106,11 +149,6 @@ const schema = z
         ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no sirve para esta receta' })
       }
     }
-    // Una imagen adjunta sin rol declarado es un deseo, no una instrucción: el
-    // modelo no puede saber si es la casa, el clima o el encuadre.
-    if (v.has_reference && !v.reference_role) {
-      ctx.addIssue({ code: 'custom', path: ['reference_role'], message: 'Declara qué es la imagen de referencia' })
-    }
     if (v.source_mode === 'photo') {
       if (!PHOTO_RECIPES.includes(v.recipe)) {
         ctx.addIssue({ code: 'custom', path: ['source_mode'], message: 'Usar la foto solo aplica a las recetas de casa' })
@@ -128,6 +166,18 @@ const schema = z
   })
 
 export type StudioForm = z.infer<typeof schema>
+
+/**
+ * Cuántas referencias tiene la pieza, mirando los dos formatos.
+ *
+ * Las piezas guardadas antes traen `has_reference: true` y ninguna cuenta; si se
+ * leyera solo `reference_count`, generar una variante de una de ellas perdería
+ * las reglas de referencia del prompt y saldría otra cosa.
+ */
+export function referenceCount(form: StudioForm): number {
+  if (form.reference_count > 0) return form.reference_count
+  return form.has_reference ? 1 : 0
+}
 
 /**
  * Valida el formulario. Devuelve el primer mensaje legible en vez de un árbol

@@ -35,7 +35,7 @@ async function downloadPhoto(url: string): Promise<Buffer> {
 export async function resolveBackground(params: {
   sourceMode:  SourceMode
   scenePrompt: string | null
-  reference:   { data: Buffer; mimeType: string } | null
+  references:  Array<{ data: Buffer; mimeType: string }>
   photoUrl:    string | null
 }): Promise<BackgroundResult> {
   if (params.sourceMode === 'photo') {
@@ -57,7 +57,7 @@ export async function resolveBackground(params: {
   }
 
   try {
-    const img = await generateImage(params.scenePrompt, params.reference ?? undefined)
+    const img = await generateImage(params.scenePrompt, params.references)
     return { buffer: img.data, source: 'generated', model: img.model, warning: null }
   } catch (e) {
     return {

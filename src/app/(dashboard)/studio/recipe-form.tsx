@@ -2,11 +2,14 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { Loader2, Sparkles, Eye } from 'lucide-react'
-import { STYLES } from '@/lib/studio/styles'
 import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
-import { templatesForRecipe } from '@/lib/studio/templates/registry'
-import { Field, TextInput, TextArea, Select, Toggle, ColorTags } from './field-inputs'
+import { Lightbox } from './lightbox'
+import { templatesForRecipe, findTemplate } from '@/lib/studio/templates/registry'
+import { HEADLINE_MAX } from '@/lib/studio/recipes'
+import { Field, TextInput, TextArea, Select, Toggle, Section } from './field-inputs'
+import { PalettePicker } from './palette-picker'
+import { DEFAULT_PALETTE, tenantPreset, paletteLabel, type StudioPalette } from '@/lib/studio/palettes'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
 
@@ -15,21 +18,16 @@ import type { StudioImage } from '@/lib/studio/types'
 // escritos en la imagen, y validarlos completos ANTES de generar es lo que evita
 // imprecisiones y gasto de tokens.
 
+// El prompt abierto ya no es una receta de esta pestaña: vive en "Mi Imagen".
+// Estas cuatro tienen en común que el CRM sabe qué va escrito en la pieza.
 const RECIPES = [
   { key: 'open_house',  label: 'Casa abierta' },
   { key: 'new_listing', label: 'Nueva disponible' },
   { key: 'sold',        label: 'Vendida' },
   { key: 'event',       label: 'Evento' },
-  { key: 'open_prompt', label: 'Prompt abierto' },
 ]
 
 const HOUSE_RECIPES = ['open_house', 'new_listing', 'sold']
-
-const REFERENCE_ROLES = [
-  { value: 'subject',     label: 'Es la casa',        hint: 'Se conserva la arquitectura; solo cambian luz, cielo y encuadre.' },
-  { value: 'style',       label: 'Es el estilo',      hint: 'Se copian la paleta y el clima; el contenido se ignora.' },
-  { value: 'composition', label: 'Es la composición', hint: 'Se conserva el encuadre; el contenido es nuevo.' },
-]
 
 const ASPECTS = [
   { value: '4:5',  label: '4:5 · feed alto' },
@@ -51,25 +49,46 @@ function num(v: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
-export function RecipeForm({ properties, agents, onCreated }: {
-  properties: PropertyOption[]
-  agents:     AgentOption[]
-  onCreated:  (image: StudioImage) => void
+/**
+ * El diseño con el que arranca una receta: el primero que la declara, y cadena
+ * vacía cuando no tiene ninguno (evento y prompt abierto, que van con IA).
+ *
+ * Abrir SIN diseño dejaba el formulario en el camino con IA —el que cuesta— y
+ * sin previsualización, y eso se leía como que la previsualización había
+ * desaparecido. El camino gratis tiene que ser el que se encuentra sin buscarlo.
+ */
+function firstTemplateFor(recipe: string): string {
+  return templatesForRecipe(recipe as never)[0]?.key ?? ''
+}
+
+export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
+  properties:  PropertyOption[]
+  agents:      AgentOption[]
+  /** tenants.primary_color — el preset "Marca del equipo". Dato, no código. */
+  tenantColor: string
+  onCreated:   (image: StudioImage) => void
 }) {
-  const [recipe, setRecipe] = useState('open_house')
+  // Arranca en la única receta que ya tiene diseños; con las nueve dará igual.
+  const [recipe, setRecipe] = useState('new_listing')
   const [fields, setFields] = useState<Fields>({})
-  const [palette, setPalette] = useState<string[]>([])
-  const [style, setStyle] = useState(STYLES[0].key)
+  const [palette, setPalette] = useState<StudioPalette>(tenantColor ? tenantPreset(tenantColor).palette : DEFAULT_PALETTE)
   const [aspect, setAspect] = useState('4:5')
   const [sourceMode, setSourceMode] = useState('generate')
-  const [sceneNotes, setSceneNotes] = useState('')
+  const [extra, setExtra] = useState('')
   const [propertyId, setPropertyId] = useState('')
   const [agentId, setAgentId] = useState('')
-  const [referenceFile, setReferenceFile] = useState<File | null>(null)
-  const [referenceRole, setReferenceRole] = useState('subject')
-  const [template, setTemplate] = useState('')
+  const [template, setTemplate] = useState(() => firstTemplateFor('new_listing'))
   const [headline, setHeadline] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
+  const [zoomPreview, setZoomPreview] = useState(false)
+  // Qué bloque está abierto. Contenido y Diseño arrancan abiertos porque son las
+  // decisiones que se tocan siempre; Colores y Escena, cerrados con su resumen a
+  // la vista, para que cerrado no signifique escondido.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    contenido: true, diseno: true, colores: false, adicional: false,
+  })
+  const toggle = (k: string) => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
+
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -78,6 +97,18 @@ export function RecipeForm({ properties, agents, onCreated }: {
   const canUsePhoto = isHouse && !!property?.photos.length
   const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
   const agent = agents.find(a => a.id === agentId)
+  // Los formatos que admite el diseño elegido. Sin diseño (camino con IA) valen
+  // los tres: ahí el lienzo lo compone el compositor de bandas, que sí es
+  // sensible al formato.
+  const allowedAspects: string[] = template
+    ? (findTemplate(template)?.aspects as string[] | undefined) ?? ['4:5']
+    : ASPECTS.map(a => a.value)
+  const templateLabel = templates.find(t => t.key === template)?.label
+  const contentSummary =
+    [property?.address ?? (fields.address ? String(fields.address) : null), agent?.name]
+      .filter(Boolean).join(' · ') || 'Sin completar'
+  const designSummary = `${templateLabel ?? 'Sin diseño'} · ${aspect}`
+  const colorSummary  = paletteLabel(palette, tenantColor)
 
   function set(key: string, value: unknown) {
     setFields(prev => ({ ...prev, [key]: value }))
@@ -100,36 +131,49 @@ export function RecipeForm({ properties, agents, onCreated }: {
     }))
   }
 
+  function applyTemplate(key: string) {
+    setTemplate(key)
+    if (!key) return
+    // Si el formato actual no lo admite el diseño nuevo, se corrige solo en vez
+    // de dejar una combinación que produciría una pieza recortada.
+    const allowed = (findTemplate(key)?.aspects as string[] | undefined) ?? ['4:5']
+    if (!allowed.includes(aspect)) setAspect(allowed[0])
+  }
+
+  function chooseTemplate(key: string) {
+    applyTemplate(key)
+    setPreview(null)
+  }
+
   function changeRecipe(key: string) {
     setRecipe(key)
     setFields({})
     setPropertyId('')
     setSourceMode('generate')
     // Un diseño solo sirve para las recetas que declara: al cambiar de receta
-    // deja de ser válido y el selector vuelve a estar sin elegir.
-    setTemplate('')
+    // deja de ser válido y se pasa al primero de la nueva.
+    applyTemplate(firstTemplateFor(key))
     setPreview(null)
   }
 
   function buildPayload() {
     return {
       ...fields,
-      recipe, style, aspect, palette,
-      source_mode:    sourceMode,
-      template:       template || undefined,
-      headline:       headline || undefined,
-      scene_notes:    sceneNotes || undefined,
-      property_id:    propertyId || undefined,
-      agent_id:       agentId || undefined,
-      has_reference:  !!referenceFile,
-      reference_role: referenceFile ? referenceRole : undefined,
+      recipe, aspect, palette,
+      source_mode: sourceMode,
+      template:    template || undefined,
+      headline:    headline || undefined,
+      // El bloque "Adicional" viaja en el campo de siempre: es la clave que las
+      // piezas ya guardadas tienen en su form_json.
+      scene_notes: extra || undefined,
+      property_id: propertyId || undefined,
+      agent_id:    agentId || undefined,
     }
   }
 
   function formData(): FormData {
     const data = new FormData()
     data.set('payload', JSON.stringify(buildPayload()))
-    if (referenceFile) data.set('reference', referenceFile)
     return data
   }
 
@@ -184,6 +228,7 @@ export function RecipeForm({ properties, agents, onCreated }: {
         })}
       </div>
 
+      <Section title="Contenido" summary={contentSummary} open={openSections.contenido} onToggle={() => toggle('contenido')}>
       {/* Selector de propiedad */}
       {isHouse && properties.length > 0 && (
         <Field label="Propiedad" hint="Rellena los datos desde el CRM. Puedes editarlos o saltarte el selector.">
@@ -211,22 +256,14 @@ export function RecipeForm({ properties, agents, onCreated }: {
         </Field>
       )}
 
-      {/* Diseño: se elige mirando, no de una lista de nombres */}
       {isHouse && (
-        <TemplatePicker
-          templates={templates}
-          value={template}
-          onChange={setTemplate}
-          photoCount={property?.photos.length ?? 0}
-          hasAgentPhoto={!!agent?.cover_photo_url}
-        />
-      )}
-
-      {isHouse && (
-        <Field label="Titular" hint="Opcional. Sin él se usa uno por defecto según la receta.">
+        <Field
+          label="Titular"
+          hint={`Opcional. Sin él se usa uno por defecto según la receta. ${headline.length}/${HEADLINE_MAX}`}
+        >
           <TextInput
             value={headline}
-            maxLength={60}
+            maxLength={HEADLINE_MAX}
             onChange={e => setHeadline(e.target.value)}
             placeholder="Casa elegante y familiar en venta"
           />
@@ -273,13 +310,6 @@ export function RecipeForm({ properties, agents, onCreated }: {
               <TextInput inputMode="numeric" value={fields.sqft === undefined ? '' : String(fields.sqft)} onChange={e => set('sqft', num(e.target.value))} />
             </Field>
           </div>
-          <Field label="Destacados" hint="Hasta tres, separados por coma.">
-            <TextInput
-              value={Array.isArray(fields.highlights) ? (fields.highlights as string[]).join(', ') : ''}
-              onChange={e => set('highlights', e.target.value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3))}
-              placeholder="Piscina, Cocina nueva"
-            />
-          </Field>
         </>
       )}
 
@@ -331,19 +361,6 @@ export function RecipeForm({ properties, agents, onCreated }: {
         </>
       )}
 
-      {recipe === 'open_prompt' && (
-        <Field label="Prompt">
-          <TextArea value={String(fields.prompt ?? '')} onChange={e => set('prompt', e.target.value)} placeholder="Una llave dorada sobre mármol, luz lateral" />
-        </Field>
-      )}
-
-      {/* Comunes */}
-      {recipe !== 'open_prompt' && (
-        <Field label="¿Cómo es la casa? ¿Qué quieres que se vea?" hint="Opcional. Se suma como contexto de la escena; no cambia el diseño ni los datos.">
-          <TextArea value={sceneNotes} onChange={e => setSceneNotes(e.target.value)} placeholder="colonial de ladrillo con porche, frente al agua…" />
-        </Field>
-      )}
-
       {agents.length > 0 && (
         <Field label="Agente">
           <Select
@@ -354,40 +371,63 @@ export function RecipeForm({ properties, agents, onCreated }: {
         </Field>
       )}
 
-      <Field label="Estilo" hint={STYLES.find(s => s.key === style)?.hint}>
-        <Select
-          value={style}
-          onChange={e => setStyle(e.target.value)}
-          options={STYLES.map(s => ({ value: s.key, label: s.label }))}
+      </Section>
+
+      <Section title="Diseño" summary={designSummary} open={openSections.diseno} onToggle={() => toggle('diseno')}>
+      {/* Diseño: se elige mirando, no de una lista de nombres */}
+      {isHouse && (
+        <TemplatePicker
+          templates={templates}
+          value={template}
+          onChange={chooseTemplate}
+          photoCount={property?.photos.length ?? 0}
+          hasAgentPhoto={!!agent?.cover_photo_url}
+          showFit={!!propertyId}
         />
-      </Field>
-
-      <Field label="Colores">
-        <ColorTags value={palette} onChange={setPalette} />
-      </Field>
-
-      <Field label="Imagen de referencia">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={e => setReferenceFile(e.target.files?.[0] ?? null)}
-          style={{ fontSize: '12px', color: 'var(--text-muted)' }}
-        />
-      </Field>
-
-      {referenceFile && (
-        <Field label="¿Qué es esa imagen?" hint={REFERENCE_ROLES.find(r => r.value === referenceRole)?.hint}>
-          <Select
-            value={referenceRole}
-            onChange={e => setReferenceRole(e.target.value)}
-            options={REFERENCE_ROLES.map(r => ({ value: r.value, label: r.label }))}
-          />
-        </Field>
       )}
 
-      <Field label="Formato">
-        <Select value={aspect} onChange={e => setAspect(e.target.value)} options={ASPECTS} />
-      </Field>
+      {/* El selector solo aparece si hay algo que elegir. Los diseños de esta
+          entrega están compuestos para 4:5, así que con uno elegido el campo
+          tendría una sola opción: un control que no decide nada es ruido. */}
+      {allowedAspects.length > 1 ? (
+        <Field label="Formato">
+          <Select
+            value={aspect}
+            onChange={e => setAspect(e.target.value)}
+            options={ASPECTS.filter(a => allowedAspects.includes(a.value))}
+          />
+        </Field>
+      ) : (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.45 }}>
+          Formato {aspect} — el que compone este diseño.
+        </p>
+      )}
+
+      </Section>
+
+      <Section title="Colores" summary={colorSummary} open={openSections.colores} onToggle={() => toggle('colores')}>
+      <PalettePicker value={palette} onChange={setPalette} tenantColor={tenantColor} />
+
+      </Section>
+
+      {/* Adicional: lo único que queda del bloque de escena. Un post se arma con
+          los campos de su receta; esto es la salida para lo que no cabe en
+          ninguno, no un segundo formulario. */}
+      <Section title="Adicional" summary={extra ? 'Con indicaciones' : 'Opcional'} open={openSections.adicional} onToggle={() => toggle('adicional')}>
+        <Field
+          label="Algo más que agregar"
+          hint={template
+            ? 'Este diseño compone la pieza con tus datos, así que estas indicaciones no la cambian. Aplican a las recetas cuya escena se genera con IA.'
+            : 'Se suma a lo que ya describe la receta. No cambia los datos de la pieza.'}
+        >
+          <TextArea
+            value={extra}
+            onChange={e => setExtra(e.target.value)}
+            maxLength={500}
+            placeholder="colonial de ladrillo con porche, frente al agua, luz de atardecer…"
+          />
+        </Field>
+      </Section>
 
       {error && (
         <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>
@@ -410,6 +450,23 @@ export function RecipeForm({ properties, agents, onCreated }: {
         >
           <Eye size={14} /> Previsualizar
         </button>
+      )}
+
+      {template && (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          Este diseño usa las fotos y los datos de la propiedad: no consume generación con IA.
+          Previsualiza las veces que quieras.
+        </p>
+      )}
+      {!template && isHouse && (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          Elige un diseño para componer la pieza sin costo.
+        </p>
+      )}
+      {!isHouse && (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          Esta receta genera la escena con IA y consume presupuesto de generación.
+        </p>
       )}
 
       <button
@@ -437,8 +494,20 @@ export function RecipeForm({ properties, agents, onCreated }: {
             Previsualización · todavía no está guardada
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element -- reason: data URI en memoria, no hay host que optimizar */}
-          <img src={preview} alt="Previsualización" style={{ width: '100%', display: 'block', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+          <img
+            src={preview}
+            alt="Previsualización"
+            onClick={() => setZoomPreview(true)}
+            style={{ width: '100%', display: 'block', borderRadius: '8px', border: '1px solid var(--border-subtle)', cursor: 'zoom-in' }}
+          />
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Clic para verla en grande
+          </div>
         </div>
+      )}
+
+      {zoomPreview && preview && (
+        <Lightbox src={preview} alt="Previsualización" onClose={() => setZoomPreview(false)} />
       )}
     </div>
   )

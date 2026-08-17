@@ -81,6 +81,40 @@ export async function normalizePhoto(buffer: Buffer): Promise<string | null> {
   }
 }
 
+/**
+ * Repinta el logo con el color de marca para que la pieza sea armónica.
+ *
+ * Solo se tiñe si el archivo tiene transparencia real: la silueta se rellena con
+ * el color y el fondo sigue vacío. Un logo SIN transparencia (fondo blanco) NO
+ * se toca — teñirlo lo convertiría en un rectángulo de color sólido, que es peor
+ * que dejarlo con sus colores originales.
+ */
+export async function tintLogo(buffer: Buffer, color: string): Promise<string | null> {
+  try {
+    const img = sharp(buffer)
+    const { isOpaque } = await img.stats()
+    if (isOpaque !== false) {
+      // Sin transparencia no hay silueta que rellenar: se usa tal cual.
+      return toDataUri(await img.png().toBuffer(), 'image/png')
+    }
+
+    const { width = 0, height = 0 } = await img.metadata()
+    if (!width || !height) return toDataUri(await img.png().toBuffer(), 'image/png')
+
+    // El canal alfa del logo hace de máscara sobre un lienzo del color de marca.
+    const alpha = await sharp(buffer).ensureAlpha().extractChannel('alpha').toBuffer()
+    const tinted = await sharp({
+      create: { width, height, channels: 3, background: color },
+    })
+      .joinChannel(alpha)
+      .png()
+      .toBuffer()
+    return toDataUri(tinted, 'image/png')
+  } catch {
+    return null
+  }
+}
+
 async function fetchImage(url: string): Promise<Buffer | null> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 15000)
@@ -114,20 +148,23 @@ export async function buildTemplateProps(params: {
   if (params.agentPhoto) {
     const raw = await fetchImage(params.agentPhoto.url)
     if (raw) {
-      // Recorte real → tal cual. Foto normal → círculo.
-      agentPhoto = params.agentPhoto.cutout
-        ? toDataUri(raw, 'image/png')
-        : toDataUri(await circleCrop(raw, 480), 'image/png')
+      // SIEMPRE en círculo, venga recortada o no. Antes se usaba tal cual si el
+      // PNG traía transparencia, y el resultado dependía de lo bien editada que
+      // estuviera la foto de cada agente. El diseño no puede depender de eso.
+      agentPhoto = toDataUri(await circleCrop(raw, 560), 'image/png')
     }
   }
 
   const logoBuf = brand.logo_url ? await fetchImage(brand.logo_url) : null
+  // El logo se tiñe con SU rol, no con el primario: en los diseños va sobre el
+  // fondo claro, y si fuera del color de las bandas se confundiría con ellas.
+  const logo = logoBuf ? await tintLogo(logoBuf, form.palette.logo) : null
 
   return {
     heroPhoto:   photos[0] ?? null,
     thumbPhotos: photos.slice(1),
     agentPhoto,
-    logo:        logoBuf ? toDataUri(logoBuf, 'image/png') : null,
+    logo,
     headline:    defaultHeadline(form),
     price:       priceFor(form),
     when:        whenFor(form),
@@ -137,10 +174,9 @@ export async function buildTemplateProps(params: {
     badge:       badgeFor(form.recipe),
     stats:       statsFor(form),
     agentName:   brand.agent_name,
-    palette: {
-      primary: form.palette[0] ?? brand.primary_color,
-      ink:     '#FFFFFF',
-      surface: '#FBF6EE',
-    },
+    // Los colores ya vienen por rol desde el formulario; aquí no se reinterpreta
+    // nada. El texto sobre `brand` es siempre blanco y la banda secundaria es
+    // `brand` oscurecido: eso lo derivan los templates.
+    palette: form.palette,
   }
 }
