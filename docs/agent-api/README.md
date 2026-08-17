@@ -8,7 +8,7 @@ Contrato completo: [`openapi.json`](./openapi.json) · Datos offline: [`demo-ten
 
 | | |
 |---|---|
-| Base URL | `https://<pendiente-de-deploy>` |
+| Base URL | `https://itmano-crm-sandbox.vercel.app` |
 | Proyecto Supabase | `xpaixcowvyksgluazwzn` (**sandbox**, nunca producción) |
 | Tenant demo | `tenant-conduit-demo` — "Costa Verde Realty" |
 | Datos | 60 leads, 5 agentes, 6 canales, 10 propiedades, 25 procesos. **100 % sintéticos** |
@@ -26,8 +26,8 @@ El token **determina el tenant**. Ninguna ruta acepta `tenant_id` como parámetr
 
 | Token | Scopes | Uso |
 |---|---|---|
-| `itmano_agent_sbx_BaYhhfMK…` | `read` | Operación normal del agente |
-| `itmano_agent_sbx_9150gCoh…` | `read,write` | Sólo cuando necesite crear o modificar |
+| `itmano_agent_sbx_BaYhhfMKUOUahF_9n9-CKHyAiE7NyI5F` | `read` | Operación normal del agente |
+| `itmano_agent_sbx_9150gCohLiNtfDp69ZbgiSLL0j9jSnOX` | `read,write` | Sólo cuando necesite crear o modificar |
 
 Vencen a los 90 días. Para emitir, listar o revocar:
 
@@ -50,7 +50,9 @@ La revocación es inmediata: se comprueba en cada petición, sin caché. Emitir 
 Exporta primero:
 
 ```bash
-export BASE="https://<tu-deployment>" TOKEN="itmano_agent_sbx_BaYhhfMK..."
+export BASE="https://itmano-crm-sandbox.vercel.app"
+export TOKEN="itmano_agent_sbx_BaYhhfMKUOUahF_9n9-CKHyAiE7NyI5F"
+export TOKEN_RW="itmano_agent_sbx_9150gCohLiNtfDp69ZbgiSLL0j9jSnOX"
 ```
 
 **Identidad y vocabulario**
@@ -204,17 +206,31 @@ El servidor corta y devuelve **504 con cuerpo**, nunca deja colgada la petición
 | `search` | 5 s | 10 s |
 | escrituras | 8 s | 15 s |
 
-**Línea base medida** (20 llamadas por endpoint, app + base desde una máquina local, sin la red de Vercel):
+**Medido contra el despliegue** (12 llamadas por endpoint, cliente en Europa):
 
 | Endpoint | p50 | p95 |
 |---|---|---|
-| whoami | 808 ms | 1441 ms |
-| metadata | 1076 ms | 1999 ms |
-| leads (25) | 1074 ms | 1358 ms |
-| deals (25) | 1062 ms | 1114 ms |
-| search | 1065 ms | 1432 ms |
+| whoami | 522 ms | 1055 ms |
+| leads (25) | 586 ms | 937 ms |
+| deals (25) | 553 ms | 649 ms |
 
-Lo interesante es que **`whoami` cuesta casi lo mismo que listar 25 leads sin consultar ni un dato de negocio**: el coste fijo son los tres viajes a la base de la cadena de autenticación (buscar el token, mintear el JWT, contar el rate limit), no las queries. Desplegado junto a la base esos viajes bajan de ~270 ms a pocos milisegundos. Si aun así los percentiles molestan, ahí está el margen: fusionar los tres en un solo RPC.
+Con estos números, **10 s de timeout en el cliente sobra** para lectura y 15 s para
+escritura.
+
+Ahora bien, esos ~520 ms tienen una explicación concreta y son mejorables casi a la
+mitad. El header  devuelve : la función se ejecuta en
+**iad1 (Washington)** mientras la base está en **us-west-1**. Cada viaje cruza
+Estados Unidos, ~130 ms ida y vuelta. Y la cadena de autenticación hace **tres
+viajes antes de la primera query de negocio** (buscar el token, mintear el JWT,
+contar el rate limit), más la query: cuatro viajes ≈ 520 ms, que es exactamente el
+p50 observado.
+
+De ahí que djver, que no consulta ni un dato de negocio, cueste lo mismo que
+listar 25 leads. Dos palancas, en este orden:
+
+1. **Mover la región de las funciones a US West** ( o ) para que
+   coincida con la base. Es un ajuste en Vercel, sin tocar código.
+2. Fusionar los tres viajes de autenticación en un solo RPC de Postgres.
 
 ## 11. Reseña de la siembra
 
