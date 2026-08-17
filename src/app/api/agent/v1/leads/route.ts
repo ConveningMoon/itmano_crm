@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/agent-api/handler'
-import { parseLeadFilters, listLeads, getTenantCurrency } from '@/lib/agent-api/queries/leads'
+import { parseLeadFilters, listLeads, getLead, getTenantCurrency } from '@/lib/agent-api/queries/leads'
+import { createLead } from '@/lib/agent-api/queries/writes'
 import { serializeLead } from '@/lib/agent-api/serializers/lead'
 
 export const runtime = 'nodejs'
@@ -18,5 +19,15 @@ export const GET = defineRoute({
       data:        rows.map(r => serializeLead(r, currency)),
       next_cursor: nextCursor,
     }
+  },
+})
+
+export const POST = defineRoute({
+  scope: 'write',
+  kind:  'write',
+  handler: async (ctx, req) => {
+    const id = await createLead(ctx, req)
+    const [row, currency] = await Promise.all([getLead(ctx, id), getTenantCurrency(ctx)])
+    return serializeLead(row, currency)
   },
 })
