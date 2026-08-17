@@ -353,7 +353,16 @@ Cinco capas, a nivel de datos y de entorno:
    leads. La razón importa: `send-purchase-email.ts:140` solo corta con ese
    valor exacto. Además es la etiqueta honesta — `example.com` es un dominio
    reservado que no acepta correo, así que esas direcciones rebotarían de verdad.
-4. El deployment sandbox va **sin `RESEND_API_KEY`**. Sin clave no hay transporte.
+4. El deployment sandbox lleva una **`RESEND_API_KEY` deliberadamente inválida**
+   (`re_SANDBOX_SIN_ENVIO_...`). Cualquier intento de envío recibe un 401 de Resend.
+
+   La intención original era desplegar **sin** la variable, pero no se puede:
+   `src/lib/resend.ts` lanza al importarse el módulo, y la fase "Collecting page
+   data" de Next importa todas las rutas, así que el build falla con
+   `Failed to collect page data for /api/cron/sequence-orchestrator`. Es el único
+   sitio del repo que exige un secreto de runtime en tiempo de build — los otros
+   dos throws por variable ausente (`ANTHROPIC_API_KEY`) están dentro de
+   funciones y sólo saltan al llamarlas.
 5. El proyecto Vercel sandbox no se registra en cron-job.org. Los crons de este
    repo son externos, así que nadie los llama.
 

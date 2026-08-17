@@ -12,7 +12,7 @@ Contrato completo: [`openapi.json`](./openapi.json) · Datos offline: [`demo-ten
 | Proyecto Supabase | `xpaixcowvyksgluazwzn` (**sandbox**, nunca producción) |
 | Tenant demo | `tenant-conduit-demo` — "Costa Verde Realty" |
 | Datos | 60 leads, 5 agentes, 6 canales, 10 propiedades, 25 procesos. **100 % sintéticos** |
-| Envío de email | **Imposible**: el deployment va sin `RESEND_API_KEY` |
+| Envío de email | **Imposible**: el deployment lleva una `RESEND_API_KEY` inválida a propósito |
 
 Todos los correos del tenant demo son `@example.com`, un dominio reservado que no acepta correo.
 
