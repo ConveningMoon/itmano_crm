@@ -80,7 +80,8 @@ function operacion(ruta: RouteSpec, ejemplo: unknown): Json {
       },
     } : {}),
     responses: {
-      [esEscritura ? '201' : '200']: {
+      // 201 sólo para POST, que crea. PATCH actualiza y devuelve 200.
+      [ruta.method === 'post' ? '201' : '200']: {
         description: 'OK',
         headers: {
           'X-RateLimit-Limit':     { schema: { type: 'string' }, description: 'Límite de la ventana de 60 s.' },
