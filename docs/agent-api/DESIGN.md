@@ -67,7 +67,7 @@ src/lib/agent-api/
   serializers/                     fila de BD -> forma pública
   schemas/                         schemas zod (fuente del OpenAPI)
   registry.ts                      inventario de rutas para el generador
-supabase/migrations/096_agent_api.sql
+supabase/migrations/103_agent_api.sql
 scripts/agent-token.mjs            emisión, rotación, revocación
 scripts/seed-agent-demo.mjs        siembra idempotente + export JSON
 scripts/gen-openapi.mjs            generación del contrato
