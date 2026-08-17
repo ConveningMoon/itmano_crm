@@ -1,0 +1,2739 @@
+{
+  "generado_el": "2026-08-12",
+  "tenant": {
+    "id": "tenant-conduit-demo",
+    "name": "Costa Verde Realty"
+  },
+  "aviso": "Datos 100% sintéticos del tenant demo. Todos los correos son @example.com.",
+  "metadata": {
+    "stages": [
+      {
+        "value": "nuevo",
+        "label": "Nuevo"
+      },
+      {
+        "value": "nutricion",
+        "label": "En Nutrición"
+      },
+      {
+        "value": "en_proceso",
+        "label": "En proceso"
+      },
+      {
+        "value": "cerrado",
+        "label": "Cerrado"
+      },
+      {
+        "value": "perdido",
+        "label": "Perdido"
+      }
+    ],
+    "quality_bands": [
+      {
+        "value": "alta",
+        "label": "Alta"
+      },
+      {
+        "value": "media_alta",
+        "label": "Media alta"
+      },
+      {
+        "value": "media",
+        "label": "Media"
+      },
+      {
+        "value": "media_baja",
+        "label": "Media baja"
+      },
+      {
+        "value": "baja",
+        "label": "Baja"
+      }
+    ],
+    "urgencies": [
+      {
+        "value": "hoy",
+        "label": "Hoy"
+      },
+      {
+        "value": "esta_semana",
+        "label": "Esta semana"
+      },
+      {
+        "value": "sin_apuro",
+        "label": "Sin prisa"
+      }
+    ],
+    "pipelines": [
+      {
+        "value": "compra",
+        "label": "Compra"
+      }
+    ],
+    "owners": [
+      {
+        "id": "demo-agent-04",
+        "name": "Hugo Bastida",
+        "email": "hugo.bastida@example.com",
+        "active": true
+      },
+      {
+        "id": "demo-agent-05",
+        "name": "Ivette Maldonado",
+        "email": "ivette.maldonado@example.com",
+        "active": true
+      },
+      {
+        "id": "demo-agent-03",
+        "name": "Nadia Contreras",
+        "email": "nadia.contreras@example.com",
+        "active": true
+      },
+      {
+        "id": "demo-agent-02",
+        "name": "Óscar Villalba",
+        "email": "oscar.villalba@example.com",
+        "active": true
+      },
+      {
+        "id": "demo-agent-01",
+        "name": "Renata Solís",
+        "email": "renata.solis@example.com",
+        "active": true
+      }
+    ],
+    "channels": [
+      {
+        "id": "b5648545-0de1-41b7-920b-e81632485b1d",
+        "name": "Guía para compradores",
+        "channel_type": "lead_magnet"
+      },
+      {
+        "id": "fcce8eff-c4f4-4c0d-aa4e-369942ecd453",
+        "name": "Valoración de vivienda",
+        "channel_type": "lead_magnet"
+      },
+      {
+        "id": "0244feef-7525-4dc3-8de4-33c11f2dd684",
+        "name": "Jornada de puertas abiertas",
+        "channel_type": "event"
+      },
+      {
+        "id": "8e248797-9820-4bb6-ad15-d16dafff26a1",
+        "name": "Contacto desde la web",
+        "channel_type": "contact_form"
+      },
+      {
+        "id": "38570f87-fff2-4de5-bd94-40a3d7aa8e0a",
+        "name": "Programa de referidos",
+        "channel_type": "lead_magnet"
+      },
+      {
+        "id": "0045360f-9af3-4173-8a80-92a474c339ba",
+        "name": "Seminario de inversión",
+        "channel_type": "event"
+      }
+    ],
+    "property_statuses": [
+      "available",
+      "in_process",
+      "sold"
+    ],
+    "fit_dimensions": {
+      "buy": [
+        "timeline",
+        "financing",
+        "budget_tier",
+        "agent_status",
+        "contingency",
+        "geo_fit",
+        "property_use"
+      ],
+      "sell": [
+        "sell_motivation",
+        "timeline",
+        "listing_status",
+        "geo_fit"
+      ],
+      "buckets": {
+        "timeline": [
+          "under_3_months",
+          "3_6_months",
+          "6_12_months",
+          "over_12_explorando"
+        ],
+        "financing": [
+          "cash",
+          "preapproved",
+          "in_process",
+          "not_started"
+        ],
+        "budget_tier": [
+          "premium",
+          "mid",
+          "entry",
+          "undefined"
+        ],
+        "agent_status": [
+          "sin_agente",
+          "con_agente"
+        ],
+        "sell_motivation": [
+          "alta",
+          "media",
+          "baja"
+        ],
+        "listing_status": [
+          "no_listado_sin_agente",
+          "ya_listado_con_agente"
+        ],
+        "contingency": [
+          "sin_contingencia",
+          "con_contingencia"
+        ],
+        "geo_fit": [
+          "zona_principal",
+          "zona_secundaria",
+          "fuera_de_zona"
+        ],
+        "property_use": [
+          "vivienda_principal",
+          "segunda_vivienda",
+          "inversion"
+        ]
+      }
+    },
+    "currency": "USD",
+    "locales": [
+      "es",
+      "en",
+      "pt"
+    ],
+    "custom_fields": []
+  },
+  "leads": [
+    {
+      "id": "demo-lead-060",
+      "first_name": "Marco",
+      "last_name": "Narváez",
+      "email": "marco.narvaez.60@example.com",
+      "phone": "+1 757 555 2782",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 51,
+        "fit": 40,
+        "engagement": 11,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "940000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-08-11T19:40:03.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-059",
+      "first_name": "Elena",
+      "last_name": "Gallardo",
+      "email": "elena.gallardo.59@example.com",
+      "phone": "+1 757 555 5235",
+      "language": "en",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 36,
+        "fit": 27,
+        "engagement": 9,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "760000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-08-07T12:08:44.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-058",
+      "first_name": "Rodrigo",
+      "last_name": "Tejeda",
+      "email": "rodrigo.tejeda.58@example.com",
+      "phone": "+1 757 555 2256",
+      "language": "en",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 55,
+        "fit": 55,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "240000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-08-06T11:22:59.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-057",
+      "first_name": "Catalina",
+      "last_name": "Mendieta",
+      "email": "catalina.mendieta.57@example.com",
+      "phone": "+1 757 555 8977",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 90,
+        "fit": 65,
+        "engagement": 0,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "850000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-08-02T13:16:48.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-056",
+      "first_name": "Dante",
+      "last_name": "Fonseca",
+      "email": "dante.fonseca.56@example.com",
+      "phone": "+1 757 555 1866",
+      "language": "es",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 61,
+        "fit": 35,
+        "engagement": 1,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "870000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-29T10:24:39.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-055",
+      "first_name": "Amaya",
+      "last_name": "Solórzano",
+      "email": "amaya.solorzano.55@example.com",
+      "phone": "+1 757 555 6354",
+      "language": "en",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 21,
+        "fit": 5,
+        "engagement": 16,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "470000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-26T08:29:23.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-054",
+      "first_name": "Thiago",
+      "last_name": "Lozano",
+      "email": "thiago.lozano.54@example.com",
+      "phone": "+1 757 555 3996",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 71,
+        "fit": 45,
+        "engagement": 26,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "430000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-24T13:51:33.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-053",
+      "first_name": "Lucía",
+      "last_name": "Escalante",
+      "email": "lucia.escalante.53@example.com",
+      "phone": "+1 757 555 9313",
+      "language": "es",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 41,
+        "fit": 12,
+        "engagement": 4,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "780000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-19T12:24:54.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-052",
+      "first_name": "Iker",
+      "last_name": "Rivadeneira",
+      "email": "iker.rivadeneira.52@example.com",
+      "phone": "+1 757 555 3802",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 28,
+        "fit": 25,
+        "engagement": 3,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "900000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-19T11:18:40.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-051",
+      "first_name": "Ximena",
+      "last_name": "Kuroda",
+      "email": "ximena.kuroda.51@example.com",
+      "phone": "+1 757 555 3975",
+      "language": "es",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 40,
+        "fit": 40,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "850000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-16T14:48:19.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-050",
+      "first_name": "Gael",
+      "last_name": "Del Valle",
+      "email": "gael.delvalle.50@example.com",
+      "phone": "+1 757 555 7884",
+      "language": "en",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 86,
+        "fit": 65,
+        "engagement": 1,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "700000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-13T18:03:35.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-049",
+      "first_name": "Sofía",
+      "last_name": "Quiroga",
+      "email": "sofia.quiroga.49@example.com",
+      "phone": "+1 757 555 6538",
+      "language": "en",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media_baja",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 24,
+        "fit": 20,
+        "engagement": 4,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "280000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-09T14:33:58.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-048",
+      "first_name": "Nicolás",
+      "last_name": "Jaramillo",
+      "email": "nicolas.jaramillo.48@example.com",
+      "phone": "+1 757 555 8970",
+      "language": "es",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 47,
+        "fit": 47,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "930000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-06T10:07:25.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-047",
+      "first_name": "Paloma",
+      "last_name": "Cifuentes",
+      "email": "paloma.cifuentes.47@example.com",
+      "phone": "+1 757 555 8589",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 29,
+        "fit": 25,
+        "engagement": 4,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "840000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-07-03T11:43:17.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-046",
+      "first_name": "Álvaro",
+      "last_name": "Peñalosa",
+      "email": "alvaro.penalosa.46@example.com",
+      "phone": "+1 757 555 6932",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 41,
+        "fit": 40,
+        "engagement": 1,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "870000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-29T08:36:20.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-045",
+      "first_name": "Regina",
+      "last_name": "Iriarte",
+      "email": "regina.iriarte.45@example.com",
+      "phone": "+1 757 555 8823",
+      "language": "en",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 29,
+        "fit": 2,
+        "engagement": 2,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "730000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-28T11:37:16.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-044",
+      "first_name": "Facundo",
+      "last_name": "Bermúdez",
+      "email": "facundo.bermudez.44@example.com",
+      "phone": "+1 757 555 1552",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 60,
+        "fit": 27,
+        "engagement": 13,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "590000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-23T09:58:53.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-043",
+      "first_name": "Martina",
+      "last_name": "O'Farrell",
+      "email": "martina.ofarrell.43@example.com",
+      "phone": "+1 757 555 5966",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 30,
+        "fit": 30,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "680000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-18T16:00:19.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-042",
+      "first_name": "Joaquín",
+      "last_name": "Herrera",
+      "email": "joaquin.herrera.42@example.com",
+      "phone": "+1 757 555 8939",
+      "language": "es",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "baja",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 0,
+        "fit": 60,
+        "engagement": -100,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "230000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-17T13:37:00.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-041",
+      "first_name": "Antonella",
+      "last_name": "Arriaga",
+      "email": "antonella.arriaga.41@example.com",
+      "phone": "+1 757 555 2424",
+      "language": "en",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "alta",
+      "urgency": "esta_semana",
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 63,
+        "fit": 45,
+        "engagement": 18,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "790000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-16T13:10:14.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-040",
+      "first_name": "Bruno",
+      "last_name": "Narváez",
+      "email": "bruno.narvaez.40@example.com",
+      "phone": "+1 757 555 5219",
+      "language": "es",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 65,
+        "fit": 50,
+        "engagement": 15,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "610000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-11T19:12:17.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-038",
+      "first_name": "Emilio",
+      "last_name": "Tejeda",
+      "email": "emilio.tejeda.38@example.com",
+      "phone": "+1 757 555 7243",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 68,
+        "fit": 60,
+        "engagement": 8,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "230000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-07T08:56:56.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-039",
+      "first_name": "Julieta",
+      "last_name": "Gallardo",
+      "email": "julieta.gallardo.39@example.com",
+      "phone": "+1 757 555 2409",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 100,
+        "fit": 77,
+        "engagement": 14,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "190000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-07T08:46:24.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-037",
+      "first_name": "Renata",
+      "last_name": "Mendieta",
+      "email": "renata.mendieta.37@example.com",
+      "phone": "+1 757 555 3442",
+      "language": "es",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 91,
+        "fit": 35,
+        "engagement": 31,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "520000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-04T12:33:59.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-036",
+      "first_name": "Tomás",
+      "last_name": "Fonseca",
+      "email": "tomas.fonseca.36@example.com",
+      "phone": "+1 757 555 1946",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 60,
+        "fit": 35,
+        "engagement": 5,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "940000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-06-01T16:24:37.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-035",
+      "first_name": "Isabella",
+      "last_name": "Solórzano",
+      "email": "isabella.solorzano.35@example.com",
+      "phone": "+1 757 555 4016",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 9,
+        "fit": 5,
+        "engagement": 4,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "270000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-26T19:59:30.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-034",
+      "first_name": "Sebastián",
+      "last_name": "Lozano",
+      "email": "sebastian.lozano.34@example.com",
+      "phone": "+1 757 555 2226",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 76,
+        "fit": 25,
+        "engagement": 31,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "850000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-26T10:39:01.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-033",
+      "first_name": "Valentina",
+      "last_name": "Escalante",
+      "email": "valentina.escalante.33@example.com",
+      "phone": "+1 757 555 9010",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 52,
+        "fit": 52,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "660000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-21T17:20:05.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-032",
+      "first_name": "Mateo",
+      "last_name": "Rivadeneira",
+      "email": "mateo.rivadeneira.32@example.com",
+      "phone": "+1 757 555 6263",
+      "language": "es",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 71,
+        "fit": 15,
+        "engagement": 16,
+        "manual": 40
+      },
+      "budget": {
+        "amount": "190000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-18T09:07:40.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-031",
+      "first_name": "Camila",
+      "last_name": "Kuroda",
+      "email": "camila.kuroda.31@example.com",
+      "phone": "+1 757 555 1690",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 55,
+        "fit": 35,
+        "engagement": 0,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "490000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-16T19:24:05.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-030",
+      "first_name": "Marco",
+      "last_name": "Del Valle",
+      "email": "marco.delvalle.30@example.com",
+      "phone": "+1 757 555 8115",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media_baja",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 32,
+        "fit": 7,
+        "engagement": 0,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "350000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-11T13:29:31.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-029",
+      "first_name": "Elena",
+      "last_name": "Quiroga",
+      "email": "elena.quiroga.29@example.com",
+      "phone": "+1 757 555 9651",
+      "language": "en",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media_baja",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 15,
+        "fit": 15,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "540000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-09T19:21:49.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-028",
+      "first_name": "Rodrigo",
+      "last_name": "Jaramillo",
+      "email": "rodrigo.jaramillo.28@example.com",
+      "phone": "+1 757 555 9981",
+      "language": "en",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 55,
+        "fit": 55,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "730000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-08T19:55:54.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-027",
+      "first_name": "Catalina",
+      "last_name": "Cifuentes",
+      "email": "catalina.cifuentes.27@example.com",
+      "phone": "+1 757 555 6355",
+      "language": "en",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "media_baja",
+      "urgency": null,
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 27,
+        "fit": 27,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "280000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-05-04T17:37:47.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-026",
+      "first_name": "Dante",
+      "last_name": "Peñalosa",
+      "email": "dante.penalosa.26@example.com",
+      "phone": "+1 757 555 6103",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 74,
+        "fit": 45,
+        "engagement": 29,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "430000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-30T10:59:26.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-025",
+      "first_name": "Amaya",
+      "last_name": "Iriarte",
+      "email": "amaya.iriarte.25@example.com",
+      "phone": "+1 757 555 6745",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 46,
+        "fit": 40,
+        "engagement": 6,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "950000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-26T17:34:58.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-024",
+      "first_name": "Thiago",
+      "last_name": "Bermúdez",
+      "email": "thiago.bermudez.24@example.com",
+      "phone": "+1 757 555 1827",
+      "language": "es",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 23,
+        "fit": 22,
+        "engagement": 1,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "200000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-25T15:32:48.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-023",
+      "first_name": "Lucía",
+      "last_name": "O'Farrell",
+      "email": "lucia.ofarrell.23@example.com",
+      "phone": "+1 757 555 9418",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 70,
+        "fit": 45,
+        "engagement": 0,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "360000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-21T13:42:30.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-022",
+      "first_name": "Iker",
+      "last_name": "Herrera",
+      "email": "iker.herrera.22@example.com",
+      "phone": "+1 757 555 9764",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 100,
+        "fit": 55,
+        "engagement": 6,
+        "manual": 40
+      },
+      "budget": {
+        "amount": "450000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-18T15:13:45.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-021",
+      "first_name": "Ximena",
+      "last_name": "Arriaga",
+      "email": "ximena.arriaga.21@example.com",
+      "phone": "+1 757 555 8379",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 65,
+        "fit": 65,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "800000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-16T14:47:49.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-020",
+      "first_name": "Gael",
+      "last_name": "Narváez",
+      "email": "gael.narvaez.20@example.com",
+      "phone": "+1 757 555 5798",
+      "language": "en",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 76,
+        "fit": 27,
+        "engagement": 4,
+        "manual": 45
+      },
+      "budget": {
+        "amount": "940000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-13T17:35:39.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-019",
+      "first_name": "Sofía",
+      "last_name": "Gallardo",
+      "email": "sofia.gallardo.19@example.com",
+      "phone": "+1 757 555 5975",
+      "language": "en",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 64,
+        "fit": 20,
+        "engagement": 4,
+        "manual": 40
+      },
+      "budget": {
+        "amount": "860000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-10T15:52:00.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-018",
+      "first_name": "Nicolás",
+      "last_name": "Tejeda",
+      "email": "nicolas.tejeda.18@example.com",
+      "phone": "+1 757 555 7796",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media_baja",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 25,
+        "fit": 25,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": null,
+      "created_at": "2026-04-07T09:36:37.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-017",
+      "first_name": "Paloma",
+      "last_name": "Mendieta",
+      "email": "paloma.mendieta.17@example.com",
+      "phone": "+1 757 555 7144",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 36,
+        "fit": 32,
+        "engagement": 4,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "830000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-03T14:06:58.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-016",
+      "first_name": "Álvaro",
+      "last_name": "Fonseca",
+      "email": "alvaro.fonseca.16@example.com",
+      "phone": "+1 757 555 2091",
+      "language": "es",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media_alta",
+      "urgency": null,
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 57,
+        "fit": 35,
+        "engagement": 2,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "200000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-04-01T10:50:56.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-015",
+      "first_name": "Regina",
+      "last_name": "Solórzano",
+      "email": "regina.solorzano.15@example.com",
+      "phone": "+1 757 555 8694",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 84,
+        "fit": 60,
+        "engagement": 24,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "920000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-30T13:57:53.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-013",
+      "first_name": "Martina",
+      "last_name": "Escalante",
+      "email": "martina.escalante.13@example.com",
+      "phone": "+1 757 555 9752",
+      "language": "en",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 83,
+        "fit": 55,
+        "engagement": 3,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "380000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-24T12:13:19.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-014",
+      "first_name": "Facundo",
+      "last_name": "Lozano",
+      "email": "facundo.lozano.14@example.com",
+      "phone": "+1 757 555 4601",
+      "language": "en",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "media_baja",
+      "urgency": null,
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 20,
+        "fit": 20,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "150000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-24T09:41:45.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-012",
+      "first_name": "Joaquín",
+      "last_name": "Rivadeneira",
+      "email": "joaquin.rivadeneira.12@example.com",
+      "phone": null,
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 24,
+        "fit": 20,
+        "engagement": 4,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "870000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-20T14:45:40.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-011",
+      "first_name": "Antonella",
+      "last_name": "Kuroda",
+      "email": "antonella.kuroda.11@example.com",
+      "phone": "+1 757 555 4442",
+      "language": "es",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 87,
+        "fit": 65,
+        "engagement": 22,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "170000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-15T12:01:12.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-010",
+      "first_name": "Bruno",
+      "last_name": "Del Valle",
+      "email": "bruno.delvalle.10@example.com",
+      "phone": "+1 757 555 8445",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 50,
+        "fit": 50,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "950000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-14T14:48:48.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-009",
+      "first_name": "Julieta",
+      "last_name": "Quiroga",
+      "email": "julieta.quiroga.9@example.com",
+      "phone": "+1 757 555 5613",
+      "language": "es",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "baja",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 0,
+        "fit": -10,
+        "engagement": 1,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "750000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-11T18:15:20.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-008",
+      "first_name": "Emilio",
+      "last_name": "Jaramillo",
+      "email": "emilio.jaramillo.8@example.com",
+      "phone": "+1 757 555 4408",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 89,
+        "fit": 62,
+        "engagement": 2,
+        "manual": 25
+      },
+      "budget": {
+        "amount": "240000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-06T09:58:02.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-007",
+      "first_name": "Renata",
+      "last_name": "Cifuentes",
+      "email": "renata.cifuentes.7@example.com",
+      "phone": "+1 757 555 5251",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 92,
+        "fit": 60,
+        "engagement": 12,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "590000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-04T19:09:37.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-006",
+      "first_name": "Tomás",
+      "last_name": "Peñalosa",
+      "email": "tomas.penalosa.6@example.com",
+      "phone": "+1 757 555 3084",
+      "language": "en",
+      "notes": null,
+      "stage": "perdido",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 71,
+        "fit": 57,
+        "engagement": 14,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "170000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-03-03T09:51:47.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-005",
+      "first_name": "Isabella",
+      "last_name": "Iriarte",
+      "email": "isabella.iriarte.5@example.com",
+      "phone": "+1 757 555 5558",
+      "language": "es",
+      "notes": null,
+      "stage": "en_proceso",
+      "quality_band": "alta",
+      "urgency": null,
+      "owner": "demo-agent-05",
+      "score": {
+        "total": 69,
+        "fit": 37,
+        "engagement": 12,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "710000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-02-28T16:48:42.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-004",
+      "first_name": "Sebastián",
+      "last_name": "Bermúdez",
+      "email": "sebastian.bermudez.4@example.com",
+      "phone": "+1 757 555 3539",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "media",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-04",
+      "score": {
+        "total": 50,
+        "fit": 50,
+        "engagement": 0,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "540000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-02-23T15:10:32.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-003",
+      "first_name": "Valentina",
+      "last_name": "O'Farrell",
+      "email": "valentina.ofarrell.3@example.com",
+      "phone": "+1 757 555 7683",
+      "language": "es",
+      "notes": null,
+      "stage": "cerrado",
+      "quality_band": "media",
+      "urgency": null,
+      "owner": "demo-agent-03",
+      "score": {
+        "total": 33,
+        "fit": 20,
+        "engagement": 13,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "870000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-02-20T13:43:05.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-002",
+      "first_name": "Mateo",
+      "last_name": "Herrera",
+      "email": "mateo.herrera.2@example.com",
+      "phone": "+1 757 555 9371",
+      "language": "es",
+      "notes": null,
+      "stage": "nutricion",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-02",
+      "score": {
+        "total": 47,
+        "fit": 35,
+        "engagement": 12,
+        "manual": 0
+      },
+      "budget": {
+        "amount": "780000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-02-17T18:16:13.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    },
+    {
+      "id": "demo-lead-001",
+      "first_name": "Camila",
+      "last_name": "Arriaga",
+      "email": "camila.arriaga.1@example.com",
+      "phone": "+1 757 555 4767",
+      "language": "en",
+      "notes": null,
+      "stage": "nuevo",
+      "quality_band": "alta",
+      "urgency": "sin_apuro",
+      "owner": "demo-agent-01",
+      "score": {
+        "total": 100,
+        "fit": 60,
+        "engagement": 28,
+        "manual": 20
+      },
+      "budget": {
+        "amount": "860000.00",
+        "currency": "USD"
+      },
+      "created_at": "2026-02-16T17:07:41.000Z",
+      "updated_at": "2026-08-17T08:28:48.720Z"
+    }
+  ],
+  "contacts": [
+    {
+      "id": "demo-lead-060",
+      "first_name": "Marco",
+      "last_name": "Narváez",
+      "email": "marco.narvaez.60@example.com",
+      "phone": "+1 757 555 2782",
+      "language": "es",
+      "owner": "demo-agent-05",
+      "created_at": "2026-08-11T19:40:03.000Z"
+    },
+    {
+      "id": "demo-lead-059",
+      "first_name": "Elena",
+      "last_name": "Gallardo",
+      "email": "elena.gallardo.59@example.com",
+      "phone": "+1 757 555 5235",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-08-07T12:08:44.000Z"
+    },
+    {
+      "id": "demo-lead-058",
+      "first_name": "Rodrigo",
+      "last_name": "Tejeda",
+      "email": "rodrigo.tejeda.58@example.com",
+      "phone": "+1 757 555 2256",
+      "language": "en",
+      "owner": "demo-agent-03",
+      "created_at": "2026-08-06T11:22:59.000Z"
+    },
+    {
+      "id": "demo-lead-057",
+      "first_name": "Catalina",
+      "last_name": "Mendieta",
+      "email": "catalina.mendieta.57@example.com",
+      "phone": "+1 757 555 8977",
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-08-02T13:16:48.000Z"
+    },
+    {
+      "id": "demo-lead-056",
+      "first_name": "Dante",
+      "last_name": "Fonseca",
+      "email": "dante.fonseca.56@example.com",
+      "phone": "+1 757 555 1866",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-07-29T10:24:39.000Z"
+    },
+    {
+      "id": "demo-lead-055",
+      "first_name": "Amaya",
+      "last_name": "Solórzano",
+      "email": "amaya.solorzano.55@example.com",
+      "phone": "+1 757 555 6354",
+      "language": "en",
+      "owner": "demo-agent-05",
+      "created_at": "2026-07-26T08:29:23.000Z"
+    },
+    {
+      "id": "demo-lead-054",
+      "first_name": "Thiago",
+      "last_name": "Lozano",
+      "email": "thiago.lozano.54@example.com",
+      "phone": "+1 757 555 3996",
+      "language": "es",
+      "owner": "demo-agent-04",
+      "created_at": "2026-07-24T13:51:33.000Z"
+    },
+    {
+      "id": "demo-lead-053",
+      "first_name": "Lucía",
+      "last_name": "Escalante",
+      "email": "lucia.escalante.53@example.com",
+      "phone": "+1 757 555 9313",
+      "language": "es",
+      "owner": "demo-agent-03",
+      "created_at": "2026-07-19T12:24:54.000Z"
+    },
+    {
+      "id": "demo-lead-052",
+      "first_name": "Iker",
+      "last_name": "Rivadeneira",
+      "email": "iker.rivadeneira.52@example.com",
+      "phone": "+1 757 555 3802",
+      "language": "en",
+      "owner": "demo-agent-02",
+      "created_at": "2026-07-19T11:18:40.000Z"
+    },
+    {
+      "id": "demo-lead-051",
+      "first_name": "Ximena",
+      "last_name": "Kuroda",
+      "email": "ximena.kuroda.51@example.com",
+      "phone": "+1 757 555 3975",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-07-16T14:48:19.000Z"
+    },
+    {
+      "id": "demo-lead-050",
+      "first_name": "Gael",
+      "last_name": "Del Valle",
+      "email": "gael.delvalle.50@example.com",
+      "phone": "+1 757 555 7884",
+      "language": "en",
+      "owner": "demo-agent-05",
+      "created_at": "2026-07-13T18:03:35.000Z"
+    },
+    {
+      "id": "demo-lead-049",
+      "first_name": "Sofía",
+      "last_name": "Quiroga",
+      "email": "sofia.quiroga.49@example.com",
+      "phone": "+1 757 555 6538",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-07-09T14:33:58.000Z"
+    },
+    {
+      "id": "demo-lead-048",
+      "first_name": "Nicolás",
+      "last_name": "Jaramillo",
+      "email": "nicolas.jaramillo.48@example.com",
+      "phone": "+1 757 555 8970",
+      "language": "es",
+      "owner": "demo-agent-03",
+      "created_at": "2026-07-06T10:07:25.000Z"
+    },
+    {
+      "id": "demo-lead-047",
+      "first_name": "Paloma",
+      "last_name": "Cifuentes",
+      "email": "paloma.cifuentes.47@example.com",
+      "phone": "+1 757 555 8589",
+      "language": "en",
+      "owner": "demo-agent-02",
+      "created_at": "2026-07-03T11:43:17.000Z"
+    },
+    {
+      "id": "demo-lead-046",
+      "first_name": "Álvaro",
+      "last_name": "Peñalosa",
+      "email": "alvaro.penalosa.46@example.com",
+      "phone": "+1 757 555 6932",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-06-29T08:36:20.000Z"
+    },
+    {
+      "id": "demo-lead-045",
+      "first_name": "Regina",
+      "last_name": "Iriarte",
+      "email": "regina.iriarte.45@example.com",
+      "phone": "+1 757 555 8823",
+      "language": "en",
+      "owner": "demo-agent-05",
+      "created_at": "2026-06-28T11:37:16.000Z"
+    },
+    {
+      "id": "demo-lead-044",
+      "first_name": "Facundo",
+      "last_name": "Bermúdez",
+      "email": "facundo.bermudez.44@example.com",
+      "phone": "+1 757 555 1552",
+      "language": "es",
+      "owner": "demo-agent-04",
+      "created_at": "2026-06-23T09:58:53.000Z"
+    },
+    {
+      "id": "demo-lead-043",
+      "first_name": "Martina",
+      "last_name": "O'Farrell",
+      "email": "martina.ofarrell.43@example.com",
+      "phone": "+1 757 555 5966",
+      "language": "en",
+      "owner": "demo-agent-03",
+      "created_at": "2026-06-18T16:00:19.000Z"
+    },
+    {
+      "id": "demo-lead-042",
+      "first_name": "Joaquín",
+      "last_name": "Herrera",
+      "email": "joaquin.herrera.42@example.com",
+      "phone": "+1 757 555 8939",
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-06-17T13:37:00.000Z"
+    },
+    {
+      "id": "demo-lead-041",
+      "first_name": "Antonella",
+      "last_name": "Arriaga",
+      "email": "antonella.arriaga.41@example.com",
+      "phone": "+1 757 555 2424",
+      "language": "en",
+      "owner": "demo-agent-01",
+      "created_at": "2026-06-16T13:10:14.000Z"
+    },
+    {
+      "id": "demo-lead-040",
+      "first_name": "Bruno",
+      "last_name": "Narváez",
+      "email": "bruno.narvaez.40@example.com",
+      "phone": "+1 757 555 5219",
+      "language": "es",
+      "owner": "demo-agent-05",
+      "created_at": "2026-06-11T19:12:17.000Z"
+    },
+    {
+      "id": "demo-lead-038",
+      "first_name": "Emilio",
+      "last_name": "Tejeda",
+      "email": "emilio.tejeda.38@example.com",
+      "phone": "+1 757 555 7243",
+      "language": "en",
+      "owner": "demo-agent-03",
+      "created_at": "2026-06-07T08:56:56.000Z"
+    },
+    {
+      "id": "demo-lead-039",
+      "first_name": "Julieta",
+      "last_name": "Gallardo",
+      "email": "julieta.gallardo.39@example.com",
+      "phone": "+1 757 555 2409",
+      "language": "es",
+      "owner": "demo-agent-04",
+      "created_at": "2026-06-07T08:46:24.000Z"
+    },
+    {
+      "id": "demo-lead-037",
+      "first_name": "Renata",
+      "last_name": "Mendieta",
+      "email": "renata.mendieta.37@example.com",
+      "phone": "+1 757 555 3442",
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-06-04T12:33:59.000Z"
+    },
+    {
+      "id": "demo-lead-036",
+      "first_name": "Tomás",
+      "last_name": "Fonseca",
+      "email": "tomas.fonseca.36@example.com",
+      "phone": "+1 757 555 1946",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-06-01T16:24:37.000Z"
+    },
+    {
+      "id": "demo-lead-035",
+      "first_name": "Isabella",
+      "last_name": "Solórzano",
+      "email": "isabella.solorzano.35@example.com",
+      "phone": "+1 757 555 4016",
+      "language": "en",
+      "owner": "demo-agent-05",
+      "created_at": "2026-05-26T19:59:30.000Z"
+    },
+    {
+      "id": "demo-lead-034",
+      "first_name": "Sebastián",
+      "last_name": "Lozano",
+      "email": "sebastian.lozano.34@example.com",
+      "phone": "+1 757 555 2226",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-05-26T10:39:01.000Z"
+    },
+    {
+      "id": "demo-lead-033",
+      "first_name": "Valentina",
+      "last_name": "Escalante",
+      "email": "valentina.escalante.33@example.com",
+      "phone": "+1 757 555 9010",
+      "language": "es",
+      "owner": "demo-agent-03",
+      "created_at": "2026-05-21T17:20:05.000Z"
+    },
+    {
+      "id": "demo-lead-032",
+      "first_name": "Mateo",
+      "last_name": "Rivadeneira",
+      "email": "mateo.rivadeneira.32@example.com",
+      "phone": "+1 757 555 6263",
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-05-18T09:07:40.000Z"
+    },
+    {
+      "id": "demo-lead-031",
+      "first_name": "Camila",
+      "last_name": "Kuroda",
+      "email": "camila.kuroda.31@example.com",
+      "phone": "+1 757 555 1690",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-05-16T19:24:05.000Z"
+    },
+    {
+      "id": "demo-lead-030",
+      "first_name": "Marco",
+      "last_name": "Del Valle",
+      "email": "marco.delvalle.30@example.com",
+      "phone": "+1 757 555 8115",
+      "language": "en",
+      "owner": "demo-agent-05",
+      "created_at": "2026-05-11T13:29:31.000Z"
+    },
+    {
+      "id": "demo-lead-029",
+      "first_name": "Elena",
+      "last_name": "Quiroga",
+      "email": "elena.quiroga.29@example.com",
+      "phone": "+1 757 555 9651",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-05-09T19:21:49.000Z"
+    },
+    {
+      "id": "demo-lead-028",
+      "first_name": "Rodrigo",
+      "last_name": "Jaramillo",
+      "email": "rodrigo.jaramillo.28@example.com",
+      "phone": "+1 757 555 9981",
+      "language": "en",
+      "owner": "demo-agent-03",
+      "created_at": "2026-05-08T19:55:54.000Z"
+    },
+    {
+      "id": "demo-lead-027",
+      "first_name": "Catalina",
+      "last_name": "Cifuentes",
+      "email": "catalina.cifuentes.27@example.com",
+      "phone": "+1 757 555 6355",
+      "language": "en",
+      "owner": "demo-agent-02",
+      "created_at": "2026-05-04T17:37:47.000Z"
+    },
+    {
+      "id": "demo-lead-026",
+      "first_name": "Dante",
+      "last_name": "Peñalosa",
+      "email": "dante.penalosa.26@example.com",
+      "phone": "+1 757 555 6103",
+      "language": "en",
+      "owner": "demo-agent-01",
+      "created_at": "2026-04-30T10:59:26.000Z"
+    },
+    {
+      "id": "demo-lead-025",
+      "first_name": "Amaya",
+      "last_name": "Iriarte",
+      "email": "amaya.iriarte.25@example.com",
+      "phone": "+1 757 555 6745",
+      "language": "es",
+      "owner": "demo-agent-05",
+      "created_at": "2026-04-26T17:34:58.000Z"
+    },
+    {
+      "id": "demo-lead-024",
+      "first_name": "Thiago",
+      "last_name": "Bermúdez",
+      "email": "thiago.bermudez.24@example.com",
+      "phone": "+1 757 555 1827",
+      "language": "es",
+      "owner": "demo-agent-04",
+      "created_at": "2026-04-25T15:32:48.000Z"
+    },
+    {
+      "id": "demo-lead-023",
+      "first_name": "Lucía",
+      "last_name": "O'Farrell",
+      "email": "lucia.ofarrell.23@example.com",
+      "phone": "+1 757 555 9418",
+      "language": "en",
+      "owner": "demo-agent-03",
+      "created_at": "2026-04-21T13:42:30.000Z"
+    },
+    {
+      "id": "demo-lead-022",
+      "first_name": "Iker",
+      "last_name": "Herrera",
+      "email": "iker.herrera.22@example.com",
+      "phone": "+1 757 555 9764",
+      "language": "en",
+      "owner": "demo-agent-02",
+      "created_at": "2026-04-18T15:13:45.000Z"
+    },
+    {
+      "id": "demo-lead-021",
+      "first_name": "Ximena",
+      "last_name": "Arriaga",
+      "email": "ximena.arriaga.21@example.com",
+      "phone": "+1 757 555 8379",
+      "language": "en",
+      "owner": "demo-agent-01",
+      "created_at": "2026-04-16T14:47:49.000Z"
+    },
+    {
+      "id": "demo-lead-020",
+      "first_name": "Gael",
+      "last_name": "Narváez",
+      "email": "gael.narvaez.20@example.com",
+      "phone": "+1 757 555 5798",
+      "language": "en",
+      "owner": "demo-agent-05",
+      "created_at": "2026-04-13T17:35:39.000Z"
+    },
+    {
+      "id": "demo-lead-019",
+      "first_name": "Sofía",
+      "last_name": "Gallardo",
+      "email": "sofia.gallardo.19@example.com",
+      "phone": "+1 757 555 5975",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-04-10T15:52:00.000Z"
+    },
+    {
+      "id": "demo-lead-018",
+      "first_name": "Nicolás",
+      "last_name": "Tejeda",
+      "email": "nicolas.tejeda.18@example.com",
+      "phone": "+1 757 555 7796",
+      "language": "es",
+      "owner": "demo-agent-03",
+      "created_at": "2026-04-07T09:36:37.000Z"
+    },
+    {
+      "id": "demo-lead-017",
+      "first_name": "Paloma",
+      "last_name": "Mendieta",
+      "email": "paloma.mendieta.17@example.com",
+      "phone": "+1 757 555 7144",
+      "language": "en",
+      "owner": "demo-agent-02",
+      "created_at": "2026-04-03T14:06:58.000Z"
+    },
+    {
+      "id": "demo-lead-016",
+      "first_name": "Álvaro",
+      "last_name": "Fonseca",
+      "email": "alvaro.fonseca.16@example.com",
+      "phone": "+1 757 555 2091",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-04-01T10:50:56.000Z"
+    },
+    {
+      "id": "demo-lead-015",
+      "first_name": "Regina",
+      "last_name": "Solórzano",
+      "email": "regina.solorzano.15@example.com",
+      "phone": "+1 757 555 8694",
+      "language": "es",
+      "owner": "demo-agent-05",
+      "created_at": "2026-03-30T13:57:53.000Z"
+    },
+    {
+      "id": "demo-lead-013",
+      "first_name": "Martina",
+      "last_name": "Escalante",
+      "email": "martina.escalante.13@example.com",
+      "phone": "+1 757 555 9752",
+      "language": "en",
+      "owner": "demo-agent-03",
+      "created_at": "2026-03-24T12:13:19.000Z"
+    },
+    {
+      "id": "demo-lead-014",
+      "first_name": "Facundo",
+      "last_name": "Lozano",
+      "email": "facundo.lozano.14@example.com",
+      "phone": "+1 757 555 4601",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-03-24T09:41:45.000Z"
+    },
+    {
+      "id": "demo-lead-012",
+      "first_name": "Joaquín",
+      "last_name": "Rivadeneira",
+      "email": "joaquin.rivadeneira.12@example.com",
+      "phone": null,
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-03-20T14:45:40.000Z"
+    },
+    {
+      "id": "demo-lead-011",
+      "first_name": "Antonella",
+      "last_name": "Kuroda",
+      "email": "antonella.kuroda.11@example.com",
+      "phone": "+1 757 555 4442",
+      "language": "es",
+      "owner": "demo-agent-01",
+      "created_at": "2026-03-15T12:01:12.000Z"
+    },
+    {
+      "id": "demo-lead-010",
+      "first_name": "Bruno",
+      "last_name": "Del Valle",
+      "email": "bruno.delvalle.10@example.com",
+      "phone": "+1 757 555 8445",
+      "language": "es",
+      "owner": "demo-agent-05",
+      "created_at": "2026-03-14T14:48:48.000Z"
+    },
+    {
+      "id": "demo-lead-009",
+      "first_name": "Julieta",
+      "last_name": "Quiroga",
+      "email": "julieta.quiroga.9@example.com",
+      "phone": "+1 757 555 5613",
+      "language": "es",
+      "owner": "demo-agent-04",
+      "created_at": "2026-03-11T18:15:20.000Z"
+    },
+    {
+      "id": "demo-lead-008",
+      "first_name": "Emilio",
+      "last_name": "Jaramillo",
+      "email": "emilio.jaramillo.8@example.com",
+      "phone": "+1 757 555 4408",
+      "language": "es",
+      "owner": "demo-agent-03",
+      "created_at": "2026-03-06T09:58:02.000Z"
+    },
+    {
+      "id": "demo-lead-007",
+      "first_name": "Renata",
+      "last_name": "Cifuentes",
+      "email": "renata.cifuentes.7@example.com",
+      "phone": "+1 757 555 5251",
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-03-04T19:09:37.000Z"
+    },
+    {
+      "id": "demo-lead-006",
+      "first_name": "Tomás",
+      "last_name": "Peñalosa",
+      "email": "tomas.penalosa.6@example.com",
+      "phone": "+1 757 555 3084",
+      "language": "en",
+      "owner": "demo-agent-01",
+      "created_at": "2026-03-03T09:51:47.000Z"
+    },
+    {
+      "id": "demo-lead-005",
+      "first_name": "Isabella",
+      "last_name": "Iriarte",
+      "email": "isabella.iriarte.5@example.com",
+      "phone": "+1 757 555 5558",
+      "language": "es",
+      "owner": "demo-agent-05",
+      "created_at": "2026-02-28T16:48:42.000Z"
+    },
+    {
+      "id": "demo-lead-004",
+      "first_name": "Sebastián",
+      "last_name": "Bermúdez",
+      "email": "sebastian.bermudez.4@example.com",
+      "phone": "+1 757 555 3539",
+      "language": "en",
+      "owner": "demo-agent-04",
+      "created_at": "2026-02-23T15:10:32.000Z"
+    },
+    {
+      "id": "demo-lead-003",
+      "first_name": "Valentina",
+      "last_name": "O'Farrell",
+      "email": "valentina.ofarrell.3@example.com",
+      "phone": "+1 757 555 7683",
+      "language": "es",
+      "owner": "demo-agent-03",
+      "created_at": "2026-02-20T13:43:05.000Z"
+    },
+    {
+      "id": "demo-lead-002",
+      "first_name": "Mateo",
+      "last_name": "Herrera",
+      "email": "mateo.herrera.2@example.com",
+      "phone": "+1 757 555 9371",
+      "language": "es",
+      "owner": "demo-agent-02",
+      "created_at": "2026-02-17T18:16:13.000Z"
+    },
+    {
+      "id": "demo-lead-001",
+      "first_name": "Camila",
+      "last_name": "Arriaga",
+      "email": "camila.arriaga.1@example.com",
+      "phone": "+1 757 555 4767",
+      "language": "en",
+      "owner": "demo-agent-01",
+      "created_at": "2026-02-16T17:07:41.000Z"
+    }
+  ],
+  "deals": [
+    {
+      "id": "10000000-0000-4000-8000-000000000025",
+      "lead_id": "demo-lead-057",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "850000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-07",
+      "loan_type": "cash",
+      "address": "3526 Larchmont Ct, Virginia Beach VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:28:31.138Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000024",
+      "lead_id": "demo-lead-055",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "470000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-10",
+      "loan_type": "va",
+      "address": "2347 Ashmont Ave, Portsmouth VA",
+      "notes": null,
+      "completed_at": "2026-07-21T15:08:54.000Z",
+      "created_at": "2026-08-17T08:28:31.138Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000023",
+      "lead_id": "demo-lead-052",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "900000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-31",
+      "loan_type": "fha",
+      "address": "9332 Windmere Ave, Virginia Beach VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:28:31.138Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000022",
+      "lead_id": "demo-lead-050",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "700000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-09",
+      "loan_type": "conventional",
+      "address": "9538 Colonial Ln, Norfolk VA",
+      "notes": null,
+      "completed_at": "2026-07-26T15:40:49.000Z",
+      "created_at": "2026-08-17T08:28:31.138Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000021",
+      "lead_id": "demo-lead-047",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "840000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-02",
+      "loan_type": "fha",
+      "address": "9030 Larchmont Ct, Portsmouth VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:28:31.138Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000020",
+      "lead_id": "demo-lead-045",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "730000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-09",
+      "loan_type": "cash",
+      "address": "8926 Bayberry Ct, Virginia Beach VA",
+      "notes": null,
+      "completed_at": "2026-06-24T15:04:08.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000019",
+      "lead_id": "demo-lead-044",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "590000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-08-26",
+      "loan_type": "fha",
+      "address": "2432 Colonial Ln, Suffolk VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000018",
+      "lead_id": "demo-lead-042",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "perdido",
+      "lead_budget_amount": {
+        "amount": "230000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-08-29",
+      "loan_type": "cash",
+      "address": "647 Larchmont Ave, Portsmouth VA",
+      "notes": null,
+      "completed_at": "2026-06-26T15:20:11.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000017",
+      "lead_id": "demo-lead-039",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "190000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-10",
+      "loan_type": "fha",
+      "address": "149 Larchmont Ct, Norfolk VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000016",
+      "lead_id": "demo-lead-037",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "520000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-08-20",
+      "loan_type": "conventional",
+      "address": "6948 Windmere Ct, Virginia Beach VA",
+      "notes": null,
+      "completed_at": "2026-07-31T15:31:20.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000015",
+      "lead_id": "demo-lead-034",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "850000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-21",
+      "loan_type": "cash",
+      "address": "7497 Kingsley Ln, Chesapeake VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000014",
+      "lead_id": "demo-lead-032",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "190000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-08-30",
+      "loan_type": "va",
+      "address": "8552 Larchmont Ln, Hampton VA",
+      "notes": null,
+      "completed_at": "2026-06-26T15:15:33.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000013",
+      "lead_id": "demo-lead-031",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "490000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-12",
+      "loan_type": "conventional",
+      "address": "2803 Bayberry Ave, Suffolk VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000012",
+      "lead_id": "demo-lead-029",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "540000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-11-03",
+      "loan_type": "cash",
+      "address": "272 Larchmont Ave, Suffolk VA",
+      "notes": null,
+      "completed_at": "2026-06-17T15:29:24.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000011",
+      "lead_id": "demo-lead-026",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "430000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-28",
+      "loan_type": "va",
+      "address": "2057 Ravenwood Ct, Virginia Beach VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000010",
+      "lead_id": "demo-lead-024",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "200000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-22",
+      "loan_type": "cash",
+      "address": "6413 Colonial Ave, Suffolk VA",
+      "notes": null,
+      "completed_at": "2026-06-27T15:41:01.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000009",
+      "lead_id": "demo-lead-023",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "360000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-07",
+      "loan_type": "cash",
+      "address": "6950 Ravenwood Ct, Virginia Beach VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000008",
+      "lead_id": "demo-lead-021",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "800000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-22",
+      "loan_type": "conventional",
+      "address": "6192 Windmere Ave, Chesapeake VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "lead_id": "demo-lead-018",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": null,
+      "close_date": "2026-11-12",
+      "loan_type": "va",
+      "address": "8916 Colonial Ave, Portsmouth VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "lead_id": "demo-lead-016",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "200000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-10-04",
+      "loan_type": "fha",
+      "address": "7586 Ravenwood Ct, Norfolk VA",
+      "notes": null,
+      "completed_at": "2026-07-11T15:33:48.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "lead_id": "demo-lead-013",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "380000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-08",
+      "loan_type": "conventional",
+      "address": "9280 Colonial Ave, Norfolk VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "lead_id": "demo-lead-011",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "cerrado",
+      "lead_budget_amount": {
+        "amount": "170000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-11-11",
+      "loan_type": "cash",
+      "address": "2115 Larchmont Ct, Portsmouth VA",
+      "notes": null,
+      "completed_at": "2026-08-07T15:21:18.000Z",
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "lead_id": "demo-lead-010",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "950000.00",
+        "currency": "USD"
+      },
+      "close_date": "2026-09-04",
+      "loan_type": "fha",
+      "address": "3474 Larchmont Ct, Suffolk VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "lead_id": "demo-lead-008",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "240000.00",
+        "currency": "USD"
+      },
+      "close_date": null,
+      "loan_type": "va",
+      "address": "3514 Ravenwood Ln, Norfolk VA",
+      "notes": null,
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "lead_id": "demo-lead-005",
+      "pipeline": "compra",
+      "amount": null,
+      "lead_stage": "en_proceso",
+      "lead_budget_amount": {
+        "amount": "710000.00",
+        "currency": "USD"
+      },
+      "close_date": null,
+      "loan_type": "va",
+      "address": "8505 Ravenwood Ave, Chesapeake VA",
+      "notes": "Inspección pendiente de agendar.",
+      "completed_at": null,
+      "created_at": "2026-08-17T08:27:51.265Z"
+    }
+  ]
+}
