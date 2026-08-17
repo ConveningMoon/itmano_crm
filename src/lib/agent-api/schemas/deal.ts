@@ -37,12 +37,15 @@ export const DealSchema = z.object({
   close_date: z.string().nullable().meta({
     description: 'purchase_processes.closing_date (YYYY-MM-DD). Null si no hay cierre previsto.',
   }),
-  loan_type: z.string().nullable(),
-  address:   z.string().nullable().meta({ ...PII }),
+  // address y loan_type son NOT NULL en purchase_processes: siempre vienen.
+  loan_type: z.string(),
+  address:   z.string().meta({ ...PII }),
   notes:     z.string().nullable().meta({ ...PII }),
 
   completed_at: z.string().nullable(),
-  created_at:   z.string(),
+  // created_at tiene default now() pero la columna admite null, así que el
+  // contrato lo declara nullable en vez de prometer lo que la base no garantiza.
+  created_at: z.string().nullable(),
 })
 
 export type Deal = z.infer<typeof DealSchema>

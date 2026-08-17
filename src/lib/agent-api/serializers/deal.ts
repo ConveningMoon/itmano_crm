@@ -7,13 +7,20 @@ import type { LeadRow } from './lead'
 export interface DealRow {
   id: string
   lead_id: string
-  address: string | null
-  loan_type: string | null
+  address: string
+  loan_type: string
   closing_date: string | null
   notes: string | null
   completed_at: string | null
-  created_at: string
+  created_at: string | null
 }
+
+/**
+ * Lo mínimo que hace falta del lead dueño: solo los dos campos prestados. Se
+ * pide un `Pick` en vez de la fila entera para que quede explícito que un deal
+ * no arrastra la ficha del lead.
+ */
+export type OwnerLead = Pick<LeadRow, 'stage' | 'budget_amount'>
 
 /**
  * `lead` es la fila del lead dueño, de donde salen los dos campos prestados.
@@ -22,7 +29,7 @@ export interface DealRow {
  */
 export function serializeDeal(
   row: DealRow,
-  lead: LeadRow | null,
+  lead: OwnerLead | null,
   currency: string,
 ): Deal {
   return {
@@ -42,6 +49,6 @@ export function serializeDeal(
     notes:      row.notes,
 
     completed_at: toIso(row.completed_at),
-    created_at:   toIso(row.created_at)!,
+    created_at:   toIso(row.created_at),
   }
 }
