@@ -23,7 +23,8 @@
     "types:db": "node scripts/gen-db-types.mjs",
     "types:db:sandbox": "node scripts/gen-db-types.mjs sandbox",
     "test:business": "vitest run tests/business",
-    "test:agent-api": "vitest run tests/agent-api-db"
+    "test:agent-api": "vitest run tests/agent-api-db",
+    "seed:agent-demo": "node scripts/seed-agent-demo.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
