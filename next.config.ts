@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   // sharp ships a native binary; keep it as a real require() at runtime instead
   // of letting the bundler trace/link it (Turbopack's Windows junction-point
   // creation for it fails outright on some filesystems).
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "puppeteer-core", "@sparticuz/chromium"],
   // The Carousel Engine compositor rasterizes bundled OFL fonts (opentype.js →
   // paths → sharp). Next's file tracer must copy the .ttf files into the
   // serverless function of EVERY route that composes a slide — fonts.ts reads

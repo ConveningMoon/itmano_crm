@@ -22,13 +22,15 @@
     "test:sources": "vitest run tests/sources",
     "types:db": "node scripts/gen-db-types.mjs",
     "types:db:sandbox": "node scripts/gen-db-types.mjs sandbox",
-    "test:business": "vitest run tests/business"
+    "test:business": "vitest run tests/business",
+    "studio:smoke": "node scripts/studio-render-smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
     "@base-ui/react": "^1.4.1",
     "@paddle/paddle-js": "1.6.4",
     "@paddle/paddle-node-sdk": "3.8.0",
+    "@sparticuz/chromium": "^149.0.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "class-variance-authority": "^0.7.1",
@@ -38,6 +40,7 @@
     "next": "16.2.10",
     "opentype.js": "^1.3.4",
     "papaparse": "^5.5.3",
+    "puppeteer-core": "^25.8.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
