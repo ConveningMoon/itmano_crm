@@ -8,8 +8,15 @@ describe('registro de templates', () => {
     }
   })
 
-  it('event y open_prompt no tienen diseños: usan el compositor de bandas', () => {
-    expect(templatesForRecipe('event')).toHaveLength(0)
+  it('evento también tiene tres, y uno de ellos no necesita foto', () => {
+    const evento = templatesForRecipe('event')
+    expect(evento).toHaveLength(3)
+    // Un evento no sale del módulo de propiedades: sin al menos un diseño que
+    // funcione sin foto, publicarlo obligaría a pagar una escena generada.
+    expect(evento.some(t => t.idealPhotos === 0 && !t.slots.required.includes('photo.hero'))).toBe(true)
+  })
+
+  it('open_prompt no tiene diseños: la imagen sale tal cual del modelo', () => {
     expect(templatesForRecipe('open_prompt')).toHaveLength(0)
   })
 

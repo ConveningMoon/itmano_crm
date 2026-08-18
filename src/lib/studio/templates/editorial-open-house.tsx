@@ -10,11 +10,14 @@ import type { StudioTemplate, TemplateProps } from './types'
 // el horario; la franja clara lleva la dirección en vez de las specs, que una
 // casa abierta no tiene.
 
+// La franja de datos era de 240 px y solo lleva la dirección: una casa abierta
+// no tiene specs, así que quedaba un hueco del alto de una foto. Se ajusta a lo
+// que de verdad contiene y esos píxeles se los queda la foto.
 const HEADER_H = 430
 const PHOTO_Y  = 430
-const PHOTO_H  = 560
-const INFO_Y   = 990
-const BAND_H   = 120
+const PHOTO_H  = 630
+const INFO_Y   = 1060
+const BAND_H   = 140
 
 const LOGO_SIZE  = 120
 const AGENT_SIZE = 230
@@ -54,8 +57,8 @@ function Render(p: TemplateProps) {
       <div style={{
         display: 'flex', position: 'absolute', top: INFO_Y, left: 0,
         width: 1080, height: 1350 - INFO_Y - BAND_H,
-        paddingLeft: 70, paddingRight: 70, paddingTop: 52,
-        alignItems: 'flex-start', justifyContent: 'space-between',
+        paddingLeft: 70, paddingRight: 70,
+        alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', width: 760 }}>
           {p.address && (

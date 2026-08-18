@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate, referenceCount, usesAi, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { generateStudioImage, recomposeStudioImage, renderTemplatePiece } from '@/lib/studio/generate'
 import { getStudioImage, STUDIO_BUCKET } from '@/lib/data/studio'
 import type { ActionResult, StudioImage } from '@/lib/studio/types'
@@ -150,6 +150,11 @@ export async function previewStudioImage(formData: FormData): Promise<ActionResu
   if (!parsed.ok) return parsed
   if (!parsed.data.template) {
     return { ok: false, error: 'La previsualización solo existe para las piezas con diseño' }
+  }
+  // Previsualizar es gratis e ilimitado justo porque no llama a nada. Con una
+  // escena generada, cada vista costaría dinero.
+  if (usesAi(parsed.data)) {
+    return { ok: false, error: 'Con escena generada no hay previsualización: cada intento tiene costo' }
   }
 
   try {

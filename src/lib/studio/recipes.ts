@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
 import { DEFAULT_PALETTE } from './palettes'
-import { findTemplate } from './templates/registry'
+import { findTemplate, templatesForRecipe } from './templates/registry'
 import type { ActionResult } from './types'
 
 // Validación por receta, PURA y sin dependencias de servidor: corre antes de
@@ -16,6 +16,16 @@ export const HEADLINE_MAX = 60
 /** Cuántas imágenes de referencia admite una pieza. Tres son suficientes para
  *  decir "esto, con esto y con este ambiente" y acotan el tamaño del request. */
 export const MAX_REFERENCES = 3
+
+/** Tope del encabezado. Va en versalitas con mucho espaciado: pasado de aquí
+ *  deja de caber en una línea y el diseño se rompe donde nadie lo revisa. */
+export const BADGE_MAX = 24
+
+/** Tope de cada etiqueta de característica ("sqft", "hab", "baños"). Una sola
+ *  palabra y corta: van una detrás de otra en la misma fila. */
+export const STAT_LABEL_MAX = 12
+
+const ONE_WORD = /^\S+$/
 
 const HEX  = /^#[0-9a-fA-F]{6}$/
 
@@ -42,9 +52,13 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 // Campos comunes a las cinco recetas.
 const common = {
   source_mode:    z.enum(['generate', 'photo']).default('generate'),
-  // El texto libre del bloque "Adicional". Conserva el nombre `scene_notes`
-  // porque es la clave que ya tienen guardada las piezas existentes en su
-  // form_json: renombrarla las dejaría sin ese dato al recomponerlas.
+  // El PROMPT DE PROPIEDAD: cómo tiene que verse la casa (o el evento) cuando
+  // no se eligió una propiedad del CRM. Es lo único que dispara la IA en las
+  // recetas de post — con propiedad elegida se usan sus fotos y no cuesta nada.
+  //
+  // Conserva el nombre `scene_notes` porque es la clave que ya tienen guardada
+  // las piezas existentes en su form_json: renombrarla las dejaría sin ese dato
+  // al recomponerlas.
   scene_notes:    z.string().trim().max(500).optional(),
   // El estilo dejó de pedirse: los diseños componen la pieza y el prompt libre
   // dice él mismo qué quiere. Sigue en el esquema con default porque es columna
@@ -76,7 +90,17 @@ const common = {
   // Titular de marketing. La etiqueta fija ("NUEVA DISPONIBLE") describe el
   // hecho; el titular vende. Sin él, los nueve diseños dirían siempre lo mismo.
   headline:       z.string().trim().max(HEADLINE_MAX, `El titular no puede pasar de ${HEADLINE_MAX} caracteres`).optional(),
+  // El encabezado de la pieza. Vacío significa el de la receta ("VENDIDA"), que
+  // sigue siendo el default; escribirlo permite decir "RECIÉN VENDIDA" o el
+  // vocabulario que use esa agencia.
+  badge:          z.string().trim().max(BADGE_MAX, `El encabezado no puede pasar de ${BADGE_MAX} caracteres`).optional(),
 }
+
+/** Etiqueta de una característica: una palabra, corta. */
+const statLabel = z.string().trim()
+  .max(STAT_LABEL_MAX, `Cada etiqueta se limita a ${STAT_LABEL_MAX} caracteres`)
+  .regex(ONE_WORD, 'Cada etiqueta debe ser una sola palabra')
+  .optional()
 
 const money = z.number({ error: 'La cifra es obligatoria' }).positive('La cifra debe ser mayor que cero')
 
@@ -92,6 +116,8 @@ const openHouse = z.object({
   date:         required('La fecha es obligatoria').regex(DATE, 'La fecha es obligatoria'),
   time_start:   required('La hora de inicio es obligatoria').regex(TIME, 'La hora de inicio es obligatoria'),
   time_end:     required('La hora de cierre es obligatoria').regex(TIME, 'La hora de cierre es obligatoria'),
+  // Retirado del formulario: cabía en el compositor de bandas, no en un diseño.
+  // Sigue en el esquema para que las piezas que lo guardaron se recompongan.
   refreshments: z.boolean().default(false),
 })
 
@@ -103,8 +129,18 @@ const newListing = z.object({
   bedrooms:   z.number().int().nonnegative().optional(),
   bathrooms:  z.number().nonnegative().optional(),
   sqft:       z.number().int().positive().optional(),
+  // Cómo se llama cada característica en la pieza. Vacío = el default. Existen
+  // porque "sqft" no significa nada fuera de Estados Unidos y "hab" no es lo
+  // que escribiría una agencia de Barcelona.
+  sqft_label:      statLabel,
+  bedrooms_label:  statLabel,
+  bathrooms_label: statLabel,
 })
 
+// Un cierre publica MENOS de lo que se creía: titular, dirección, encabezado y
+// el agente. La cifra y la nota se retiraron del formulario —los diseños se
+// llenaban de huecos alrededor de datos que casi nadie publica— y siguen en el
+// esquema solo para que las piezas guardadas se recompongan sin fallar.
 const sold = z.object({
   ...common,
   recipe:     z.literal('sold'),
@@ -118,13 +154,15 @@ const event = z.object({
   ...common,
   recipe:     z.literal('event'),
   title:      required('El título es obligatorio').trim().min(3, 'El título es obligatorio'),
-  event_type: z.enum(['seminario', 'webinar', 'casa_abierta_comunitaria', 'otro']).default('otro'),
   date:       required('La fecha es obligatoria').regex(DATE, 'La fecha es obligatoria'),
   time_start: required('La hora es obligatoria').regex(TIME, 'La hora es obligatoria'),
   venue:      required('El lugar es obligatorio').trim().min(2, 'El lugar es obligatorio'),
-  is_free:    z.boolean().default(true),
   price:      money.optional(),
   signup:     z.string().trim().max(120).optional(),
+  // Retirados del formulario. `event_type` no cambiaba nada de la pieza y
+  // `is_free` era un interruptor para un campo que ya es opcional.
+  event_type: z.enum(['seminario', 'webinar', 'casa_abierta_comunitaria', 'otro']).default('otro'),
+  is_free:    z.boolean().default(true),
 })
 
 const openPrompt = z.object({
@@ -157,12 +195,6 @@ const schema = z
         ctx.addIssue({ code: 'custom', path: ['property_id'], message: 'Elige la propiedad de la que sale la foto' })
       }
     }
-    if (v.recipe === 'sold' && v.show_price && v.price === undefined) {
-      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Indica la cifra o desactiva mostrarla' })
-    }
-    if (v.recipe === 'event' && !v.is_free && v.price === undefined) {
-      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Indica la cifra o marca el evento como gratuito' })
-    }
   })
 
 export type StudioForm = z.infer<typeof schema>
@@ -177,6 +209,23 @@ export type StudioForm = z.infer<typeof schema>
 export function referenceCount(form: StudioForm): number {
   if (form.reference_count > 0) return form.reference_count
   return form.has_reference ? 1 : 0
+}
+
+/**
+ * Si la pieza gasta presupuesto de IA.
+ *
+ * La regla es una sola y se lee en el formulario: **con propiedad elegida no
+ * hay IA**. Las fotos son las suyas, el texto sale de sus datos y el diseño lo
+ * compone sharp. Sin propiedad no hay imagen que poner, así que la escena se
+ * genera — pero solo si el agente la describió; sin descripción el diseño se
+ * dibuja sin foto, que es un resultado legítimo y gratis.
+ *
+ * "Mi Imagen" siempre genera: es su único trabajo.
+ */
+export function usesAi(form: StudioForm): boolean {
+  if (form.recipe === 'open_prompt') return true
+  if (form.property_id) return false
+  return !!form.scene_notes
 }
 
 /**
@@ -201,7 +250,9 @@ export function parseStudioForm(input: unknown): ActionResult<StudioForm> {
  * el pasado utilizable sin abrir la puerta a piezas nuevas sin diseño.
  */
 export function requireTemplate(form: StudioForm): { ok: false; error: string } | null {
-  if (!PHOTO_RECIPES.includes(form.recipe)) return null
+  // La condición es que la receta TENGA diseños, no que sea de casa: evento
+  // también los tiene, y "Mi Imagen" nunca los tendrá.
+  if (templatesForRecipe(form.recipe).length === 0) return null
   if (form.template) return null
   return { ok: false, error: 'Elige un diseño' }
 }

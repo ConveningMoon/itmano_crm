@@ -11,7 +11,7 @@ import { paletteRow } from './palettes'
 import { findTemplate } from './templates/registry'
 import { renderToPng } from './render/satori'
 import { CANVAS } from './canvas'
-import type { StudioForm } from './recipes'
+import { usesAi, type StudioForm } from './recipes'
 import type { ActionResult, StudioImage, TextZone } from './types'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 
@@ -51,6 +51,8 @@ async function firstPhotoUrl(tenantId: string, propertyId: string): Promise<stri
 export async function renderTemplatePiece(params: {
   ctx:  TenantContext
   form: StudioForm
+  /** La escena generada, cuando la pieza no salió de una propiedad del CRM. */
+  generatedHero?: Buffer | null
 }): Promise<Buffer> {
   const { ctx, form } = params
   if (!ctx.tenant_id) throw new Error('Selecciona un tenant antes de renderizar')
@@ -74,7 +76,7 @@ export async function renderTemplatePiece(params: {
     ? { url: agent.cover_photo_url, cutout: agent.cover_photo_cutout }
     : null
 
-  const props = await buildTemplateProps({ form, brand, photoUrls, agentPhoto })
+  const props = await buildTemplateProps({ form, brand, photoUrls, agentPhoto, generatedHero: params.generatedHero })
   const { width, height } = CANVAS[form.aspect]
   return renderToPng(template.render(props), { width, height })
 }
@@ -87,9 +89,9 @@ export async function generateStudioImage(params: {
   const { ctx, form } = params
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant antes de generar' }
 
-  // Ni el modo 'photo' ni una pieza con diseño llaman a la IA, así que tampoco
-  // consumen presupuesto. Solo la escena generada pasa por el gate.
-  if (!form.template && form.source_mode === 'generate') {
+  // El gate va ANTES de gastar nada, y solo cuando de verdad se va a gastar:
+  // con propiedad elegida la pieza se compone con sus fotos y no cuesta.
+  if (usesAi(form)) {
     const blocked = await assertAiWithinLimit(ctx)
     if (blocked) return blocked
   }
@@ -120,19 +122,52 @@ export async function generateStudioImage(params: {
   let costUsd = 0
 
   try {
-    // ── Camino con diseño: sin IA, sin costo ─────────────────────────────────
-    // Las fotos son las reales y el texto sale del formulario, así que no hay
-    // escena que generar ni prompt que dirigir.
+    // ── Camino con diseño ────────────────────────────────────────────────────
+    // El texto y el layout los pone el diseño. La única pregunta es de dónde
+    // sale la foto: de la propiedad elegida (gratis) o de la IA, cuando el
+    // agente escribió cómo tiene que verse porque no hay propiedad.
     if (form.template) {
-      const png = await renderTemplatePiece({ ctx, form })
+      let hero: Buffer | null = null
+      let scenePrompt: string | null = null
+
+      if (usesAi(form)) {
+        const direction = await directScene({ form, brand })
+        scenePrompt = direction.direction.scene_prompt
+        costUsd += computeCostUsd(DIRECTOR_MODEL, direction.usage)
+        await recordAiUsage({
+          tenantId: ctx.tenant_id, userId: ctx.user_id, feature: 'studio_prompt',
+          model: DIRECTOR_MODEL, usage: direction.usage,
+          metadata: { studio_image_id: id, recipe: form.recipe },
+        })
+
+        const bg = await resolveBackground({
+          sourceMode: 'generate', scenePrompt, references: params.references, photoUrl: null,
+        })
+        hero = bg.buffer
+        if (bg.source === 'generated') {
+          costUsd += IMAGE_UNIT_COST_USD
+          await recordAiUsage({
+            tenantId: ctx.tenant_id, userId: ctx.user_id, feature: 'studio_image',
+            model: bg.model ?? 'nano-banana', usage: {}, costUsdOverride: IMAGE_UNIT_COST_USD,
+            metadata: { studio_image_id: id, recipe: form.recipe },
+          })
+        }
+      }
+
+      const png = await renderTemplatePiece({ ctx, form, generatedHero: hero })
       const renderedPath = await uploadPng(`${base}/final.png`, png)
+      // La escena se guarda aparte: es la que reusa "Recomponer" para no volver
+      // a pagarla cuando lo que hay que corregir es un texto.
+      const backgroundPath = hero ? await uploadPng(`${base}/bg.png`, hero) : null
 
       await db.from('studio_images').update({
-        rendered_path: renderedPath,
-        status:        'ready',
-        error_message: null,
-        cost_usd:      0,
-        updated_at:    new Date().toISOString(),
+        rendered_path:   renderedPath,
+        background_path: backgroundPath,
+        scene_prompt:    scenePrompt,
+        status:          'ready',
+        error_message:   null,
+        cost_usd:        Math.round(costUsd * 1_000_000) / 1_000_000,
+        updated_at:      new Date().toISOString(),
       }).eq('id', id)
 
       const ready = await getStudioImage(id)
@@ -228,10 +263,15 @@ export async function recomposeStudioImage(
 
   const db = createAdminClient()
   try {
-    // Con diseño no hay fondo que reutilizar: el template se vuelve a dibujar
-    // entero, y no cuesta nada.
+    // Con diseño se vuelve a dibujar entero, pero la escena ya pagada se reusa:
+    // recomponer existe para arreglar un texto sin volver a pasar por la IA.
     if (form.template) {
-      const png = await renderTemplatePiece({ ctx, form })
+      let hero: Buffer | null = null
+      if (existing.background_path) {
+        const { data: blob } = await db.storage.from(STUDIO_BUCKET).download(existing.background_path)
+        if (blob) hero = Buffer.from(await blob.arrayBuffer())
+      }
+      const png = await renderTemplatePiece({ ctx, form, generatedHero: hero })
       const renderedPath = await uploadPng(`${existing.tenant_id}/${id}/final.png`, png)
       await db.from('studio_images').update({
         form_json: form, template: form.template, rendered_path: renderedPath,

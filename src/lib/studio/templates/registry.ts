@@ -9,6 +9,9 @@ import { editorialOpenHouse } from './editorial-open-house'
 import { mosaicoSold } from './mosaico-sold'
 import { completaSold } from './completa-sold'
 import { editorialSold } from './editorial-sold'
+import { agendaEvent } from './agenda-event'
+import { completaEvent } from './completa-event'
+import { editorialEvent } from './editorial-event'
 
 // El registro es explícito, no un glob: importar por nombre hace que un template
 // roto sea un error de compilación y no una ausencia silenciosa en el selector.
@@ -26,6 +29,11 @@ export const TEMPLATES: StudioTemplate[] = [
   mosaicoSold,
   completaSold,
   editorialSold,
+  // Evento no lleva Mosaico: sin galería de propiedad no hay cuatro fotos que
+  // repartir. Su tercera opción es Agenda, que no usa ninguna.
+  agendaEvent,
+  completaEvent,
+  editorialEvent,
 ]
 
 export function templatesForRecipe(recipe: StudioRecipe): StudioTemplate[] {

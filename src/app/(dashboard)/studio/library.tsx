@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { deleteStudioImage, recomposeImage, regenerateStudioImage } from './actions'
 import { Lightbox } from './lightbox'
 import type { StudioImage } from '@/lib/studio/types'
@@ -33,6 +34,10 @@ export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: 
 }) {
   const [pending, startTransition] = useTransition()
   const [zoom, setZoom] = useState<StudioImage | null>(null)
+  // Qué pieza se está borrando. Es por id y no un booleano global: borrar tarda
+  // (van tres archivos del bucket y la fila), y sin señal la tarjeta se quedaba
+  // igual el tiempo suficiente para que se volviera a hacer clic.
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   if (images.length === 0) {
     return (
@@ -72,8 +77,15 @@ export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: 
           )}
 
           <div style={{ padding: '10px 12px' }}>
-            <div style={{ fontSize: '12px', color: 'var(--text-primary)', marginBottom: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)', marginBottom: '2px' }}>
               {RECIPE_LABELS[img.recipe] ?? img.recipe}
+              {/* Qué piezas costaron dinero. El costo es la única marca honesta
+                  de que hubo IA: una compuesta con sharp vale exactamente 0. */}
+              {img.cost_usd > 0 && (
+                <span title="Generada con IA" style={{ display: 'flex', color: 'var(--accent-gold)' }}>
+                  <Sparkles size={12} />
+                </span>
+              )}
             </div>
             {/* El estilo ya no se elige, así que dejó de ser información: lo que
                 distingue a una pieza de otra es su formato y cuándo se hizo. */}
@@ -117,14 +129,21 @@ export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: 
               )}
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => startTransition(async () => {
-                  const r = await deleteStudioImage(img.id)
-                  if (r.ok) onDeleted(img.id)
-                })}
-                style={actionStyle}
+                disabled={pending || deleting === img.id}
+                onClick={() => {
+                  setDeleting(img.id)
+                  startTransition(async () => {
+                    const r = await deleteStudioImage(img.id)
+                    if (r.ok) onDeleted(img.id)
+                    // Si falló, la tarjeta sigue ahí: hay que poder reintentar.
+                    setDeleting(null)
+                  })
+                }}
+                style={{ ...actionStyle, display: 'flex', alignItems: 'center', gap: '5px' }}
               >
-                Borrar
+                {deleting === img.id
+                  ? <><Loader2 size={11} className="animate-spin" /> Eliminando…</>
+                  : 'Borrar'}
               </button>
             </div>
           </div>

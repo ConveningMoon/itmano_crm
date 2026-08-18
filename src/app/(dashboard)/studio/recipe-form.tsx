@@ -6,8 +6,8 @@ import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
 import { Lightbox } from './lightbox'
 import { templatesForRecipe, findTemplate } from '@/lib/studio/templates/registry'
-import { HEADLINE_MAX } from '@/lib/studio/recipes'
-import { Field, TextInput, TextArea, Select, Toggle, Section } from './field-inputs'
+import { HEADLINE_MAX, BADGE_MAX, STAT_LABEL_MAX } from '@/lib/studio/recipes'
+import { Field, TextInput, TextArea, Select, Section } from './field-inputs'
 import { PalettePicker } from './palette-picker'
 import { DEFAULT_PALETTE, tenantPreset, paletteLabel, type StudioPalette } from '@/lib/studio/palettes'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
@@ -29,17 +29,25 @@ const RECIPES = [
 
 const HOUSE_RECIPES = ['open_house', 'new_listing', 'sold']
 
+// El encabezado por defecto de cada receta. Espeja BADGES de template-props:
+// aquí solo se usa como placeholder y para decir qué saldrá si se deja vacío.
+const DEFAULT_BADGES: Record<string, string> = {
+  open_house:  'CASA ABIERTA',
+  new_listing: 'NUEVA DISPONIBLE',
+  sold:        'VENDIDA',
+  event:       'EVENTO',
+}
+
+const STAT_LABEL_FIELDS = [
+  { key: 'bedrooms_label',  placeholder: 'hab',   aria: 'Cómo se llaman las habitaciones' },
+  { key: 'bathrooms_label', placeholder: 'baños', aria: 'Cómo se llaman los baños' },
+  { key: 'sqft_label',      placeholder: 'sqft',  aria: 'Cómo se llama la superficie' },
+]
+
 const ASPECTS = [
   { value: '4:5',  label: '4:5 · feed alto' },
   { value: '1:1',  label: '1:1 · feed cuadrado' },
   { value: '9:16', label: '9:16 · story' },
-]
-
-const EVENT_TYPES = [
-  { value: 'otro',                     label: 'Otro' },
-  { value: 'seminario',                label: 'Seminario' },
-  { value: 'webinar',                  label: 'Webinar' },
-  { value: 'casa_abierta_comunitaria', label: 'Casa abierta comunitaria' },
 ]
 
 type Fields = Record<string, unknown>
@@ -73,19 +81,19 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const [fields, setFields] = useState<Fields>({})
   const [palette, setPalette] = useState<StudioPalette>(tenantColor ? tenantPreset(tenantColor).palette : DEFAULT_PALETTE)
   const [aspect, setAspect] = useState('4:5')
-  const [sourceMode, setSourceMode] = useState('generate')
-  const [extra, setExtra] = useState('')
+  const [scenePrompt, setScenePrompt] = useState('')
   const [propertyId, setPropertyId] = useState('')
   const [agentId, setAgentId] = useState('')
   const [template, setTemplate] = useState(() => firstTemplateFor('new_listing'))
   const [headline, setHeadline] = useState('')
+  const [badge, setBadge] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const [zoomPreview, setZoomPreview] = useState(false)
   // Qué bloque está abierto. Contenido y Diseño arrancan abiertos porque son las
   // decisiones que se tocan siempre; Colores y Escena, cerrados con su resumen a
   // la vista, para que cerrado no signifique escondido.
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    contenido: true, diseno: true, colores: false, adicional: false,
+    contenido: true, diseno: true, colores: false,
   })
   const toggle = (k: string) => setOpenSections(prev => ({ ...prev, [k]: !prev[k] }))
 
@@ -94,7 +102,10 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
 
   const isHouse = HOUSE_RECIPES.includes(recipe)
   const property = useMemo(() => properties.find(p => p.id === propertyId) ?? null, [properties, propertyId])
-  const canUsePhoto = isHouse && !!property?.photos.length
+  // Con propiedad elegida se usan SUS fotos y no hay nada que generar. Sin ella
+  // —datos a mano, o un evento, que nunca tiene propiedad— la escena la describe
+  // el agente, y solo entonces entra la IA.
+  const usesAi = !propertyId && !!scenePrompt.trim()
   const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
   const agent = agents.find(a => a.id === agentId)
   // Los formatos que admite el diseño elegido. Sin diseño (camino con IA) valen
@@ -118,7 +129,10 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   // para no volver a pisar lo que el usuario ya editó a mano.
   function selectProperty(id: string) {
     setPropertyId(id)
-    if (!id) { setSourceMode('generate'); return }
+    setPreview(null)
+    if (!id) return
+    // Elegir propiedad apaga el prompt de escena: sus fotos son las que van.
+    setScenePrompt('')
     const p = properties.find(x => x.id === id)
     if (!p) return
     setFields(prev => ({
@@ -149,7 +163,8 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     setRecipe(key)
     setFields({})
     setPropertyId('')
-    setSourceMode('generate')
+    setScenePrompt('')
+    setBadge('')
     // Un diseño solo sirve para las recetas que declara: al cambiar de receta
     // deja de ser válido y se pasa al primero de la nueva.
     applyTemplate(firstTemplateFor(key))
@@ -160,12 +175,14 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     return {
       ...fields,
       recipe, aspect, palette,
-      source_mode: sourceMode,
+      // Con propiedad se usan sus fotos; sin ella, la escena que se describió.
+      source_mode: propertyId ? 'photo' : 'generate',
       template:    template || undefined,
       headline:    headline || undefined,
-      // El bloque "Adicional" viaja en el campo de siempre: es la clave que las
-      // piezas ya guardadas tienen en su form_json.
-      scene_notes: extra || undefined,
+      badge:       badge || undefined,
+      // El prompt de propiedad viaja en el campo de siempre: es la clave que
+      // las piezas ya guardadas tienen en su form_json.
+      scene_notes: scenePrompt.trim() || undefined,
       property_id: propertyId || undefined,
       agent_id:    agentId || undefined,
     }
@@ -243,20 +260,38 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         </Field>
       )}
 
-      {canUsePhoto && (
-        <Field label="Fondo" hint="Usar la foto real no consume generación y muestra la casa que el comprador va a ver.">
-          <Select
-            value={sourceMode}
-            onChange={e => setSourceMode(e.target.value)}
-            options={[
-              { value: 'generate', label: 'Generar escena con IA' },
-              { value: 'photo',    label: 'Usar la foto tal cual' },
-            ]}
+      {/* El prompt de propiedad SOLO existe sin propiedad elegida. Con una
+          elegida se usan sus fotos: describir una escena competiría con ellas
+          y costaría dinero por una imagen que ya se tiene. */}
+      {!propertyId && (
+        <Field
+          label={recipe === 'event' ? 'Prompt del evento' : 'Prompt de propiedad'}
+          hint={recipe === 'event'
+            ? 'Opcional. Describe la escena del evento; el diseño se dibuja sin foto si lo dejas vacío.'
+            : 'Opcional. Describe cómo tiene que verse la casa; el diseño se dibuja sin foto si lo dejas vacío.'}
+        >
+          <TextArea
+            value={scenePrompt}
+            maxLength={500}
+            onChange={e => { setScenePrompt(e.target.value); setPreview(null) }}
+            placeholder="colonial de ladrillo con porche, frente al agua, luz de atardecer…"
           />
         </Field>
       )}
 
-      {isHouse && (
+      <Field
+        label="Encabezado"
+        hint={`Opcional. Sin él se usa "${DEFAULT_BADGES[recipe] ?? ''}". ${badge.length}/${BADGE_MAX}`}
+      >
+        <TextInput
+          value={badge}
+          maxLength={BADGE_MAX}
+          onChange={e => setBadge(e.target.value)}
+          placeholder={DEFAULT_BADGES[recipe] ?? ''}
+        />
+      </Field>
+
+      {recipe !== 'event' && (
         <Field
           label="Titular"
           hint={`Opcional. Sin él se usa uno por defecto según la receta. ${headline.length}/${HEADLINE_MAX}`}
@@ -287,7 +322,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
               <TextInput type="time" value={String(fields.time_end ?? '')} onChange={e => set('time_end', e.target.value)} />
             </Field>
           </div>
-          <Toggle checked={!!fields.refreshments} onChange={v => set('refreshments', v)} label="Con refrigerios" />
         </>
       )}
 
@@ -310,6 +344,24 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
               <TextInput inputMode="numeric" value={fields.sqft === undefined ? '' : String(fields.sqft)} onChange={e => set('sqft', num(e.target.value))} />
             </Field>
           </div>
+
+          {/* Cómo se llama cada característica EN LA PIEZA. "sqft" no significa
+              nada fuera de Estados Unidos y "hab" no es lo que escribiría una
+              agencia de Barcelona. Una palabra cada una: van en la misma fila. */}
+          <Field label="Cómo se llaman" hint={`Opcional. Una palabra cada una, máximo ${STAT_LABEL_MAX} caracteres.`}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              {STAT_LABEL_FIELDS.map(f => (
+                <TextInput
+                  key={f.key}
+                  value={String(fields[f.key] ?? '')}
+                  maxLength={STAT_LABEL_MAX}
+                  aria-label={f.aria}
+                  onChange={e => set(f.key, e.target.value.replace(/\s/g, '') || undefined)}
+                  placeholder={f.placeholder}
+                />
+              ))}
+            </div>
+          </Field>
         </>
       )}
 
@@ -318,25 +370,15 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
           <Field label="Dirección o zona">
             <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="Ghent, Norfolk" />
           </Field>
-          <Toggle checked={!!fields.show_price} onChange={v => set('show_price', v)} label="Mostrar la cifra" />
-          {!!fields.show_price && (
-            <Field label="Cifra">
-              <TextInput inputMode="numeric" value={fields.price === undefined ? '' : String(fields.price)} onChange={e => set('price', num(e.target.value))} placeholder="389000" />
-            </Field>
-          )}
-          <Field label="Nota">
-            <TextInput value={String(fields.note ?? '')} onChange={e => set('note', e.target.value || undefined)} placeholder="Vendida en 9 días" />
-          </Field>
         </>
       )}
 
       {recipe === 'event' && (
         <>
+          {/* El título ES el titular de un evento: no hay un segundo campo que
+              compita con él. */}
           <Field label="Título">
             <TextInput value={String(fields.title ?? '')} onChange={e => set('title', e.target.value)} placeholder="Seminario para compradores primerizos" />
-          </Field>
-          <Field label="Tipo">
-            <Select value={String(fields.event_type ?? 'otro')} onChange={e => set('event_type', e.target.value)} options={EVENT_TYPES} />
           </Field>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Field label="Fecha">
@@ -349,12 +391,9 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
           <Field label="Lugar">
             <TextInput value={String(fields.venue ?? '')} onChange={e => set('venue', e.target.value)} placeholder="Centro Comunitario Ghent" />
           </Field>
-          <Toggle checked={fields.is_free !== false} onChange={v => set('is_free', v)} label="Entrada libre" />
-          {fields.is_free === false && (
-            <Field label="Cifra">
-              <TextInput inputMode="numeric" value={fields.price === undefined ? '' : String(fields.price)} onChange={e => set('price', num(e.target.value))} placeholder="25" />
-            </Field>
-          )}
+          <Field label="Cifra" hint="Opcional. Vacío significa que la pieza no habla de dinero.">
+            <TextInput inputMode="numeric" value={fields.price === undefined ? '' : String(fields.price)} onChange={e => set('price', num(e.target.value))} placeholder="25" />
+          </Field>
           <Field label="Cómo registrarse">
             <TextInput value={String(fields.signup ?? '')} onChange={e => set('signup', e.target.value || undefined)} placeholder="itmano.com/eventos" />
           </Field>
@@ -374,8 +413,10 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
       </Section>
 
       <Section title="Diseño" summary={designSummary} open={openSections.diseno} onToggle={() => toggle('diseno')}>
-      {/* Diseño: se elige mirando, no de una lista de nombres */}
-      {isHouse && (
+      {/* Diseño: se elige mirando, no de una lista de nombres. La condición es
+          "esta receta TIENE diseños", no "es una receta de casa": evento
+          también los tiene desde que existe la familia de eventos. */}
+      {templates.length > 0 && (
         <TemplatePicker
           templates={templates}
           value={template}
@@ -410,30 +451,13 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
 
       </Section>
 
-      {/* Adicional: lo único que queda del bloque de escena. Un post se arma con
-          los campos de su receta; esto es la salida para lo que no cabe en
-          ninguno, no un segundo formulario. */}
-      <Section title="Adicional" summary={extra ? 'Con indicaciones' : 'Opcional'} open={openSections.adicional} onToggle={() => toggle('adicional')}>
-        <Field
-          label="Algo más que agregar"
-          hint={template
-            ? 'Este diseño compone la pieza con tus datos, así que estas indicaciones no la cambian. Aplican a las recetas cuya escena se genera con IA.'
-            : 'Se suma a lo que ya describe la receta. No cambia los datos de la pieza.'}
-        >
-          <TextArea
-            value={extra}
-            onChange={e => setExtra(e.target.value)}
-            maxLength={500}
-            placeholder="colonial de ladrillo con porche, frente al agua, luz de atardecer…"
-          />
-        </Field>
-      </Section>
-
       {error && (
         <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>
       )}
 
-      {template && (
+      {/* Previsualizar solo existe donde es gratis. Con escena generada, cada
+          vista costaría lo mismo que la pieza final. */}
+      {template && !usesAi && (
         <button
           type="button"
           className="studio-generate"
@@ -452,20 +476,19 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         </button>
       )}
 
-      {template && (
+      {usesAi ? (
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
-          Este diseño usa las fotos y los datos de la propiedad: no consume generación con IA.
-          Previsualiza las veces que quieras.
+          La escena se genera con IA y consume presupuesto de generación.
         </p>
-      )}
-      {!template && isHouse && (
+      ) : template ? (
+        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+          {propertyId
+            ? 'Este diseño usa las fotos y los datos de la propiedad: no consume generación con IA. Previsualiza las veces que quieras.'
+            : 'Sin propiedad ni prompt, el diseño se dibuja sin foto. No consume generación con IA.'}
+        </p>
+      ) : (
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
           Elige un diseño para componer la pieza sin costo.
-        </p>
-      )}
-      {!isHouse && (
-        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
-          Esta receta genera la escena con IA y consume presupuesto de generación.
         </p>
       )}
 
@@ -483,9 +506,14 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
           transition: 'background-color var(--dur-fast), color var(--dur-fast)',
         }}
       >
+        {/* El icono de IA solo aparece cuando de verdad se llama a la IA:
+            ponerlo en una pieza compuesta con sharp anunciaba un costo que no
+            existe. */}
         {pending
-          ? <><Loader2 size={14} className="animate-spin" /> Generando…</>
-          : <><Sparkles size={14} /> {template ? 'Guardar en la biblioteca' : 'Generar imagen'}</>}
+          ? <><Loader2 size={14} className="animate-spin" /> {usesAi ? 'Generando…' : 'Guardando…'}</>
+          : usesAi
+            ? <><Sparkles size={14} /> Generar imagen</>
+            : <>Guardar en la biblioteca</>}
       </button>
 
       {preview && (
