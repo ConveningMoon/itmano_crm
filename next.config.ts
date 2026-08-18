@@ -29,6 +29,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/admin/carousels": ["./src/lib/carousels/fonts/**"],
     "/api/cron/carousel-render": ["./src/lib/carousels/fonts/**"],
+    // El render del Estudio inyecta las fuentes como data URI: los .ttf tienen
+    // que viajar en el bundle de ESTA función, y public/ no se traza solo.
+    "/api/studio/render": ["./public/studio/fonts/**"],
   },
   experimental: {
     // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así
