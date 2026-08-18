@@ -436,7 +436,10 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
           también los tiene desde que existe la familia de eventos. */}
       {templates.length > 0 && (
         <TemplatePicker
-          templates={templates}
+          templates={templates.map(t => ({
+            key: t.key, label: t.label, hint: t.hint, recipes: t.recipes, aspects: t.aspects,
+            slots: t.slots, idealPhotos: t.idealPhotos, thumbUrl: null,
+          }))}
           value={template}
           onChange={chooseTemplate}
           photoCount={property?.photos.length ?? 0}

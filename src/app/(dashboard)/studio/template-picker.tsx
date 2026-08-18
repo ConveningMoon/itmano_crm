@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 import { Maximize2 } from 'lucide-react'
-import { templateFit } from '@/lib/studio/templates/registry'
+import { templateFit, type TemplateMeta } from '@/lib/studio/templates/meta'
 import { Lightbox } from './lightbox'
-import type { StudioTemplate } from '@/lib/studio/templates/types'
 
 // Nadie elige un diseño de una lista de nombres. Tres tarjetas con su miniatura,
 // y el aviso de encaje cruzando lo que el diseño necesita con lo que el agente
@@ -14,7 +13,7 @@ import type { StudioTemplate } from '@/lib/studio/templates/types'
 // decisión; lo que no puede es enterarse al final.
 
 export function TemplatePicker({ templates, value, onChange, photoCount, hasAgentPhoto, showFit }: {
-  templates:     StudioTemplate[]
+  templates:     TemplateMeta[]
   value:         string
   onChange:      (key: string) => void
   photoCount:    number
@@ -23,7 +22,7 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
    *  un aviso, es ruido — todavía no has elegido nada. */
   showFit:       boolean
 }) {
-  const [zoom, setZoom] = useState<StudioTemplate | null>(null)
+  const [zoom, setZoom] = useState<TemplateMeta | null>(null)
 
   if (templates.length === 0) {
     return (
