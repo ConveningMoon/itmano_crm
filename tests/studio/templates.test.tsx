@@ -58,9 +58,9 @@ async function props(recipe: StudioRecipe, over: Partial<TemplateProps> = {}): P
                : esEvento ? 'Seminario para compradores primerizos'
                : recipe === 'open_house' ? 'Te esperamos este sábado'
                : 'Casa elegante y familiar en venta',
-    // Solo una venta y un evento publican cifra: un cierre dejó de hacerlo y
-    // una casa abierta nunca la tuvo.
-    price:       esVenta ? '$274,400' : esEvento ? '$25' : null,
+    // Solo una venta publica cifra: un cierre dejó de hacerlo, una casa abierta
+    // nunca la tuvo y un evento dejó de pedirla.
+    price:       esVenta ? '$274,400' : null,
     when:        recipe === 'open_house' ? '15 de agosto de 2026 · 11:00–14:00'
                : esEvento ? '1 de septiembre de 2026 · 18:00'
                : null,

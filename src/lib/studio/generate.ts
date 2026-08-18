@@ -85,13 +85,16 @@ export async function generateStudioImage(params: {
   ctx:        TenantContext
   form:       StudioForm
   references: Array<{ data: Buffer; mimeType: string }>
+  /** La imagen principal subida a mano, cuando la hay. Gana sobre la escena
+   *  generada: si el agente ya tiene la foto, no hay nada que inventar. */
+  heroUpload?: Buffer | null
 }): Promise<ActionResult<StudioImage>> {
   const { ctx, form } = params
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant antes de generar' }
 
   // El gate va ANTES de gastar nada, y solo cuando de verdad se va a gastar:
-  // con propiedad elegida la pieza se compone con sus fotos y no cuesta.
-  if (usesAi(form)) {
+  // con propiedad elegida —o con la foto subida a mano— no cuesta.
+  if (!params.heroUpload && usesAi(form)) {
     const blocked = await assertAiWithinLimit(ctx)
     if (blocked) return blocked
   }
@@ -127,10 +130,11 @@ export async function generateStudioImage(params: {
     // sale la foto: de la propiedad elegida (gratis) o de la IA, cuando el
     // agente escribió cómo tiene que verse porque no hay propiedad.
     if (form.template) {
-      let hero: Buffer | null = null
+      // La foto subida gana: ya está, no hay nada que generar ni que cobrar.
+      let hero: Buffer | null = params.heroUpload ?? null
       let scenePrompt: string | null = null
 
-      if (usesAi(form)) {
+      if (!hero && usesAi(form)) {
         const direction = await directScene({ form, brand })
         scenePrompt = direction.direction.scene_prompt
         costUsd += computeCostUsd(DIRECTOR_MODEL, direction.usage)

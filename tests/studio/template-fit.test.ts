@@ -8,12 +8,16 @@ describe('registro de templates', () => {
     }
   })
 
-  it('evento también tiene tres, y uno de ellos no necesita foto', () => {
+  it('los tres diseños de evento tienen imagen principal', () => {
     const evento = templatesForRecipe('event')
     expect(evento).toHaveLength(3)
-    // Un evento no sale del módulo de propiedades: sin al menos un diseño que
-    // funcione sin foto, publicarlo obligaría a pagar una escena generada.
-    expect(evento.some(t => t.idealPhotos === 0 && !t.slots.required.includes('photo.hero'))).toBe(true)
+    // Un evento no sale del módulo de propiedades, así que su imagen viene de
+    // una de las otras dos vías: subirla (gratis) o describirla (con IA). Que
+    // los tres la tengan es lo que hace que la subida no sea opcional.
+    for (const t of evento) {
+      expect([...t.slots.required, ...t.slots.optional]).toContain('photo.hero')
+      expect(t.idealPhotos).toBeGreaterThan(0)
+    }
   })
 
   it('open_prompt no tiene diseños: la imagen sale tal cual del modelo', () => {

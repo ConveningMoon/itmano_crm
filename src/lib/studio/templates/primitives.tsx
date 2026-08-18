@@ -139,8 +139,8 @@ export function StatRow({ stats, color }: { stats: Stat[]; color: string }) {
  * con cualquier foto y no deja huecos: el diseño no puede depender de que el
  * usuario sepa editar imágenes.
  */
-export function AgentBadge({ src, size, ring, right, bottom }: {
-  src: string; size: number; ring: string; right: number; bottom: number
+export function AgentBadge({ src, size, ring, right, left, bottom }: {
+  src: string; size: number; ring: string; right?: number; left?: number; bottom: number
 }) {
   // El anillo es el FONDO del contenedor, no un `border`, y no se recorta nada.
   //
@@ -155,7 +155,11 @@ export function AgentBadge({ src, size, ring, right, bottom }: {
 
   return (
     <div style={{
-      display: 'flex', position: 'absolute', right, bottom,
+      display: 'flex', position: 'absolute', bottom,
+      // Solo el lado que se pidió: satori intenta parsear el valor de CADA
+      // propiedad presente, y un `right: undefined` lo hace reventar.
+      ...(right !== undefined ? { right } : {}),
+      ...(left  !== undefined ? { left }  : {}),
       width: size, height: size, borderRadius: size / 2,
       backgroundColor: ring,
       alignItems: 'center', justifyContent: 'center',

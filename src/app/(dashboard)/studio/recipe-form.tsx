@@ -9,6 +9,8 @@ import { templatesForRecipe, findTemplate } from '@/lib/studio/templates/registr
 import { HEADLINE_MAX, BADGE_MAX, STAT_LABEL_MAX } from '@/lib/studio/recipes'
 import { Field, TextInput, TextArea, Select, Section } from './field-inputs'
 import { PalettePicker } from './palette-picker'
+import { HeroPicker } from './hero-picker'
+import type { ReferenceItem } from './reference-picker'
 import { DEFAULT_PALETTE, tenantPreset, paletteLabel, type StudioPalette } from '@/lib/studio/palettes'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
@@ -82,6 +84,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const [palette, setPalette] = useState<StudioPalette>(tenantColor ? tenantPreset(tenantColor).palette : DEFAULT_PALETTE)
   const [aspect, setAspect] = useState('4:5')
   const [scenePrompt, setScenePrompt] = useState('')
+  const [heroFile, setHeroFile] = useState<ReferenceItem | null>(null)
   const [propertyId, setPropertyId] = useState('')
   const [agentId, setAgentId] = useState('')
   const [template, setTemplate] = useState(() => firstTemplateFor('new_listing'))
@@ -102,10 +105,10 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
 
   const isHouse = HOUSE_RECIPES.includes(recipe)
   const property = useMemo(() => properties.find(p => p.id === propertyId) ?? null, [properties, propertyId])
-  // Con propiedad elegida se usan SUS fotos y no hay nada que generar. Sin ella
-  // —datos a mano, o un evento, que nunca tiene propiedad— la escena la describe
-  // el agente, y solo entonces entra la IA.
-  const usesAi = !propertyId && !!scenePrompt.trim()
+  // Con propiedad elegida se usan SUS fotos, y con una imagen subida esa. Solo
+  // queda la IA cuando no hay ninguna de las dos y el agente describió la
+  // escena — que es el único caso en que hay algo que inventar.
+  const usesAi = !propertyId && !heroFile && !!scenePrompt.trim()
   const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
   const agent = agents.find(a => a.id === agentId)
   // Los formatos que admite el diseño elegido. Sin diseño (camino con IA) valen
@@ -127,12 +130,20 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
 
   // Autorrelleno al elegir propiedad. Se hace en el handler y no en un efecto
   // para no volver a pisar lo que el usuario ya editó a mano.
+  /** Subir imagen y describirla son excluyentes: llenan el mismo hueco. */
+  function chooseHero(item: ReferenceItem | null) {
+    setHeroFile(item)
+    setPreview(null)
+    if (item) setScenePrompt('')
+  }
+
   function selectProperty(id: string) {
     setPropertyId(id)
     setPreview(null)
     if (!id) return
-    // Elegir propiedad apaga el prompt de escena: sus fotos son las que van.
+    // Elegir propiedad apaga las otras dos vías: sus fotos son las que van.
     setScenePrompt('')
+    chooseHero(null)
     const p = properties.find(x => x.id === id)
     if (!p) return
     setFields(prev => ({
@@ -165,6 +176,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     setPropertyId('')
     setScenePrompt('')
     setBadge('')
+    chooseHero(null)
     // Un diseño solo sirve para las recetas que declara: al cambiar de receta
     // deja de ser válido y se pasa al primero de la nueva.
     applyTemplate(firstTemplateFor(key))
@@ -191,6 +203,9 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   function formData(): FormData {
     const data = new FormData()
     data.set('payload', JSON.stringify(buildPayload()))
+    // Va también a previsualizar: con la foto ya subida, ver el resultado no
+    // cuesta nada y no habría razón para esconder el botón.
+    if (heroFile) data.set('hero', heroFile.file)
     return data
   }
 
@@ -260,23 +275,29 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         </Field>
       )}
 
-      {/* El prompt de propiedad SOLO existe sin propiedad elegida. Con una
-          elegida se usan sus fotos: describir una escena competiría con ellas
-          y costaría dinero por una imagen que ya se tiene. */}
+      {/* La imagen principal SOLO se pide sin propiedad elegida: con una, son
+          sus fotos. Hay dos formas de darla y son excluyentes — subir la que ya
+          tienes (gratis) o describir la que no tienes (con IA). */}
       {!propertyId && (
-        <Field
-          label={recipe === 'event' ? 'Prompt del evento' : 'Prompt de propiedad'}
-          hint={recipe === 'event'
-            ? 'Opcional. Describe la escena del evento; el diseño se dibuja sin foto si lo dejas vacío.'
-            : 'Opcional. Describe cómo tiene que verse la casa; el diseño se dibuja sin foto si lo dejas vacío.'}
-        >
-          <TextArea
-            value={scenePrompt}
-            maxLength={500}
-            onChange={e => { setScenePrompt(e.target.value); setPreview(null) }}
-            placeholder="colonial de ladrillo con porche, frente al agua, luz de atardecer…"
-          />
-        </Field>
+        <>
+          <HeroPicker file={heroFile} onChange={chooseHero} />
+
+          {!heroFile && (
+            <Field
+              label={recipe === 'event' ? 'Prompt del evento' : 'Prompt de propiedad'}
+              hint={recipe === 'event'
+                ? 'O descríbela y la genera la IA. Sin foto ni prompt, el diseño se dibuja sin imagen.'
+                : 'O descríbela y la genera la IA. Sin foto ni prompt, el diseño se dibuja sin imagen.'}
+            >
+              <TextArea
+                value={scenePrompt}
+                maxLength={500}
+                onChange={e => { setScenePrompt(e.target.value); setPreview(null) }}
+                placeholder="colonial de ladrillo con porche, frente al agua, luz de atardecer…"
+              />
+            </Field>
+          )}
+        </>
       )}
 
       <Field
@@ -391,9 +412,6 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
           <Field label="Lugar">
             <TextInput value={String(fields.venue ?? '')} onChange={e => set('venue', e.target.value)} placeholder="Centro Comunitario Ghent" />
           </Field>
-          <Field label="Cifra" hint="Opcional. Vacío significa que la pieza no habla de dinero.">
-            <TextInput inputMode="numeric" value={fields.price === undefined ? '' : String(fields.price)} onChange={e => set('price', num(e.target.value))} placeholder="25" />
-          </Field>
           <Field label="Cómo registrarse">
             <TextInput value={String(fields.signup ?? '')} onChange={e => set('signup', e.target.value || undefined)} placeholder="itmano.com/eventos" />
           </Field>
@@ -484,7 +502,9 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
           {propertyId
             ? 'Este diseño usa las fotos y los datos de la propiedad: no consume generación con IA. Previsualiza las veces que quieras.'
-            : 'Sin propiedad ni prompt, el diseño se dibuja sin foto. No consume generación con IA.'}
+            : heroFile
+              ? 'Este diseño usa la imagen que subiste: no consume generación con IA. Previsualiza las veces que quieras.'
+              : 'Sin imagen ni prompt, el diseño se dibuja sin foto. No consume generación con IA.'}
         </p>
       ) : (
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>

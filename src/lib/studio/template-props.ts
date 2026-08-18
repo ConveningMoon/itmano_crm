@@ -71,7 +71,6 @@ export function statsFor(form: StudioForm): Stat[] {
  */
 export function priceFor(form: StudioForm): string | null {
   if (form.recipe === 'new_listing') return formatMoney(form.price)
-  if (form.recipe === 'event' && form.price !== undefined) return formatMoney(form.price)
   return null
 }
 

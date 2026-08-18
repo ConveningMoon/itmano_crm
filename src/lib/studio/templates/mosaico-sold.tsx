@@ -63,7 +63,9 @@ function Render(p: TemplateProps) {
         </div>
       </Band>
 
-      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={250} ring={p.palette.brand} right={50} bottom={190} />}
+      {/* Monta sobre la banda: apoyada justo en su borde parecía un error de
+          encaje, y es el mismo gesto que hacen los otros diseños. */}
+      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={250} ring={p.palette.brand} right={50} bottom={110} />}
     </div>
   )
 }

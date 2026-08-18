@@ -71,7 +71,8 @@ function Render(p: TemplateProps) {
         </span>
       </Band>
 
-      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={250} ring={p.palette.brand} right={50} bottom={150} />}
+      {/* Monta sobre las bandas, como en el resto de los diseños. */}
+      {p.agentPhoto && <AgentBadge src={p.agentPhoto} size={250} ring={p.palette.brand} right={50} bottom={130} />}
     </div>
   )
 }
