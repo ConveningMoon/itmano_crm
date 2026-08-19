@@ -5,7 +5,7 @@ import { Loader2, Sparkles, Eye } from 'lucide-react'
 import { createStudioImage, previewStudioImage } from './actions'
 import { TemplatePicker } from './template-picker'
 import { Lightbox } from './lightbox'
-import { templatesForRecipe, findTemplate } from '@/lib/studio/templates/registry'
+import { templatesForRecipeIn, findTemplateIn } from '@/lib/studio/templates/meta'
 import { HEADLINE_MAX, BADGE_MAX, STAT_LABEL_MAX } from '@/lib/studio/recipes'
 import { Field, TextInput, TextArea, Select, Section } from './field-inputs'
 import { PalettePicker } from './palette-picker'
@@ -13,7 +13,8 @@ import { HeroPicker } from './hero-picker'
 import type { ReferenceItem } from './reference-picker'
 import { DEFAULT_PALETTE, tenantPreset, paletteLabel, type StudioPalette } from '@/lib/studio/palettes'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
-import type { StudioImage } from '@/lib/studio/types'
+import type { StudioImage, StudioRecipe } from '@/lib/studio/types'
+import type { TemplateMeta } from '@/lib/studio/templates/meta'
 
 // Formulario del generador. Una receta = un formulario distinto, no uno genérico
 // con campos opcionales: los datos que pide cada pieza son los que acaban
@@ -67,13 +68,14 @@ function num(v: string): number | undefined {
  * sin previsualización, y eso se leía como que la previsualización había
  * desaparecido. El camino gratis tiene que ser el que se encuentra sin buscarlo.
  */
-function firstTemplateFor(recipe: string): string {
-  return templatesForRecipe(recipe as never)[0]?.key ?? ''
+function firstTemplateFor(metas: TemplateMeta[], recipe: string): string {
+  return metas.find(t => t.recipes.includes(recipe as StudioRecipe))?.key ?? ''
 }
 
-export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
+export function RecipeForm({ properties, agents, templates: templatesProp, tenantColor, onCreated }: {
   properties:  PropertyOption[]
   agents:      AgentOption[]
+  templates:   TemplateMeta[]
   /** tenants.primary_color — el preset "Marca del equipo". Dato, no código. */
   tenantColor: string
   onCreated:   (image: StudioImage) => void
@@ -87,7 +89,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   const [heroFile, setHeroFile] = useState<ReferenceItem | null>(null)
   const [propertyId, setPropertyId] = useState('')
   const [agentId, setAgentId] = useState('')
-  const [template, setTemplate] = useState(() => firstTemplateFor('new_listing'))
+  const [template, setTemplate] = useState(() => firstTemplateFor(templatesProp, 'new_listing'))
   const [headline, setHeadline] = useState('')
   const [badge, setBadge] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
@@ -109,13 +111,13 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
   // queda la IA cuando no hay ninguna de las dos y el agente describió la
   // escena — que es el único caso en que hay algo que inventar.
   const usesAi = !propertyId && !heroFile && !!scenePrompt.trim()
-  const templates = useMemo(() => templatesForRecipe(recipe as never), [recipe])
+  const templates = useMemo(() => templatesForRecipeIn(templatesProp, recipe as StudioRecipe), [templatesProp, recipe])
   const agent = agents.find(a => a.id === agentId)
   // Los formatos que admite el diseño elegido. Sin diseño (camino con IA) valen
   // los tres: ahí el lienzo lo compone el compositor de bandas, que sí es
   // sensible al formato.
   const allowedAspects: string[] = template
-    ? (findTemplate(template)?.aspects as string[] | undefined) ?? ['4:5']
+    ? (findTemplateIn(templatesProp, template)?.aspects as string[] | undefined) ?? ['4:5']
     : ASPECTS.map(a => a.value)
   const templateLabel = templates.find(t => t.key === template)?.label
   const contentSummary =
@@ -161,7 +163,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     if (!key) return
     // Si el formato actual no lo admite el diseño nuevo, se corrige solo en vez
     // de dejar una combinación que produciría una pieza recortada.
-    const allowed = (findTemplate(key)?.aspects as string[] | undefined) ?? ['4:5']
+    const allowed = (findTemplateIn(templatesProp, key)?.aspects as string[] | undefined) ?? ['4:5']
     if (!allowed.includes(aspect)) setAspect(allowed[0])
   }
 
@@ -179,7 +181,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
     chooseHero(null)
     // Un diseño solo sirve para las recetas que declara: al cambiar de receta
     // deja de ser válido y se pasa al primero de la nueva.
-    applyTemplate(firstTemplateFor(key))
+    applyTemplate(firstTemplateFor(templatesProp, key))
     setPreview(null)
   }
 
@@ -436,10 +438,7 @@ export function RecipeForm({ properties, agents, tenantColor, onCreated }: {
           también los tiene desde que existe la familia de eventos. */}
       {templates.length > 0 && (
         <TemplatePicker
-          templates={templates.map(t => ({
-            key: t.key, label: t.label, hint: t.hint, recipes: t.recipes, aspects: t.aspects,
-            slots: t.slots, idealPhotos: t.idealPhotos, thumbUrl: null,
-          }))}
+          templates={templates}
           value={template}
           onChange={chooseTemplate}
           photoCount={property?.photos.length ?? 0}

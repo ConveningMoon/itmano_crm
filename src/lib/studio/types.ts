@@ -42,6 +42,10 @@ export interface StudioImage {
   error_message:   string | null
   cost_usd:        number
   created_at:      string
+  // El diseño congelado al generar: {html, css} de entonces. Recomponer lo usa
+  // en vez del diseño vivo, para que una edición al diseño no reescriba piezas
+  // que el tenant ya publicó.
+  template_snapshot: { html: string; css: string } | null
 }
 
 // Resultado tipado uniforme de las server actions (nunca throw al cliente).

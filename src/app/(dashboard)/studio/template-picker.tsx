@@ -65,12 +65,14 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
               }}
             >
               <span style={{ display: 'block', position: 'relative' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- reason: asset estático del repo; next/image no aporta aquí */}
-                <img
-                  src={`/studio/templates/${t.key}.webp`}
-                  alt={t.label}
-                  style={{ width: '100%', display: 'block', borderRadius: '6px', aspectRatio: '4 / 5', objectFit: 'cover' }}
-                />
+                {t.thumbUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- reason: el bucket sirve el PNG; next/image no aporta en una tarjeta de 130px
+                  <img src={t.thumbUrl} alt={t.label}
+                       style={{ width: '100%', display: 'block', borderRadius: '6px', aspectRatio: '4 / 5', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ display: 'block', width: '100%', aspectRatio: '4 / 5', borderRadius: '6px',
+                                 background: 'var(--bg-subtle, var(--bg-surface))' }} />
+                )}
                 {/* Ver en grande sin elegir: una tarjeta de 130px no permite
                     juzgar un diseño de 1080×1350. */}
                 <span
@@ -105,9 +107,9 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
         })}
       </div>
 
-      {zoom && (
+      {zoom?.thumbUrl && (
         <Lightbox
-          src={`/studio/templates/${zoom.key}.webp`}
+          src={zoom.thumbUrl}
           alt={`Diseño ${zoom.label}`}
           onClose={() => setZoom(null)}
         />

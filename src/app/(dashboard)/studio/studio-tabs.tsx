@@ -7,6 +7,7 @@ import { FreeImageForm } from './free-image-form'
 import { Library } from './library'
 import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
+import type { TemplateMeta } from '@/lib/studio/templates/meta'
 
 // Envoltura del Estudio: Posts · Carruseles · Mi Imagen.
 //
@@ -22,10 +23,11 @@ const gridStyle: React.CSSProperties = {
   display: 'grid', gap: '28px', gridTemplateColumns: 'minmax(320px, 420px) 1fr', alignItems: 'start',
 }
 
-export function StudioTabs({ images, properties, agents, tenantColor, carousels }: {
+export function StudioTabs({ images, properties, agents, templates, tenantColor, carousels }: {
   images:      StudioImage[]
   properties:  PropertyOption[]
   agents:      AgentOption[]
+  templates:   TemplateMeta[]
   tenantColor: string
   carousels:   React.ReactNode
 }) {
@@ -53,6 +55,7 @@ export function StudioTabs({ images, properties, agents, tenantColor, carousels 
             <RecipeForm
               properties={properties}
               agents={agents}
+              templates={templates}
               tenantColor={tenantColor}
               onCreated={created}
             />

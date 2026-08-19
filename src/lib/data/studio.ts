@@ -13,7 +13,7 @@ const IMAGE_COLUMNS = columns('studio_images', [
   'id', 'tenant_id', 'agent_id', 'recipe', 'property_id', 'form_json', 'source_mode',
   'style', 'palette', 'aspect', 'reference_path', 'reference_paths', 'reference_role', 'scene_prompt',
   'text_zone', 'background_path', 'rendered_path', 'status', 'error_message',
-  'cost_usd', 'created_at',
+  'cost_usd', 'created_at', 'template_snapshot',
 ])
 
 const PROPERTY_COLUMNS = columns('properties', [
@@ -68,6 +68,7 @@ function toImage(r: any): StudioImage {
     rendered_url: publicUrl(r.rendered_path ?? null),
     status: r.status, error_message: r.error_message ?? null,
     cost_usd: Number(r.cost_usd ?? 0), created_at: r.created_at,
+    template_snapshot: r.template_snapshot ?? null,
   }
 }
 
