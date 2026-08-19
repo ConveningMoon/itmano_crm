@@ -28,10 +28,14 @@
   </div>
 
   <div class="banda cierre">
-    <!-- Una sección de teléfono anidada dentro de la del agente no funciona:
-         las secciones no anidan (ver document.ts). El separador se oculta
-         con la clase de estado sin-telefono en vez de una segunda sección. -->
-    {{#agentName}}<span class="agente">{{agentName}}<span class="separador"> · </span>{{phone}}</span>{{/agentName}}
+    <!-- El TSX original (mosaico-open-house.tsx) NO condiciona esta banda al
+         nombre del agente: solo filtra qué hay ([agentName, phone].filter
+         (Boolean)), así que el teléfono se pinta aunque falte el nombre. Nombre
+         y teléfono son dos secciones independientes -sin anidar, ver
+         document.ts- y el separador se apaga con la clase de estado que
+         corresponda (sin-agente o sin-telefono) en vez de vivir dentro de una
+         sección. -->
+    <span class="agente">{{#agentName}}{{agentName}}{{/agentName}}<span class="separador"> · </span>{{#phone}}{{phone}}{{/phone}}</span>
   </div>
 
   {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}

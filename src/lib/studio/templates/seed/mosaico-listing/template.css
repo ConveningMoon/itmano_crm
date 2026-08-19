@@ -9,7 +9,19 @@
 .thumbs img { width: 300px; height: 220px; object-fit: cover; border-radius: 14px;
               box-shadow: 0 6px 20px rgba(0,0,0,.28); }
 
-.titular { position: absolute; top: 830px; left: 60px; width: 700px; }
+/* Anclado por ABAJO, no por arriba: el borde inferior del bloque queda a 15px
+   fijos por encima del borde superior de la banda de specs (bottom:130px +
+   height:110px = 240px desde el fondo del lienzo → 255px), y el bloque crece
+   HACIA ARRIBA con el contenido. Con `top` fijo un titular de cuatro líneas, o
+   un titular largo más una dirección de dos líneas, empujaban el texto dentro
+   de la banda — con `bottom` fijo y sin `top`, el navegador calcula la altura
+   por contenido y jamás puede invadirla, tenga las líneas que tenga.
+   Los 15px son deliberadamente pocos (no ~60px, que se probó primero): con un
+   titular de tres líneas el bloque ya roza las miniaturas de arriba, así que
+   regalarle más aire a la banda de abajo sólo empujaba más invasión hacia las
+   fotos de arriba. Medido con getBoundingClientRect sobre el documento real,
+   no a ojo. */
+.titular { position: absolute; bottom: 255px; left: 60px; width: 700px; }
 .badge { font-family: Marcellus; font-size: 26px; letter-spacing: 6px; color: var(--brand); }
 /* El titular parte de línea dentro del ancho del bloque (700px, heredado de
    .titular): en el original ese maxWidth:900 de Headline es inerte, porque el
@@ -67,8 +79,15 @@
 .retrato { position: absolute; right: 50px; bottom: 130px; width: 250px; height: 250px;
            border-radius: 50%; object-fit: cover; border: 8px solid var(--brand); }
 
-/* Sin miniaturas el titular sube: el hueco de 220px no tiene por qué quedarse. */
-html.fotos-1 .titular { top: 700px; }
+/* Sin miniaturas el titular sube: el hueco de 220px no tiene por qué quedarse.
+   Agrandar el titular por sí solo no bastaba —con poco texto (sin dirección
+   en Mínimo) el bloque se quedaba corto y dejaba un vacío grande bajo la
+   portada—, así que este SEGUNDO `bottom`, más generoso, sube el ancla entera:
+   sigue siendo "borde inferior fijo, crece hacia arriba", sólo que con más
+   aire porque sin miniaturas no hay nada arriba con lo que chocar. Calculado
+   (con getBoundingClientRect) para que el bloque quede pegado a la portada,
+   igual que hacía el `top:700px` de antes. */
+html.fotos-1 .titular { bottom: 468px; }
 html.fotos-1 .titular h1 { font-size: 64px; }
 
 /* Sin teléfono no queda el punto colgando: la clase de estado apaga el
