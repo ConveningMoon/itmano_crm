@@ -162,17 +162,29 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
       </div>
 
       <div style={{ position: 'sticky', top: '20px' }}>
-        <iframe
-          title="Vista previa"
-          srcDoc={document}
-          sandbox=""
-          // El blanco es el papel de la pieza (el lienzo de 1080×1350 sobre el
-          // que se diseña), no interfaz del CRM: se queda fijo pase lo que
-          // pase con el tema, igual que el fondo de una hoja en cualquier
-          // editor de diseño.
-          style={{ width: '420px', height: `${Math.round(420 * height / width)}px`,
-                   border: '1px solid var(--border-subtle)', borderRadius: '12px', background: '#fff' }}
-        />
+        {/* Un iframe no escala su contenido: es una ventana. Para ver la pieza
+            ENTERA (no sólo la esquina superior izquierda) el iframe sigue
+            renderizando al tamaño real del lienzo — el mismo documento que
+            produce el PNG — y lo reducimos con transform: scale() dentro de
+            un marco recortado a ese mismo tamaño. La escala sale del ancho
+            fijo del marco (420px) sobre el ancho real del lienzo, así que
+            sirve igual para 4:5, 1:1 o 9:16. */}
+        <div style={{ width: '420px', height: `${Math.round(420 * height / width)}px`,
+                      overflow: 'hidden', border: '1px solid var(--border-subtle)',
+                      borderRadius: '12px',
+                      // El blanco es el papel de la pieza (el lienzo sobre el
+                      // que se diseña), no interfaz del CRM: se queda fijo
+                      // pase lo que pase con el tema, igual que el fondo de
+                      // una hoja en cualquier editor de diseño.
+                      background: '#fff' }}>
+          <iframe
+            title="Vista previa"
+            srcDoc={document}
+            sandbox=""
+            style={{ width: `${width}px`, height: `${height}px`, border: 'none',
+                     transform: `scale(${420 / width})`, transformOrigin: 'top left' }}
+          />
+        </div>
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
           {width}×{height} · el mismo documento que se convierte en PNG
         </p>

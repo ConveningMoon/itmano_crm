@@ -8,8 +8,16 @@ import 'server-only'
 // lee nada — recibe HTML y devuelve bytes.
 
 function baseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
+  // VERCEL_URL es específica de ESTE despliegue (la pone Vercel, no se
+  // configura) y tiene que ganar: NEXT_PUBLIC_APP_URL suele estar fija a
+  // producción a nivel de proyecto, así que si se mirara primero, cada
+  // preview mandaría su render al dominio de producción — nunca ejercitaría
+  // su propio Chrome, su propio reset ni su catálogo de fuentes, y podría
+  // escribir donde no toca. NEXT_PUBLIC_APP_URL sólo sirve de respaldo para
+  // un entorno que no sea Vercel (no define VERCEL_URL), y localhost es el
+  // último recurso para desarrollo local.
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
   return 'http://localhost:3000'
 }
 

@@ -112,9 +112,15 @@ export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: 
               >
                 Variante
               </button>
-              {/* Recomponer: reusa el fondo ya pagado. El arreglo barato cuando
-                  el precio o la fecha salieron mal. */}
-              {img.background_path && (
+              {/* Recomponer: vuelve a dibujar el texto sobre la misma base sin
+                  gastar IA otra vez. Eso protege dos casos distintos: el fondo
+                  generado por IA que sí costó dinero (`background_path`), y una
+                  pieza con diseño (`form_json.template`) — ésa siempre es
+                  gratis de recomponer, con o sin fondo propio, porque vuelve a
+                  bajar las fotos de la propiedad si hace falta. Sin la segunda
+                  mitad, el botón no aparecía nunca en las piezas hechas con
+                  fotos del CRM, que son la mayoría. */}
+              {Boolean(img.background_path || img.form_json.template) && (
                 <button
                   type="button"
                   disabled={pending}

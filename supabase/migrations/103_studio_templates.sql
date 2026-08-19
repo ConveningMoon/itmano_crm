@@ -37,6 +37,7 @@ comment on column studio_templates.slots is
 -- de ITMANO, y las escrituras pasan todas por el cliente admin.
 alter table studio_templates enable row level security;
 
+drop policy if exists "studio_templates_select" on studio_templates;
 create policy "studio_templates_select"
   on studio_templates for select
   using (auth.role() = 'authenticated');

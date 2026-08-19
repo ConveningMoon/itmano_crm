@@ -32,6 +32,10 @@ const nextConfig: NextConfig = {
     // El render del Estudio inyecta las fuentes como data URI: los .ttf tienen
     // que viajar en el bundle de ESTA función, y public/ no se traza solo.
     "/api/studio/render": ["./public/studio/fonts/**"],
+    // La server action de /studio/plantillas llama a samplePropsInlined, que lee
+    // las fotos de ejemplo de public/studio/fixtures para renderizar la miniatura
+    // al guardar. Mismo problema que la línea de arriba: public/ no se traza solo.
+    "/studio/plantillas": ["./public/studio/fixtures/**"],
   },
   experimental: {
     // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así

@@ -246,16 +246,35 @@ export function validateTemplateChoice(
   return null
 }
 
+// Recetas que hoy tienen diseños sembrados y SIEMPRE deben exigirlo, tenga o
+// no filas el catálogo en este momento. Fija a propósito y no derivada de
+// `metas`: derivarla del catálogo es justo el bug que se arregla aquí — con
+// la tabla vacía (migración aplicada, seed olvidado) `metas` está vacío para
+// TODAS las recetas, y de ahí no se puede distinguir "esta receta no tiene
+// diseños todavía, por diseño" (Evento, Task 16 pendiente) de "el despliegue
+// se quedó a medias". Cuando Evento reciba sus diseños, se añade aquí.
+const RECIPES_WITH_TEMPLATES = ['open_house', 'new_listing', 'sold']
+
 /**
  * Las piezas NUEVAS de casa se dibujan con un diseño. Es política de producto y
  * va aparte del esquema a propósito: las piezas creadas antes de los diseños
  * tienen `template` nulo, y recomponerlas vuelve a pasar su form_json por
  * parseStudioForm — si el esquema lo exigiera, dejarían de poder recomponerse.
+ *
+ * Falla ruidosamente si el catálogo está vacío para una receta que debería
+ * tenerlo: sin esto, `generateStudioImage` seguía por el camino libre y
+ * devolvía una foto recortada sin texto ni marca, marcada "ready" y habiendo
+ * gastado presupuesto de IA — el único fallo silencioso de un despliegue con
+ * el seed olvidado.
  */
 export function requireTemplate(
   form: StudioForm, metas: TemplateMeta[],
 ): { ok: false; error: string } | null {
-  if (metas.filter(m => m.recipes.includes(form.recipe)).length === 0) return null
+  if (!RECIPES_WITH_TEMPLATES.includes(form.recipe)) return null
   if (form.template) return null
+  const hayDisenosParaLaReceta = metas.some(m => m.recipes.includes(form.recipe))
+  if (!hayDisenosParaLaReceta) {
+    return { ok: false, error: 'No hay ningún diseño cargado para esta receta todavía. Avisa antes de generar.' }
+  }
   return { ok: false, error: 'Elige un diseño' }
 }
