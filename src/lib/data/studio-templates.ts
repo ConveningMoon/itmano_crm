@@ -2,7 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { inferSlots } from '@/lib/studio/templates/slots'
-import { STUDIO_BUCKET } from './studio'
+import { STUDIO_BUCKET, publicUrl } from './studio'
 import type { TemplateMeta } from '@/lib/studio/templates/meta'
 import type { StudioRecipe, Aspect } from '@/lib/studio/types'
 
@@ -22,11 +22,6 @@ const META_COLUMNS = columns('studio_templates', [
 const FULL_COLUMNS = columns('studio_templates', [
   'key', 'label', 'hint', 'recipes', 'aspects', 'slots', 'ideal_photos', 'thumb_path', 'html', 'css',
 ])
-
-function publicUrl(path: string | null): string | null {
-  if (!path) return null
-  return createAdminClient().storage.from(STUDIO_BUCKET).getPublicUrl(path).data.publicUrl
-}
 
 /** Pura a propósito: es lo único de este archivo que se puede testear sin BD. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reason: el cliente de Supabase no está tipado en este repo; la lista de columnas ya se valida con columns()
@@ -97,7 +92,8 @@ export async function saveTemplateThumb(key: string, png: Buffer): Promise<strin
       contentType: 'image/png', upsert: true,
     })
   if (error) throw new Error(`No se pudo subir la miniatura: ${error.message}`)
-  await db.from('studio_templates')
+  const { error: updateError } = await db.from('studio_templates')
     .update({ thumb_path: path, updated_at: new Date().toISOString() }).eq('key', key)
+  if (updateError) throw new Error(`No se pudo guardar la miniatura en el diseño: ${updateError.message}`)
   return path
 }

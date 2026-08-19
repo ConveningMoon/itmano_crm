@@ -46,7 +46,8 @@ export interface AgentOption {
   cover_photo_cutout: boolean
 }
 
-function publicUrl(path: string | null): string | null {
+/** Resuelve la URL pública de un path del bucket del Estudio. Compartida con studio-templates.ts. */
+export function publicUrl(path: string | null): string | null {
   if (!path) return null
   return createAdminClient().storage.from(STUDIO_BUCKET).getPublicUrl(path).data.publicUrl
 }
