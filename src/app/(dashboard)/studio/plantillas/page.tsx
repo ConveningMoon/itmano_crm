@@ -23,7 +23,12 @@ export default async function TemplatesPage({ searchParams }: {
   ])
 
   return (
+    // La key remonta el editor entero al cambiar de diseño: el estado interno
+    // (html, css, key, label...) se inicializa una sola vez con useState, así
+    // que sin esto cambiar el <select> no refrescaba el panel y un Guardar
+    // posterior escribía el HTML del diseño anterior sobre el nuevo.
     <TemplateEditor
+      key={current?.key ?? 'nuevo'}
       templates={templates}
       current={current}
       fontFaceCss={fontFaceCssFromUrls()}

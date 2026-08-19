@@ -69,7 +69,7 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
     setSaved(false)
     startTransition(async () => {
       const r = await saveTemplateAction({ key, label, hint, recipes, aspects, html, css })
-      if (r.ok) { setSaved(true); router.refresh() } else setError(r.error)
+      if (r.ok) { setSaved(true); router.refresh() } else { setError(r.error); router.refresh() }
     })
   }
 
@@ -157,7 +157,7 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
           </button>
         </div>
 
-        {error && <p style={{ fontSize: '12px', color: 'var(--status-danger, #c0392b)' }}>{error}</p>}
+        {error && <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)' }}>{error}</p>}
         {saved && <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Guardado, con su miniatura.</p>}
       </div>
 
@@ -166,6 +166,10 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
           title="Vista previa"
           srcDoc={document}
           sandbox=""
+          // El blanco es el papel de la pieza (el lienzo de 1080×1350 sobre el
+          // que se diseña), no interfaz del CRM: se queda fijo pase lo que
+          // pase con el tema, igual que el fondo de una hoja en cualquier
+          // editor de diseño.
           style={{ width: '420px', height: `${Math.round(420 * height / width)}px`,
                    border: '1px solid var(--border-subtle)', borderRadius: '12px', background: '#fff' }}
         />
