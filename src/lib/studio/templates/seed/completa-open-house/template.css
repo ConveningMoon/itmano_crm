@@ -1,0 +1,48 @@
+/* Foto completa · casa abierta — la foto ocupa el lienzo y el texto vive sobre
+   el degradado del color primario, igual que la variante de venta.
+   Donde esa pone el precio, esta pone la fecha y el horario: menor cuerpo que
+   una cifra pero el mismo peso, porque es el dato por el que alguien decide
+   presentarse. */
+.pieza { position: relative; width: var(--w); height: var(--h);
+         background: var(--surface); overflow: hidden; }
+
+.hero { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+.velo { position: absolute; inset: 0; background: linear-gradient(
+  to bottom,
+  transparent 28%,
+  color-mix(in srgb, var(--brand) 55%, transparent) 52%,
+  color-mix(in srgb, var(--brand) 85%, transparent) 70%,
+  color-mix(in srgb, var(--brand) 97%, transparent) 100%); }
+
+.logo { position: absolute; top: 50px; right: 50px; width: 120px; height: 120px;
+        object-fit: contain; }
+
+.texto { position: absolute; bottom: 100px; left: 70px; width: 860px;
+         display: flex; flex-direction: column; color: var(--on-photo); }
+html:not(.sin-foto-agente) .texto { width: 700px; }
+
+.badge { font-family: Marcellus; font-size: 26px; letter-spacing: 6px; }
+
+/* Mismo truco que en completa-listing: font-size:0 en el h1 colapsa el
+   espacio literal entre palabras (values.ts las une con join(' ')), y cada
+   palabra pone su propio tamaño más el margen de 14px que usaba Headline. */
+.texto h1 { font-family: Spectral; font-size: 0; line-height: 1.08; margin-top: 16px; }
+.palabra, .palabra-fuerte { font-size: 64px; margin-right: 14px; }
+.palabra { font-weight: 400; }
+.palabra-fuerte { font-weight: 800; }
+
+.fecha-dia { display: block; font-family: Spectral; font-weight: 800; font-size: 46px; margin-top: 22px; }
+.fecha-hora { display: block; font-family: Spectral; font-weight: 800; font-size: 40px; margin-top: 4px; }
+
+.direccion-fila { display: flex; align-items: center; margin-top: 18px; }
+.icono-pin { width: 30px; height: 30px; flex-shrink: 0; }
+.direccion { font-family: Spectral; font-size: 28px; margin-left: 12px; }
+
+.agente { font-family: Marcellus; font-size: 24px; letter-spacing: 3px; margin-top: 24px; }
+/* Sin teléfono no queda el punto colgando. */
+html.sin-telefono .separador { display: none; }
+
+/* El anillo es el único borde del diseño. */
+.retrato { position: absolute; right: 70px; bottom: 120px; width: 209px; height: 209px;
+           border-radius: 50%; object-fit: cover; border: 8px solid var(--surface); }

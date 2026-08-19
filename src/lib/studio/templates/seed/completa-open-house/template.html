@@ -1,0 +1,22 @@
+<main class="pieza">
+  <!-- Sin envolver en sección: el diseño no existe sin la foto de portada. -->
+  <img class="hero" src="{{hero}}" alt="">
+  <div class="velo"></div>
+  {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+
+  <div class="texto">
+    <span class="badge">{{badge}}</span>
+    <h1>{{&headlineRitmo}}</h1>
+    <!-- Donde la venta pone el precio, esta pone la fecha: día y hora ya
+         llegan partidos como dos claves independientes (values.ts), así que
+         no hace falta anidar una sección de hora dentro de la del día. -->
+    {{#whenDay}}<span class="fecha-dia">{{whenDay}}</span>{{/whenDay}}
+    {{#whenTime}}<span class="fecha-hora">{{whenTime}}</span>{{/whenTime}}
+    {{#address}}<div class="direccion-fila"><svg class="icono-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg><span class="direccion">{{address}}</span></div>{{/address}}
+    <!-- El teléfono va suelto dentro de la sección del agente, no anidado:
+         las secciones no anidan (ver document.ts). -->
+    {{#agentName}}<span class="agente">{{agentName}}<span class="separador"> · </span>{{phone}}</span>{{/agentName}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>
