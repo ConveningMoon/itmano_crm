@@ -5,7 +5,7 @@ import { recordAiUsage, computeCostUsd, IMAGE_UNIT_COST_USD } from '@/lib/servic
 import { getStudioBrand, getStudioImage, getPropertyOptions, getAgentOptions, STUDIO_BUCKET } from '@/lib/data/studio'
 import { directScene, DIRECTOR_MODEL } from './prompt-director'
 import { resolveBackground } from './background'
-import { composeStudioImage } from './compositor'
+import { finishFreeImage } from './finish-free-image'
 import { buildTemplateProps } from './template-props'
 import { paletteRow } from './palettes'
 import { getTemplate } from '@/lib/data/studio-templates'
@@ -14,7 +14,7 @@ import { templateValues, templateRawValues, templateFlags, paletteVars } from '.
 import { renderDocument } from './render/client'
 import { CANVAS } from './canvas'
 import { usesAi, type StudioForm } from './recipes'
-import type { ActionResult, StudioImage, TextZone } from './types'
+import type { ActionResult, StudioImage } from './types'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 
 // ── Pipeline del Estudio ─────────────────────────────────────────────────────
@@ -207,11 +207,9 @@ export async function generateStudioImage(params: {
 
     // 1. Dirección de escena (solo en modo generate).
     let scenePrompt: string | null = null
-    let textZone: TextZone = 'bottom'
     if (form.source_mode === 'generate') {
       const direction = await directScene({ form, brand })
       scenePrompt = direction.direction.scene_prompt
-      textZone = direction.direction.text_zone
       costUsd += computeCostUsd(DIRECTOR_MODEL, direction.usage)
       await recordAiUsage({
         tenantId: ctx.tenant_id, userId: ctx.user_id, feature: 'studio_prompt',
@@ -243,7 +241,7 @@ export async function generateStudioImage(params: {
 
     // 3. Composición.
     await db.from('studio_images').update({ status: 'composing', updated_at: new Date().toISOString() }).eq('id', id)
-    const png = await composeStudioImage({ form, brand, background: bg.buffer, textZone })
+    const png = await finishFreeImage({ background: bg.buffer, accent: brand.primary_color, ...CANVAS[form.aspect] })
     const renderedPath = await uploadPng(`${base}/final.png`, png)
 
     await db.from('studio_images').update({
@@ -252,7 +250,6 @@ export async function generateStudioImage(params: {
       reference_path:  referencePaths[0] ?? null,
       reference_paths: referencePaths.length ? referencePaths : null,
       scene_prompt:    scenePrompt,
-      text_zone:       textZone,
       background_path: backgroundPath,
       rendered_path:   renderedPath,
       status:          'ready',
@@ -315,7 +312,7 @@ export async function recomposeStudioImage(
     }
 
     const brand = await getStudioBrand(existing.tenant_id, form.agent_id ?? null)
-    const png = await composeStudioImage({ form, brand, background: bg, textZone: existing.text_zone ?? 'bottom' })
+    const png = await finishFreeImage({ background: bg, accent: brand.primary_color, ...CANVAS[form.aspect] })
     const renderedPath = await uploadPng(`${existing.tenant_id}/${id}/final.png`, png)
 
     await db.from('studio_images').update({
