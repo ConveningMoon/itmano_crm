@@ -1,0 +1,79 @@
+/* Editorial · vendida — el mismo esqueleto que editorial-listing con la mitad
+   de los datos, porque un cierre publica la mitad: sin cifra, sin specs y sin
+   cuándo, el bloque de color queda reducido a encabezado, titular y
+   dirección. El bloque de color se lleva TODO lo que sobra con flex:1 y
+   centra su contenido, así que un hueco es imposible aunque quede aún menos
+   que leer que en la venta. */
+.pieza { display: flex; flex-direction: column; width: var(--w); height: var(--h);
+         background: var(--surface); position: relative; overflow: hidden; }
+
+/* Cuánto lienzo se lleva la foto, según cuánto texto trae la receta —esto es
+   `photoHeight(blocks)` del shell, vuelto clases de estado en vez de una
+   función. Un cierre nunca pasa de 3 bloques (encabezado + titular +
+   dirección), así que aquí la foto siempre gana el máximo, 700px: es
+   exactamente lo que dice el comentario del shell -"la foto se queda con
+   todo lo que eso deja libre, que en esta receta es mucho"-. Las reglas de
+   datos-4/5/6 se dejan igual que en editorial-listing por si algún día esta
+   receta publica más (no es el caso hoy: statsFor, priceFor y whenFor
+   siempre devuelven vacío para "sold"). */
+.foto { width: 1080px; height: 520px; flex-shrink: 0; object-fit: cover; }
+html.datos-1 .foto, html.datos-2 .foto, html.datos-3 .foto { height: 700px; }
+html.datos-4 .foto, html.datos-5 .foto { height: 600px; }
+
+/* line-height:1.08 aquí, no solo en el h1: ver editorial-listing/template.css
+   para la explicación completa -Chrome reserva más interlineado "normal" que
+   satori para Spectral/Marcellus, y un span sin line-height propio se comía
+   presupuesto de un bloque con alto disponible fijo-. Un cierre publica
+   menos datos que una venta, así que aquí el margen es más ancho, pero la
+   regla se deja igual por consistencia de familia. */
+.bloque { display: flex; flex-direction: column; flex: 1; width: 1080px;
+          background: var(--brand); justify-content: center; padding: 50px 70px;
+          line-height: 1.08; }
+
+.badge { font-family: Marcellus; font-size: 32px; letter-spacing: 10px; color: var(--on-brand); }
+
+/* Mismo truco que el resto de la familia: font-size:0 en el h1 colapsa el
+   espacio literal que deja values.ts entre palabras (join(' ')), y cada
+   .palabra/.palabra-fuerte pone su propio tamaño más el margen de 14px que
+   usaba Headline. El margen superior es del h1, no del badge: en el TSX vive
+   en el div que envuelve a Headline y se aplica siempre, tenga o no badge
+   encima. */
+.bloque h1 { font-family: Spectral; font-size: 0; color: var(--on-brand); margin-top: 20px; }
+.palabra, .palabra-fuerte { font-size: 56px; margin-right: 14px; }
+.palabra { font-weight: 400; }
+.palabra-fuerte { font-weight: 800; }
+
+.direccion { display: flex; align-items: center; margin-top: 24px; color: var(--on-brand); }
+.direccion span { font-family: Spectral; font-size: 30px; margin-left: 14px; }
+
+/* El pin va con máscara, igual que el resto de la familia: un único selector
+   de color por `currentColor`, heredado del `color` de .direccion. */
+.icono { display: block; width: 32px; height: 32px; flex-shrink: 0; background-color: currentColor;
+         -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+         -webkit-mask-position: center; mask-position: center;
+         -webkit-mask-size: contain; mask-size: contain; }
+.icono-pin {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'/%3E%3C/svg%3E");
+}
+
+/* Pie claro: el nombre y el logo. Con retrato el texto arranca después de él
+   -70 (margen) + 200 (tamaño) + 30 (aire) = 300- para que el círculo monte
+   sobre el pie y la cara quede junto al nombre en vez de apoyada en el borde
+   como si no hubiera cabido. Sin retrato el padding vuelve a 70. */
+.pie { display: flex; flex-shrink: 0; width: 1080px; height: 180px; background: var(--surface);
+       align-items: center; justify-content: space-between; padding: 0 70px 0 300px; }
+html.sin-foto-agente .pie { padding-left: 70px; }
+
+.agente { display: flex; flex-direction: column; }
+.nombre-agente { display: block; font-family: Spectral; font-weight: 800; font-size: 38px; color: var(--ink); }
+.telefono-agente { display: block; font-family: Marcellus; font-size: 28px; letter-spacing: 3px;
+                    color: var(--ink); margin-top: 6px; }
+
+.logo { width: 110px; height: 110px; object-fit: contain; }
+
+/* Monta SOBRE el pie, no apoyada en su borde, igual que el resto de la
+   familia: el anillo es del color del pie (surface), no de la marca, porque
+   es sobre el pie donde se posa. */
+.retrato { position: absolute; left: 70px; bottom: 106px; width: 200px; height: 200px;
+           border-radius: 50%; object-fit: cover; border: 8px solid var(--surface); }

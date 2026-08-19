@@ -1,0 +1,105 @@
+/* Editorial · nueva disponible — pocas fotos, manda el texto. Traducción de
+   editorial-shell.tsx: SOLO la foto y el pie tienen alto fijo; el bloque de
+   color se lleva TODO lo que sobra con flex:1 y centra su contenido dentro de
+   ese espacio. Un hueco es imposible: si la receta trae poco que contar, el
+   bloque no se encoge, se centra.
+   El pie es CLARO a propósito: ahí va el logo, y el logo se tiñe con el color
+   de marca — sobre el bloque de color desaparecería. */
+.pieza { display: flex; flex-direction: column; width: var(--w); height: var(--h);
+         background: var(--surface); position: relative; overflow: hidden; }
+
+/* Cuánto lienzo se lleva la foto, según cuánto texto trae la receta —esto es
+   `photoHeight(blocks)` del shell, vuelto clases de estado en vez de una
+   función. Cuanto menos hay que leer, más grande es la foto: una venta
+   completa (badge + titular + precio + dirección + specs = 5 bloques) se
+   queda en 600px, y el escenario Mínimo (badge + titular = 2 bloques, sin
+   precio ni dirección ni specs) sube a 700px. Comprobado en el editor
+   cambiando de escenario: la foto SÍ cambia de alto. */
+.foto { width: 1080px; height: 520px; flex-shrink: 0; object-fit: cover; }
+html.datos-1 .foto, html.datos-2 .foto, html.datos-3 .foto { height: 700px; }
+html.datos-4 .foto, html.datos-5 .foto { height: 600px; }
+
+/* line-height:1.08 aquí, no solo en el h1: satori (el TSX original) no
+   reserva el interlineado "normal" de la fuente real, así que un span sin
+   line-height propio salía compacto. Chrome sí lo hace -Spectral a 68px pesa
+   ~103px con "normal" en vez de ~73px-, y en el escenario "Titular de tres
+   líneas" con datos completos (badge+titular+precio+dirección+specs, 570px
+   disponibles) ese exceso desbordaba el bloque 31px por debajo del pie,
+   recortado en silencio por el overflow:hidden de .pieza. Heredar 1.08 aquí
+   iguala el criterio del h1 en todos los hijos sin repetirlo en cada clase. */
+.bloque { display: flex; flex-direction: column; flex: 1; width: 1080px;
+          background: var(--brand); justify-content: center; padding: 50px 70px;
+          line-height: 1.08; }
+
+.badge { font-family: Marcellus; font-size: 32px; letter-spacing: 10px; color: var(--on-brand); }
+
+/* Mismo truco que el resto de la familia: font-size:0 en el h1 colapsa el
+   espacio literal que deja values.ts entre palabras (join(' ')), y cada
+   .palabra/.palabra-fuerte pone su propio tamaño más el margen de 14px que
+   usaba Headline. El margen superior es del h1, no del badge: en el TSX vive
+   en el div que envuelve a Headline y se aplica siempre, tenga o no badge
+   encima. */
+.bloque h1 { font-family: Spectral; font-size: 0; color: var(--on-brand); margin-top: 20px; }
+.palabra, .palabra-fuerte { font-size: 56px; margin-right: 14px; }
+.palabra { font-weight: 400; }
+.palabra-fuerte { font-weight: 800; }
+
+.precio { display: block; font-family: Spectral; font-weight: 800; font-size: 68px;
+          color: var(--on-brand); margin-top: 20px; }
+
+.direccion { display: flex; align-items: center; margin-top: 24px; color: var(--on-brand); }
+.direccion span { font-family: Spectral; font-size: 30px; margin-left: 14px; }
+
+.specs { display: flex; gap: 44px; margin-top: 20px; }
+.specs:empty { display: none; }
+.stat { display: flex; align-items: center; gap: 12px; font-family: Spectral;
+        font-size: 31px; color: var(--on-brand); }
+
+/* Cada cifra va con su ícono, igual que StatRow: sin él la banda se lee como
+   una lista de texto y pierde el vistazo rápido que busca un feed. Máscara en
+   vez de SVG inline, como el resto de la familia mosaico/completa: un único
+   selector de color por `currentColor`. El del pin es más chico (32px) que
+   los de specs (40px), igual que en el TSX (Icon size=32 para la dirección,
+   StatRow los pinta a 40). */
+.icono { display: block; width: 40px; height: 40px; flex-shrink: 0; background-color: currentColor;
+         -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+         -webkit-mask-position: center; mask-position: center;
+         -webkit-mask-size: contain; mask-size: contain; }
+.direccion .icono { width: 32px; height: 32px; }
+.icono-pin {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'/%3E%3C/svg%3E");
+}
+.icono-regla {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h18M6 9v6M12 9v6M18 9v6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h18M6 9v6M12 9v6M18 9v6'/%3E%3C/svg%3E");
+}
+.icono-cama {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 18v-6h18v6M3 12V8h8v4M14 12V8h7v4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 18v-6h18v6M3 12V8h8v4M14 12V8h7v4'/%3E%3C/svg%3E");
+}
+.icono-bano {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12h16v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z M7 12V5a2 2 0 0 1 4 0'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12h16v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z M7 12V5a2 2 0 0 1 4 0'/%3E%3C/svg%3E");
+}
+
+/* Pie claro: el nombre y el logo. Con retrato el texto arranca después de él
+   -70 (margen) + 200 (tamaño) + 30 (aire) = 300- para que el círculo monte
+   sobre el pie y la cara quede junto al nombre en vez de apoyada en el borde
+   como si no hubiera cabido. Sin retrato el padding vuelve a 70. */
+.pie { display: flex; flex-shrink: 0; width: 1080px; height: 180px; background: var(--surface);
+       align-items: center; justify-content: space-between; padding: 0 70px 0 300px; }
+html.sin-foto-agente .pie { padding-left: 70px; }
+
+.agente { display: flex; flex-direction: column; }
+.nombre-agente { display: block; font-family: Spectral; font-weight: 800; font-size: 38px; color: var(--ink); }
+.telefono-agente { display: block; font-family: Marcellus; font-size: 28px; letter-spacing: 3px;
+                    color: var(--ink); margin-top: 6px; }
+
+.logo { width: 110px; height: 110px; object-fit: contain; }
+
+/* Monta SOBRE el pie, no apoyada en su borde, igual que el resto de la
+   familia: el anillo es del color del pie (surface), no de la marca, porque
+   es sobre el pie donde se posa. */
+.retrato { position: absolute; left: 70px; bottom: 106px; width: 200px; height: 200px;
+           border-radius: 50%; object-fit: cover; border: 8px solid var(--surface); }
