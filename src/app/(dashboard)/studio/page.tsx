@@ -43,6 +43,9 @@ export default async function StudioPage() {
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
           Imágenes y carruseles · fase de prueba, solo ITMANO
         </p>
+        <a href="/studio/plantillas" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
+          Editar diseños
+        </a>
       </div>
       <StudioTabs
         images={images}
