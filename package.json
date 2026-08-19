@@ -23,7 +23,8 @@
     "types:db": "node scripts/gen-db-types.mjs",
     "types:db:sandbox": "node scripts/gen-db-types.mjs sandbox",
     "test:business": "vitest run tests/business",
-    "studio:smoke": "node scripts/studio-render-smoke.mjs"
+    "studio:smoke": "node scripts/studio-render-smoke.mjs",
+    "studio:seed": "node scripts/seed-studio-templates.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

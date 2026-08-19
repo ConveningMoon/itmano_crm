@@ -1,0 +1,34 @@
+<main class="pieza">
+  <!-- Sin envolver en sección: el mosaico no existe sin foto de portada, así
+       que la clave suelta es lo que declara el slot como requerido. -->
+  <img class="hero" src="{{hero}}" alt="">
+  {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+
+  <div class="thumbs">
+    {{#thumb1}}<img src="{{thumb1}}" alt="">{{/thumb1}}
+    {{#thumb2}}<img src="{{thumb2}}" alt="">{{/thumb2}}
+    {{#thumb3}}<img src="{{thumb3}}" alt="">{{/thumb3}}
+  </div>
+
+  <div class="titular">
+    <span class="badge">{{badge}}</span>
+    <h1>{{&headlineRitmo}}</h1>
+    {{#address}}<p class="direccion">{{address}}</p>{{/address}}
+  </div>
+
+  <div class="banda specs">
+    {{#stat1}}<span class="stat"><i class="icono icono-regla"></i>{{stat1}}</span>{{/stat1}}
+    {{#stat2}}<span class="stat"><i class="icono icono-cama"></i>{{stat2}}</span>{{/stat2}}
+    {{#stat3}}<span class="stat"><i class="icono icono-bano"></i>{{stat3}}</span>{{/stat3}}
+  </div>
+
+  <div class="banda cierre">
+    {{#price}}<span class="precio">{{price}}</span>{{/price}}
+    <!-- Una sección de teléfono anidada dentro de la del agente no funciona:
+         las secciones no anidan (ver document.ts). El separador se oculta
+         con la clase de estado sin-telefono en vez de una segunda sección. -->
+    {{#agentName}}<span class="agente">{{agentName}}<span class="separador"> · </span>{{phone}}</span>{{/agentName}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>
