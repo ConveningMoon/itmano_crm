@@ -29,6 +29,19 @@ describe('templateValues', () => {
     expect(v.stat1).toBe('3 hab')
   })
 
+  it('nombra cada spec por su icono, no por su posicion', () => {
+    // Sin metros: bedrooms cae en la posicion 1 del array. Si el diseno
+    // pintara el icono de regla en stat1, saldria junto al numero de
+    // habitaciones — las nombradas atan el icono al dato, no al indice.
+    const v = templateValues(props({
+      stats: [{ icon: 'bed', value: '3 hab' }, { icon: 'bath', value: '2 baños' }],
+    }))
+    expect(v.statBedrooms).toBe('3 hab')
+    expect(v.statBathrooms).toBe('2 baños')
+    expect(v.statSqft).toBeUndefined()
+    expect('statSqft' in v).toBe(false)
+  })
+
   it('parte la fecha en dia y hora', () => {
     const v = templateValues(props({ when: '15 de agosto de 2026 · 11:00–14:00' }))
     expect(v.whenDay).toBe('15 de agosto de 2026')

@@ -25,6 +25,9 @@ const SLOT_OF: Record<string, SlotKey> = {
   stat1:      'stats',
   stat2:      'stats',
   stat3:      'stats',
+  statSqft:      'stats',
+  statBedrooms:  'stats',
+  statBathrooms: 'stats',
   logo:       'logo.tenant',
 }
 

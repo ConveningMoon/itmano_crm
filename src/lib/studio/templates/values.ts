@@ -42,6 +42,19 @@ export function templateValues(p: TemplateProps): Record<string, string> {
   }
 
   p.stats.slice(0, 3).forEach((s, i) => put(`stat${i + 1}`, s.value))
+  // Las nombradas atan el icono a SU dato, no a la posición: sqft, bedrooms y
+  // bathrooms son cada uno opcional por su cuenta (ver statsFor en
+  // template-props.ts), así que un listado sin metros deja bedrooms en la
+  // posición 1 — un diseño que pinte el icono de regla en stat1 pondría una
+  // regla junto al número de habitaciones. Las ordinales se quedan para los
+  // diseños que solo enumeran valores sin icono.
+  const STAT_KEY_OF_ICON: Record<string, string> = {
+    ruler: 'statSqft', bed: 'statBedrooms', bath: 'statBathrooms',
+  }
+  for (const s of p.stats) {
+    const key = STAT_KEY_OF_ICON[s.icon]
+    if (key) put(key, s.value)
+  }
   return v
 }
 
