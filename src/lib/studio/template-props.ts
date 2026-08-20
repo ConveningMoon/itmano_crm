@@ -1,9 +1,10 @@
 import 'server-only'
 import sharp from 'sharp'
 import { circleCrop } from './agent-photo'
+import { badgeFor } from './badges'
 import { formatDate, formatMoney } from './format'
 import type { StudioForm } from './recipes'
-import type { StudioBrand, StudioRecipe } from './types'
+import type { StudioBrand } from './types'
 import type { Stat, TemplateProps } from './templates/types'
 
 // Traduce el formulario + la marca + las fotos a lo que un template pinta.
@@ -11,18 +12,7 @@ import type { Stat, TemplateProps } from './templates/types'
 // mismas reglas de formato: una fecha o un precio no pueden verse distintos
 // según el diseño elegido.
 
-const BADGES: Record<StudioRecipe, string> = {
-  open_house:  'CASA ABIERTA',
-  new_listing: 'NUEVA DISPONIBLE',
-  sold:        'VENDIDA',
-  event:       'EVENTO',
-  open_prompt: '',
-}
-
-/** El encabezado de la receta. Es el DEFAULT: `badgeOf` respeta el escrito. */
-export function badgeFor(recipe: StudioRecipe): string {
-  return BADGES[recipe]
-}
+export { badgeFor }
 
 /** El encabezado que se pinta: el que escribió el agente, o el de la receta. */
 export function badgeOf(form: StudioForm): string {

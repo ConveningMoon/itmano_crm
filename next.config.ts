@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   // sharp ships a native binary; keep it as a real require() at runtime instead
   // of letting the bundler trace/link it (Turbopack's Windows junction-point
   // creation for it fails outright on some filesystems).
-  serverExternalPackages: ["sharp"],
+  serverExternalPackages: ["sharp", "puppeteer-core", "@sparticuz/chromium"],
   // The Carousel Engine compositor rasterizes bundled OFL fonts (opentype.js →
   // paths → sharp). Next's file tracer must copy the .ttf files into the
   // serverless function of EVERY route that composes a slide — fonts.ts reads
@@ -29,6 +29,13 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/admin/carousels": ["./src/lib/carousels/fonts/**"],
     "/api/cron/carousel-render": ["./src/lib/carousels/fonts/**"],
+    // El render del Estudio inyecta las fuentes como data URI: los .ttf tienen
+    // que viajar en el bundle de ESTA función, y public/ no se traza solo.
+    "/api/studio/render": ["./public/studio/fonts/**"],
+    // La server action de /studio/plantillas llama a samplePropsInlined, que lee
+    // las fotos de ejemplo de public/studio/fixtures para renderizar la miniatura
+    // al guardar. Mismo problema que la línea de arriba: public/ no se traza solo.
+    "/studio/plantillas": ["./public/studio/fixtures/**"],
   },
   experimental: {
     // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así

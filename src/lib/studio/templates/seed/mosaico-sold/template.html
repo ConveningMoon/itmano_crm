@@ -1,0 +1,30 @@
+<main class="pieza">
+  <!-- Sin envolver en sección: el mosaico no existe sin foto de portada. -->
+  <img class="hero" src="{{hero}}" alt="">
+  {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+
+  <div class="thumbs">
+    {{#thumb1}}<img src="{{thumb1}}" alt="">{{/thumb1}}
+    {{#thumb2}}<img src="{{thumb2}}" alt="">{{/thumb2}}
+    {{#thumb3}}<img src="{{thumb3}}" alt="">{{/thumb3}}
+  </div>
+
+  <div class="titular">
+    <!-- Aquí el badge sí es opcional (el TSX lo guarda con &&, no usa el
+         componente Badge común): un cierre puede publicarse sin insignia. -->
+    {{#badge}}<span class="badge">{{badge}}</span>{{/badge}}
+    <h1>{{&headlineRitmo}}</h1>
+    {{#address}}<p class="direccion">{{address}}</p>{{/address}}
+  </div>
+
+  <!-- El agente cierra la pieza en una sola banda alta: es lo que un cierre
+       vende de verdad. Nombre y teléfono son dos bloques independientes, no
+       uno combinado con separador, porque el TSX los renderiza como dos
+       condicionales hermanas. -->
+  <div class="banda cierre">
+    {{#agentName}}<span class="nombre-agente">{{agentName}}</span>{{/agentName}}
+    {{#phone}}<span class="telefono-agente">{{phone}}</span>{{/phone}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>

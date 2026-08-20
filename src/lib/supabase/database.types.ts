@@ -1925,6 +1925,7 @@ export type Database = {
           status: string
           style: string
           template: string | null
+          template_snapshot: Json | null
           tenant_id: string
           text_zone: string | null
           updated_at: string
@@ -1951,6 +1952,7 @@ export type Database = {
           status?: string
           style: string
           template?: string | null
+          template_snapshot?: Json | null
           tenant_id: string
           text_zone?: string | null
           updated_at?: string
@@ -1977,6 +1979,7 @@ export type Database = {
           status?: string
           style?: string
           template?: string | null
+          template_snapshot?: Json | null
           tenant_id?: string
           text_zone?: string | null
           updated_at?: string
@@ -2004,6 +2007,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      studio_templates: {
+        Row: {
+          aspects: string[]
+          created_at: string
+          css: string
+          hint: string
+          html: string
+          ideal_photos: number
+          key: string
+          label: string
+          recipes: string[]
+          slots: Json
+          thumb_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          aspects?: string[]
+          created_at?: string
+          css?: string
+          hint?: string
+          html?: string
+          ideal_photos?: number
+          key: string
+          label: string
+          recipes?: string[]
+          slots?: Json
+          thumb_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aspects?: string[]
+          created_at?: string
+          css?: string
+          hint?: string
+          html?: string
+          ideal_photos?: number
+          key?: string
+          label?: string
+          recipes?: string[]
+          slots?: Json
+          thumb_path?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       subscriptions: {
         Row: {

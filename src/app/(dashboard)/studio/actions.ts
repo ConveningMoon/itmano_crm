@@ -4,9 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { parseStudioForm, requireTemplate, referenceCount, usesAi, MAX_REFERENCES } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate, validateTemplateChoice, referenceCount, usesAi, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { generateStudioImage, recomposeStudioImage, renderTemplatePiece } from '@/lib/studio/generate'
 import { getStudioImage, STUDIO_BUCKET } from '@/lib/data/studio'
+import { listTemplates } from '@/lib/data/studio-templates'
 import type { ActionResult, StudioImage } from '@/lib/studio/types'
 
 // Cada action repite el guardia: la ruta no es la única puerta — una server
@@ -51,8 +52,12 @@ export async function createStudioImage(formData: FormData): Promise<ActionResul
   const parsed = parseStudioForm(parsedJson)
   if (!parsed.ok) return parsed
 
-  // Solo al CREAR: las piezas viejas sin template siguen recomponiéndose.
-  const noTemplate = requireTemplate(parsed.data)
+  const metas = await listTemplates()
+  const malaEleccion = validateTemplateChoice(parsed.data, metas)
+  if (malaEleccion) return malaEleccion
+
+  // Solo al CREAR: las piezas viejas sin diseño siguen recomponiéndose.
+  const noTemplate = requireTemplate(parsed.data, metas)
   if (noTemplate) return noTemplate
 
   const hero = await readHero(formData)
@@ -180,7 +185,7 @@ export async function previewStudioImage(formData: FormData): Promise<ActionResu
   if (!hero.ok) return hero
 
   try {
-    const png = await renderTemplatePiece({ ctx, form: parsed.data, generatedHero: hero.data })
+    const { png } = await renderTemplatePiece({ ctx, form: parsed.data, generatedHero: hero.data })
     return { ok: true, data: { dataUri: `data:image/png;base64,${png.toString('base64')}` } }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudo previsualizar' }

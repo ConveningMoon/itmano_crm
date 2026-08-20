@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
 import { DEFAULT_PALETTE } from './palettes'
-import { findTemplate, templatesForRecipe } from './templates/registry'
 import type { ActionResult } from './types'
+import type { TemplateMeta } from './templates/meta'
 
 // Validación por receta, PURA y sin dependencias de servidor: corre antes de
 // gastar un token. Es el contrato que impide que una generación empiece con
@@ -177,16 +177,6 @@ const PHOTO_RECIPES = ['open_house', 'new_listing', 'sold']
 const schema = z
   .discriminatedUnion('recipe', [openHouse, newListing, sold, event, openPrompt])
   .superRefine((v, ctx) => {
-    // El template, SI viene, tiene que existir y servir para esta receta. Que
-    // sea obligatorio o no NO se decide aquí: ver `requireTemplate` abajo.
-    if (v.template) {
-      const t = findTemplate(v.template)
-      if (!t) {
-        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no existe' })
-      } else if (!t.recipes.includes(v.recipe)) {
-        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no sirve para esta receta' })
-      }
-    }
     if (v.source_mode === 'photo') {
       if (!PHOTO_RECIPES.includes(v.recipe)) {
         ctx.addIssue({ code: 'custom', path: ['source_mode'], message: 'Usar la foto solo aplica a las recetas de casa' })
@@ -240,19 +230,51 @@ export function parseStudioForm(input: unknown): ActionResult<StudioForm> {
 }
 
 /**
- * Las piezas NUEVAS de casa se dibujan con un template. Esto es política de
- * producto y va aparte del esquema a propósito:
+ * El diseño elegido tiene que existir y servir para esta receta.
  *
- * las piezas creadas ANTES de los templates se hicieron con el compositor de
- * bandas y tienen `template` nulo. Recomponerlas o generar una variante vuelve a
- * pasar su `form_json` por `parseStudioForm` — si el esquema exigiera template,
- * esas piezas dejarían de poder recomponerse. Exigirlo solo al crear mantiene
- * el pasado utilizable sin abrir la puerta a piezas nuevas sin diseño.
+ * Salió del esquema zod cuando las plantillas pasaron a ser filas: el esquema
+ * es síncrono y lo usa también el cliente, así que no puede consultar la base.
+ * El llamador ya tiene el catálogo cargado y se lo pasa.
  */
-export function requireTemplate(form: StudioForm): { ok: false; error: string } | null {
-  // La condición es que la receta TENGA diseños, no que sea de casa: evento
-  // también los tiene, y "Mi Imagen" nunca los tendrá.
-  if (templatesForRecipe(form.recipe).length === 0) return null
+export function validateTemplateChoice(
+  form: StudioForm, metas: TemplateMeta[],
+): { ok: false; error: string } | null {
+  if (!form.template) return null
+  const t = metas.find(m => m.key === form.template)
+  if (!t) return { ok: false, error: 'Ese diseño no existe' }
+  if (!t.recipes.includes(form.recipe)) return { ok: false, error: 'Ese diseño no sirve para esta receta' }
+  return null
+}
+
+// Recetas que hoy tienen diseños sembrados y SIEMPRE deben exigirlo, tenga o
+// no filas el catálogo en este momento. Fija a propósito y no derivada de
+// `metas`: derivarla del catálogo es justo el bug que se arregla aquí — con
+// la tabla vacía (migración aplicada, seed olvidado) `metas` está vacío para
+// TODAS las recetas, y de ahí no se puede distinguir "esta receta no tiene
+// diseños todavía, por diseño" (Evento, Task 16 pendiente) de "el despliegue
+// se quedó a medias". Cuando Evento reciba sus diseños, se añade aquí.
+const RECIPES_WITH_TEMPLATES = ['open_house', 'new_listing', 'sold']
+
+/**
+ * Las piezas NUEVAS de casa se dibujan con un diseño. Es política de producto y
+ * va aparte del esquema a propósito: las piezas creadas antes de los diseños
+ * tienen `template` nulo, y recomponerlas vuelve a pasar su form_json por
+ * parseStudioForm — si el esquema lo exigiera, dejarían de poder recomponerse.
+ *
+ * Falla ruidosamente si el catálogo está vacío para una receta que debería
+ * tenerlo: sin esto, `generateStudioImage` seguía por el camino libre y
+ * devolvía una foto recortada sin texto ni marca, marcada "ready" y habiendo
+ * gastado presupuesto de IA — el único fallo silencioso de un despliegue con
+ * el seed olvidado.
+ */
+export function requireTemplate(
+  form: StudioForm, metas: TemplateMeta[],
+): { ok: false; error: string } | null {
+  if (!RECIPES_WITH_TEMPLATES.includes(form.recipe)) return null
   if (form.template) return null
+  const hayDisenosParaLaReceta = metas.some(m => m.recipes.includes(form.recipe))
+  if (!hayDisenosParaLaReceta) {
+    return { ok: false, error: 'No hay ningún diseño cargado para esta receta todavía. Avisa antes de generar.' }
+  }
   return { ok: false, error: 'Elige un diseño' }
 }

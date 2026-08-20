@@ -2,9 +2,8 @@
 
 import { useState } from 'react'
 import { Maximize2 } from 'lucide-react'
-import { templateFit } from '@/lib/studio/templates/registry'
+import { templateFit, type TemplateMeta } from '@/lib/studio/templates/meta'
 import { Lightbox } from './lightbox'
-import type { StudioTemplate } from '@/lib/studio/templates/types'
 
 // Nadie elige un diseño de una lista de nombres. Tres tarjetas con su miniatura,
 // y el aviso de encaje cruzando lo que el diseño necesita con lo que el agente
@@ -14,7 +13,7 @@ import type { StudioTemplate } from '@/lib/studio/templates/types'
 // decisión; lo que no puede es enterarse al final.
 
 export function TemplatePicker({ templates, value, onChange, photoCount, hasAgentPhoto, showFit }: {
-  templates:     StudioTemplate[]
+  templates:     TemplateMeta[]
   value:         string
   onChange:      (key: string) => void
   photoCount:    number
@@ -23,7 +22,7 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
    *  un aviso, es ruido — todavía no has elegido nada. */
   showFit:       boolean
 }) {
-  const [zoom, setZoom] = useState<StudioTemplate | null>(null)
+  const [zoom, setZoom] = useState<TemplateMeta | null>(null)
 
   if (templates.length === 0) {
     return (
@@ -66,12 +65,14 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
               }}
             >
               <span style={{ display: 'block', position: 'relative' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- reason: asset estático del repo; next/image no aporta aquí */}
-                <img
-                  src={`/studio/templates/${t.key}.webp`}
-                  alt={t.label}
-                  style={{ width: '100%', display: 'block', borderRadius: '6px', aspectRatio: '4 / 5', objectFit: 'cover' }}
-                />
+                {t.thumbUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- reason: el bucket sirve el PNG; next/image no aporta en una tarjeta de 130px
+                  <img src={t.thumbUrl} alt={t.label}
+                       style={{ width: '100%', display: 'block', borderRadius: '6px', aspectRatio: '4 / 5', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ display: 'block', width: '100%', aspectRatio: '4 / 5', borderRadius: '6px',
+                                 background: 'var(--bg-subtle, var(--bg-surface))' }} />
+                )}
                 {/* Ver en grande sin elegir: una tarjeta de 130px no permite
                     juzgar un diseño de 1080×1350. */}
                 <span
@@ -106,9 +107,9 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
         })}
       </div>
 
-      {zoom && (
+      {zoom?.thumbUrl && (
         <Lightbox
-          src={`/studio/templates/${zoom.key}.webp`}
+          src={zoom.thumbUrl}
           alt={`Diseño ${zoom.label}`}
           onClose={() => setZoom(null)}
         />

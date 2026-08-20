@@ -1,0 +1,6 @@
+{
+  "label": "Mosaico",
+  "hint": "Cuatro fotos o más",
+  "recipes": ["new_listing"],
+  "aspects": ["4:5"]
+}

@@ -335,7 +335,7 @@ export function buildTemplateDocument(input: TemplateDocumentInput): string {
 npx vitest run tests/studio/document.test.ts
 ```
 
-Esperado: PASS, 18 tests.
+Esperado: PASS, todos los tests del archivo en verde.
 
 - [ ] **Step 5: Commit**
 
@@ -1296,7 +1296,7 @@ Crea `src/app/api/studio/render/route.ts`:
 ```ts
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { renderDocumentToPng } from '@/lib/studio/render/chrome'
+import { renderDocumentToPng, studioFontFaceCss } from '@/lib/studio/render/chrome'
 
 // El ÚNICO sitio del proyecto que importa Chromium. Vive aparte para que sus
 // ~50 MB y su arranque en frío no viajen en el bundle de /studio ni en el del
@@ -1327,7 +1327,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const png = await renderDocumentToPng(parsed.data.document, {
+    // Las fuentes las pone la ruta, no el llamador: los .ttf viven en el bundle
+    // de ESTA función (outputFileTracingIncludes) y nadie más tiene por qué
+    // cargar con sus bytes. El documento llega con `fontFaceCss: ''` y sale con
+    // las @font-face delante de todo lo demás.
+    const withFonts = parsed.data.document.replace('<style>', `<style>${studioFontFaceCss()}`)
+    const png = await renderDocumentToPng(withFonts, {
       width: parsed.data.width, height: parsed.data.height,
     })
     return new NextResponse(new Uint8Array(png), {
@@ -1449,7 +1454,7 @@ En una terminal `npm run dev`; en otra:
 npm run studio:smoke
 ```
 
-Esperado: `... bytes · PNG: true`. Abre `studio-smoke.png`: fondo azul oscuro, "Hola · sin precio" centrado en Spectral. Si el texto sale en una fuente del sistema, las `@font-face` no llegaron; si el proceso se queda colgado, revisa `CHROME_EXECUTABLE_PATH`.
+Esperado: `... bytes · PNG: true`. Abre `studio-smoke.png`: fondo azul oscuro, "Hola · sin precio" centrado, en la serif de Spectral — el documento del script NO declara `@font-face`, así que si el texto sale con serifas es la ruta inyectándolas, que es justo lo que hay que comprobar. Si sale en Arial o Times, `studioFontFaceCss()` no encontró los `.ttf` en `public/studio/fonts`. Si el proceso se queda colgado, revisa `CHROME_EXECUTABLE_PATH`.
 
 - [ ] **Step 9: Commit**
 
@@ -2016,29 +2021,17 @@ La herramienta. Después de esta tarea se puede diseñar; las plantillas todaví
 - Modify: `src/app/(dashboard)/studio/page.tsx` (enlace al editor)
 
 **Interfaces:**
-- Consumes: `listTemplates`, `getTemplate`, `saveTemplate`, `saveTemplateThumb` (Task 8); `buildTemplateDocument` (Task 1); `templateValues`, `templateFlags`, `paletteVars` (Task 4); `sampleProps` / `samplePropsInlined` (Task 9); `fontFaceCssFromUrls` (Task 5); `renderDocument` (Task 6); `studioFontFaceCss` — **no**: esa vive en chrome.ts y el editor no debe importarla; la ruta de render ya inyecta las fuentes por su cuenta.
+- Consumes: `listTemplates`, `getTemplate`, `saveTemplate`, `saveTemplateThumb` (Task 8); `buildTemplateDocument` (Task 1); `templateValues`, `templateRawValues`, `templateFlags`, `paletteVars` (Task 4); `sampleProps` / `samplePropsInlined` (Task 9); `fontFaceCssFromUrls` (Task 5); `renderDocument` (Task 6).
+- **No** importes `studioFontFaceCss`: vive en `chrome.ts`, que arrastra Chromium. La ruta de render ya inyecta las fuentes por su cuenta (Task 6), y por eso todo lo que arma un documento para el servidor pasa `fontFaceCss: ''`.
 - Produces: `saveTemplateAction(input: TemplateInput): Promise<ActionResult<{ key: string; thumbUrl: string | null }>>`
 
-> **Sobre las fuentes en el render:** `buildTemplateDocument` recibe `fontFaceCss`. Para el documento que va a Chrome, quien lo arma es el servidor y usa `studioFontFaceCss()` de `chrome.ts` — pero ese módulo lo importa solo la ruta. Solución: la ruta `/api/studio/render` recibe el documento **sin** fuentes y las inyecta ella misma. Modifica `src/app/api/studio/render/route.ts` para insertar `studioFontFaceCss()` justo después de `<style>`:
->
-> ```ts
-> const withFonts = parsed.data.document.replace('<style>', `<style>${studioFontFaceCss()}`)
-> const png = await renderDocumentToPng(withFonts, { width: parsed.data.width, height: parsed.data.height })
-> ```
->
-> y añade el import `import { renderDocumentToPng, studioFontFaceCss } from '@/lib/studio/render/chrome'`. Así ningún llamador necesita los bytes de las fuentes.
+> **Las dos vías de las fuentes.** En la vista previa el iframe las pide por URL
+> (`fontFaceCssFromUrls()`, que la página pasa como prop). En el render las
+> inyecta la ruta con `studioFontFaceCss()` (Task 6), así que **todo documento
+> destinado al servidor se arma con `fontFaceCss: ''`**. Mismos archivos y mismos
+> nombres de familia por los dos caminos: lo único que cambia es el transporte.
 
-- [ ] **Step 1: Ajustar la ruta de render para que inyecte las fuentes**
-
-Aplica el cambio de la nota anterior y comprueba con:
-
-```bash
-npm run studio:smoke
-```
-
-Esperado: sigue en verde (el smoke ya no necesita declarar fuentes).
-
-- [ ] **Step 2: La server action**
+- [ ] **Step 1: La server action**
 
 Crea `src/app/(dashboard)/studio/plantillas/actions.ts`:
 
@@ -2116,7 +2109,7 @@ export async function saveTemplateAction(input: unknown): Promise<ActionResult<{
 }
 ```
 
-- [ ] **Step 3: La página servidor**
+- [ ] **Step 2: La página servidor**
 
 Crea `src/app/(dashboard)/studio/plantillas/page.tsx`:
 
@@ -2156,7 +2149,7 @@ export default async function TemplatesPage({ searchParams }: {
 }
 ```
 
-- [ ] **Step 4: El editor cliente**
+- [ ] **Step 3: El editor cliente**
 
 Crea `src/app/(dashboard)/studio/plantillas/editor.tsx`:
 
@@ -2343,7 +2336,7 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
 
 Nota sobre `sandbox=""`: deja el iframe sin permisos, incluido JavaScript. Es el mismo cierre que la decisión 14 aplica en el servidor, así que la vista previa tampoco puede ejecutar nada que el render no ejecutaría.
 
-- [ ] **Step 5: Enlazar desde el Estudio**
+- [ ] **Step 4: Enlazar desde el Estudio**
 
 En `src/app/(dashboard)/studio/page.tsx`, dentro del `<div style={{ marginBottom: '24px' }}>` de la cabecera y después del `<p>`, añade:
 
@@ -2353,7 +2346,7 @@ En `src/app/(dashboard)/studio/page.tsx`, dentro del `<div style={{ marginBottom
         </a>
 ```
 
-- [ ] **Step 6: Probarlo a mano**
+- [ ] **Step 5: Probarlo a mano**
 
 ```bash
 npm run dev
@@ -2365,14 +2358,14 @@ Entra con `/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=dj.vergara@hotmail.com
 3. Guardar con clave `prueba-borrador`, receta "Nueva disponible": responde sin error y la miniatura aparece en el bucket (`templates/prueba-borrador.png`).
 4. Borra la fila de prueba por el MCP: `delete from studio_templates where key = 'prueba-borrador';`
 
-- [ ] **Step 7: Verificar y commitear**
+- [ ] **Step 6: Verificar y commitear**
 
 ```bash
 npm run lint && npx tsc --noEmit && npm run test:unit
 ```
 
 ```bash
-git add "src/app/(dashboard)/studio/plantillas" "src/app/(dashboard)/studio/page.tsx" src/app/api/studio/render/route.ts
+git add "src/app/(dashboard)/studio/plantillas" "src/app/(dashboard)/studio/page.tsx"
 git commit -m "feat(studio): editor de plantillas con vista previa en vivo"
 ```
 

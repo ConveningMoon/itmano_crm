@@ -1,0 +1,42 @@
+<main class="pieza">
+  <!-- Sin envolver en sección: el mosaico no existe sin foto de portada, así
+       que la clave suelta es lo que declara el slot como requerido. -->
+  <img class="hero" src="{{hero}}" alt="">
+  {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+
+  <div class="thumbs">
+    {{#thumb1}}<img src="{{thumb1}}" alt="">{{/thumb1}}
+    {{#thumb2}}<img src="{{thumb2}}" alt="">{{/thumb2}}
+    {{#thumb3}}<img src="{{thumb3}}" alt="">{{/thumb3}}
+  </div>
+
+  <div class="titular">
+    <span class="badge">{{badge}}</span>
+    <h1>{{&headlineRitmo}}</h1>
+    <!-- Donde el mosaico de venta pone la dirección, este pone cuándo: día y
+         hora ya llegan partidos como dos claves independientes (values.ts),
+         así que no hace falta anidar una sección de hora dentro de la del día. -->
+    {{#whenDay}}<span class="fecha-dia">{{whenDay}}</span>{{/whenDay}}
+    {{#whenTime}}<span class="fecha-hora">{{whenTime}}</span>{{/whenTime}}
+  </div>
+
+  <!-- La dirección baja a la primera banda, que en la venta llevaba las specs:
+       una casa abierta no las tiene, y el dónde es la instrucción, no un
+       detalle del listado. -->
+  <div class="banda direccion-banda">
+    {{#address}}<i class="icono icono-pin"></i><span class="direccion">{{address}}</span>{{/address}}
+  </div>
+
+  <div class="banda cierre">
+    <!-- El TSX original (mosaico-open-house.tsx) NO condiciona esta banda al
+         nombre del agente: solo filtra qué hay ([agentName, phone].filter
+         (Boolean)), así que el teléfono se pinta aunque falte el nombre. Nombre
+         y teléfono son dos secciones independientes -sin anidar, ver
+         document.ts- y el separador se apaga con la clase de estado que
+         corresponda (sin-agente o sin-telefono) en vez de vivir dentro de una
+         sección. -->
+    <span class="agente">{{#agentName}}{{agentName}}{{/agentName}}<span class="separador"> · </span>{{#phone}}{{phone}}{{/phone}}</span>
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>

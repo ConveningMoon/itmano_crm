@@ -68,3 +68,6 @@ docs/superpowers/
 # db — local Supabase CLI state only (migrations and seeds are tracked)
 supabase/.branches/
 supabase/.temp/
+
+# Estudio — salida del humo manual de /api/studio/render (npm run studio:smoke)
+studio-smoke.png

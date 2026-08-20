@@ -1,0 +1,29 @@
+<main class="pieza">
+  <!-- Sin envolver en sección, igual que en mosaico-listing: el diseño no
+       existe sin la foto de portada, así que la clave suelta es lo que
+       declara el slot como requerido. -->
+  <img class="hero" src="{{hero}}" alt="">
+  <div class="velo"></div>
+  {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+
+  <div class="texto">
+    <span class="badge">{{badge}}</span>
+    <h1>{{&headlineRitmo}}</h1>
+    {{#price}}<span class="precio">{{price}}</span>{{/price}}
+    {{#address}}<span class="direccion">{{address}}</span>{{/address}}
+    <!-- Nombradas, no ordinales: sqft, bedrooms y bathrooms son opcionales
+         cada una por su cuenta, así que el icono va siempre con SU dato, sin
+         indirección por posición. Sin espacio entre las tres secciones para
+         que ".specs:empty" funcione de verdad cuando ninguna tiene dato: un
+         hueco de texto entre ellas dejaría el div con un nodo de texto y
+         nunca estaría "vacío". -->
+    <div class="specs">{{#statSqft}}<span class="stat"><i class="icono icono-regla"></i>{{statSqft}}</span>{{/statSqft}}{{#statBedrooms}}<span class="stat"><i class="icono icono-cama"></i>{{statBedrooms}}</span>{{/statBedrooms}}{{#statBathrooms}}<span class="stat"><i class="icono icono-bano"></i>{{statBathrooms}}</span>{{/statBathrooms}}</div>
+    <!-- El teléfono va suelto dentro de la sección del agente, no anidado en
+         una sección propia: las secciones no anidan (ver document.ts). El
+         separador vive en su propio span y una clase de estado
+         (sin-telefono) lo oculta cuando no hay teléfono. -->
+    {{#agentName}}<span class="agente">{{agentName}}<span class="separador"> · </span>{{phone}}</span>{{/agentName}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>

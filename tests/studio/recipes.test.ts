@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseStudioForm, requireTemplate, referenceCount, usesAi,
+  parseStudioForm, requireTemplate, validateTemplateChoice, referenceCount, usesAi,
   MAX_REFERENCES, BADGE_MAX, STAT_LABEL_MAX,
 } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
 import { DEFAULT_PALETTE, paletteRow } from '@/lib/studio/palettes'
+import type { TemplateMeta } from '@/lib/studio/templates/meta'
 
 const base = { style: 'editorial', aspect: '4:5', palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } }
 
@@ -209,6 +210,21 @@ describe('styles', () => {
 describe('template y headline', () => {
   const listing = { ...base, recipe: 'new_listing', address: '9 Bay St', price: 450000 }
 
+  // Catálogo mínimo para probar validateTemplateChoice/requireTemplate sin BD:
+  // ambas funciones son puras y reciben el catálogo ya cargado.
+  const metas: TemplateMeta[] = [
+    {
+      key: 'mosaico-listing', label: 'Mosaico', hint: '',
+      recipes: ['new_listing'], aspects: ['4:5'],
+      slots: { required: [], optional: [] }, idealPhotos: 0, thumbUrl: null,
+    },
+    {
+      key: 'mosaico-open-house', label: 'Mosaico casa abierta', hint: '',
+      recipes: ['open_house'], aspects: ['4:5'],
+      slots: { required: [], optional: [] }, idealPhotos: 0, thumbUrl: null,
+    },
+  ]
+
   it('el esquema acepta una receta de casa sin diseño: las piezas viejas se recomponen', () => {
     // Exigir el template en el esquema dejaría sin recomponer las piezas hechas
     // antes de los templates, que tienen template nulo en form_json.
@@ -219,7 +235,7 @@ describe('template y headline', () => {
     const r = parseStudioForm(listing)
     expect(r.ok).toBe(true)
     if (r.ok) {
-      const denied = requireTemplate(r.data)
+      const denied = requireTemplate(r.data, metas)
       expect(denied).not.toBeNull()
       expect(denied!.error).toContain('diseño')
     }
@@ -228,13 +244,17 @@ describe('template y headline', () => {
   it('event y open_prompt nunca exigen diseño', () => {
     const r = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
     expect(r.ok).toBe(true)
-    if (r.ok) expect(requireTemplate(r.data)).toBeNull()
+    if (r.ok) expect(requireTemplate(r.data, metas)).toBeNull()
   })
 
   it('rechaza una clave de diseño inventada', () => {
-    const r = parseStudioForm({ ...listing, template: 'no-existe' })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toContain('diseño')
+    const r = parseStudioForm(listing)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const denied = validateTemplateChoice({ ...r.data, template: 'no-existe' }, [])
+      expect(denied).not.toBeNull()
+      expect(denied!.error).toContain('diseño')
+    }
   })
 
   it('event y open_prompt no piden diseño', () => {
@@ -242,8 +262,12 @@ describe('template y headline', () => {
   })
 
   it('acepta un diseño que declara esa receta y rechaza uno que no', () => {
-    expect(parseStudioForm({ ...listing, template: 'mosaico-listing' }).ok).toBe(true)
-    expect(parseStudioForm({ ...listing, template: 'mosaico-open-house' }).ok).toBe(false)
+    const r = parseStudioForm(listing)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(validateTemplateChoice({ ...r.data, template: 'mosaico-listing' }, metas)).toBeNull()
+      expect(validateTemplateChoice({ ...r.data, template: 'mosaico-open-house' }, metas)).not.toBeNull()
+    }
   })
 
   it('headline es opcional y se limita a 60 caracteres', () => {

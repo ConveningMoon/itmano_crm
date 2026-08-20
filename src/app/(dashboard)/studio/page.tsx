@@ -1,6 +1,7 @@
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { getStudioImages, getPropertyOptions, getAgentOptions, getStudioBrand } from '@/lib/data/studio'
+import { listTemplates } from '@/lib/data/studio-templates'
 import { getBrandProfiles, getRecentJobs, getCarouselCosts, getJobWithSlides } from '@/lib/data/carousels'
 import { V2_COPY_RULES } from '@/lib/carousels/brand'
 import { CarouselsTabs } from '../admin/carousels/carousels-tabs'
@@ -26,10 +27,11 @@ export default async function StudioPage() {
       ])
     : [[], [], [], null]
 
-  const [brands, recentJobs, costs] = await Promise.all([
+  const [brands, recentJobs, costs, templates] = await Promise.all([
     getBrandProfiles(),
     getRecentJobs(),
     getCarouselCosts(),
+    listTemplates(),
   ])
   // Auto-cargar el último carrusel en su tab (sin espera en el cliente).
   const initialJob = recentJobs.length ? await getJobWithSlides(recentJobs[0].id) : null
@@ -43,11 +45,15 @@ export default async function StudioPage() {
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
           Imágenes y carruseles · fase de prueba, solo ITMANO
         </p>
+        <a href="/studio/plantillas" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
+          Editar diseños
+        </a>
       </div>
       <StudioTabs
         images={images}
         properties={properties}
         agents={agents}
+        templates={templates}
         tenantColor={brand?.primary_color ?? '#1B2A41'}
         carousels={
           <CarouselsTabs
