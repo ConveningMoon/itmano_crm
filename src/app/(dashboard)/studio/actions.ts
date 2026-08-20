@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
+import { parseStudioForm, requireTemplate, referenceCount, usesAi, MAX_REFERENCES } from '@/lib/studio/recipes'
 import { generateStudioImage, recomposeStudioImage, renderTemplatePiece } from '@/lib/studio/generate'
 import { getStudioImage, STUDIO_BUCKET } from '@/lib/data/studio'
 import type { ActionResult, StudioImage } from '@/lib/studio/types'
@@ -17,6 +17,22 @@ async function gate() {
 }
 
 const MAX_REFERENCE_BYTES = 8 * 1024 * 1024
+
+/**
+ * La imagen principal subida a mano.
+ *
+ * Es la tercera forma de llenar ese hueco, junto a las fotos de la propiedad y
+ * la escena generada. Existe porque un agente que YA tiene la foto no debería
+ * pagar por que un modelo se la invente ni tener que dar de alta una propiedad
+ * para publicar un evento.
+ */
+async function readHero(formData: FormData): Promise<{ ok: true; data: Buffer | null } | { ok: false; error: string }> {
+  const file = formData.get('hero')
+  if (!(file instanceof File) || file.size === 0) return { ok: true, data: null }
+  if (file.size > MAX_REFERENCE_BYTES) return { ok: false, error: 'La imagen principal supera los 8 MB' }
+  if (!file.type.startsWith('image/')) return { ok: false, error: 'La imagen principal debe ser una imagen' }
+  return { ok: true, data: Buffer.from(await file.arrayBuffer()) }
+}
 
 /**
  * Genera una imagen. Recibe FormData porque la referencia es un archivo; el
@@ -39,6 +55,9 @@ export async function createStudioImage(formData: FormData): Promise<ActionResul
   const noTemplate = requireTemplate(parsed.data)
   if (noTemplate) return noTemplate
 
+  const hero = await readHero(formData)
+  if (!hero.ok) return hero
+
   const files = formData.getAll('reference').filter((f): f is File => f instanceof File && f.size > 0)
   if (files.length > MAX_REFERENCES) {
     return { ok: false, error: `Como máximo ${MAX_REFERENCES} imágenes de referencia` }
@@ -56,7 +75,7 @@ export async function createStudioImage(formData: FormData): Promise<ActionResul
     return { ok: false, error: 'No llegaron las imágenes de referencia' }
   }
 
-  const result = await generateStudioImage({ ctx, form: parsed.data, references })
+  const result = await generateStudioImage({ ctx, form: parsed.data, references, heroUpload: hero.data })
   if (result.ok) revalidatePath('/studio')
   return result
 }
@@ -151,9 +170,17 @@ export async function previewStudioImage(formData: FormData): Promise<ActionResu
   if (!parsed.data.template) {
     return { ok: false, error: 'La previsualización solo existe para las piezas con diseño' }
   }
+  // Previsualizar es gratis e ilimitado justo porque no llama a nada. Con una
+  // escena generada, cada vista costaría dinero.
+  if (usesAi(parsed.data)) {
+    return { ok: false, error: 'Con escena generada no hay previsualización: cada intento tiene costo' }
+  }
+
+  const hero = await readHero(formData)
+  if (!hero.ok) return hero
 
   try {
-    const png = await renderTemplatePiece({ ctx, form: parsed.data })
+    const png = await renderTemplatePiece({ ctx, form: parsed.data, generatedHero: hero.data })
     return { ok: true, data: { dataUri: `data:image/png;base64,${png.toString('base64')}` } }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudo previsualizar' }

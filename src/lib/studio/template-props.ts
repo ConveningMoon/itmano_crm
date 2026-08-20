@@ -15,12 +15,18 @@ const BADGES: Record<StudioRecipe, string> = {
   open_house:  'CASA ABIERTA',
   new_listing: 'NUEVA DISPONIBLE',
   sold:        'VENDIDA',
-  event:       '',
+  event:       'EVENTO',
   open_prompt: '',
 }
 
+/** El encabezado de la receta. Es el DEFAULT: `badgeOf` respeta el escrito. */
 export function badgeFor(recipe: StudioRecipe): string {
   return BADGES[recipe]
+}
+
+/** El encabezado que se pinta: el que escribió el agente, o el de la receta. */
+export function badgeOf(form: StudioForm): string {
+  return form.badge || badgeFor(form.recipe)
 }
 
 /** El titular del agente, o uno derivado del hecho si no lo escribió. */
@@ -30,30 +36,49 @@ export function defaultHeadline(form: StudioForm): string {
     case 'open_house':  return 'Casa abierta este fin de semana'
     case 'new_listing': return 'Nueva casa disponible'
     case 'sold':        return 'Otra familia en su nuevo hogar'
+    // El título ES el titular de un evento: no hay un segundo campo que
+    // compita con él ni un texto por defecto que tenga sentido inventar.
+    case 'event':       return form.title
     default:            return ''
   }
 }
 
+// Las etiquetas por defecto. "sqft" no significa nada fuera de Estados Unidos y
+// "hab" no es lo que escribiría una agencia de Barcelona, así que cada una se
+// puede reescribir desde el formulario.
+const STAT_LABELS = { sqft: 'sqft', bedrooms: 'hab', bathrooms: 'baños' }
+
 export function statsFor(form: StudioForm): Stat[] {
   if (form.recipe !== 'new_listing') return []
   const out: Stat[] = []
-  if (form.sqft !== undefined)      out.push({ icon: 'ruler', value: `${form.sqft.toLocaleString('en-US')} sqft` })
-  if (form.bedrooms !== undefined)  out.push({ icon: 'bed',   value: `${form.bedrooms} hab` })
-  if (form.bathrooms !== undefined) out.push({ icon: 'bath',  value: `${form.bathrooms} baños` })
+  if (form.sqft !== undefined) {
+    out.push({ icon: 'ruler', value: `${form.sqft.toLocaleString('en-US')} ${form.sqft_label ?? STAT_LABELS.sqft}` })
+  }
+  if (form.bedrooms !== undefined) {
+    out.push({ icon: 'bed', value: `${form.bedrooms} ${form.bedrooms_label ?? STAT_LABELS.bedrooms}` })
+  }
+  if (form.bathrooms !== undefined) {
+    out.push({ icon: 'bath', value: `${form.bathrooms} ${form.bathrooms_label ?? STAT_LABELS.bathrooms}` })
+  }
   return out
 }
 
-/** La cifra, solo cuando la receta la muestra. Vendida puede ocultarla. */
+/**
+ * La cifra, solo donde la receta la publica.
+ *
+ * Un cierre NO la publica: los tres diseños de "vendida" se llenaban de huecos
+ * alrededor de un dato que casi ningún agente enseña, así que dejó de pedirse.
+ */
 export function priceFor(form: StudioForm): string | null {
   if (form.recipe === 'new_listing') return formatMoney(form.price)
-  if (form.recipe === 'sold' && form.show_price && form.price !== undefined) return formatMoney(form.price)
   return null
 }
 
-/** Fecha y horario: el dato dominante de una casa abierta. */
+/** Fecha y horario: el dato dominante de una casa abierta y de un evento. */
 export function whenFor(form: StudioForm): string | null {
-  if (form.recipe !== 'open_house') return null
-  return `${formatDate(form.date)} · ${form.time_start}–${form.time_end}`
+  if (form.recipe === 'open_house') return `${formatDate(form.date)} · ${form.time_start}–${form.time_end}`
+  if (form.recipe === 'event')      return `${formatDate(form.date)} · ${form.time_start}`
+  return null
 }
 
 /** satori no debe hacer red: las imágenes entran ya codificadas. */
@@ -134,6 +159,9 @@ export async function buildTemplateProps(params: {
   brand:      StudioBrand
   photoUrls:  string[]
   agentPhoto: { url: string; cutout: boolean } | null
+  /** La escena generada con IA, cuando no se eligió propiedad. Entra como
+   *  primera foto: para el diseño es el hero, venga de donde venga. */
+  generatedHero?: Buffer | null
 }): Promise<TemplateProps> {
   const { form, brand } = params
 
@@ -143,6 +171,11 @@ export async function buildTemplateProps(params: {
     .filter((b): b is Buffer => b !== null)
   const photos = (await Promise.all(raw.map(normalizePhoto)))
     .filter((u): u is string => u !== null)
+
+  if (params.generatedHero) {
+    const uri = await normalizePhoto(params.generatedHero)
+    if (uri) photos.unshift(uri)
+  }
 
   let agentPhoto: string | null = null
   if (params.agentPhoto) {
@@ -168,10 +201,12 @@ export async function buildTemplateProps(params: {
     headline:    defaultHeadline(form),
     price:       priceFor(form),
     when:        whenFor(form),
-    address:     'address' in form ? form.address : null,
+    // El evento no tiene dirección sino LUGAR, que ocupa el mismo hueco.
+    address:     form.recipe === 'event' ? form.venue : ('address' in form ? form.address : null),
     phone:       brand.agent_phone,
-    cta:         form.recipe === 'sold' ? (form.note ?? null) : null,
-    badge:       badgeFor(form.recipe),
+    // Cómo apuntarse a un evento. La nota de un cierre se retiró del formulario.
+    cta:         form.recipe === 'event' ? (form.signup ?? null) : null,
+    badge:       badgeOf(form),
     stats:       statsFor(form),
     agentName:   brand.agent_name,
     // Los colores ya vienen por rol desde el formulario; aquí no se reinterpreta

@@ -45,6 +45,7 @@ async function photo(name: string): Promise<string> {
 async function props(recipe: StudioRecipe, over: Partial<TemplateProps> = {}): Promise<TemplateProps> {
   const esVenta  = recipe === 'new_listing'
   const esCierre = recipe === 'sold'
+  const esEvento = recipe === 'event'
 
   return {
     heroPhoto:   await photo('casa-fachada'),
@@ -54,14 +55,20 @@ async function props(recipe: StudioRecipe, over: Partial<TemplateProps> = {}): P
     agentPhoto:  await photo('agente-ejemplo'),
     logo:        await logoFixture(),
     headline:    esCierre ? 'Otra familia en su nuevo hogar'
+               : esEvento ? 'Seminario para compradores primerizos'
                : recipe === 'open_house' ? 'Te esperamos este sábado'
                : 'Casa elegante y familiar en venta',
-    // Casa abierta no lleva cifra; el cierre la lleva solo si el agente la publica.
-    price:       esVenta || esCierre ? '$274,400' : null,
-    when:        recipe === 'open_house' ? '15 de agosto de 2026 · 11:00–14:00' : null,
-    address:     '1909 Ocean View Avenue, Norfolk, VA',
+    // Solo una venta publica cifra: un cierre dejó de hacerlo, una casa abierta
+    // nunca la tuvo y un evento dejó de pedirla.
+    price:       esVenta ? '$274,400' : null,
+    when:        recipe === 'open_house' ? '15 de agosto de 2026 · 11:00–14:00'
+               : esEvento ? '1 de septiembre de 2026 · 18:00'
+               : null,
+    // En un evento este hueco lo ocupa el LUGAR.
+    address:     esEvento ? 'Centro Comunitario Ghent' : '1909 Ocean View Avenue, Norfolk, VA',
     phone:       '+1 757 555 0199',
-    cta:         esCierre ? 'Vendida en 9 días' : null,
+    // La nota del cierre se retiró; en un evento el hueco lo ocupa el registro.
+    cta:         esEvento ? 'Regístrate en itmano.com/eventos' : null,
     badge:       badgeFor(recipe),
     // Las specs solo existen en la receta de venta: statsFor las devuelve vacías
     // para las otras dos.

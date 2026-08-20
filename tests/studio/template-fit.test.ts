@@ -8,8 +8,19 @@ describe('registro de templates', () => {
     }
   })
 
-  it('event y open_prompt no tienen diseños: usan el compositor de bandas', () => {
-    expect(templatesForRecipe('event')).toHaveLength(0)
+  it('los tres diseños de evento tienen imagen principal', () => {
+    const evento = templatesForRecipe('event')
+    expect(evento).toHaveLength(3)
+    // Un evento no sale del módulo de propiedades, así que su imagen viene de
+    // una de las otras dos vías: subirla (gratis) o describirla (con IA). Que
+    // los tres la tengan es lo que hace que la subida no sea opcional.
+    for (const t of evento) {
+      expect([...t.slots.required, ...t.slots.optional]).toContain('photo.hero')
+      expect(t.idealPhotos).toBeGreaterThan(0)
+    }
+  })
+
+  it('open_prompt no tiene diseños: la imagen sale tal cual del modelo', () => {
     expect(templatesForRecipe('open_prompt')).toHaveLength(0)
   })
 
