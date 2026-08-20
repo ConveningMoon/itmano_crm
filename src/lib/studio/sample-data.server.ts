@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { normalizePhoto, toDataUri } from './template-props'
 import { sampleProps, type ScenarioKey } from './sample-data'
+import { isFallbackUrl, type MockupMap } from './mockups'
 import type { StudioRecipe } from './types'
 import type { TemplateProps } from './templates/types'
 
@@ -13,13 +14,39 @@ import type { TemplateProps } from './templates/types'
 
 const DIR = join(process.cwd(), 'public', 'studio', 'fixtures')
 
-function fixturePath(url: string): string {
-  return join(DIR, url.split('/').pop() ?? '')
+/**
+ * Los bytes de una imagen de ejemplo, venga de donde venga.
+ *
+ * Las de reserva viven en el repo y se leen del disco; las que el autor subió
+ * viven en el bucket y hay que bajarlas. El render corre en una función
+ * serverless, así que la descarga lleva su propio corte: una imagen de ejemplo
+ * que no responde no puede colgar la generación de una pieza.
+ */
+async function bytesDe(url: string): Promise<Buffer | null> {
+  if (isFallbackUrl(url)) {
+    try {
+      return readFileSync(join(DIR, url.split('/').pop() ?? ''))
+    } catch {
+      return null
+    }
+  }
+  const corte = new AbortController()
+  const reloj = setTimeout(() => corte.abort(), 15000)
+  try {
+    const res = await fetch(url, { signal: corte.signal, cache: 'no-store' })
+    if (!res.ok) return null
+    return Buffer.from(await res.arrayBuffer())
+  } catch {
+    return null
+  } finally {
+    clearTimeout(reloj)
+  }
 }
 
 async function inline(url: string | null): Promise<string | null> {
   if (!url) return null
-  return normalizePhoto(readFileSync(fixturePath(url)))
+  const bytes = await bytesDe(url)
+  return bytes ? normalizePhoto(bytes) : null
 }
 
 /**
@@ -32,18 +59,21 @@ async function inline(url: string | null): Promise<string | null> {
  */
 async function inlinePng(url: string | null): Promise<string | null> {
   if (!url) return null
+  const bytes = await bytesDe(url)
+  if (!bytes) return null
   try {
-    const png = await sharp(readFileSync(fixturePath(url))).png().toBuffer()
-    return toDataUri(png, 'image/png')
+    return toDataUri(await sharp(bytes).png().toBuffer(), 'image/png')
   } catch {
     return null
   }
 }
 
 export async function samplePropsInlined(
-  recipe: StudioRecipe, scenario: ScenarioKey,
+  recipe: StudioRecipe,
+  scenario: ScenarioKey,
+  imagenes?: MockupMap,
 ): Promise<TemplateProps> {
-  const p = sampleProps(recipe, scenario)
+  const p = sampleProps(recipe, scenario, imagenes)
   const [heroPhoto, agentPhoto, logo, ...thumbs] = await Promise.all([
     inline(p.heroPhoto), inlinePng(p.agentPhoto), inlinePng(p.logo),
     ...p.thumbPhotos.map(inline),

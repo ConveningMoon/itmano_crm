@@ -1,3 +1,4 @@
+import { fallbackMockups, type MockupMap } from './mockups'
 import { DEFAULT_PALETTE } from './palettes'
 import { badgeFor } from './badges'
 import type { StudioRecipe } from './types'
@@ -14,7 +15,6 @@ import type { TemplateProps } from './templates/types'
 // Las fotos van por URL: el iframe del editor las pide al servidor de Next. Para
 // el render, sample-data.server.ts las convierte a data URI — mismos bytes.
 
-const F = '/studio/fixtures'
 
 export type ScenarioKey = 'completo' | 'minimo' | 'titular-largo' | 'sin-agente'
 
@@ -35,17 +35,30 @@ const HEADLINES: Record<StudioRecipe, string> = {
 
 const LARGO = 'Casa de cuatro habitaciones con jardín, garaje doble y vistas al río en el corazón de Ghent'
 
-export function sampleProps(recipe: StudioRecipe, scenario: ScenarioKey): TemplateProps {
+/**
+ * Los datos con los que se dibuja la vista previa.
+ *
+ * `imagenes` es el juego de mockups ya resuelto (lo subido, o las de reserva
+ * del repo). Se recibe en vez de leerse aquí para que esta función siga siendo
+ * pura y síncrona: la usan el editor —en el navegador, a cada tecla— y el
+ * servidor cuando genera la miniatura, y ninguno de los dos puede permitirse
+ * que consulte un bucket.
+ */
+export function sampleProps(
+  recipe: StudioRecipe,
+  scenario: ScenarioKey,
+  imagenes: MockupMap = fallbackMockups(),
+): TemplateProps {
   const esVenta  = recipe === 'new_listing'
   const esEvento = recipe === 'event'
   const minimo   = scenario === 'minimo'
   const sinAgente = scenario === 'sin-agente' || minimo
 
   return {
-    heroPhoto:   `${F}/casa-fachada.webp`,
-    thumbPhotos: minimo ? [] : [`${F}/casa-salon.webp`, `${F}/casa-comedor.webp`, `${F}/casa-atardecer.webp`],
-    agentPhoto:  sinAgente ? null : `${F}/agente-ejemplo.webp`,
-    logo:        minimo ? null : `${F}/logo-ejemplo.webp`,
+    heroPhoto:   imagenes.hero,
+    thumbPhotos: minimo ? [] : [imagenes.thumb1, imagenes.thumb2, imagenes.thumb3],
+    agentPhoto:  sinAgente ? null : imagenes.agentPhoto,
+    logo:        minimo ? null : imagenes.logo,
 
     headline: scenario === 'titular-largo' ? LARGO : HEADLINES[recipe],
     // Solo una venta publica cifra: un cierre dejó de hacerlo, una casa abierta

@@ -33,6 +33,15 @@ const SLOT_OF: Record<string, SlotKey> = {
 
 const THUMB_KEYS = ['thumb1', 'thumb2', 'thumb3']
 
+/**
+ * Las claves del contrato que son IMÁGENES, en el orden en que se presentan.
+ *
+ * Vive aquí y no en el catálogo de mockups porque es vocabulario del contrato
+ * de plantilla —lo mismo que `SLOT_OF`—, y el catálogo es sólo cómo se enseñan
+ * en el editor. Un test cruza las dos listas para que no se separen.
+ */
+export const IMAGE_KEYS = ['hero', ...THUMB_KEYS, 'agentPhoto', 'logo']
+
 const SECTION_RE = /\{\{#([\w.]+)\}\}([\s\S]*?)\{\{\/\1\}\}/g
 
 function keysInSections(html: string): Set<string> {
@@ -78,4 +87,18 @@ export function inferSlots(html: string): { required: SlotKey[]; optional: SlotK
   const idealPhotos = usesHero ? 1 + thumbs : 0
 
   return { required: [...required], optional: [...optional], idealPhotos }
+}
+
+/**
+ * Qué imágenes usa este HTML, en orden de catálogo.
+ *
+ * Es lo que permite que el panel del editor enseñe exactamente los huecos que
+ * el diseño necesita —seis en un mosaico, tres en un editorial— sin que nadie
+ * los declare: se leen del mismo HTML que se está escribiendo. Cuenta tanto las
+ * sueltas como las envueltas en sección: para poner una imagen de ejemplo da
+ * igual si el diseño sabe vivir sin ella.
+ */
+export function imageKeysIn(html: string): string[] {
+  const usadas = new Set([...html.matchAll(/\{\{[#&/]?([\w.]+)\}\}/g)].map(m => m[1]))
+  return IMAGE_KEYS.filter(k => usadas.has(k))
 }

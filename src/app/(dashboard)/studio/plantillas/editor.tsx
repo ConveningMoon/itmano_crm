@@ -6,6 +6,9 @@ import { Loader2, Save } from 'lucide-react'
 import { buildTemplateDocument } from '@/lib/studio/templates/document'
 import { templateValues, templateRawValues, templateFlags, paletteVars } from '@/lib/studio/templates/values'
 import { sampleProps, SCENARIOS, type ScenarioKey } from '@/lib/studio/sample-data'
+import { imageKeysIn } from '@/lib/studio/templates/slots'
+import { type MockupMap } from '@/lib/studio/mockups'
+import { MockupPanel } from './mockup-panel'
 import { CANVAS } from '@/lib/studio/canvas'
 import { saveTemplateAction } from './actions'
 import type { TemplateMeta } from '@/lib/studio/templates/meta'
@@ -30,11 +33,18 @@ const codeStyle: React.CSSProperties = {
   border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px',
 }
 
-export function TemplateEditor({ templates, current, fontFaceCss, families }: {
+export function TemplateEditor({
+  templates, current, fontFaceCss, families,
+  imagenes: imagenesIniciales, subidas,
+}: {
   templates:   TemplateMeta[]
   current:     TemplateRecord | null
   fontFaceCss: string
   families:    string[]
+  /** El juego de imágenes de ejemplo ya resuelto (lo subido, o lo del repo). */
+  imagenes:    MockupMap
+  /** Cuáles de ellas son propias, para poder decirlo y poder quitarlas. */
+  subidas:     string[]
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -50,19 +60,38 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
   const [css, setCss]         = useState(current?.css ?? '.pieza{width:var(--w);height:var(--h);background:var(--surface);color:var(--ink)}\nh1{font-family:Spectral;font-size:64px;padding:60px}')
   const [scenario, setScenario] = useState<ScenarioKey>('completo')
 
+  // Las imágenes viven en estado para que subir una cambie la vista previa al
+  // instante, sin recargar la página.
+  const [imagenes, setImagenes] = useState<MockupMap>(imagenesIniciales)
+  const [propias, setPropias]   = useState<Set<string>>(() => new Set(subidas))
+
   const { width, height } = CANVAS[aspects[0]]
 
   // Se recalcula en cada tecla: es barato (una sustitución de cadenas) y es todo
   // el bucle de trabajo que este proyecto viene a dar.
+  // Qué huecos de imagen usa este diseño. Se recalcula con el HTML porque el
+  // panel tiene que seguir a lo que se está escribiendo, no a lo guardado.
+  const clavesDeImagen = useMemo(() => imageKeysIn(html), [html])
+
   const document = useMemo(() => {
-    const props = sampleProps(recipes[0], scenario)
+    const props = sampleProps(recipes[0], scenario, imagenes)
     return buildTemplateDocument({
       html, css,
       values: templateValues(props), rawValues: templateRawValues(props),
       vars: paletteVars(props.palette), flags: templateFlags(props),
       fontFaceCss, width, height,
     })
-  }, [html, css, recipes, scenario, fontFaceCss, width, height])
+  }, [html, css, recipes, scenario, imagenes, fontFaceCss, width, height])
+
+  function cambioDeImagen(key: string, url: string, esPropia: boolean) {
+    setImagenes(prev => ({ ...prev, [key]: url }))
+    setPropias(prev => {
+      const siguiente = new Set(prev)
+      if (esPropia) siguiente.add(key)
+      else siguiente.delete(key)
+      return siguiente
+    })
+  }
 
   function save() {
     setError(null)
@@ -177,10 +206,18 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
                       // pase lo que pase con el tema, igual que el fondo de
                       // una hoja en cualquier editor de diseño.
                       background: '#fff' }}>
+          {/* `allow-same-origin` SIN `allow-scripts`. La combinación de los dos
+              es la peligrosa —un marco con script y origen propio puede quitarse
+              su propio sandbox—, pero por separado el primero es sólo lo que
+              hace que el documento pueda cargar sus imágenes y sus fuentes: con
+              origen opaco el navegador las bloquea y la vista previa sale con
+              los huecos vacíos y la tipografía del sistema, sin un solo error.
+              El HTML de la plantilla sigue sin poder ejecutar nada, que es el
+              cierre que importa (decisión 14 del spec). */}
           <iframe
             title="Vista previa"
             srcDoc={document}
-            sandbox=""
+            sandbox="allow-same-origin"
             style={{ width: `${width}px`, height: `${height}px`, border: 'none',
                      transform: `scale(${420 / width})`, transformOrigin: 'top left' }}
           />
@@ -188,6 +225,13 @@ export function TemplateEditor({ templates, current, fontFaceCss, families }: {
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
           {width}×{height} · el mismo documento que se convierte en PNG
         </p>
+
+        <MockupPanel
+          claves={clavesDeImagen}
+          imagenes={imagenes}
+          propias={propias}
+          onCambio={cambioDeImagen}
+        />
       </div>
     </div>
   )

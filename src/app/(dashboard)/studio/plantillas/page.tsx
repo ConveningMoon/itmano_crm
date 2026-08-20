@@ -2,6 +2,8 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseStudio } from '@/lib/access/studio'
 import { listTemplates, getTemplate } from '@/lib/data/studio-templates'
 import { fontFaceCssFromUrls, FONT_FAMILIES } from '@/lib/studio/fonts/catalog'
+import { listMockupOverrides } from '@/lib/data/studio-mockups'
+import { resolveMockups } from '@/lib/studio/mockups'
 import { StudioTeaser } from '../teaser'
 import { TemplateEditor } from './editor'
 
@@ -17,9 +19,10 @@ export default async function TemplatesPage({ searchParams }: {
   if (!canUseStudio(ctx)) return <StudioTeaser />
 
   const { key } = await searchParams
-  const [templates, current] = await Promise.all([
+  const [templates, current, subidas] = await Promise.all([
     listTemplates(),
     key ? getTemplate(key) : Promise.resolve(null),
+    listMockupOverrides(),
   ])
 
   return (
@@ -33,6 +36,10 @@ export default async function TemplatesPage({ searchParams }: {
       current={current}
       fontFaceCss={fontFaceCssFromUrls()}
       families={FONT_FAMILIES}
+      // Ya resueltas: el editor no tiene por qué saber cuáles son propias y
+      // cuáles de reserva para DIBUJAR — sólo para etiquetarlas en el panel.
+      imagenes={resolveMockups(subidas)}
+      subidas={Object.keys(subidas)}
     />
   )
 }

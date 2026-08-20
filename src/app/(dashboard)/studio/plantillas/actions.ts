@@ -8,6 +8,8 @@ import { saveTemplate, saveTemplateThumb, listTemplates } from '@/lib/data/studi
 import { buildTemplateDocument } from '@/lib/studio/templates/document'
 import { templateValues, templateRawValues, templateFlags, paletteVars } from '@/lib/studio/templates/values'
 import { samplePropsInlined } from '@/lib/studio/sample-data.server'
+import { listMockupOverrides, saveMockup, deleteMockup } from '@/lib/data/studio-mockups'
+import { resolveMockups, mockupSlot } from '@/lib/studio/mockups'
 import { renderDocument } from '@/lib/studio/render/client'
 import { CANVAS } from '@/lib/studio/canvas'
 import type { ActionResult, StudioRecipe, Aspect } from '@/lib/studio/types'
@@ -49,7 +51,10 @@ export async function saveTemplateAction(input: unknown): Promise<ActionResult<{
   try {
     const aspect = data.aspects[0] as Aspect
     const { width, height } = CANVAS[aspect]
-    const props = await samplePropsInlined(data.recipes[0] as StudioRecipe, 'completo')
+    // La miniatura se dibuja con las MISMAS imágenes que el autor está viendo
+    // en el editor: si subió su propia foto, la tarjeta del selector la enseña.
+    const imagenes = resolveMockups(await listMockupOverrides())
+    const props = await samplePropsInlined(data.recipes[0] as StudioRecipe, 'completo', imagenes)
     const document = buildTemplateDocument({
       html: data.html, css: data.css,
       values: templateValues(props), rawValues: templateRawValues(props),
@@ -68,4 +73,59 @@ export async function saveTemplateAction(input: unknown): Promise<ActionResult<{
   revalidatePath('/studio')
   revalidatePath('/studio/plantillas')
   return { ok: true, data: { key: data.key, thumbUrl } }
+}
+
+const MAX_MOCKUP_BYTES = 10 * 1024 * 1024
+
+/**
+ * Sube una imagen de ejemplo para un hueco del diseño.
+ *
+ * Recibe FormData porque viaja un archivo. Devuelve la URL ya versionada para
+ * que la vista previa cambie sin recargar: el bucket sirve por ruta fija, así
+ * que sin la versión el navegador seguiría enseñando la imagen anterior.
+ */
+export async function saveMockupAction(formData: FormData): Promise<ActionResult<{ key: string; url: string }>> {
+  const ctx = await getCurrentTenantContext()
+  if (!canUseStudio(ctx)) return { ok: false, error: 'Acceso no autorizado' }
+
+  const key = formData.get('key')
+  if (typeof key !== 'string' || !mockupSlot(key)) {
+    return { ok: false, error: 'Ese hueco de imagen no existe' }
+  }
+
+  const archivo = formData.get('imagen')
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { ok: false, error: 'No llegó ninguna imagen' }
+  }
+  if (!archivo.type.startsWith('image/')) {
+    return { ok: false, error: 'El archivo tiene que ser una imagen' }
+  }
+  if (archivo.size > MAX_MOCKUP_BYTES) {
+    return { ok: false, error: 'La imagen supera los 10 MB' }
+  }
+
+  try {
+    const url = await saveMockup(key, Buffer.from(await archivo.arrayBuffer()))
+    revalidatePath('/studio/plantillas')
+    return { ok: true, data: { key, url } }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo subir la imagen' }
+  }
+}
+
+/** Quita la imagen subida y devuelve el hueco a la de reserva del repo. */
+export async function deleteMockupAction(key: string): Promise<ActionResult<{ key: string; url: string }>> {
+  const ctx = await getCurrentTenantContext()
+  if (!canUseStudio(ctx)) return { ok: false, error: 'Acceso no autorizado' }
+
+  const slot = mockupSlot(key)
+  if (!slot) return { ok: false, error: 'Ese hueco de imagen no existe' }
+
+  try {
+    await deleteMockup(key)
+    revalidatePath('/studio/plantillas')
+    return { ok: true, data: { key, url: slot.fallback } }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo quitar la imagen' }
+  }
 }
