@@ -133,7 +133,7 @@ del autor, y su HTML dentro de un `<html>` con las clases de estado.
 
 ### 9. La plantilla es una fila, con el HTML y el CSS separados
 
-Migración `103_studio_templates.sql`:
+Migración `104_studio_templates.sql` (era la 103 hasta que `main` reclamó ese número para `agent_api`):
 
 | Columna | Para qué |
 |---|---|

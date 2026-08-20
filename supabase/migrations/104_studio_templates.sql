@@ -1,4 +1,4 @@
--- 103 · Las plantillas del Estudio pasan a ser filas.
+-- 104 · Las plantillas del Estudio pasan a ser filas.
 --
 -- Eran doce funciones TSX: cambiarlas exigía desplegar, y en Vercel no se puede
 -- escribir en el sistema de archivos. Como filas, se editan desde el CRM.
