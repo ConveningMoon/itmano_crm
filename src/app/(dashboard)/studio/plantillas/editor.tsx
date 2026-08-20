@@ -10,6 +10,7 @@ import { imageKeysIn } from '@/lib/studio/templates/slots'
 import { type MockupMap } from '@/lib/studio/mockups'
 import { MockupPanel } from './mockup-panel'
 import { CodeEditor } from './code-editor'
+import { ReferencePanel } from './reference-panel'
 import { CANVAS } from '@/lib/studio/canvas'
 import { saveTemplateAction } from './actions'
 import type { TemplateMeta } from '@/lib/studio/templates/meta'
@@ -72,6 +73,14 @@ export function TemplateEditor({
   // panel tiene que seguir a lo que se está escribiendo, no a lo guardado.
   const clavesDeImagen = useMemo(() => imageKeysIn(html), [html])
 
+  // Las mismas clases que el motor pone en el <html>. Se calculan aparte de
+  // `document` porque la chuleta las enseña: saber si toca `datos-4` o
+  // `datos-5` a ojo es justo lo que hacía falta dejar de adivinar.
+  const clasesActivas = useMemo(
+    () => templateFlags(sampleProps(recipes[0], scenario, imagenes)),
+    [recipes, scenario, imagenes],
+  )
+
   // Se recalcula en cada tecla: es barato (una sustitución de cadenas) y es todo
   // el bucle de trabajo que este proyecto viene a dar.
   const document = useMemo(() => {
@@ -131,9 +140,6 @@ export function TemplateEditor({
             {SCENARIOS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
 
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Fuentes: {families.join(' · ')}
-          </span>
         </div>
 
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr' }}>
@@ -224,6 +230,12 @@ export function TemplateEditor({
           imagenes={imagenes}
           propias={propias}
           onCambio={cambioDeImagen}
+        />
+
+        <ReferencePanel
+          claveActual={current?.key ?? key}
+          clasesActivas={clasesActivas}
+          familias={families}
         />
       </div>
     </div>
