@@ -47,3 +47,22 @@ describe('los binarios nativos de sharp viajan al bundle', () => {
     expect(patrones.some(p => p.includes('@img'))).toBe(false)
   })
 })
+
+// El mismo fallo, otro paquete: `@sparticuz/chromium` guarda su navegador en
+// `bin/*.br` y lo descomprime en /tmp al arrancar, leyendolo con lambdafs. Eso
+// tampoco es un require, asi que el trazador se lleva solo los .js y la funcion
+// arranca sin navegador con "The input directory .../bin does not exist".
+describe('el chromium empaquetado viaja al bundle del render', () => {
+  const patrones = (nextConfig.outputFileTracingIncludes ?? {})['/api/studio/render'] ?? []
+
+  it('la ruta de render traza el bin de @sparticuz/chromium', () => {
+    expect(
+      patrones.some(p => p.includes('@sparticuz/chromium/bin')),
+      'sin esto la funcion se despliega sin navegador y todo render devuelve 500',
+    ).toBe(true)
+  })
+
+  it('y sigue trazando las fuentes, que inyecta como data URI', () => {
+    expect(patrones.some(p => p.includes('public/studio/fonts'))).toBe(true)
+  })
+})
