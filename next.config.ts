@@ -48,7 +48,17 @@ const nextConfig: NextConfig = {
     "/api/cron/carousel-render": ["./src/lib/carousels/fonts/**", ...SHARP_NATIVE],
     // El render del Estudio inyecta las fuentes como data URI: los .ttf tienen
     // que viajar en el bundle de ESTA función, y public/ no se traza solo.
-    "/api/studio/render": ["./public/studio/fonts/**"],
+    //
+    // Y con ellas el Chromium comprimido: `@sparticuz/chromium` guarda su
+    // navegador en `bin/*.br` y lo descomprime en /tmp al arrancar, leyéndolo
+    // con lambdafs. Eso NO es un require, así que el trazador sólo se lleva los
+    // .js del paquete y la función se despliega sin navegador: "The input
+    // directory /var/task/node_modules/@sparticuz/chromium/bin does not exist".
+    // Mismo mecanismo que el .so de sharp, distinto paquete.
+    "/api/studio/render": [
+      "./public/studio/fonts/**",
+      "./node_modules/@sparticuz/chromium/bin/**",
+    ],
     // La server action de /studio/plantillas llama a samplePropsInlined, que lee
     // las fotos de ejemplo de public/studio/fixtures para renderizar la miniatura
     // al guardar. Mismo problema que la línea de arriba: public/ no se traza solo.
