@@ -6,6 +6,23 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
   : undefined;
 
+// Los binarios nativos de sharp, que el trazador de Next NO puede descubrir solo.
+//
+// sharp carga `@img/sharp-<plataforma>` con un require dinámico, y ese paquete
+// abre su libvips (`libvips-cpp.so`) con dlopen desde el propio binario. Un
+// dlopen no es un require: ningún trazador de JavaScript puede verlo, así que
+// el `.node` viaja al bundle y su `.so` se queda fuera. En producción eso da
+// "ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3: cannot open shared object file" al
+// primer uso, con el build en verde y el lockfile correcto.
+//
+// En Windows no se nota: ahí libvips va dentro del propio paquete de la
+// plataforma, así que en local no falta nada y el fallo sólo aparece en Linux.
+//
+// La lista de rutas de abajo salió de mirar qué `.nft.json` del build mencionan
+// `node_modules/sharp/`. Si una ruta nueva empieza a usar sharp, hay que
+// añadirla aquí — o fallará igual de silenciosamente.
+const SHARP_NATIVE = ["./node_modules/@img/**"]
+
 const nextConfig: NextConfig = {
   images: {
     // Sin esto, next/image rechaza cualquier URL remota y toca caer a <img>
@@ -27,15 +44,23 @@ const nextConfig: NextConfig = {
   // "Fuente del carrusel no encontrada". Two routes render today: the admin
   // page's server actions and the cron that drains slides left pending.
   outputFileTracingIncludes: {
-    "/admin/carousels": ["./src/lib/carousels/fonts/**"],
-    "/api/cron/carousel-render": ["./src/lib/carousels/fonts/**"],
+    "/admin/carousels": ["./src/lib/carousels/fonts/**", ...SHARP_NATIVE],
+    "/api/cron/carousel-render": ["./src/lib/carousels/fonts/**", ...SHARP_NATIVE],
     // El render del Estudio inyecta las fuentes como data URI: los .ttf tienen
     // que viajar en el bundle de ESTA función, y public/ no se traza solo.
     "/api/studio/render": ["./public/studio/fonts/**"],
     // La server action de /studio/plantillas llama a samplePropsInlined, que lee
     // las fotos de ejemplo de public/studio/fixtures para renderizar la miniatura
     // al guardar. Mismo problema que la línea de arriba: public/ no se traza solo.
-    "/studio/plantillas": ["./public/studio/fixtures/**"],
+    "/studio/plantillas": ["./public/studio/fixtures/**", ...SHARP_NATIVE],
+    // El resto de rutas que llaman a sharp. La lista sale de mirar qué
+    // .nft.json del build mencionan node_modules/sharp/, no de suponerlo.
+    "/admin": SHARP_NATIVE,
+    "/properties": SHARP_NATIVE,
+    "/properties/[id]": SHARP_NATIVE,
+    "/settings": SHARP_NATIVE,
+    "/studio": SHARP_NATIVE,
+    "/api/properties/media": SHARP_NATIVE,
   },
   experimental: {
     // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así
