@@ -100,7 +100,7 @@ export function MockupPanel({ claves, imagenes, propias, onCambio }: {
                   style={{
                     width: '100%', display: 'block', borderRadius: '6px',
                     aspectRatio: '1 / 1', objectFit: 'cover',
-                    background: 'var(--bg-subtle, var(--bg-surface))',
+                    background: 'var(--bg-elevated)',
                     opacity: ocupado ? 0.4 : 1,
                   }}
                 />

@@ -71,7 +71,7 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
                        style={{ width: '100%', display: 'block', borderRadius: '6px', aspectRatio: '4 / 5', objectFit: 'cover' }} />
                 ) : (
                   <span style={{ display: 'block', width: '100%', aspectRatio: '4 / 5', borderRadius: '6px',
-                                 background: 'var(--bg-subtle, var(--bg-surface))' }} />
+                                 background: 'var(--bg-elevated)' }} />
                 )}
                 {/* Ver en grande sin elegir: una tarjeta de 130px no permite
                     juzgar un diseño de 1080×1350. */}

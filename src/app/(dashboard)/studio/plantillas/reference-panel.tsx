@@ -14,7 +14,10 @@ import { GRUPOS, CLASES_DE_ESTADO, rutaEnElRepo } from '@/lib/studio/templates/r
 const chip: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: '10px', padding: '1px 5px', borderRadius: '4px',
-  background: 'var(--bg-subtle, rgba(0,0,0,0.05))', color: 'var(--text-primary)',
+  // `--bg-elevated` y no un respaldo a negro translúcido: el CRM es oscuro, y
+  // un negro al 5% sobre #0B0C0E deja el chip invisible — que fue justo lo que
+  // pasó. Sobre el fondo elevado sí se lee como algo que se puede pulsar.
+  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)', cursor: 'pointer',
 }
 
@@ -116,7 +119,7 @@ export function ReferencePanel({ claveActual, clasesActivas, familias }: {
                     type="button"
                     style={{
                       ...chip,
-                      background: activa ? 'rgba(224, 168, 74, 0.22)' : chip.background,
+                      background: activa ? 'rgba(201, 169, 110, 0.25)' : chip.background,
                       borderColor: activa ? 'var(--accent-gold)' : 'var(--border-subtle)',
                     }}
                     onClick={() => copiar(`html.${real ?? c.clave} `)}
