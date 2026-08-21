@@ -9,6 +9,8 @@ import { sampleProps, SCENARIOS, type ScenarioKey } from '@/lib/studio/sample-da
 import { imageKeysIn } from '@/lib/studio/templates/slots'
 import { type MockupMap } from '@/lib/studio/mockups'
 import { MockupPanel } from './mockup-panel'
+import { CodeEditor } from './code-editor'
+import { ReferencePanel } from './reference-panel'
 import { CANVAS } from '@/lib/studio/canvas'
 import { saveTemplateAction } from './actions'
 import type { TemplateMeta } from '@/lib/studio/templates/meta'
@@ -67,12 +69,20 @@ export function TemplateEditor({
 
   const { width, height } = CANVAS[aspects[0]]
 
-  // Se recalcula en cada tecla: es barato (una sustitución de cadenas) y es todo
-  // el bucle de trabajo que este proyecto viene a dar.
   // Qué huecos de imagen usa este diseño. Se recalcula con el HTML porque el
   // panel tiene que seguir a lo que se está escribiendo, no a lo guardado.
   const clavesDeImagen = useMemo(() => imageKeysIn(html), [html])
 
+  // Las mismas clases que el motor pone en el <html>. Se calculan aparte de
+  // `document` porque la chuleta las enseña: saber si toca `datos-4` o
+  // `datos-5` a ojo es justo lo que hacía falta dejar de adivinar.
+  const clasesActivas = useMemo(
+    () => templateFlags(sampleProps(recipes[0], scenario, imagenes)),
+    [recipes, scenario, imagenes],
+  )
+
+  // Se recalcula en cada tecla: es barato (una sustitución de cadenas) y es todo
+  // el bucle de trabajo que este proyecto viene a dar.
   const document = useMemo(() => {
     const props = sampleProps(recipes[0], scenario, imagenes)
     return buildTemplateDocument({
@@ -130,22 +140,11 @@ export function TemplateEditor({
             {SCENARIOS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
 
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Fuentes: {families.join(' · ')}
-          </span>
         </div>
 
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-            HTML
-            <textarea value={html} onChange={e => setHtml(e.target.value)} spellCheck={false}
-                      style={{ ...codeStyle, minHeight: '420px' }} />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--text-muted)' }}>
-            CSS
-            <textarea value={css} onChange={e => setCss(e.target.value)} spellCheck={false}
-                      style={{ ...codeStyle, minHeight: '420px' }} />
-          </label>
+          <CodeEditor etiqueta="HTML" lenguaje="html" valor={html} onChange={setHtml} alto={420} />
+          <CodeEditor etiqueta="CSS"  lenguaje="css"  valor={css}  onChange={setCss}  alto={420} />
         </div>
 
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
@@ -231,6 +230,12 @@ export function TemplateEditor({
           imagenes={imagenes}
           propias={propias}
           onCambio={cambioDeImagen}
+        />
+
+        <ReferencePanel
+          claveActual={current?.key ?? key}
+          clasesActivas={clasesActivas}
+          familias={families}
         />
       </div>
     </div>
