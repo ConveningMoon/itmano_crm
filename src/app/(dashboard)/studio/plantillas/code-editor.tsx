@@ -35,7 +35,7 @@ const APAGADO = '#8A867E'
 // cada decisión. Este verde apagado los deja distinguibles de la puntuación sin
 // competir con el código.
 const COMENTARIO = '#7F8B78'
-const ORO     = '#D9A441'   // emparentado con --accent-gold
+const ORO     = '#C9A96E'   // --accent-gold, el mismo de toda la interfaz
 
 /**
  * El tema del editor.
@@ -63,7 +63,7 @@ const temaItmano = EditorView.theme({
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: ORO },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'rgba(217, 164, 65, 0.25)',
+    backgroundColor: 'rgba(201, 169, 110, 0.25)',
   },
   '.cm-gutters': {
     backgroundColor: FONDO,
@@ -75,7 +75,7 @@ const temaItmano = EditorView.theme({
   '.cm-activeLineGutter': { backgroundColor: 'transparent', color: TEXTO },
   '.cm-foldPlaceholder': { backgroundColor: 'rgba(255,255,255,0.08)', border: 'none', color: APAGADO },
   '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': {
-    backgroundColor: 'rgba(217, 164, 65, 0.25)', outline: 'none',
+    backgroundColor: 'rgba(201, 169, 110, 0.25)', outline: 'none',
   },
   // El panel de búsqueda es la razón principal de todo esto: que se vea.
   '.cm-panels': { backgroundColor: '#17181C', color: TEXTO, borderTop: '1px solid rgba(255,255,255,0.08)' },
@@ -83,10 +83,10 @@ const temaItmano = EditorView.theme({
     backgroundColor: FONDO, color: TEXTO, border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: '4px', padding: '2px 6px',
   },
-  '.cm-searchMatch': { backgroundColor: 'rgba(217, 164, 65, 0.28)' },
-  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'rgba(217, 164, 65, 0.6)' },
+  '.cm-searchMatch': { backgroundColor: 'rgba(201, 169, 110, 0.28)' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'rgba(201, 169, 110, 0.6)' },
   '.cm-tooltip': { backgroundColor: '#17181C', border: '1px solid rgba(255,255,255,0.12)', color: TEXTO },
-  '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: 'rgba(217, 164, 65, 0.2)', color: TEXTO },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: 'rgba(201, 169, 110, 0.2)', color: TEXTO },
 }, { dark: true })
 
 /**
