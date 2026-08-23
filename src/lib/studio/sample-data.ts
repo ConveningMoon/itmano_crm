@@ -21,7 +21,7 @@ export type ScenarioKey = 'completo' | 'minimo' | 'titular-largo' | 'sin-agente'
 export const SCENARIOS: Array<{ key: ScenarioKey; label: string }> = [
   { key: 'completo',      label: 'Completo' },
   { key: 'minimo',        label: 'Mínimo' },
-  { key: 'titular-largo', label: 'Titular de tres líneas' },
+  { key: 'titular-largo', label: 'Titular en el límite (60)' },
   { key: 'sin-agente',    label: 'Sin foto de agente' },
 ]
 
@@ -33,7 +33,11 @@ const HEADLINES: Record<StudioRecipe, string> = {
   open_prompt: '',
 }
 
-const LARGO = 'Casa de cuatro habitaciones con jardín, garaje doble y vistas al río en el corazón de Ghent'
+// Exactamente HEADLINE_MAX caracteres: el titular más largo que un agente
+// PUEDE escribir. Antes eran 91 — un 52% por encima del límite del formulario—,
+// así que los ocho diseños se ajustaron contra un caso que no puede ocurrir y
+// el peor caso real nunca se probó.
+const LARGO = 'Casa de cuatro habitaciones con jardín y garaje en el centro'
 
 /**
  * Los datos con los que se dibuja la vista previa.

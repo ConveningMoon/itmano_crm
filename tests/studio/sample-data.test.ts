@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sampleProps, SCENARIOS } from '@/lib/studio/sample-data'
+import { HEADLINE_MAX } from '@/lib/studio/recipes'
 
 describe('escenarios de ejemplo', () => {
   it('ofrece los cuatro casos', () => {
@@ -25,8 +26,11 @@ describe('escenarios de ejemplo', () => {
     expect(p.headline).toBeTruthy()
   })
 
-  it('el titular largo es de verdad largo', () => {
-    expect(sampleProps('new_listing', 'titular-largo').headline.length).toBeGreaterThan(60)
+  it('el titular largo es el mas largo que un agente PUEDE escribir', () => {
+    // No mas: el formulario corta en HEADLINE_MAX, asi que un ejemplo por encima
+    // ajusta los disenos contra un caso imposible. Antes eran 91 caracteres.
+    const largo = sampleProps('new_listing', 'titular-largo').headline
+    expect(largo.length).toBe(HEADLINE_MAX)
   })
 
   it('sin-agente quita la foto y el nombre', () => {

@@ -1,4 +1,5 @@
 import { darken, textColors, type StudioPalette } from '../palettes'
+import { HEADLINE_MAX } from '../recipes'
 import { escapeHtml } from './document'
 import type { TemplateProps } from './types'
 
@@ -62,6 +63,25 @@ export function templateValues(p: TemplateProps): Record<string, string> {
  * Las clases del <html>. Sustituyen a `photoHeight(blocks)`: con ellas el CSS
  * puede reaccionar a CUÁNTO hay, no solo a qué falta.
  */
+/**
+ * En qué tramo de longitud cae el titular.
+ *
+ * Existe porque `datos-N` cuenta CUÁNTOS bloques hay, no cuánto ocupa uno: un
+ * titular de 60 caracteres y otro de 20 dan el mismo `datos-5`, y el diseño no
+ * tenía forma de distinguirlos. Con esto puede bajar el cuerpo de letra cuando
+ * el titular es largo y mantenerlo en dos líneas.
+ *
+ * Los cortes se derivan de `HEADLINE_MAX` en vez de escribirse a mano: si algún
+ * día el formulario admite más o menos, los tramos siguen repartidos igual y no
+ * hay que acordarse de tocarlos.
+ */
+function tramoDelTitular(headline: string): string {
+  const proporcion = headline.length / HEADLINE_MAX
+  if (proporcion <= 0.4) return 'titular-corto'
+  if (proporcion <= 0.7) return 'titular-medio'
+  return 'titular-largo'
+}
+
 export function templateFlags(p: TemplateProps): string[] {
   const flags: string[] = []
   const missing = (value: unknown, name: string) => {
@@ -79,6 +99,7 @@ export function templateFlags(p: TemplateProps): string[] {
   missing(p.agentName, 'sin-agente')
   missing(p.stats.length, 'sin-specs')
 
+  if (p.headline) flags.push(tramoDelTitular(p.headline))
   flags.push(`fotos-${(p.heroPhoto ? 1 : 0) + p.thumbPhotos.length}`)
   // Cuántos bloques de texto hay que leer. Es la cuenta que hacía el editorial
   // para decidir cuánto lienzo se llevaba la foto.
