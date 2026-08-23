@@ -98,6 +98,35 @@ describe('templateFlags', () => {
   })
 })
 
+describe('templateFlags — tramo del titular', () => {
+  // Existe porque datos-N cuenta CUANTOS bloques hay, no cuanto ocupa uno: un
+  // titular de 60 caracteres y otro de 20 daban exactamente las mismas clases.
+  it('un titular corto sale como corto', () => {
+    expect(templateFlags(props({ headline: 'Casa en venta' }))).toContain('titular-corto')
+  })
+
+  it('uno intermedio sale como medio', () => {
+    // 33 caracteres sobre un limite de 60 = 55%
+    expect(templateFlags(props({ headline: 'Casa elegante y familiar en venta' }))).toContain('titular-medio')
+  })
+
+  it('uno en el limite del formulario sale como largo', () => {
+    const enElLimite = 'Casa de cuatro habitaciones con jardín y garaje en el centro'
+    expect(enElLimite.length).toBe(60)
+    expect(templateFlags(props({ headline: enElLimite }))).toContain('titular-largo')
+  })
+
+  it('sale exactamente UN tramo, nunca dos', () => {
+    const tramos = templateFlags(props({ headline: 'Otra familia en su nuevo hogar' }))
+      .filter(c => c.startsWith('titular-'))
+    expect(tramos).toHaveLength(1)
+  })
+
+  it('sin titular no sale ningun tramo', () => {
+    expect(templateFlags(props({ headline: '' })).filter(c => c.startsWith('titular-'))).toEqual([])
+  })
+})
+
 describe('paletteVars', () => {
   it('expone los roles y los derivados', () => {
     const v = paletteVars(DEFAULT_PALETTE)

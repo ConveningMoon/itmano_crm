@@ -110,6 +110,9 @@ export const CLASES_DE_ESTADO: ClaveDocumentada[] = [
   { clave: 'sin-cta',         que: 'No hay registro' },
   { clave: 'sin-agente',      que: 'No hay nombre de agente' },
   { clave: 'sin-specs',       que: 'No hay especificaciones' },
+  { clave: 'titular-corto',   que: 'El titular ocupa hasta el 40% del límite' },
+  { clave: 'titular-medio',   que: 'Entre el 40% y el 70%' },
+  { clave: 'titular-largo',   que: 'Más del 70% del límite: baja el cuerpo para que quepa en dos líneas' },
   { clave: 'fotos-N',         que: 'Cuántas fotos hay contando el hero: de 0 a 4' },
   { clave: 'datos-N',         que: 'Cuántos bloques de texto hay que leer: de 1 a 6' },
 ]

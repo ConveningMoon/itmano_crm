@@ -31,8 +31,8 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
         border: '1px dashed var(--border-subtle)', fontSize: '12px',
         color: 'var(--text-muted)', lineHeight: 1.5,
       }}>
-        Todavía no hay diseños para esta receta. Por ahora solo están los de
-        &quot;Nueva disponible&quot;.
+        Todavía no hay diseños para esta receta. Créalos en
+        {' '}<a href="/studio/plantillas" style={{ color: 'var(--accent-gold)' }}>el editor de plantillas</a>.
       </div>
     )
   }

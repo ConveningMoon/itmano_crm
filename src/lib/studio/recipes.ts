@@ -252,8 +252,10 @@ export function validateTemplateChoice(
 // la tabla vacía (migración aplicada, seed olvidado) `metas` está vacío para
 // TODAS las recetas, y de ahí no se puede distinguir "esta receta no tiene
 // diseños todavía, por diseño" (Evento, Task 16 pendiente) de "el despliegue
-// se quedó a medias". Cuando Evento reciba sus diseños, se añade aquí.
-const RECIPES_WITH_TEMPLATES = ['open_house', 'new_listing', 'sold']
+// se quedó a medias". Evento entró en la lista aunque todavía no tenga diseños:
+// sin ellos generaba una foto recortada sin texto ni marca, que no sirve para
+// publicar, así que negarse es más honesto que devolver eso.
+const RECIPES_WITH_TEMPLATES = ['open_house', 'new_listing', 'sold', 'event']
 
 /**
  * Las piezas NUEVAS de casa se dibujan con un diseño. Es política de producto y
