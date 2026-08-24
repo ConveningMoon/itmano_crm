@@ -34,13 +34,73 @@ export function shouldAssessFit(
 }
 
 /**
+ * ¿Lleva este metadata la marca de procedencia de suscriptor? Puro, para que un
+ * llamador que ya tiene el metadata en la mano no pague el SELECT que hace
+ * `graduateSubscriber` sólo para descubrir que no hay nada que quitar.
+ */
+export function hasSubscriberMark(
+  metadata: Record<string, unknown> | null | undefined,
+): metadata is Record<string, unknown> {
+  return !!metadata && typeof metadata === 'object' && 'newsletter_subscriber' in metadata
+}
+
+/** La prueba del consentimiento tal y como se guarda en `leads.metadata`. */
+export interface NewsletterConsentProof {
+  text:       string
+  source_url: string
+  at:         string
+}
+
+/**
+ * PRUEBA del consentimiento. Vive en `metadata.newsletter_consent`, una clave
+ * PROPIA y separada de la marca de procedencia, por dos razones:
+ *
+ *  1. Un email que ya era lead NO recibe la marca `newsletter_subscriber` (un
+ *     lead con historial no es sólo un lector), pero sí acaba de consentir: la
+ *     prueba tiene que quedar guardada igual. El RGPD art. 7.1 exige poder
+ *     DEMOSTRAR el consentimiento y eso no se puede añadir retroactivamente a
+ *     una lista ya capturada (spec §7).
+ *  2. `graduateSubscriber` borra la marca de procedencia. Si la prueba viviera
+ *     sólo dentro de ella, graduar a un suscriptor destruiría el registro legal
+ *     de su consentimiento.
+ *
+ * Se conserva ADEMÁS dentro de la marca (`newsletter_subscriber.consent`,
+ * spec §3.5) para no cambiar lo que ya está escrito en filas existentes; la
+ * copia de arriba es la duradera.
+ */
+export function newsletterConsent(args: {
+  consentText: string
+  sourceUrl:   string
+  at?:         string
+}): NewsletterConsentProof {
+  return {
+    text:       args.consentText,
+    source_url: args.sourceUrl,
+    at:         args.at ?? new Date().toISOString(),
+  }
+}
+
+/**
+ * Añade (o refresca) la prueba de consentimiento sobre el metadata que el lead
+ * ya tenía, sin tocar nada más. Para el lead EXISTENTE que se suscribe: no
+ * recibe la marca de procedencia, sí la prueba.
+ */
+export function withNewsletterConsent(
+  base: Record<string, unknown> | null,
+  args: { consentText: string; sourceUrl: string; at?: string },
+): Record<string, unknown> {
+  return { ...(base ?? {}), newsletter_consent: newsletterConsent(args) }
+}
+
+/**
  * La marca que hace `is_subscriber` verdadero en leads_list y saca al lead del
  * cálculo de quintiles (migración 106). Mismo mecanismo que `metadata.imported`
- * de la 080.
+ * de la 080. Sólo para un lead NUEVO: un email con historial previo ya no es
+ * sólo un lector.
  *
- * `consent` guarda la PRUEBA del consentimiento: el RGPD no exige doble opt-in,
- * pero sí exige poder demostrarlo (art. 7.1), y eso no se puede añadir
- * retroactivamente a una lista ya capturada.
+ * Devuelve las DOS claves: la procedencia (`newsletter_subscriber`, que la
+ * graduación quita) y la prueba de consentimiento (`newsletter_consent`, que no
+ * se quita nunca).
  */
 export function subscriberMetadata(args: {
   channelId:   string
@@ -48,12 +108,14 @@ export function subscriberMetadata(args: {
   sourceUrl:   string
 }): Record<string, unknown> {
   const at = new Date().toISOString()
+  const consent = newsletterConsent({ consentText: args.consentText, sourceUrl: args.sourceUrl, at })
   return {
     newsletter_subscriber: {
       at,
       channel_id: args.channelId,
-      consent: { text: args.consentText, source_url: args.sourceUrl, at },
+      consent,
     },
+    newsletter_consent: consent,
   }
 }
 
@@ -94,8 +156,17 @@ export function mergeSubmissionMetadata(
  * quintiles PARA SIEMPRE — el mismo fallo silencioso que ya sufrió
  * `refresh_quality_bands()` (ver CLAUDE.md).
  *
+ * NO toca `metadata.newsletter_consent`: graduarse no revoca el consentimiento
+ * que el lector dio, y borrar la prueba sería justamente lo que el RGPD art.
+ * 7.1 impide.
+ *
  * Best-effort: nunca lanza al llamador. Idempotente — si el lead no tiene la
  * marca (o no existe), no escribe nada.
+ *
+ * Hace un SELECT por PK para saber si hay algo que quitar. El llamador que YA
+ * tenga el metadata del lead a mano debería envolver la llamada en
+ * `hasSubscriberMark(metadata)` y ahorrárselo: es la comprobación que esta
+ * función repite contra la base.
  */
 export async function graduateSubscriber(db: AdminClient, leadId: string): Promise<void> {
   try {
@@ -103,7 +174,7 @@ export async function graduateSubscriber(db: AdminClient, leadId: string): Promi
     // reason: el cliente de Supabase no está tipado en este repo.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const metadata = (lead as any)?.metadata as Record<string, unknown> | null | undefined
-    if (!metadata || typeof metadata !== 'object' || !('newsletter_subscriber' in metadata)) return
+    if (!hasSubscriberMark(metadata)) return
 
     const rest = { ...metadata }
     delete rest.newsletter_subscriber

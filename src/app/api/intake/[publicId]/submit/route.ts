@@ -10,7 +10,10 @@ import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
-import { shouldAssessFit, subscriberMetadata, mergeSubmissionMetadata, graduateSubscriber } from '@/lib/newsletters/subscriber'
+import {
+  shouldAssessFit, subscriberMetadata, mergeSubmissionMetadata, graduateSubscriber,
+  hasSubscriberMark, withNewsletterConsent,
+} from '@/lib/newsletters/subscriber'
 
 export function OPTIONS() {
   return corsOptions()
@@ -209,23 +212,37 @@ export async function POST(
 
     // Graduación: si este lead YA venía marcado como suscriptor de newsletter
     // y llega ahora por un canal que NO es newsletter, acaba de mostrar
-    // intención real — deja de ser sólo un lector (migración 106). No hace
-    // nada si no tenía la marca (best-effort, ver graduateSubscriber).
-    if (channelType !== 'newsletter') {
+    // intención real — deja de ser sólo un lector (migración 106). El guard
+    // sobre `leadMetadata` evita el SELECT por PK de graduateSubscriber cuando
+    // ya sabemos, con el metadata que acabamos de leer, que no hay marca.
+    if (channelType !== 'newsletter' && hasSubscriberMark(leadMetadata)) {
       await graduateSubscriber(db, leadId)
-      if (leadMetadata && 'newsletter_subscriber' in leadMetadata) {
-        const stripped = { ...leadMetadata }
-        delete stripped.newsletter_subscriber
-        leadMetadata = stripped
-      }
+      const stripped = { ...leadMetadata }
+      delete stripped.newsletter_subscriber
+      leadMetadata = stripped
+    }
+
+    // Consentimiento de un lead que YA existía. No recibe la marca de
+    // procedencia (un email con historial previo no es sólo un lector), pero sí
+    // acaba de consentir: la PRUEBA se guarda igual, en su propia clave. El
+    // RGPD art. 7.1 exige poder demostrarlo y eso no se puede añadir
+    // retroactivamente a una lista ya capturada (spec §7).
+    if (channelType === 'newsletter') {
+      leadMetadata = withNewsletterConsent(leadMetadata, {
+        consentText: parsed.consent_text as string,
+        sourceUrl:   parsed.source_url ?? '',
+      })
     }
 
     // a) Merge non-empty changed fields
-    const updates: Record<string, string> = {}
+    const updates: Record<string, unknown> = {}
     if (parsed.first_name && parsed.first_name !== existing.first_name) updates.first_name = parsed.first_name
     if (parsed.last_name  && parsed.last_name  !== existing.last_name)  updates.last_name  = parsed.last_name
     if (parsed.phone      && parsed.phone      !== existing.phone)      updates.phone      = parsed.phone
     if (parsed.language   && parsed.language   !== existing.language)   updates.language   = parsed.language
+    // La graduación ya escribió su propio UPDATE; aquí sólo viaja el metadata
+    // cuando esta misma request lo cambió por el consentimiento.
+    if (channelType === 'newsletter') updates.metadata = leadMetadata
 
     if (Object.keys(updates).length > 0) {
       await db.from('leads').update(updates).eq('id', leadId)
