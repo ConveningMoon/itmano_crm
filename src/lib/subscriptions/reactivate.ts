@@ -2,14 +2,18 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface ReactivationReport {
-  propertiesRepublished: number
+  propertiesRepublished:  number
+  newslettersRepublished: number
 }
 
 /**
- * Restaura lo que la degradación modificó. Hoy son solo las propiedades: los
- * runs de secuencia nunca cambiaron de estado (Task 12 Step 4), así que se
- * reanudan solos al volver a pasar el gate de suscripción — y la guardia de
- * frescura (isRunStale) impide que un envío vencido hace meses se dispare.
+ * Restaura lo que la degradación modificó. Propiedades y newsletters siguen el
+ * mismo mecanismo (unpublished_by_billing es una MARCA de procedencia, no un
+ * estado): al restaurar vuelve SOLO lo que esa marca señala, nunca todo lo que
+ * esté en el estado "bajado". Los runs de secuencia nunca cambiaron de estado
+ * (Task 12 Step 4), así que se reanudan solos al volver a pasar el gate de
+ * suscripción — y la guardia de frescura (isRunStale) impide que un envío
+ * vencido hace meses se dispare.
  */
 export async function restoreAfterReactivation(tenantId: string): Promise<ReactivationReport> {
   const supabase = createAdminClient()
@@ -25,5 +29,22 @@ export async function restoreAfterReactivation(tenantId: string): Promise<Reacti
     .eq('unpublished_by_billing', true)
     .select('id')
 
-  return { propertiesRepublished: (restored ?? []).length }
+  // Mismo criterio para newsletters: solo `unpublished_by_billing = true`
+  // vuelve a `published`. Una edición que el tenant dejó en `draft` a
+  // propósito (nunca llegó a publicarla) NO lleva esa marca, así que este
+  // UPDATE no la toca — publicar un borrador que el tenant nunca quiso
+  // publicar es exactamente el fallo que la marca existe para evitar. Una
+  // edición `archived` tampoco la lleva nunca (el paso de degradación solo
+  // marca `status = 'published'`), así que queda fuera por el mismo filtro.
+  const { data: restoredNewsletters } = await supabase
+    .from('newsletter_editions')
+    .update({ status: 'published', unpublished_by_billing: false })
+    .eq('tenant_id', tenantId)
+    .eq('unpublished_by_billing', true)
+    .select('id')
+
+  return {
+    propertiesRepublished:  (restored ?? []).length,
+    newslettersRepublished: (restoredNewsletters ?? []).length,
+  }
 }

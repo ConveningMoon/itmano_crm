@@ -1,39 +1,44 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// La lógica real de restoreAfterReactivation es "una consulta a Supabase" — no
-// hay nada puro que extraer. En vez de conformarnos con "la función existe",
-// mockeamos SOLO la forma del query builder encadenable (.from/.update/.eq/.select)
-// y grabamos qué se le pidió. Esto sí verifica el contrato crítico de la tarea:
-// que el UPDATE llega con el filtro `unpublished_by_billing = true` — sin él se
-// republicaría una propiedad que el cliente despublicó a propósito (casa vendida).
+// La lógica real de restoreAfterReactivation es "dos consultas a Supabase" —
+// no hay nada puro que extraer. En vez de conformarnos con "la función
+// existe", mockeamos SOLO la forma del query builder encadenable
+// (.from/.update/.eq/.select) y grabamos qué se le pidió a CADA tabla. Esto sí
+// verifica el contrato crítico de la tarea: que ambos UPDATE llegan con el
+// filtro `unpublished_by_billing = true` — sin él se republicaría una
+// propiedad que el cliente despublicó a propósito (casa vendida) o una
+// newsletter que el cliente nunca quiso publicar (borrador propio).
 // Lo que este test NO cubre (requiere DB real, ver prueba manual del brief):
-// RLS, que la columna exista en el schema real, y el efecto end-to-end contra
-// datos reales de un tenant.
-type Call = { method: string; args: unknown[] }
+// RLS, que las columnas existan en el schema real, y el efecto end-to-end
+// contra datos reales de un tenant.
+type Call = { method: string; args: unknown[]; table?: string }
 
-function makeFakeSupabase(rows: { id: string }[]) {
+function makeFakeSupabase(rowsByTable: Record<string, { id: string }[]>) {
   const calls: Call[] = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- doble encadenable de prueba, sin tipos de Supabase
-  const builder: any = {
-    update(payload: unknown) {
-      calls.push({ method: 'update', args: [payload] })
-      return builder
-    },
-    eq(col: string, val: unknown) {
-      calls.push({ method: 'eq', args: [col, val] })
-      return builder
-    },
-    select(cols: string) {
-      calls.push({ method: 'select', args: [cols] })
-      return Promise.resolve({ data: rows, error: null })
-    },
+  function makeBuilder(table: string) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- doble encadenable de prueba, sin tipos de Supabase
+    const builder: any = {
+      update(payload: unknown) {
+        calls.push({ method: 'update', args: [payload], table })
+        return builder
+      },
+      eq(col: string, val: unknown) {
+        calls.push({ method: 'eq', args: [col, val], table })
+        return builder
+      },
+      select(cols: string) {
+        calls.push({ method: 'select', args: [cols], table })
+        return Promise.resolve({ data: rowsByTable[table] ?? [], error: null })
+      },
+    }
+    return builder
   }
   return {
     calls,
     client: {
       from(table: string) {
         calls.push({ method: 'from', args: [table] })
-        return builder
+        return makeBuilder(table)
       },
     },
   }
@@ -53,8 +58,8 @@ describe('restoreAfterReactivation', () => {
     expect(typeof restoreAfterReactivation).toBe('function')
   })
 
-  it('filtra por tenant_id Y unpublished_by_billing=true — el punto de la tarea', async () => {
-    const fake = makeFakeSupabase([{ id: 'p1' }, { id: 'p2' }])
+  it('propiedades: filtra por tenant_id Y unpublished_by_billing=true — el punto de la tarea', async () => {
+    const fake = makeFakeSupabase({ properties: [{ id: 'p1' }, { id: 'p2' }] })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
     mockCreateAdminClient.mockReturnValue(fake.client as any)
 
@@ -62,33 +67,74 @@ describe('restoreAfterReactivation', () => {
 
     expect(fake.calls[0]).toEqual({ method: 'from', args: ['properties'] })
 
-    const eqCalls = fake.calls.filter((c) => c.method === 'eq').map((c) => c.args)
-    expect(eqCalls).toContainEqual(['tenant_id', 'tenant-x'])
+    const propsEq = fake.calls.filter((c) => c.method === 'eq' && c.table === 'properties').map((c) => c.args)
+    expect(propsEq).toContainEqual(['tenant_id', 'tenant-x'])
     // Sin este filtro se republicaría una casa que el cliente quitó a propósito.
-    expect(eqCalls).toContainEqual(['unpublished_by_billing', true])
+    expect(propsEq).toContainEqual(['unpublished_by_billing', true])
 
-    expect(report).toEqual({ propertiesRepublished: 2 })
+    expect(report).toEqual({ propertiesRepublished: 2, newslettersRepublished: 0 })
   })
 
-  it('el UPDATE republica Y limpia la marca de degradación, nunca solo una', async () => {
-    const fake = makeFakeSupabase([{ id: 'p1' }])
+  it('propiedades: el UPDATE republica Y limpia la marca de degradación, nunca solo una', async () => {
+    const fake = makeFakeSupabase({ properties: [{ id: 'p1' }] })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
     mockCreateAdminClient.mockReturnValue(fake.client as any)
 
     await restoreAfterReactivation('tenant-x')
 
-    const updateCall = fake.calls.find((c) => c.method === 'update')
+    const updateCall = fake.calls.find((c) => c.method === 'update' && c.table === 'properties')
     // Si solo se limpiara `unpublished_by_billing` sin volver a `published_to_web:
     // true`, la propiedad quedaría invisible para siempre en la web pública.
     expect(updateCall?.args[0]).toEqual({ published_to_web: true, unpublished_by_billing: false })
   })
 
-  it('sin filas afectadas devuelve 0, no revienta', async () => {
-    const fake = makeFakeSupabase([])
+  it('newsletters: filtra por tenant_id Y unpublished_by_billing=true, y limpia la marca al republicar', async () => {
+    const fake = makeFakeSupabase({ newsletter_editions: [{ id: 'n1' }] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+
+    const report = await restoreAfterReactivation('tenant-x')
+
+    const nlEq = fake.calls.filter((c) => c.method === 'eq' && c.table === 'newsletter_editions').map((c) => c.args)
+    expect(nlEq).toContainEqual(['tenant_id', 'tenant-x'])
+    // Sin este filtro se republicaría una edición que el tenant nunca marcó
+    // como publicada — el fallo exacto que la marca de procedencia evita.
+    expect(nlEq).toContainEqual(['unpublished_by_billing', true])
+
+    const updateCall = fake.calls.find((c) => c.method === 'update' && c.table === 'newsletter_editions')
+    expect(updateCall?.args[0]).toEqual({ status: 'published', unpublished_by_billing: false })
+
+    expect(report).toEqual({ propertiesRepublished: 0, newslettersRepublished: 1 })
+  })
+
+  it('newsletters: un borrador propio del tenant (sin la marca) no vuelve a publicarse', async () => {
+    // El mock no simula el WHERE real de Postgres — solo registra qué se
+    // pidió (ver comentario de cabecera). Este caso representa un tenant cuya
+    // única edición es un borrador que el AGENTE dejó sin publicar a
+    // propósito: nunca pasó por el paso de degradación, así que nunca llevó
+    // `unpublished_by_billing = true`, y por tanto el filtro `.eq(...,true)`
+    // no la habría seleccionado — de ahí que la fila simulada del lado del
+    // servidor sea 0, no que el código la ignore explícitamente.
+    const fake = makeFakeSupabase({ newsletter_editions: [] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+
+    const report = await restoreAfterReactivation('tenant-x')
+
+    const updateCall = fake.calls.find((c) => c.method === 'update' && c.table === 'newsletter_editions')
+    // El UPDATE se sigue emitiendo con el filtro correcto — lo que cambia es
+    // que Postgres no encuentra filas que lo cumplan, no que el código decida
+    // saltárselo.
+    expect(updateCall).toBeDefined()
+    expect(report.newslettersRepublished).toBe(0)
+  })
+
+  it('sin filas afectadas en ninguna tabla devuelve 0 y 0, no revienta', async () => {
+    const fake = makeFakeSupabase({})
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
     mockCreateAdminClient.mockReturnValue(fake.client as any)
 
     const report = await restoreAfterReactivation('tenant-sin-degradar')
-    expect(report).toEqual({ propertiesRepublished: 0 })
+    expect(report).toEqual({ propertiesRepublished: 0, newslettersRepublished: 0 })
   })
 })
