@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowUpRight, Newspaper } from 'lucide-react'
 import { getPublicTenant, getPublicSeries, getPublicEditions, getPublicNewsletterPaths, type PublicEdition } from '../shared'
 import { formatEditionDate } from '../nl-format'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from '../nl-chrome'
+import { SubscribeForm } from './subscribe-form'
 
 // Archivo público de una serie de newsletter — news.itmano.com/<slug>/<serie>.
 // Todas las ediciones publicadas de esa serie, más reciente primero.
@@ -76,6 +77,10 @@ export default async function PublicNewsletterSeriesPage({ params }: { params: P
           <h1 style={{ ...DISPLAY, fontSize: 'clamp(28px, 5vw, 44px)', margin: 0, color: P.ink }}>
             {series.name}
           </h1>
+        </div>
+
+        <div style={{ marginBottom: '36px' }}>
+          <SubscribeForm publicId={series.public_id} tenantName={tenant.name} P={P} />
         </div>
 
         {editions.length === 0 ? (

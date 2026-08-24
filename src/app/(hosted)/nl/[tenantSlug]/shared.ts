@@ -28,6 +28,9 @@ export type PublicSeries = {
   tenant_id: string
   name: string
   slug: string
+  // Llave del canal para postear al intake público (/api/intake/<public_id>/submit)
+  // desde el formulario de suscripción — mismo contrato que hp/[..]/hosted-form.tsx.
+  public_id: string
 }
 
 export type PublicEdition = {
@@ -53,7 +56,7 @@ export type PublicEdition = {
 
 const PUBLIC_TENANT_COLUMNS = columns('tenants', ['id', 'name', 'slug', 'logo_url', 'primary_color'])
 
-const PUBLIC_SERIES_COLUMNS = columns('acquisition_channels', ['id', 'tenant_id', 'name', 'slug'])
+const PUBLIC_SERIES_COLUMNS = columns('acquisition_channels', ['id', 'tenant_id', 'name', 'slug', 'public_id'])
 
 // Sólo lo que hace falta para el embed (badge + link) — no se expone nada más
 // del canal en la página pública.
