@@ -1063,7 +1063,12 @@ describe('renderNewsletterHtml', () => {
     }
     const html = renderNewsletterHtml(content, [])
     expect(html).not.toContain('<script>')
-    expect(html).not.toContain('onerror=')
+    // Lo que importa no es que desaparezca la subcadena "onerror=" —escapeHtml
+    // no escapa `=`, ni debe— sino que el payload no llegue como TAG. Estas dos
+    // aserciones valen aquí porque este `content` no tiene ningún bloque image:
+    // uno legítimo sí emite `<img`.
+    expect(html).not.toContain('<img')
+    expect(html).not.toContain('<b>')
     expect(html).toContain('&lt;script&gt;')
   })
 
