@@ -108,9 +108,13 @@ export async function getSeriesForTenant(tenantId: string): Promise<NewsletterSe
   const ids = rows.map(r => r.id as string)
 
   // Conteos en dos consultas agregadas en vez de N+1: pocas series, muchos leads.
+  // El `.eq('tenant_id', ...)` es redundante con el `.in(ids)` mientras los ids
+  // vengan ya acotados por tenant arriba, pero este módulo usa createAdminClient()
+  // (bypasea RLS): no hay tirantes, así que el cinturón del filtro va explícito
+  // en cada consulta, no solo donde nace la lista de ids.
   const [{ data: leadRows }, { data: editionRows }, { data: seqRows }] = await Promise.all([
-    db.from('leads').select('acquisition_channel_id').in('acquisition_channel_id', ids),
-    db.from('newsletter_editions').select('channel_id, published_at').in('channel_id', ids),
+    db.from('leads').select('acquisition_channel_id').eq('tenant_id', tenantId).in('acquisition_channel_id', ids),
+    db.from('newsletter_editions').select('channel_id, published_at').eq('tenant_id', tenantId).in('channel_id', ids),
     db.from('email_sequences').select('id, name').eq('tenant_id', tenantId),
   ])
 
