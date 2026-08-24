@@ -87,6 +87,15 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   'funcion:agent_api_mint_jwt(p_user_id uuid, p_ttl_seconds integer)':                           'migración 096 (agent_api): sólo en sandbox',
   'funcion:agent_api_purge_expired()':                                                           'migración 096 (agent_api): sólo en sandbox',
   'funcion:agent_api_rate_limit(p_token_id uuid, p_bucket text, p_limit integer, p_window_s integer)': 'migración 096 (agent_api): sólo en sandbox',
+
+  // Rama feat/newsletters: 105 y 106 aplicadas sólo al sandbox hasta que se
+  // aprueben en producción. VACIAR ESTA LISTA AL MERGEAR.
+  'tabla:newsletter_editions':          'migración 105 (newsletters): tabla nueva, sólo en sandbox',
+  'tabla:tenants':                      'migración 105 (newsletters): columna newsletter_source_domains, sólo en sandbox',
+  'tabla:leads_list':                   'migración 106 (newsletter_subscriber): vista recreada con is_subscriber, sólo en sandbox',
+  'policy:newsletter_editions':         'migración 105 (newsletters): policies nuevas, sólo en sandbox',
+  'funcion:touch_newsletter_edition()': 'migración 105 (newsletters): función nueva, sólo en sandbox',
+  'funcion:refresh_quality_bands()':    'migración 106 (newsletter_subscriber): función modificada, sólo en sandbox',
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
