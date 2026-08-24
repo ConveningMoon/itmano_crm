@@ -65,6 +65,10 @@ function safeUrl(raw: string): string | null {
 
 export function BlockList({ content, sources, canEdit, onChange }: Props) {
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null)
+  // Un fallo de subida se PINTA, como en CoverPicker. Antes se tragaba (`if
+  // (res.ok)` sin `else`): el spinner paraba, la URL seguía vacía y el usuario
+  // no tenía forma de saber si había subido o no.
+  const [uploadError, setUploadError] = useState<{ idx: number; message: string } | null>(null)
   const knownSourceIds = new Set(sources.map(s => s.id))
 
   function updateBlock(idx: number, next: NewsletterBlock) {
@@ -93,12 +97,15 @@ export function BlockList({ content, sources, canEdit, onChange }: Props) {
 
   async function uploadImageFor(idx: number, file: File) {
     setUploadingIdx(idx)
+    setUploadError(null)
     const res = await uploadBlockImage(file)
     setUploadingIdx(null)
-    if (res.ok) {
-      const block = content.blocks[idx]
-      if (block.type === 'image') updateBlock(idx, { ...block, url: res.url })
+    if (!res.ok) {
+      setUploadError({ idx, message: res.error })
+      return
     }
+    const block = content.blocks[idx]
+    if (block.type === 'image') updateBlock(idx, { ...block, url: res.url })
   }
 
   return (
@@ -151,6 +158,7 @@ export function BlockList({ content, sources, canEdit, onChange }: Props) {
               sources={sources}
               knownSourceIds={knownSourceIds}
               uploading={uploadingIdx === idx}
+              uploadError={uploadError?.idx === idx ? uploadError.message : null}
               onChange={next => updateBlock(idx, next)}
               onRemove={() => removeBlock(idx)}
               onMove={dir => moveBlock(idx, dir)}
@@ -203,7 +211,7 @@ export function BlockList({ content, sources, canEdit, onChange }: Props) {
 // ─── Tarjeta editable de un bloque ──────────────────────────────────────────
 
 function BlockCard({
-  block, index, total, canEdit, sources, knownSourceIds, uploading,
+  block, index, total, canEdit, sources, knownSourceIds, uploading, uploadError,
   onChange, onRemove, onMove, onUploadImage,
 }: {
   block:   NewsletterBlock
@@ -213,6 +221,7 @@ function BlockCard({
   sources: NewsletterSource[]
   knownSourceIds: Set<string>
   uploading: boolean
+  uploadError: string | null
   onChange: (next: NewsletterBlock) => void
   onRemove: () => void
   onMove:   (dir: -1 | 1) => void
@@ -377,6 +386,9 @@ function BlockCard({
                 style={{ display: 'none' }}
               />
             </label>
+          )}
+          {uploadError && (
+            <p style={{ fontSize: '11px', color: 'var(--accent-coral)', margin: 0 }}>{uploadError}</p>
           )}
           <input
             value={block.alt}

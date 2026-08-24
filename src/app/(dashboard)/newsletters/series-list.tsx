@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Plus, ExternalLink } from 'lucide-react'
+import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { NewsletterSeries } from '@/lib/data/newsletters'
 import type { EmailSequence } from '@/lib/data/email-sequences'
 import { NewSeriesModal } from './new-series-modal'
@@ -115,7 +116,10 @@ export function SeriesList({ series, sequences, agents, tenantSlug }: Props) {
 }
 
 function SeriesCard({ series, tenantSlug }: { series: NewsletterSeries; tenantSlug: string }) {
-  const publicUrl = tenantSlug ? `/nl/${tenantSlug}/${series.slug}` : null
+  // URL ABSOLUTA de news.itmano.com, no la ruta interna /nl/…: este enlace se
+  // comparte, y app.itmano.com/nl/… no es la dirección pública de la serie.
+  // Mismo criterio que property-page-options.tsx con hostedPropertiesUrl.
+  const publicUrl = tenantSlug ? hostedNewsletterUrl(tenantSlug, series.slug) : null
 
   return (
     <div

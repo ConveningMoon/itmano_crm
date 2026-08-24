@@ -5,6 +5,7 @@ import { columns } from '@/lib/supabase/columns'
 import { getEditionById, getSeriesById } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
+import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
 
@@ -46,8 +47,10 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
 
+  // URL ABSOLUTA de news.itmano.com: es el enlace que el tenant comparte, no la
+  // ruta interna /nl/… (que además redirige a /login en app.itmano.com).
   const publicUrl = tenantSlug && series
-    ? `/nl/${tenantSlug}/${series.slug}/${edition.slug}`
+    ? hostedNewsletterUrl(tenantSlug, series.slug, edition.slug)
     : null
 
   return (

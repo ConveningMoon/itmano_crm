@@ -14,32 +14,54 @@ import { z } from 'zod'
 
 export const NEWSLETTER_CONTENT_VERSION = 1 as const
 
-const text = (max: number) => z.string().trim().min(1).max(max)
+// Los mensajes van en español neutro, uno por regla, porque el editor los pinta
+// TAL CUAL: los bloques recién insertados nacen incompletos a propósito (una
+// imagen sin URL, un dato sin fuente) y el primer intento de guardar mostraba
+// el mensaje por defecto de zod, en inglés ("Invalid url"), en el primer minuto
+// de uso.
+const text = (max: number, vacio: string, largo: string) =>
+  z.string().trim().min(1, vacio).max(max, largo)
 
 const HeadingBlock = z.object({
-  type: z.literal('heading'), level: z.union([z.literal(2), z.literal(3)]), text: text(200),
+  type: z.literal('heading'),
+  level: z.union([z.literal(2), z.literal(3)]),
+  text: text(200, 'El encabezado no puede quedar vacío.', 'El encabezado es demasiado largo (máximo 200 caracteres).'),
 })
 const ParagraphBlock = z.object({
-  type: z.literal('paragraph'), text: text(4000), sourceIds: z.array(z.string()).max(8).optional(),
+  type: z.literal('paragraph'),
+  text: text(4000, 'El párrafo no puede quedar vacío.', 'El párrafo es demasiado largo (máximo 4.000 caracteres).'),
+  sourceIds: z.array(z.string()).max(8, 'Un párrafo cita como máximo 8 fuentes.').optional(),
 })
 const ListBlock = z.object({
   type: z.literal('list'), style: z.enum(['bullet', 'number']),
-  items: z.array(text(400)).min(1).max(20),
+  items: z.array(text(400, 'Ningún elemento de la lista puede quedar vacío.', 'Un elemento de la lista es demasiado largo (máximo 400 caracteres).'))
+    .min(1, 'La lista necesita al menos un elemento.')
+    .max(20, 'La lista admite como máximo 20 elementos.'),
 })
 const ImageBlock = z.object({
-  type: z.literal('image'), url: z.string().url(), alt: text(200), caption: z.string().trim().max(300).optional(),
+  type: z.literal('image'),
+  url: z.string().url('La imagen necesita una URL válida: súbela o pega su dirección completa.'),
+  alt: text(200, 'La imagen necesita un texto alternativo que describa lo que muestra.', 'El texto alternativo es demasiado largo (máximo 200 caracteres).'),
+  caption: z.string().trim().max(300, 'El pie de imagen es demasiado largo (máximo 300 caracteres).').optional(),
 })
 const QuoteBlock = z.object({
-  type: z.literal('quote'), text: text(600), attribution: z.string().trim().max(160).optional(),
+  type: z.literal('quote'),
+  text: text(600, 'La cita no puede quedar vacía.', 'La cita es demasiado larga (máximo 600 caracteres).'),
+  attribution: z.string().trim().max(160, 'La atribución de la cita es demasiado larga (máximo 160 caracteres).').optional(),
 })
 const CalloutBlock = z.object({
-  type: z.literal('callout'), tone: z.enum(['info', 'warning']), text: text(600),
+  type: z.literal('callout'), tone: z.enum(['info', 'warning']),
+  text: text(600, 'El aviso no puede quedar vacío.', 'El aviso es demasiado largo (máximo 600 caracteres).'),
 })
 // El único bloque cuyas fuentes son OBLIGATORIAS: un dato numérico sin respaldo
 // es exactamente lo que este sistema existe para impedir.
 const StatBlock = z.object({
-  type: z.literal('stat'), label: text(80), value: text(40),
-  sourceIds: z.array(z.string()).min(1).max(8),
+  type: z.literal('stat'),
+  label: text(80, 'El dato necesita una etiqueta que diga qué mide.', 'La etiqueta del dato es demasiado larga (máximo 80 caracteres).'),
+  value: text(40, 'El dato necesita un valor.', 'El valor del dato es demasiado largo (máximo 40 caracteres).'),
+  sourceIds: z.array(z.string())
+    .min(1, 'Todo dato necesita al menos una fuente que lo respalde.')
+    .max(8, 'Un dato cita como máximo 8 fuentes.'),
 })
 
 export const NewsletterBlockSchema = z.discriminatedUnion('type', [
@@ -48,16 +70,18 @@ export const NewsletterBlockSchema = z.discriminatedUnion('type', [
 
 export const NewsletterContentSchema = z.object({
   v:      z.literal(NEWSLETTER_CONTENT_VERSION),
-  blocks: z.array(NewsletterBlockSchema).min(1, 'La edición necesita al menos un bloque').max(200),
+  blocks: z.array(NewsletterBlockSchema)
+    .min(1, 'La edición necesita al menos un bloque')
+    .max(200, 'La edición admite como máximo 200 bloques.'),
 })
 
 export const NewsletterSourceSchema = z.object({
-  id:           z.string().trim().min(1).max(40),
-  url:          z.string().url(),
-  title:        text(300),
-  publisher:    z.string().trim().max(160).default(''),
-  published_at: z.string().trim().max(30).optional(),
-  accessed_at:  z.string().trim().max(30),
+  id:           z.string().trim().min(1, 'La fuente necesita un identificador.').max(40, 'El identificador de la fuente es demasiado largo.'),
+  url:          z.string().url('La fuente necesita una URL válida, empezando por https://'),
+  title:        text(300, 'La fuente necesita un título.', 'El título de la fuente es demasiado largo (máximo 300 caracteres).'),
+  publisher:    z.string().trim().max(160, 'El nombre del medio es demasiado largo (máximo 160 caracteres).').default(''),
+  published_at: z.string().trim().max(30, 'La fecha de publicación no tiene un formato válido.').optional(),
+  accessed_at:  z.string().trim().max(30, 'La fecha de consulta no tiene un formato válido.'),
 })
 
 export type NewsletterBlock   = z.infer<typeof NewsletterBlockSchema>

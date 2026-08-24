@@ -74,7 +74,7 @@ const COMPARISON: CompareGroup[] = [
         ],
       },
       { label: 'Propiedades sincronizadas con tu sitio web', values: [false, true, true] },
-      { label: 'Newsletters', values: ['—', 'Incluidas', 'Incluidas'] },
+      { label: 'Newsletters', values: [false, true, true] },
       { label: 'Reportes', values: ['Los números esenciales', 'Completos (agente, fuente y correo)', 'Completos + vista de equipo'] },
     ],
   },
