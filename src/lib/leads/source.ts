@@ -8,12 +8,16 @@ export interface LeadSource {
   label: string
 }
 
-// Channel-backed sources (lead_magnet/event/contact_form are the live ones; manual
-// and manychat_flow are legacy channels kept only for display — see CLAUDE.md).
+// Channel-backed sources (lead_magnet/event/contact_form/newsletter are the live
+// ones; manual and manychat_flow are legacy channels kept only for display — see
+// CLAUDE.md). `newsletter` es la SERIE (migración 105): sin esta entrada el
+// suscriptor caía al traffic_source 'direct' y se mostraba como "Registro
+// manual" en la lista, en la ficha del lead y en el desglose de /analytics.
 const CHANNEL_SOURCES: Record<string, LeadSource> = {
   lead_magnet:   { kind: 'lead_magnet',  label: 'Lead Magnet' },
   event:         { kind: 'event',        label: 'Evento' },
   contact_form:  { kind: 'contact_form', label: 'Formulario Web' },
+  newsletter:    { kind: 'newsletter',   label: 'Newsletter' },
   manual:        { kind: 'manual',       label: 'Registro manual' },
   manychat_flow: { kind: 'manychat',     label: 'ManyChat' },
 }
@@ -85,4 +89,5 @@ export const LEAD_SOURCE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'lead_magnet',  label: 'Lead Magnet' },
   { value: 'event',        label: 'Evento' },
   { value: 'contact_form', label: 'Formulario Web' },
+  { value: 'newsletter',   label: 'Newsletter' },
 ]
