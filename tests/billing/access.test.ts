@@ -76,6 +76,13 @@ describe('getTenantAccess — modo degradado', () => {
       expect(a.publishedPropertiesCap).toBe(3)
     })
 
+    it(`${status} impide publicar newsletters`, () => {
+      // Retención cero: el cron despublica el archivo entero. Sin este corte, el
+      // tenant vuelve a publicar y el cron lo baja al día siguiente — un bucle
+      // que nadie sabría explicar.
+      expect(getTenantAccess({ ...growthActive, status }).newslettersPublishable).toBe(false)
+    })
+
     it(`${status} muestra banner rojo`, () => {
       expect(getTenantAccess({ ...growthActive, status }).banner?.tone).toBe('red')
     })
@@ -142,6 +149,7 @@ describe('getTenantAccess — matriz completa de los 7 estados', () => {
       expect(a.canCreateSequences).toBe(!degraded)
       expect(a.monthlyEmailQuota).toBe(degraded ? DEGRADED_LIMITS.monthlyEmailQuota : null)
       expect(a.publishedPropertiesCap).toBe(degraded ? DEGRADED_LIMITS.publishedPropertiesCap : null)
+      expect(a.newslettersPublishable).toBe(!degraded)
     })
   }
 })

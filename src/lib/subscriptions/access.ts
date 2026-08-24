@@ -73,6 +73,17 @@ export interface TenantAccess {
   monthlyEmailQuota:      number | null
   /** null = rige el del plan. */
   publishedPropertiesCap: number | null
+  /**
+   * Si el tenant puede PUBLICAR ediciones de newsletter. A diferencia de las
+   * propiedades, aquí no hay tope de retención: el cron de ciclo de vida
+   * despublica el archivo entero al agotarse la gracia (un archivo editorial
+   * con tres piezas sueltas y `data_as_of` viejo es incoherente, mientras que
+   * un catálogo vacío corta la operación comercial del cliente).
+   *
+   * Por eso este flag existe: sin él, el tenant vuelve a publicar y el cron lo
+   * baja al día siguiente, en un bucle silencioso que nadie sabría explicar.
+   */
+  newslettersPublishable: boolean
   banner: { tone: 'amber' | 'red'; message: string; cta: string } | null
 }
 
@@ -90,6 +101,7 @@ const FULL_ACCESS = (plan: SubscriptionPlan): TenantAccess => ({
   customDomainAllowed:    PLANS[plan].features.customSendingDomain,
   monthlyEmailQuota:      null,
   publishedPropertiesCap: null,
+  newslettersPublishable: true,
   banner:                 null,
 })
 
@@ -119,6 +131,7 @@ export function getTenantAccess(input: AccessInput): TenantAccess {
     customDomainAllowed:    false,
     monthlyEmailQuota:      DEGRADED_LIMITS.monthlyEmailQuota,
     publishedPropertiesCap: DEGRADED_LIMITS.publishedPropertiesCap,
+    newslettersPublishable: false,
     banner: {
       tone:    'red',
       message: 'Tu suscripción está inactiva. Conservas tus datos y puedes exportarlos; la generación con IA y las secuencias automáticas están en pausa.',

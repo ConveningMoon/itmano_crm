@@ -2,37 +2,62 @@
 
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
-import { requireTenantContext } from '@/lib/auth/tenant-context'
-import { assertCanWriteEdition } from '@/lib/auth/guards'
+import { requireTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
+import { assertCanWriteEdition, assertCanWriteChannel, requireChannelWriteAccess } from '@/lib/auth/guards'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { publishBlockers } from '@/lib/newsletters/publishable'
 import { NewsletterContentSchema, NewsletterSourceSchema } from '@/lib/newsletters/content'
+import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
 import { getEditionById } from '@/lib/data/newsletters'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 
 // Cada action revalida su ruta pública además de la del CRM: publicar tiene que
 // verse ya, no en la próxima ventana de ISR.
-function revalidateAll(tenantSlug: string, seriesSlug?: string, editionSlug?: string) {
+//
+// El slug de la SERIE no es opcional en la práctica: sin él, las dos rutas más
+// profundas nunca se revalidan y publicar deja hasta `revalidate` segundos de
+// 404 cacheado (y despublicar, otros tantos de edición legible). Por eso toda
+// action que toca una edición lo resuelve antes con `seriesSlugFor`.
+function revalidateAll(tenantSlug: string, seriesSlug?: string | null, editionSlug?: string | null) {
   revalidatePath('/newsletters')
+  if (!tenantSlug) return
   revalidatePath(`/nl/${tenantSlug}`)
-  if (seriesSlug) revalidatePath(`/nl/${tenantSlug}/${seriesSlug}`)
-  if (seriesSlug && editionSlug) revalidatePath(`/nl/${tenantSlug}/${seriesSlug}/${editionSlug}`)
+  if (!seriesSlug) return
+  revalidatePath(`/nl/${tenantSlug}/${seriesSlug}`)
+  if (editionSlug) revalidatePath(`/nl/${tenantSlug}/${seriesSlug}/${editionSlug}`)
 }
 
-function slugify(raw: string): string {
-  return raw
-    // ̀-ͯ = marcas diacriticas combinantes. Escapadas a proposito:
-    // escritas como caracteres literales son invisibles en el editor y no
-    // sobreviven a un cambio de codificación del archivo.
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase().trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
+const CHANNEL_SLUG_COLUMNS = columns('acquisition_channels', ['slug'])
+const CHANNEL_GUARD_COLUMNS = columns('acquisition_channels', ['id', 'tenant_id', 'agent_id', 'channel_type', 'slug'])
+
+/** Slug de la serie a la que cuelga una edición — el que falta para revalidar. */
+async function seriesSlugFor(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  channelId: string,
+): Promise<string | null> {
+  const { data } = await db
+    .from('acquisition_channels')
+    .select(CHANNEL_SLUG_COLUMNS)
+    .eq('id', channelId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle()
+  return (data as { slug: string } | null)?.slug ?? null
+}
+
+/**
+ * Un agente sólo puede crear o mantener series a su nombre: no las regala ni
+ * las convierte en "Toda la agencia". Mismo criterio que `ownerAgentFor` de
+ * sources/actions.ts.
+ */
+function ownerAgentFor(ctx: TenantContext, requested: string | null): string | null {
+  return ctx.role === 'agent' ? (ctx.agent_id ?? null) : requested
 }
 
 // Mismo generador que usa src/app/(dashboard)/sources/actions.ts para las
@@ -92,21 +117,45 @@ const SeriesInput = z.object({
 export async function createSeries(input: unknown): Promise<Result<{ id: string }>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
+  const denied = requireChannelWriteAccess(g.ctx)
+  if (denied) return denied
   const parsed = SeriesInput.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
 
+  // El índice único de la base es (tenant_id, slug) sobre TODOS los canales del
+  // tenant, no sólo sobre las series: llamar "Contacto" a una serie cuando ya
+  // hay un formulario "Contacto" reventaba con el error crudo de Postgres, en
+  // inglés, en pantalla. Se busca el primer slug libre entre todos los canales.
+  const { data: taken } = await g.db
+    .from('acquisition_channels')
+    .select(CHANNEL_SLUG_COLUMNS)
+    .eq('tenant_id', g.tenantId)
+  const slug = uniqueSlug(
+    slugify(parsed.data.name),
+    // reason: el cliente de Supabase no está tipado en este repo.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((taken ?? []) as any[]).map(c => c.slug as string),
+  )
+
   const { data, error } = await g.db.from('acquisition_channels').insert({
-    tenant_id:         g.ctx.tenant_id,
+    tenant_id:         g.tenantId,
     public_id:         genPublicId(),
     channel_type:      'newsletter',
     name:              parsed.data.name,
-    slug:              slugify(parsed.data.name),
+    slug,
     email_sequence_id: parsed.data.emailSequenceId,
-    agent_id:          parsed.data.agentId,
+    agent_id:          ownerAgentFor(g.ctx, parsed.data.agentId),
   }).select('id').maybeSingle()
 
-  if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug)
+  // La comprobación de arriba quita el caso corriente, no la carrera de dos
+  // creaciones simultáneas: el índice sigue siendo la garantía y aquí sólo se
+  // traduce su mensaje.
+  if (error) {
+    return { ok: false, error: isUniqueViolation(error)
+      ? 'Ya existe otra fuente con ese nombre. Elige uno distinto.'
+      : error.message }
+  }
+  revalidateAll(g.tenantSlug, slug)
   // reason: ver guard().
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { ok: true, data: { id: (data as any).id } }
@@ -115,17 +164,37 @@ export async function createSeries(input: unknown): Promise<Result<{ id: string 
 export async function updateSeries(id: string, input: unknown): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
+  const denied = requireChannelWriteAccess(g.ctx)
+  if (denied) return denied
   const parsed = SeriesInput.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
+
+  // Un `agent` sólo administra las series que son suyas — el mismo guard que
+  // /sources aplica a cualquier otro canal. Sin esto, arreglar el permiso de
+  // las ediciones y dejar abierta la serie era incoherente: un agente podía
+  // renombrar o revincular la serie de un compañero.
+  const { data: channelRow } = await g.db
+    .from('acquisition_channels')
+    .select(CHANNEL_GUARD_COLUMNS)
+    .eq('id', id)
+    .eq('tenant_id', g.tenantId)
+    .eq('channel_type', 'newsletter')
+    .maybeSingle()
+  const channel = channelRow as { tenant_id: string; agent_id: string | null; slug: string } | null
+  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
+  const notMine = assertCanWriteChannel(g.ctx, channel)
+  if (notMine) return notMine
 
   const { error } = await g.db.from('acquisition_channels').update({
     name:              parsed.data.name,
     email_sequence_id: parsed.data.emailSequenceId,
-    agent_id:          parsed.data.agentId,
-  }).eq('id', id).eq('tenant_id', g.ctx.tenant_id).eq('channel_type', 'newsletter')
+    agent_id:          ownerAgentFor(g.ctx, parsed.data.agentId),
+  }).eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
 
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug)
+  // El slug NO cambia al renombrar: la URL pública ya está compartida e
+  // indexada. Se revalida el archivo de la serie porque su título sí cambia.
+  revalidateAll(g.tenantSlug, channel.slug)
   return { ok: true, data: null }
 }
 
@@ -133,7 +202,10 @@ const EditionInput = z.object({
   channelId:     z.string().uuid(),
   title:         z.string().trim().min(1, 'La edición necesita un titular').max(200),
   dek:           z.string().trim().max(400).nullable(),
-  language:      z.string().trim().min(2).max(3),
+  // El enum del repo, no una longitud: `z.string().min(2).max(3)` dejaba pasar
+  // cualquier trigrama hasta el CHECK de la base, que rebota con un error crudo
+  // de Postgres en inglés.
+  language:      z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]),
   coverImageUrl: z.string().url('La edición necesita una imagen de portada'),
   coverSource:   z.enum(['upload', 'studio', 'ai']),
   content:       NewsletterContentSchema,
@@ -155,7 +227,7 @@ export async function createEdition(input: unknown): Promise<Result<{ id: string
   // atacante que el id es real.
   const { data: channelRow } = await g.db
     .from('acquisition_channels')
-    .select(columns('acquisition_channels', ['id', 'tenant_id', 'channel_type']))
+    .select(CHANNEL_GUARD_COLUMNS)
     .eq('id', d.channelId)
     .maybeSingle()
   // reason: el cliente de Supabase no está tipado en este repo.
@@ -165,10 +237,26 @@ export async function createEdition(input: unknown): Promise<Result<{ id: string
     return { ok: false, error: 'Esa serie no existe.' }
   }
 
+  // Antes el slug llevaba un sufijo `-<timestamp base36>` SIEMPRE: feo en la
+  // URL pública y aun así colisionable si dos inserciones del mismo canal y
+  // título caían en el mismo milisegundo. Ahora se usa el slug limpio y sólo
+  // se numera cuando hace falta.
+  const { data: takenRows } = await g.db
+    .from('newsletter_editions')
+    .select(columns('newsletter_editions', ['slug']))
+    .eq('tenant_id', g.tenantId)
+    .eq('channel_id', d.channelId)
+  const slug = uniqueSlug(
+    slugify(d.title),
+    // reason: ver arriba.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((takenRows ?? []) as any[]).map(e => e.slug as string),
+  )
+
   const { data, error } = await g.db.from('newsletter_editions').insert({
-    tenant_id:           g.ctx.tenant_id,
+    tenant_id:           g.tenantId,
     channel_id:          d.channelId,
-    slug:                `${slugify(d.title)}-${Date.now().toString(36)}`,
+    slug,
     title:               d.title,
     dek:                 d.dek,
     language:            d.language,
@@ -182,8 +270,12 @@ export async function createEdition(input: unknown): Promise<Result<{ id: string
     created_by_user_id:  g.ctx.user_id,
   }).select('id').maybeSingle()
 
-  if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug)
+  if (error) {
+    return { ok: false, error: isUniqueViolation(error)
+      ? 'Ya existe otra edición con ese titular en esta serie. Cámbialo un poco.'
+      : error.message }
+  }
+  revalidateAll(g.tenantSlug, channel.slug as string)
   // reason: ver guard().
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { ok: true, data: { id: (data as any).id } }
@@ -212,10 +304,10 @@ export async function updateEdition(id: string, input: unknown): Promise<Result<
     content:         d.content,
     sources:         d.sources,
     data_as_of:      d.dataAsOf,
-  }).eq('id', id).eq('tenant_id', g.ctx.tenant_id)
+  }).eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug)
+  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
   return { ok: true, data: null }
 }
 
@@ -229,6 +321,21 @@ export async function publishEdition(id: string): Promise<Result<null>> {
     tenant_id: edition.tenantId, created_by_user_id: edition.createdByUserId,
   })
   if (denial) return denial
+
+  // Estado de la SUSCRIPCIÓN, no del plan: `canUseNewsletters` (el gate de
+  // guard()) sólo mira `subscriptions.plan` y deja publicar a un tenant
+  // degradado. Con la retención cero decidida para newsletters, el cron de
+  // ciclo de vida despublica el archivo entero al agotarse la gracia, así que
+  // sin este corte el tenant republica hoy y el cron lo baja mañana: un bucle
+  // silencioso y sin explicación. Mismo enfoque que assertPublishCap en
+  // properties/actions.ts — el motivo va en el mensaje, no un error genérico.
+  const access = await getTenantAccessFor(g.tenantId)
+  if (!access.newslettersPublishable) {
+    return {
+      ok: false,
+      error: 'Tu suscripción está inactiva, así que las newsletters no se pueden publicar. Al reactivarla vuelven a publicarse solas las que el sistema bajó.',
+    }
+  }
 
   // La MISMA función que usa el editor para deshabilitar el botón. Un check de
   // UI que el servidor no repite no es un check.
@@ -245,10 +352,10 @@ export async function publishEdition(id: string): Promise<Result<null>> {
 
   const { error } = await g.db.from('newsletter_editions')
     .update({ status: 'published', published_at: new Date().toISOString() })
-    .eq('id', id).eq('tenant_id', g.ctx.tenant_id)
+    .eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, undefined, edition.slug)
+  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, edition.channelId), edition.slug)
   return { ok: true, data: null }
 }
 
@@ -264,9 +371,11 @@ export async function unpublishEdition(id: string): Promise<Result<null>> {
 
   const { error } = await g.db.from('newsletter_editions')
     .update({ status: 'draft' })
-    .eq('id', id).eq('tenant_id', g.ctx.tenant_id)
+    .eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug)
+  // Despublicar es el caso donde MÁS importa llegar a la ruta de la edición:
+  // sin revalidarla, la pieza retirada se sigue sirviendo desde el caché.
+  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
   return { ok: true, data: null }
 }
 
@@ -280,10 +389,14 @@ export async function deleteEdition(id: string): Promise<Result<null>> {
   })
   if (denial) return denial
 
+  // El slug de la serie se resuelve ANTES del delete: después, la edición ya no
+  // existe para decir de qué serie colgaba.
+  const seriesSlug = await seriesSlugFor(g.db, g.tenantId, existing.channelId)
+
   const { error } = await g.db.from('newsletter_editions')
-    .delete().eq('id', id).eq('tenant_id', g.ctx.tenant_id)
+    .delete().eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug)
+  revalidateAll(g.tenantSlug, seriesSlug, existing.slug)
   return { ok: true, data: null }
 }
 
