@@ -2396,6 +2396,7 @@ export type Database = {
           fit_score: number | null
           id: string | null
           is_imported: boolean | null
+          is_subscriber: boolean | null
           language: string | null
           last_event_at: string | null
           last_name: string | null
