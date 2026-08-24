@@ -1,5 +1,9 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
+import { revalidateNewsletterPaths, type RevalidatableEdition } from '@/lib/newsletters/revalidate'
+
+const RESTORED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug', 'channel_id'])
 
 export interface ReactivationReport {
   propertiesRepublished:  number
@@ -41,10 +45,19 @@ export async function restoreAfterReactivation(tenantId: string): Promise<Reacti
     .update({ status: 'published', unpublished_by_billing: false })
     .eq('tenant_id', tenantId)
     .eq('unpublished_by_billing', true)
-    .select('id')
+    .select(RESTORED_EDITION_COLUMNS)
+
+  // reason: el cliente de Supabase no está tipado en este repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const republished = ((restoredNewsletters ?? []) as any[]) as RevalidatableEdition[]
+
+  // Sin esto, el archivo del cliente que acaba de volver a pagar sigue
+  // apareciendo vacío hasta que expire la ventana de ISR (300 s en las tres
+  // rutas). Best-effort: no puede tumbar la reactivación.
+  if (republished.length > 0) await revalidateNewsletterPaths(supabase, tenantId, republished)
 
   return {
     propertiesRepublished:  (restored ?? []).length,
-    newslettersRepublished: (restoredNewsletters ?? []).length,
+    newslettersRepublished: republished.length,
   }
 }

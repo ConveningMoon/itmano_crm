@@ -13,9 +13,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // contra datos reales de un tenant.
 type Call = { method: string; args: unknown[]; table?: string }
 
-function makeFakeSupabase(rowsByTable: Record<string, { id: string }[]>) {
+function makeFakeSupabase(rowsByTable: Record<string, Record<string, unknown>[]>) {
   const calls: Call[] = []
   function makeBuilder(table: string) {
+    const rows = rowsByTable[table] ?? []
+    // El builder es THENABLE: `select()` ya no cierra la cadena, porque la
+    // revalidación de las rutas públicas encadena `.select().eq().maybeSingle()`
+    // y `.select().eq().in()` sobre `tenants` y `acquisition_channels`.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- doble encadenable de prueba, sin tipos de Supabase
     const builder: any = {
       update(payload: unknown) {
@@ -26,9 +30,20 @@ function makeFakeSupabase(rowsByTable: Record<string, { id: string }[]>) {
         calls.push({ method: 'eq', args: [col, val], table })
         return builder
       },
+      in(col: string, vals: unknown) {
+        calls.push({ method: 'in', args: [col, vals], table })
+        return builder
+      },
       select(cols: string) {
         calls.push({ method: 'select', args: [cols], table })
-        return Promise.resolve({ data: rowsByTable[table] ?? [], error: null })
+        return builder
+      },
+      maybeSingle() {
+        calls.push({ method: 'maybeSingle', args: [], table })
+        return Promise.resolve({ data: rows[0] ?? null, error: null })
+      },
+      then(onOk: (v: unknown) => unknown, onErr?: (e: unknown) => unknown) {
+        return Promise.resolve({ data: rows, error: null }).then(onOk, onErr)
       },
     }
     return builder
@@ -45,13 +60,19 @@ function makeFakeSupabase(rowsByTable: Record<string, { id: string }[]>) {
 }
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
+import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 
 const mockCreateAdminClient = createAdminClient as unknown as ReturnType<typeof vi.fn>
+const mockRevalidatePath = revalidatePath as unknown as ReturnType<typeof vi.fn>
 
-beforeEach(() => mockCreateAdminClient.mockReset())
+beforeEach(() => {
+  mockCreateAdminClient.mockReset()
+  mockRevalidatePath.mockReset()
+})
 
 describe('restoreAfterReactivation', () => {
   it('exporta una funcion que devuelve el conteo de republicadas', () => {
@@ -105,6 +126,35 @@ describe('restoreAfterReactivation', () => {
     expect(updateCall?.args[0]).toEqual({ status: 'published', unpublished_by_billing: false })
 
     expect(report).toEqual({ propertiesRepublished: 0, newslettersRepublished: 1 })
+  })
+
+  it('newsletters: purga el caché de las tres rutas públicas al republicar', async () => {
+    // Sin esto, el archivo del cliente que acaba de volver a pagar sigue
+    // apareciendo vacío hasta que expire la ventana de ISR (300 s).
+    const fake = makeFakeSupabase({
+      newsletter_editions:   [{ id: 'n1', slug: 'agosto-2026', channel_id: 'ch1' }],
+      tenants:               [{ id: 'tenant-x', slug: 'aj' }],
+      acquisition_channels:  [{ id: 'ch1', slug: 'mercado' }],
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+
+    await restoreAfterReactivation('tenant-x')
+
+    const paths = mockRevalidatePath.mock.calls.map(c => c[0])
+    expect(paths).toContain('/nl/aj')
+    expect(paths).toContain('/nl/aj/mercado')
+    expect(paths).toContain('/nl/aj/mercado/agosto-2026')
+  })
+
+  it('newsletters: sin nada que republicar no toca el caché', async () => {
+    const fake = makeFakeSupabase({ tenants: [{ id: 'tenant-x', slug: 'aj' }] })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+
+    await restoreAfterReactivation('tenant-x')
+
+    expect(mockRevalidatePath).not.toHaveBeenCalled()
   })
 
   it('newsletters: un borrador propio del tenant (sin la marca) no vuelve a publicarse', async () => {
