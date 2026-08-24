@@ -17,6 +17,7 @@ export const navItems: NavItemDef[] = [
   { label: 'Dashboard',     href: '/dashboard', icon: 'LayoutDashboard' },
   { label: 'Leads',         href: '/leads',       icon: 'Users'      },
   { label: 'Propiedades',   href: '/properties', icon: 'Building2'  },
+  { label: 'Newsletters',   href: '/newsletters', icon: 'Newspaper' },
   { label: 'Fuentes',       href: '/sources',    icon: 'GitBranch'  },
   { label: 'Emails',        href: '/emails',    icon: 'Mail' },
   { label: 'Analytics',     href: '/analytics', icon: 'BarChart2' },

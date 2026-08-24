@@ -56,6 +56,13 @@ export interface PlanFeatures {
    * los tenants Growth/Partner (ver CLAUDE.md — arquitectura de email).
    */
   customSendingDomain: boolean
+  /**
+   * Newsletters: contenido editorial publicado con captación de suscriptores.
+   * Consume presupuesto de IA de forma recurrente y publica con la marca del
+   * cliente, así que acompaña a los planes que ya incluyen dominio propio y
+   * analítica completa.
+   */
+  newsletters: boolean
 }
 
 export interface PlanDefinition {
@@ -119,6 +126,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       teamAnalytics: false,
       multiLogin: false,
       customSendingDomain: false,
+      newsletters: false,
     },
     onboarding: 'Guiado (autoservicio con nuestro equipo a un email)',
     support: 'Email',
@@ -151,6 +159,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       teamAnalytics: false,
       multiLogin: false,
       customSendingDomain: true,
+      newsletters: true,
     },
     onboarding: 'Asistido (configuramos canales y secuencias contigo)',
     support: 'Email prioritario',
@@ -184,6 +193,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       teamAnalytics: true,
       multiLogin: true,
       customSendingDomain: true,
+      newsletters: true,
     },
     onboarding: 'Dedicado + migración de datos (HubSpot y otros)',
     support: 'Prioritario + contacto directo',

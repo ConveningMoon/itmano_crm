@@ -19,6 +19,7 @@ import {
   Inbox,
   Images,
   Sparkles,
+  Newspaper,
 } from 'lucide-react'
 
 // Un ítem está activo si su href es el prefijo MÁS específico que coincide con la
@@ -51,6 +52,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   Inbox,
   Images,
   Sparkles,
+  Newspaper,
 }
 
 interface NavItemProps {
