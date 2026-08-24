@@ -10,7 +10,7 @@ import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
-import { shouldAssessFit, subscriberMetadata } from '@/lib/newsletters/subscriber'
+import { shouldAssessFit, subscriberMetadata, mergeSubmissionMetadata, graduateSubscriber } from '@/lib/newsletters/subscriber'
 
 export function OPTIONS() {
   return corsOptions()
@@ -186,15 +186,39 @@ export async function POST(
     .eq('email', parsed.email)
     .maybeSingle()
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existingLeadAny = existingLead as any
+
   let leadId: string
   let duplicate = false
   const fullName = `${parsed.first_name} ${parsed.last_name}`.trim() || 'Lead'
+
+  // Vista LOCAL de lo que quedará en `leads.metadata` tras esta request.
+  // Arranca en lo ya leído (o null, si el lead es nuevo) y cada rama de abajo
+  // la actualiza — el insert de un suscriptor nuevo ESCRIBE la marca, la
+  // graduación de uno existente la QUITA — para que FASE 1, más adelante en
+  // esta misma request, nunca fusione metadata sobre un valor desactualizado
+  // y resucite (o pierda) `newsletter_subscriber`.
+  let leadMetadata = (existingLeadAny?.metadata ?? null) as Record<string, unknown> | null
 
   if (existingLead) {
     duplicate = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = existingLead as any
     leadId = existing.id as string
+
+    // Graduación: si este lead YA venía marcado como suscriptor de newsletter
+    // y llega ahora por un canal que NO es newsletter, acaba de mostrar
+    // intención real — deja de ser sólo un lector (migración 106). No hace
+    // nada si no tenía la marca (best-effort, ver graduateSubscriber).
+    if (channelType !== 'newsletter') {
+      await graduateSubscriber(db, leadId)
+      if (leadMetadata && 'newsletter_subscriber' in leadMetadata) {
+        const stripped = { ...leadMetadata }
+        delete stripped.newsletter_subscriber
+        leadMetadata = stripped
+      }
+    }
 
     // a) Merge non-empty changed fields
     const updates: Record<string, string> = {}
@@ -228,6 +252,16 @@ export async function POST(
     leadId         = crypto.randomUUID()
     const utms     = parsed.utms
 
+    // Un suscriptor de newsletter es un LECTOR, no un prospecto: la marca lo
+    // saca del cálculo de quintiles (migración 106) y evita gastar IA
+    // analizando un fit_profile vacío (ver shouldAssessFit más abajo). Se
+    // guarda también en `leadMetadata` — no sólo en el insert — porque este
+    // lead es nuevo: no hay fila previa que FASE 1 pueda leer más abajo si
+    // este mismo envío también trae `intent` o `budget_amount`.
+    if (channelType === 'newsletter') {
+      leadMetadata = subscriberMetadata({ channelId, consentText: parsed.consent_text as string, sourceUrl: parsed.source_url ?? '' })
+    }
+
     const { error: leadError } = await db.from('leads').insert({
       id:                   leadId,
       tenant_id:            tenantId,
@@ -245,12 +279,7 @@ export async function POST(
       current_score:        0,
       // quiz_answers is no longer persisted to metadata — answers now live in
       // form_submissions (see CLAUDE.md → answers contract).
-      // Un suscriptor de newsletter es un LECTOR, no un prospecto: la marca lo
-      // saca del cálculo de quintiles (migración 106) y evita gastar IA
-      // analizando un fit_profile vacío (ver shouldAssessFit más abajo).
-      ...(channelType === 'newsletter'
-        ? { metadata: subscriberMetadata({ channelId, consentText: parsed.consent_text as string, sourceUrl: parsed.source_url ?? '' }) }
-        : {}),
+      ...(leadMetadata ? { metadata: leadMetadata } : {}),
     })
 
     if (leadError) {
@@ -306,15 +335,12 @@ export async function POST(
 
   const fitDims      = extractFitDimensions(intent, parsed.form_answers, profile)
   const budgetAmount = extractBudgetAmount(parsed.form_answers)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const existingForFit = existingLead as any
   // El fit_profile efectivo del lead tras este envío — lo que ya tenía más lo
   // que aporta esta sumisión. shouldAssessFit lo usa más abajo para decidir si
   // vale la pena gastar IA analizándolo.
-  let fitProfile = (existingForFit?.fit_profile ?? null) as Record<string, unknown> | null
+  let fitProfile = (existingLeadAny?.fit_profile ?? null) as Record<string, unknown> | null
   if (Object.keys(fitDims).length > 0 || intent || budgetAmount !== null) {
     const currentProfile = (fitProfile ?? {}) as Record<string, unknown>
-    const currentMeta    = (existingForFit?.metadata ?? {}) as Record<string, unknown>
     const leadUpdate: Record<string, unknown> = {}
     if (Object.keys(fitDims).length > 0) {
       fitProfile = { ...currentProfile, ...fitDims }
@@ -322,12 +348,14 @@ export async function POST(
     }
     // El monto crudo se guarda además del bucket: el bucket dice en qué rango
     // cae, el monto es lo que la comisión necesita para valer algo.
+    //
+    // `leadMetadata` (NO `existingLead.metadata`) es la base de la fusión: para
+    // un lead nuevo `existingLead` es null, y `leadMetadata` es lo único que
+    // sabe que este mismo insert acaba de escribir la marca de suscriptor (o
+    // que la graduación de arriba la acaba de quitar). Ver mergeSubmissionMetadata.
     if (intent || budgetAmount !== null) {
-      leadUpdate.metadata = {
-        ...currentMeta,
-        ...(intent ? { intent } : {}),
-        ...(budgetAmount !== null ? { budget_amount: budgetAmount } : {}),
-      }
+      leadMetadata = mergeSubmissionMetadata(leadMetadata, { intent, budgetAmount })
+      leadUpdate.metadata = leadMetadata
     }
     const { error: fitErr } = await db.from('leads').update(leadUpdate).eq('id', leadId)
     if (fitErr) {
@@ -459,8 +487,10 @@ export async function POST(
   // contexto de mercado tras responder. Fire-and-forget con after(): no bloquea la
   // respuesta al visitante y el servicio verifica el toggle + presupuesto + clave.
   // Sin fit que analizar no se gasta IA. Ver shouldAssessFit: la newsletter
-  // entra siempre por aquí, y se gradúa sola cuando el lead muestra intención
-  // por cualquiera de las otras rutas que ya llaman a assessLeadFit.
+  // entra siempre por aquí. La graduación (quitar la marca de suscriptor) es
+  // un mecanismo APARTE — graduateSubscriber, llamado arriba y desde el
+  // webhook de respuestas de email — porque assessLeadFit sólo reinterpreta
+  // fit_profile y nunca toca metadata.
   if (shouldAssessFit(channelType, fitProfile)) {
     after(() => assessLeadFit({ leadId, tenantId, reason: 'form_submit' }))
   }
