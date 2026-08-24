@@ -1475,6 +1475,103 @@ export type Database = {
           },
         ]
       }
+      newsletter_editions: {
+        Row: {
+          ai_generated: boolean
+          ai_run: Json | null
+          channel_id: string
+          content: Json
+          cover_image_url: string
+          cover_source: string
+          created_at: string
+          created_by_agent_id: string | null
+          created_by_user_id: string | null
+          data_as_of: string | null
+          dek: string | null
+          id: string
+          language: string
+          published_at: string | null
+          slug: string
+          sources: Json
+          status: string
+          tenant_id: string
+          title: string
+          translation_group_id: string | null
+          unpublished_by_billing: boolean
+          updated_at: string
+        }
+        Insert: {
+          ai_generated?: boolean
+          ai_run?: Json | null
+          channel_id: string
+          content?: Json
+          cover_image_url: string
+          cover_source?: string
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          data_as_of?: string | null
+          dek?: string | null
+          id?: string
+          language?: string
+          published_at?: string | null
+          slug: string
+          sources?: Json
+          status?: string
+          tenant_id: string
+          title: string
+          translation_group_id?: string | null
+          unpublished_by_billing?: boolean
+          updated_at?: string
+        }
+        Update: {
+          ai_generated?: boolean
+          ai_run?: Json | null
+          channel_id?: string
+          content?: Json
+          cover_image_url?: string
+          cover_source?: string
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          data_as_of?: string | null
+          dek?: string | null
+          id?: string
+          language?: string
+          published_at?: string | null
+          slug?: string
+          sources?: Json
+          status?: string
+          tenant_id?: string
+          title?: string
+          translation_group_id?: string | null
+          unpublished_by_billing?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_editions_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "acquisition_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_editions_created_by_agent_id_fkey"
+            columns: ["created_by_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_editions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           agent_id: string | null
@@ -2181,6 +2278,7 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          newsletter_source_domains: string[] | null
           pages_managed_by_itmano: boolean
           primary_areas: string[] | null
           primary_color: string
@@ -2208,6 +2306,7 @@ export type Database = {
           id: string
           logo_url?: string | null
           name: string
+          newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
@@ -2235,6 +2334,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
