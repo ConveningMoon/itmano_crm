@@ -1276,7 +1276,10 @@ function revalidateAll(tenantSlug: string, seriesSlug?: string, editionSlug?: st
 
 function slugify(raw: string): string {
   return raw
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    // \u0300-\u036f = marcas diacriticas combinantes. Escapadas a proposito:
+    // escritas como caracteres literales son invisibles en el editor y no
+    // sobreviven a un cambio de codificación del archivo.
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
