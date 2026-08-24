@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { assertCanWriteEdition } from '@/lib/auth/guards'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
@@ -147,6 +148,23 @@ export async function createEdition(input: unknown): Promise<Result<{ id: string
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
   const d = parsed.data
 
+  // El channelId llega del cliente: sin esta comprobación, cualquiera podía
+  // colgar una edición del canal de OTRO tenant (misma tenant_id propia, pero
+  // channel_id ajeno) — la fila quedaría visible en la página pública de un
+  // tercero. Mismo mensaje para "no existe" y "no es tuyo": no le confirmes al
+  // atacante que el id es real.
+  const { data: channelRow } = await g.db
+    .from('acquisition_channels')
+    .select(columns('acquisition_channels', ['id', 'tenant_id', 'channel_type']))
+    .eq('id', d.channelId)
+    .maybeSingle()
+  // reason: el cliente de Supabase no está tipado en este repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channel = channelRow as any
+  if (!channel || channel.tenant_id !== g.ctx.tenant_id || channel.channel_type !== 'newsletter') {
+    return { ok: false, error: 'Esa serie no existe.' }
+  }
+
   const { data, error } = await g.db.from('newsletter_editions').insert({
     tenant_id:           g.ctx.tenant_id,
     channel_id:          d.channelId,
@@ -178,6 +196,13 @@ export async function updateEdition(id: string, input: unknown): Promise<Result<
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
   const d = parsed.data
 
+  const existing = await getEditionById(id, g.tenantId)
+  if (!existing) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: existing.tenantId, created_by_user_id: existing.createdByUserId,
+  })
+  if (denial) return denial
+
   const { error } = await g.db.from('newsletter_editions').update({
     title:           d.title,
     dek:             d.dek,
@@ -200,6 +225,10 @@ export async function publishEdition(id: string): Promise<Result<null>> {
 
   const edition = await getEditionById(id, g.tenantId)
   if (!edition) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: edition.tenantId, created_by_user_id: edition.createdByUserId,
+  })
+  if (denial) return denial
 
   // La MISMA función que usa el editor para deshabilitar el botón. Un check de
   // UI que el servidor no repite no es un check.
@@ -226,6 +255,13 @@ export async function publishEdition(id: string): Promise<Result<null>> {
 export async function unpublishEdition(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
+  const existing = await getEditionById(id, g.tenantId)
+  if (!existing) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: existing.tenantId, created_by_user_id: existing.createdByUserId,
+  })
+  if (denial) return denial
+
   const { error } = await g.db.from('newsletter_editions')
     .update({ status: 'draft' })
     .eq('id', id).eq('tenant_id', g.ctx.tenant_id)
@@ -237,6 +273,13 @@ export async function unpublishEdition(id: string): Promise<Result<null>> {
 export async function deleteEdition(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
+  const existing = await getEditionById(id, g.tenantId)
+  if (!existing) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: existing.tenantId, created_by_user_id: existing.createdByUserId,
+  })
+  if (denial) return denial
+
   const { error } = await g.db.from('newsletter_editions')
     .delete().eq('id', id).eq('tenant_id', g.ctx.tenant_id)
   if (error) return { ok: false, error: error.message }
@@ -244,32 +287,7 @@ export async function deleteEdition(id: string): Promise<Result<null>> {
   return { ok: true, data: null }
 }
 
-// ── Subida de medios ─────────────────────────────────────────────────────────
-// La usa el CoverPicker y el bloque de imagen. Sube con el cliente service-role
-// (nunca desde el navegador) y devuelve la URL pública ya resuelta.
-
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024
-const ALLOWED_MEDIA   = ['image/png', 'image/jpeg', 'image/webp']
-
-export async function uploadNewsletterMedia(formData: FormData): Promise<Result<{ url: string }>> {
-  const g = await guard()
-  if (!g.ctx) return { ok: false, error: g.error }
-
-  const file = formData.get('file')
-  if (!(file instanceof File)) return { ok: false, error: 'No llegó ningún archivo.' }
-  if (file.size > MAX_MEDIA_BYTES) return { ok: false, error: 'La imagen supera los 8 MB.' }
-  if (!ALLOWED_MEDIA.includes(file.type)) {
-    return { ok: false, error: 'Formato no admitido. Usa PNG, JPG o WebP.' }
-  }
-
-  const ext  = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
-  const path = `${g.ctx.tenant_id}/${crypto.randomUUID()}.${ext}`
-
-  const { error } = await g.db.storage
-    .from('newsletter-media')
-    .upload(path, file, { contentType: file.type, upsert: false })
-  if (error) return { ok: false, error: `No se pudo subir la imagen: ${error.message}` }
-
-  const { data } = g.db.storage.from('newsletter-media').getPublicUrl(path)
-  return { ok: true, data: { url: data.publicUrl } }
-}
+// La subida de medios (portada, bloque de imagen) YA NO vive aquí como Server
+// Action: ver src/app/api/newsletters/media/route.ts y el comentario de ese
+// archivo — pasar un File binario por una Server Action corrompe la subida
+// (mismo hallazgo documentado en src/app/api/properties/media/route.ts).

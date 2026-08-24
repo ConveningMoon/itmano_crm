@@ -164,6 +164,36 @@ export function assertCanWriteProperty(
 }
 
 /**
+ * Newsletter edition write gate.
+ *   - super_admin → any edition, any tenant.
+ *   - agent_owner → any edition within their tenant.
+ *   - agent       → only editions they created (created_by_user_id === ctx.user_id).
+ *
+ * Mismo criterio que assertCanWriteProperty: la ficha de "quién puede escribir"
+ * es created_by_user_id, no agents.id — una edición nace ligada al login que la
+ * creó (createEdition guarda ctx.user_id), no al registro de equipo, que en la
+ * mayoría de filas de `agents` ni siquiera existe.
+ *
+ * @returns an AuthDenial to return from the action, or null if allowed.
+ */
+export function assertCanWriteEdition(
+  ctx: TenantContext,
+  edition: { tenant_id: string; created_by_user_id: string | null },
+): AuthDenial | null {
+  if (ctx.role === 'super_admin') return null
+
+  if (edition.tenant_id !== ctx.tenant_id) {
+    return { ok: false, error: 'No tienes permiso sobre esta edición' }
+  }
+
+  if (ctx.role === 'agent' && edition.created_by_user_id !== ctx.user_id) {
+    return { ok: false, error: 'No tienes permiso sobre esta edición' }
+  }
+
+  return null
+}
+
+/**
  * Resolves the target tenant for a write: owner/agent → their context tenant;
  * super_admin → the explicitly chosen tenant (no implicit fallback). Returns the
  * tenant id, or an { error } to surface from the action.
