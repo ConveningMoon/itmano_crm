@@ -1039,7 +1039,7 @@ git commit -m "feat(newsletters): capa de datos"
 // tests/newsletters/render.test.ts
 import { describe, it, expect } from 'vitest'
 import { renderNewsletterHtml, escapeHtml } from '@/lib/newsletters/render'
-import { NEWSLETTER_CONTENT_VERSION } from '@/lib/newsletters/content'
+import { NEWSLETTER_CONTENT_VERSION, type NewsletterContent } from '@/lib/newsletters/content'
 
 const fuente = {
   id: 's1', url: 'https://nar.realtor/x', title: 'Informe NAR', publisher: 'NAR', accessed_at: '2026-08-24',
@@ -1053,14 +1053,14 @@ describe('escapeHtml', () => {
 
 describe('renderNewsletterHtml', () => {
   it('escapa el texto de usuario en cada tipo de bloque', () => {
-    const content = {
+    const content: NewsletterContent = {
       v: NEWSLETTER_CONTENT_VERSION,
       blocks: [
         { type: 'heading', level: 2, text: '<img src=x onerror=alert(1)>' },
         { type: 'paragraph', text: '<script>alert(1)</script>' },
         { type: 'quote', text: '<b>no</b>', attribution: '<i>tampoco</i>' },
       ],
-    } as const
+    }
     const html = renderNewsletterHtml(content, [])
     expect(html).not.toContain('<script>')
     expect(html).not.toContain('onerror=')
@@ -1068,41 +1068,41 @@ describe('renderNewsletterHtml', () => {
   })
 
   it('renderiza los niveles de heading como h2 y h3', () => {
-    const content = {
+    const content: NewsletterContent = {
       v: NEWSLETTER_CONTENT_VERSION,
       blocks: [
         { type: 'heading', level: 2, text: 'Dos' },
         { type: 'heading', level: 3, text: 'Tres' },
       ],
-    } as const
+    }
     const html = renderNewsletterHtml(content, [])
     expect(html).toContain('<h2>Dos</h2>')
     expect(html).toContain('<h3>Tres</h3>')
   })
 
   it('pinta las fuentes citadas al pie con su enlace', () => {
-    const content = {
+    const content: NewsletterContent = {
       v: NEWSLETTER_CONTENT_VERSION,
       blocks: [{ type: 'stat', label: 'Precio medio', value: '$385.000', sourceIds: ['s1'] }],
-    } as const
+    }
     const html = renderNewsletterHtml(content, [fuente])
     expect(html).toContain('https://nar.realtor/x')
     expect(html).toContain('Informe NAR')
   })
 
   it('no pinta la seccion de fuentes cuando ninguna se cita', () => {
-    const content = {
+    const content: NewsletterContent = {
       v: NEWSLETTER_CONTENT_VERSION,
       blocks: [{ type: 'paragraph', text: 'Sin datos' }],
-    } as const
+    }
     expect(renderNewsletterHtml(content, [fuente])).not.toContain('nar.realtor')
   })
 
   it('ignora una url de imagen que no sea http', () => {
-    const content = {
+    const content: NewsletterContent = {
       v: NEWSLETTER_CONTENT_VERSION,
       blocks: [{ type: 'image', url: 'javascript:alert(1)', alt: 'x' }],
-    } as const
+    }
     expect(renderNewsletterHtml(content, [])).not.toContain('javascript:')
   })
 })
