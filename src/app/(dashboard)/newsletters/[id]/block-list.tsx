@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Plus, Trash2, ChevronUp, ChevronDown, X, Upload, Loader2 } from 'lucide-react'
 import type { NewsletterBlock, NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
-import { uploadNewsletterMedia } from '../actions'
 
 // Columna izquierda: bloques editables. Columna derecha: vista previa en JSX
 // que espeja renderNewsletterHtml (src/lib/newsletters/render.ts) — MISMAS
@@ -11,6 +10,20 @@ import { uploadNewsletterMedia } from '../actions'
 // pública se parezcan. render.ts es server-only y no se puede importar aquí;
 // por eso las funciones de abajo (safeUrl, la unión de bloques) son una copia
 // deliberada de su lógica, no una reexportación.
+
+// Route Handler, no Server Action — ver src/app/api/newsletters/media/route.ts:
+// una Server Action POSTea a la ruta de la página, que src/proxy.ts intercepta
+// y corrompe el File binario. /api/* queda fuera de ese guard.
+async function uploadBlockImage(file: File): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const fd = new FormData()
+  fd.set('file', file)
+  const res = await fetch('/api/newsletters/media', { method: 'POST', body: fd })
+  try {
+    return await res.json()
+  } catch {
+    return { ok: false, error: 'No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.' }
+  }
+}
 
 interface Props {
   content: NewsletterContent
@@ -80,13 +93,11 @@ export function BlockList({ content, sources, canEdit, onChange }: Props) {
 
   async function uploadImageFor(idx: number, file: File) {
     setUploadingIdx(idx)
-    const fd = new FormData()
-    fd.set('file', file)
-    const res = await uploadNewsletterMedia(fd)
+    const res = await uploadBlockImage(file)
     setUploadingIdx(null)
     if (res.ok) {
       const block = content.blocks[idx]
-      if (block.type === 'image') updateBlock(idx, { ...block, url: res.data.url })
+      if (block.type === 'image') updateBlock(idx, { ...block, url: res.url })
     }
   }
 

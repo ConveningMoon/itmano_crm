@@ -1,10 +1,9 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useRef, useState } from 'react'
 import { Upload, Image as ImageIcon, Sparkles, Loader2 } from 'lucide-react'
 import type { StudioImage } from '@/lib/studio/types'
 import type { NewsletterCoverSource } from '@/lib/data/newsletters'
-import { uploadNewsletterMedia } from '../actions'
 
 // Portada de la edición. Dos vías funcionales (subir archivo / biblioteca del
 // Estudio) más un botón deshabilitado para "Generar con IA" — esa tercera vía
@@ -26,26 +25,35 @@ const SOURCE_LABEL: Record<NewsletterCoverSource, string> = {
   ai:     'Generada con IA',
 }
 
+// Route Handler, no Server Action — ver src/app/api/newsletters/media/route.ts:
+// una Server Action POSTea a la ruta de la página, que src/proxy.ts intercepta
+// y corrompe el File binario. /api/* queda fuera de ese guard.
+async function uploadCoverFile(file: File): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const fd = new FormData()
+  fd.set('file', file)
+  const res = await fetch('/api/newsletters/media', { method: 'POST', body: fd })
+  try {
+    return await res.json()
+  } catch {
+    return { ok: false, error: 'No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.' }
+  }
+}
+
 export function CoverPicker({ coverImageUrl, coverSource, studioImages, canEdit, onChange }: Props) {
   const [tab, setTab]           = useState<Tab>('upload')
   const [uploading, setUploading] = useState(false)
   const [error, setError]       = useState<string | null>(null)
-  const [, startTransition]     = useTransition()
   const fileInputRef            = useRef<HTMLInputElement>(null)
 
-  function handleFile(files: FileList | null) {
+  async function handleFile(files: FileList | null) {
     const file = files?.[0]
     if (!file) return
     setError(null)
     setUploading(true)
-    const fd = new FormData()
-    fd.set('file', file)
-    startTransition(async () => {
-      const res = await uploadNewsletterMedia(fd)
-      setUploading(false)
-      if (!res.ok) { setError(res.error); return }
-      onChange({ coverImageUrl: res.data.url, coverSource: 'upload' })
-    })
+    const res = await uploadCoverFile(file)
+    setUploading(false)
+    if (!res.ok) { setError(res.error); return }
+    onChange({ coverImageUrl: res.url, coverSource: 'upload' })
   }
 
   return (
