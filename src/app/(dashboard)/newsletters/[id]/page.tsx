@@ -47,8 +47,10 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
 
-  // URL ABSOLUTA de news.itmano.com: es el enlace que el tenant comparte, no la
-  // ruta interna /nl/… (que además redirige a /login en app.itmano.com).
+  // URL ABSOLUTA de news.itmano.com: es la dirección pública de la edición, la
+  // que el tenant comparte. La ruta interna /nl/… también responde bajo
+  // app.itmano.com desde que salió del matcher del proxy, pero no es la
+  // dirección canónica: el escaparate vive en el subdominio de newsletters.
   const publicUrl = tenantSlug && series
     ? hostedNewsletterUrl(tenantSlug, series.slug, edition.slug)
     : null

@@ -9,9 +9,8 @@
 -- Qué se rompe hoy, en concreto:
 --
 --   * lead_dashboard_stats — con 60 leads reales y 400 lectores, la tarjeta
---     "Cartera activa" diría 460. El dashboard es el libro de trabajo del
---     agente: un lector al que nadie va a llamar no pertenece a ese conteo, y
---     "Calidad alta" y el embudo arrastran el mismo error.
+--     "Cartera activa" diría 460, y "Calidad alta" cuenta lectores que nadie va
+--     a llamar. Esas dos cifras son trabajo pendiente, no inventario.
 --
 --   * lead_analytics_stats — peor, porque el sesgo tiene DIRECCIÓN:
 --     `attributed_total` cuenta a los suscriptores y `attributed_closed` no
@@ -20,14 +19,35 @@
 --     diluye con cada lector captado — justo el número que la newsletter
 --     debería ayudar a mejorar.
 --
--- Dónde NO se toca, a propósito (spec §3.5): `by_source` sigue contando a los
--- suscriptores. Ahí es donde aportan, porque mide de dónde vino la gente, y la
--- newsletter es una fuente de adquisición real. Por lo mismo se conservan en
--- `total`, `closed`, `active`, `monthly` y `quality_distribution` de
--- /analytics: son "leads captados", que es lo que un suscriptor sí es. Lo que
--- se corrige es la CONVERSIÓN, que compara captación con cierres.
+-- EL CRITERIO, y es el mismo en las DOS funciones:
 --
--- Sobre el filtro: la condición del spec es
+--   INVENTARIO  -> NO excluye lectores.
+--   total, by_stage, by_agent, by_source, quality_distribution, this_month
+--   Son "cuántos hay". Tienen que cuadrar con lo que el agente ve al abrir
+--   /leads, que SÍ lista a los suscriptores y no filtra `is_subscriber` en
+--   ningún sitio. Un número de tarjeta que no cuadra con la lista es el bug que
+--   este repo ya documenta como causa raíz ("la tarjeta decía 5 y la lista
+--   mostraba 2"): el embudo del dashboard promete literalmente "el mismo número
+--   que el kanban, comprobable abriendo la lista".
+--
+--   TRABAJO     -> SÍ excluye lectores.
+--   active, high_quality
+--   Son "qué tengo pendiente". Un lector no es trabajo de nadie. Se calculan
+--   IGUAL en las dos funciones: /dashboard y /analytics rotulan esa cifra
+--   "Cartera activa" con el mismo subtítulo, así que tienen que coincidir.
+--
+--   CONVERSIÓN  -> SÍ excluye lectores.
+--   attributed_total, attributed_closed
+--   Es la única pareja con sesgo DIRECCIONAL: el denominador los contaba y el
+--   numerador no (ningún lector cierra siendo lector; al mostrar intención se
+--   gradúa y pierde la marca), así que la tasa del tenant se diluía con cada
+--   suscriptor captado.
+--
+-- `by_source` los conserva por partida doble: es inventario y además el spec
+-- §3.5 es explícito en que el suscriptor sí cuenta en la analítica por fuente
+-- — ahí es donde aporta, porque mide de dónde vino la gente.
+--
+-- El filtro del spec es
 --   not jsonb_exists(coalesce(l.metadata, '{}'::jsonb), 'newsletter_subscriber')
 -- y es exactamente lo que `leads_list.is_subscriber` ya deriva desde la 106.
 -- Las dos funciones leen de esa vista, así que se usa la columna en vez de
@@ -39,11 +59,10 @@
 -- coincide con lo aplicado. Perder una clave del jsonb aquí deja una tarjeta en
 -- cero sin ningún error.
 
--- ── 1) Dashboard: el libro de trabajo del agente no incluye lectores ─────────
--- El filtro va en `scoped`, no en cada contador: esta función no publica ningún
--- agregado por fuente, así que todo lo que devuelve es cartera comercial. Y con
--- el corte en un solo sitio no puede ocurrir que `active` los excluya y el
--- embudo los siga contando.
+-- ── 1) Dashboard ────────────────────────────────────────────────────────────
+-- Sólo cambian 'active' y 'high_quality'. El resto (total, by_stage, by_agent,
+-- urgent_today, imported, closed_this_month) sigue contando a todo el mundo,
+-- para no separarse del kanban de /leads.
 create or replace function public.lead_dashboard_stats(
   p_tenant_id text default null,
   p_agent_id  text default null
@@ -55,12 +74,11 @@ set search_path = ''
 as $function$
   with scoped as (
     select l.id, l.agent_id, l.stage, l.quality_band, l.urgency, l.is_imported,
+           l.is_subscriber,
            coalesce(l.quality_score, 0) as quality
     from public.leads_list l
     where (p_tenant_id is null or l.tenant_id = p_tenant_id)
       and (p_agent_id  is null or l.agent_id  = p_agent_id)
-      -- 107: un suscriptor de newsletter es un LECTOR, no un prospecto.
-      and not l.is_subscriber
   ),
   -- Sólo los leads que SÍ recorrieron el embudo dentro del CRM.
   by_stage as (select stage, count(*)::int as c from scoped where not is_imported group by stage),
@@ -74,8 +92,11 @@ as $function$
   )
   select jsonb_build_object(
     'total',        (select count(*)::int from scoped),
-    'active',       (select count(*)::int from scoped where stage in ('nuevo','nutricion')),
-    'high_quality', (select count(*)::int from scoped where stage in ('nuevo','nutricion') and quality_band = 'alta'),
+    -- 107: la cartera de TRABAJO excluye a los lectores; el INVENTARIO no.
+    -- Ver la nota de arriba: 'total', 'by_stage' y 'by_agent' tienen que cuadrar
+    -- con lo que el agente ve al abrir /leads, que sí los lista.
+    'active',       (select count(*)::int from scoped where stage in ('nuevo','nutricion') and not is_subscriber),
+    'high_quality', (select count(*)::int from scoped where stage in ('nuevo','nutricion') and quality_band = 'alta' and not is_subscriber),
     'urgent_today', (select count(*)::int from scoped where urgency = 'hoy'),
     'imported',     (select count(*)::int from scoped where is_imported),
     -- Cuándo se CERRÓ, no cuándo entró. Las filas anteriores a la 082 guardan
@@ -98,10 +119,10 @@ as $function$
   );
 $function$;
 
--- ── 2) Analytics: la conversión deja de diluirse con cada lector ─────────────
--- Aquí el filtro NO va en `scoped`: `by_source` tiene que seguir viendo a los
--- suscriptores. Se acota sólo el par attributed_total / attributed_closed, que
--- es el que tenía el sesgo con dirección.
+-- ── 2) Analytics ────────────────────────────────────────────────────────────
+-- 'active' se alinea con el dashboard y la conversión se acota. by_source,
+-- total, closed, by_stage, by_agent, monthly, quality_distribution y this_month
+-- los conservan: son inventario.
 create or replace function public.lead_analytics_stats(
   p_tenant_id text default null,
   p_agent_id  text default null,
@@ -170,7 +191,11 @@ as $function$
   select jsonb_build_object(
     'total',  (select count(*)::int from scoped),
     'closed', (select count(*)::int from scoped where stage = 'cerrado'),
-    'active', (select count(*)::int from scoped where stage in ('nuevo','nutricion')),
+    -- 107: MISMO cálculo que lead_dashboard_stats. Las dos pantallas rotulan
+    -- esta cifra "Cartera activa / Cartera Activa" con el mismo subtítulo
+    -- ("nuevos y en nutrición"): si una excluyera lectores y la otra no,
+    -- dirían números distintos bajo la misma etiqueta.
+    'active', (select count(*)::int from scoped where stage in ('nuevo','nutricion') and not is_subscriber),
     -- Denominador y numerador de la CONVERSIÓN: sólo lo captado por ITMANO.
     -- 107: y sólo prospectos. Un suscriptor inflaba el denominador y nunca el
     -- numerador (al mostrar intención se gradúa y pierde la marca), así que
