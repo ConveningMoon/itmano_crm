@@ -96,6 +96,8 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   'policy:newsletter_editions':         'migración 105 (newsletters): policies nuevas, sólo en sandbox',
   'funcion:touch_newsletter_edition()': 'migración 105 (newsletters): función nueva, sólo en sandbox',
   'funcion:refresh_quality_bands()':    'migración 106 (newsletter_subscriber): función modificada, sólo en sandbox',
+  'funcion:lead_dashboard_stats(p_tenant_id text, p_agent_id text)':                    'migración 107 (stats_excluyen_suscriptores): función modificada, sólo en sandbox',
+  'funcion:lead_analytics_stats(p_tenant_id text, p_agent_id text, p_months integer)':  'migración 107 (stats_excluyen_suscriptores): función modificada, sólo en sandbox',
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
