@@ -12,7 +12,8 @@ import { HOSTED_SUBDOMAIN_REWRITE } from '@/lib/hosted-page'
 // The matcher (below) excludes ALL /api routes — each has its own auth (cron/
 // webhook secrets, Resend signature, or self-guard via getCurrentTenantContext) —
 // plus the public marketing routes (`/` landing, /planes, /terminos,
-// /privacidad, /reembolsos), /login, /auth/*, /unsubscribe, sitemap/robots and
+// /privacidad, /reembolsos), /login, /auth/*, /unsubscribe, the three hosted
+// prefixes (hp/, web/, nl/), sitemap/robots and
 // static assets. So every path
 // that reaches this function is a protected page (a denylist: every new
 // dashboard page is protected automatically, including /admin, /notifications
@@ -88,6 +89,6 @@ export const config = {
 // la landing vive en /landing/. Sin excluirlos, el guard le devolvía el HTML de
 // /login al elemento <video> y el hero se quedaba en su marcador.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|nl/|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
   ],
 }

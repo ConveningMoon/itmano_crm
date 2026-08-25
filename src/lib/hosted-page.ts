@@ -8,13 +8,14 @@ import { QUALIFYING_DIMENSIONS } from '@/lib/hosted-questions'
 // ── Subdominios ───────────────────────────────────────────────────────────────
 // CNAMEs a registrar en el DNS de itmano.com → cname.vercel-dns.com y agregar
 // como dominios del proyecto en Vercel. El proxy reescribe por host:
-//   lm | events | forms → /hp/<path>   ·   properties → /web/<path>
+//   lm | events | forms → /hp/<path>   ·   properties → /web/<path>   ·   news → /nl/<path>
 
 export const HOSTED_SUBDOMAIN_REWRITE: Record<string, string> = {
   lm:         '/hp',
   events:     '/hp',
   forms:      '/hp',
   properties: '/web',
+  news:       '/nl',
 }
 
 const SUBDOMAIN_BY_CHANNEL_TYPE: Record<string, string> = {
@@ -34,6 +35,14 @@ export function hostedChannelUrl(channelType: string, tenantSlug: string, channe
 /** URL pública del catálogo de propiedades del tenant. */
 export function hostedPropertiesUrl(tenantSlug: string): string {
   return `https://properties.${HOSTED_BASE_DOMAIN}/${tenantSlug}`
+}
+
+/** URL pública de una newsletter: portada, serie o edición. */
+export function hostedNewsletterUrl(
+  tenantSlug: string, seriesSlug?: string, editionSlug?: string,
+): string {
+  const path = [tenantSlug, seriesSlug, editionSlug].filter(Boolean).join('/')
+  return `https://news.${HOSTED_BASE_DOMAIN}/${path}`
 }
 
 // ── Config de la página (acquisition_channels.hosted_page) ───────────────────

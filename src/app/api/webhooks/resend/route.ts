@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { resend } from '@/lib/resend'
 import { stripQuotedReply } from '@/lib/email/strip-quoted-reply'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
+import { graduateSubscriber } from '@/lib/newsletters/subscriber'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -302,6 +303,11 @@ async function handleInboundEvent(
   }
 
   log({ event_type: event.type, event_id: svixId, lead_id: match.id, result: 'inserted' })
+
+  // Una respuesta de un humano es intención inequívoca: si este lead venía
+  // marcado como suscriptor de newsletter, se gradúa aquí (ver
+  // graduateSubscriber). Best-effort — nunca lanza, no puede tumbar el webhook.
+  await graduateSubscriber(db, match.id)
 
   // Reanaliza el fit del lead con IA (si el tenant lo tiene activado): una
   // respuesta agrega información. Fire-and-forget; el servicio verifica el gate.

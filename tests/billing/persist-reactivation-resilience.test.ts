@@ -149,7 +149,9 @@ describe('applySubscriptionEvent — resiliencia de la reactivación', () => {
   it('si la restauración funciona, no hay log de error', async () => {
     const fake = makeFakeSupabase(degradedSnapshotRow)
     mockCreateAdminClient.mockReturnValue(fake.client as unknown as ReturnType<typeof createAdminClient>)
-    mockRestore.mockResolvedValue({ propertiesRepublished: 2 })
+    // El reporte COMPLETO: el mock erosiona el tipo, así que omitir un campo no
+    // rompe la compilación y el hueco de cobertura pasa desapercibido.
+    mockRestore.mockResolvedValue({ propertiesRepublished: 2, newslettersRepublished: 3 })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const result = await applySubscriptionEvent(reactivationEvent)

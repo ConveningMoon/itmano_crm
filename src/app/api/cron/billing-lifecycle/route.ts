@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
+import { columns } from '@/lib/supabase/columns'
+import { revalidateNewsletterPaths, type RevalidatableEdition } from '@/lib/newsletters/revalidate'
+
+const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug', 'channel_id'])
 
 // Los plazos de 14 y 60 dias no los dispara ningun webhook: hacen falta pasadas
 // programadas. Diario, via cron-job.org (misma infraestructura que el
@@ -53,17 +57,19 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminClient()
   const report = {
-    propertiesUnpublished: 0,
-    domainsReleased:       0,
-    retentionWarnings:     0,
+    propertiesUnpublished:  0,
+    newslettersUnpublished: 0,
+    domainsReleased:        0,
+    retentionWarnings:      0,
     // Que pasos completaron su pasada vs. cuales abortaron por una excepcion en
     // la consulta base (no en una fila individual — eso se registra por log y
     // el paso sigue). Sin esto, el reporte no distingue "no habia nada que
     // hacer" de "fallo en silencio".
     steps: {
-      properties: 'ok' as 'ok' | 'failed',
-      domain:     'ok' as 'ok' | 'failed',
-      retention:  'ok' as 'ok' | 'failed',
+      properties:  'ok' as 'ok' | 'failed',
+      newsletters: 'ok' as 'ok' | 'failed',
+      domain:      'ok' as 'ok' | 'failed',
+      retention:   'ok' as 'ok' | 'failed',
     },
   }
 
@@ -123,6 +129,58 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     logError('properties', null, err)
     report.steps.properties = 'failed'
+  }
+
+  // ── 1b. Newsletters: mismo criterio de gracia que propiedades ───────────────
+  // Reutiliza GRACE_DAYS.properties: el spec no define un plazo propio para
+  // newsletters y ambas son entrega de valor continua a la web publica del
+  // tenant. Paso aislado con su propia consulta de vencidos (no comparte el
+  // array `overdueProps` de arriba) para que un fallo en uno de los dos no
+  // bloquee al otro.
+  try {
+    const { data: overdueNewsletters, error: overdueNewslettersError } = await supabase
+      .from('subscriptions')
+      .select('tenant_id')
+      .in('status', ['paused', 'cancelled'])
+      .eq('billing_exempt', false)
+      .lte('degraded_at', daysAgoIso(GRACE_DAYS.properties))
+
+    if (overdueNewslettersError) throw overdueNewslettersError
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const row of (overdueNewsletters ?? []) as any[]) {
+      try {
+        // Solo lo PUBLICADO se marca. `archived` no se toca — es una decision
+        // editorial del tenant, no un estado de entrega, y `draft` ya esta
+        // donde queremos que quede. `unpublished_by_billing` es una MARCA de
+        // procedencia, no un estado: solo distingue "el sistema lo bajo" de
+        // "el tenant lo bajo", para que la restauracion sepa que republicar.
+        const { data: unpublished, error } = await supabase
+          .from('newsletter_editions')
+          .update({ status: 'draft', unpublished_by_billing: true })
+          .eq('tenant_id', row.tenant_id)
+          .eq('status', 'published')
+          .select(UNPUBLISHED_EDITION_COLUMNS)
+
+        if (error) {
+          logError('newsletters', row.tenant_id, error)
+          continue
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const bajadas = ((unpublished ?? []) as any[]) as RevalidatableEdition[]
+        report.newslettersUnpublished += bajadas.length
+
+        // Sin purgar el cache, la pieza retirada se sigue sirviendo desde el
+        // edge hasta que expire la ventana de ISR (300 s). Best-effort: no
+        // puede tumbar la pasada del cron.
+        if (bajadas.length > 0) await revalidateNewsletterPaths(supabase, row.tenant_id, bajadas)
+      } catch (err) {
+        logError('newsletters', row.tenant_id, err)
+      }
+    }
+  } catch (err) {
+    logError('newsletters', null, err)
+    report.steps.newsletters = 'failed'
   }
 
   // ── 2. Dominio: gracia de 60 dias agotada ───────────────────────────────────
