@@ -148,15 +148,30 @@ Se aplica el patrón de la migración 080 (`is_imported`), cuya conclusión vale
 literalmente aquí: *lo que falta no es una etapa nueva, es la procedencia*.
 
 - Al crearse, el lead lleva `metadata.newsletter_subscriber = { at, channel_id, consent }`.
+- **Y la prueba del consentimiento se guarda además en `metadata.newsletter_consent`,
+  en clave propia.** Corregido durante la implementación: la graduación borra la
+  clave `newsletter_subscriber` entera, así que una prueba que viviera solo dentro
+  de esa marca se destruiría al graduar al lector — desde cuatro caminos distintos
+  y sin dejar traza. Son dos hechos con vidas distintas: la procedencia caduca
+  cuando el lector muestra intención, el consentimiento no caduca nunca.
+  Un lead que ya existía por otra vía y se suscribe recibe `newsletter_consent`
+  pero **no** la marca de procedencia: ya no es solo un lector.
 - `leads_list` deriva `is_subscriber` como columna, igual que `is_imported`.
 - `refresh_quality_bands()` excluye `is_subscriber` del cálculo de quintiles.
 - El suscriptor **sí** cuenta en la analítica por fuente: ahí es donde aporta.
 
-**La graduación ya existe y no se construye.** `assessLeadFit` se invoca hoy
+**La graduación hay que construirla.** *(Corregido durante la implementación:
+este spec afirmaba que ya existía, y era falso.)* `assessLeadFit` se invoca hoy
 desde el intake de formularios, el webhook de Resend al recibir una respuesta,
 el formulario de contacto, y a mano desde la ficha del lead — todas señales de
-intención. La única regla nueva es una omisión: el intake de un canal
-`newsletter` no llama a `assessLeadFit`.
+intención. Pero `assessLeadFit` escribe `fit_profile` y **nunca toca
+`metadata`**, así que no retira la marca: un suscriptor que mostrara intención
+habría quedado fuera de los quintiles para siempre.
+
+Hace falta un `graduateSubscriber(db, leadId)` best-effort que borre la clave
+`newsletter_subscriber` (y solo esa), llamado desde esos mismos cuatro puntos.
+La otra regla es una omisión: el intake de un canal `newsletter` no llama a
+`assessLeadFit`.
 
 El gate de gasto se expresa como **"¿tiene `fit_profile` con contenido?"**, no
 como "¿es suscriptor?". Es la pregunta correcta, evita una rama condicional y
