@@ -9,10 +9,12 @@ import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { publishBlockers } from '@/lib/newsletters/publishable'
 import { NewsletterContentSchema, NewsletterSourceSchema } from '@/lib/newsletters/content'
+import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
 import { getEditionById } from '@/lib/data/newsletters'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { generateNewsletterDraft } from '@/lib/newsletters/ai/generate'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -198,6 +200,106 @@ export async function updateSeries(id: string, input: unknown): Promise<Result<n
   return { ok: true, data: null }
 }
 
+/**
+ * El mismo control de propiedad que usa `createEdition` para aceptar un
+ * `channelId` que llega del cliente: sin esto, cualquiera podía colgar una
+ * edición del canal de OTRO tenant (misma tenant_id propia, pero channel_id
+ * ajeno) — la fila quedaría visible en la página pública de un tercero. Mismo
+ * mensaje para "no existe" y "no es tuyo": no le confirmes al atacante que el
+ * id es real.
+ *
+ * Un solo camino de validación para las dos formas de crear una edición (a
+ * mano y con IA): duplicarlo es cómo se desincronizan.
+ */
+async function resolveEditionChannel(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  channelId: string,
+): Promise<{ id: string; slug: string } | null> {
+  const { data: channelRow } = await db
+    .from('acquisition_channels')
+    .select(CHANNEL_GUARD_COLUMNS)
+    .eq('id', channelId)
+    .maybeSingle()
+  // reason: el cliente de Supabase no está tipado en este repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channel = channelRow as any
+  if (!channel || channel.tenant_id !== tenantId || channel.channel_type !== 'newsletter') return null
+  return { id: channel.id as string, slug: channel.slug as string }
+}
+
+interface EditionRowFields {
+  title:         string
+  dek:           string | null
+  language:      string
+  coverImageUrl: string
+  coverSource:   'upload' | 'studio' | 'ai'
+  content:       NewsletterContent
+  sources:       NewsletterSource[]
+  dataAsOf:      string | null
+  /** Sólo true cuando la edición nace del orquestador de IA. */
+  aiGenerated?:  boolean
+  aiRun?:        Record<string, unknown> | null
+}
+
+/**
+ * Inserta la fila de una edición nueva: slug uniquificado incluido. El único
+ * camino de inserción, para que la creación a mano y la generada con IA se
+ * comporten exactamente igual — duplicar la generación de slug es cómo se
+ * desincronizan dos caminos que deben ser uno.
+ */
+async function insertEditionRow(
+  db:       ReturnType<typeof createAdminClient>,
+  ctx:      TenantContext,
+  tenantId: string,
+  channelId: string,
+  fields:   EditionRowFields,
+): Promise<Result<{ id: string }>> {
+  // Antes el slug llevaba un sufijo `-<timestamp base36>` SIEMPRE: feo en la
+  // URL pública y aun así colisionable si dos inserciones del mismo canal y
+  // título caían en el mismo milisegundo. Ahora se usa el slug limpio y sólo
+  // se numera cuando hace falta.
+  const { data: takenRows } = await db
+    .from('newsletter_editions')
+    .select(columns('newsletter_editions', ['slug']))
+    .eq('tenant_id', tenantId)
+    .eq('channel_id', channelId)
+  const slug = uniqueSlug(
+    slugify(fields.title),
+    // reason: el cliente de Supabase no está tipado en este repo.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((takenRows ?? []) as any[]).map(e => e.slug as string),
+  )
+
+  const { data, error } = await db.from('newsletter_editions').insert({
+    tenant_id:           tenantId,
+    channel_id:          channelId,
+    slug,
+    title:               fields.title,
+    dek:                 fields.dek,
+    language:            fields.language,
+    cover_image_url:     fields.coverImageUrl,
+    cover_source:        fields.coverSource,
+    content:             fields.content,
+    sources:             fields.sources,
+    data_as_of:          fields.dataAsOf,
+    status:              'draft',
+    ai_generated:        fields.aiGenerated ?? false,
+    ai_run:              fields.aiRun ?? null,
+    created_by_agent_id: ctx.agent_id ?? null,
+    created_by_user_id:  ctx.user_id,
+  }).select('id').maybeSingle()
+
+  if (error) {
+    return { ok: false, error: isUniqueViolation(error)
+      ? 'Ya existe otra edición con ese titular en esta serie. Cámbialo un poco.'
+      : error.message }
+  }
+  // reason: ver guard().
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { ok: true, data: { id: (data as any).id } }
+}
+
 const EditionInput = z.object({
   channelId:     z.string().uuid(),
   title:         z.string().trim().min(1, 'La edición necesita un titular').max(200),
@@ -220,65 +322,23 @@ export async function createEdition(input: unknown): Promise<Result<{ id: string
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
   const d = parsed.data
 
-  // El channelId llega del cliente: sin esta comprobación, cualquiera podía
-  // colgar una edición del canal de OTRO tenant (misma tenant_id propia, pero
-  // channel_id ajeno) — la fila quedaría visible en la página pública de un
-  // tercero. Mismo mensaje para "no existe" y "no es tuyo": no le confirmes al
-  // atacante que el id es real.
-  const { data: channelRow } = await g.db
-    .from('acquisition_channels')
-    .select(CHANNEL_GUARD_COLUMNS)
-    .eq('id', d.channelId)
-    .maybeSingle()
-  // reason: el cliente de Supabase no está tipado en este repo.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channel = channelRow as any
-  if (!channel || channel.tenant_id !== g.ctx.tenant_id || channel.channel_type !== 'newsletter') {
-    return { ok: false, error: 'Esa serie no existe.' }
-  }
+  const channel = await resolveEditionChannel(g.db, g.tenantId, d.channelId)
+  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
 
-  // Antes el slug llevaba un sufijo `-<timestamp base36>` SIEMPRE: feo en la
-  // URL pública y aun así colisionable si dos inserciones del mismo canal y
-  // título caían en el mismo milisegundo. Ahora se usa el slug limpio y sólo
-  // se numera cuando hace falta.
-  const { data: takenRows } = await g.db
-    .from('newsletter_editions')
-    .select(columns('newsletter_editions', ['slug']))
-    .eq('tenant_id', g.tenantId)
-    .eq('channel_id', d.channelId)
-  const slug = uniqueSlug(
-    slugify(d.title),
-    // reason: ver arriba.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((takenRows ?? []) as any[]).map(e => e.slug as string),
-  )
+  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, channel.id, {
+    title:         d.title,
+    dek:           d.dek,
+    language:      d.language,
+    coverImageUrl: d.coverImageUrl,
+    coverSource:   d.coverSource,
+    content:       d.content,
+    sources:       d.sources,
+    dataAsOf:      d.dataAsOf,
+  })
+  if (!inserted.ok) return inserted
 
-  const { data, error } = await g.db.from('newsletter_editions').insert({
-    tenant_id:           g.tenantId,
-    channel_id:          d.channelId,
-    slug,
-    title:               d.title,
-    dek:                 d.dek,
-    language:            d.language,
-    cover_image_url:     d.coverImageUrl,
-    cover_source:        d.coverSource,
-    content:             d.content,
-    sources:             d.sources,
-    data_as_of:          d.dataAsOf,
-    status:              'draft',
-    created_by_agent_id: g.ctx.agent_id ?? null,
-    created_by_user_id:  g.ctx.user_id,
-  }).select('id').maybeSingle()
-
-  if (error) {
-    return { ok: false, error: isUniqueViolation(error)
-      ? 'Ya existe otra edición con ese titular en esta serie. Cámbialo un poco.'
-      : error.message }
-  }
-  revalidateAll(g.tenantSlug, channel.slug as string)
-  // reason: ver guard().
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { ok: true, data: { id: (data as any).id } }
+  revalidateAll(g.tenantSlug, channel.slug)
+  return inserted
 }
 
 export async function updateEdition(id: string, input: unknown): Promise<Result<null>> {
@@ -404,3 +464,64 @@ export async function deleteEdition(id: string): Promise<Result<null>> {
 // Action: ver src/app/api/newsletters/media/route.ts y el comentario de ese
 // archivo — pasar un File binario por una Server Action corrompe la subida
 // (mismo hallazgo documentado en src/app/api/properties/media/route.ts).
+
+const GenerateInput = z.object({
+  channelId: z.string().uuid(),
+  topic:     z.string().trim().max(200).nullable(),
+  language:  z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]),
+})
+
+// Portada temporal: la generación de imagen llega en otra tarea (Task 7), y
+// `cover_image_url` es NOT NULL. Se apunta al banner genérico de ITMANO —el
+// mismo que usa `brand-logo.tsx` cuando un tenant no tiene logo— en vez de
+// inventar un asset nuevo o depender de `hosted_page`, que hoy no se lee para
+// series de newsletter (sólo lo usan lead magnets, eventos y formularios bajo
+// /hp). `cover_source` se guarda como 'upload', el valor por defecto de la
+// columna: no es 'ai' porque ninguna IA generó esta imagen, y es la opción que
+// menos afirma sobre un origen que en realidad no existe todavía. El
+// CoverPicker del editor la reemplaza antes de publicar.
+const PLACEHOLDER_COVER_URL = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'}/itmano_banner.webp`
+
+/**
+ * Genera una edición con IA y la guarda como BORRADOR.
+ *
+ * La IA nunca publica: devuelve el id para que el editor lo abra y una persona
+ * decida. La portada se elige después — por eso entra con el marcador que el
+ * CoverPicker sustituye.
+ */
+export async function generateEditionWithAi(input: unknown): Promise<Result<{ id: string }>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+
+  const parsed = GenerateInput.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
+
+  // Mismo control de propiedad que crear una edición a mano: el canal existe,
+  // es de este tenant y es una serie de newsletter.
+  const channel = await resolveEditionChannel(g.db, g.tenantId, parsed.data.channelId)
+  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
+
+  const generado = await generateNewsletterDraft({
+    ctx:      g.ctx,
+    topic:    parsed.data.topic,
+    language: parsed.data.language,
+  })
+  if (!generado.ok) return generado
+
+  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, channel.id, {
+    title:         generado.data.title,
+    dek:           generado.data.dek || null,
+    language:      parsed.data.language,
+    coverImageUrl: PLACEHOLDER_COVER_URL,
+    coverSource:   'upload',
+    content:       generado.data.content,
+    sources:       generado.data.sources,
+    dataAsOf:      generado.data.dataAsOf,
+    aiGenerated:   true,
+    aiRun:         generado.data.aiRun,
+  })
+  if (!inserted.ok) return inserted
+
+  revalidateAll(g.tenantSlug, channel.slug)
+  return inserted
+}
