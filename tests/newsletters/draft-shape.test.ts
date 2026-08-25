@@ -41,4 +41,33 @@ describe('sourcesFromFindings', () => {
   it('devuelve vacio ante una lista vacia', () => {
     expect(sourcesFromFindings([])).toEqual([])
   })
+
+  it('recorta un publisher que excede el maximo del esquema, en vez de descartar la fuente', () => {
+    const publisherLargo = 'N'.repeat(200)
+    const [f] = sourcesFromFindings([
+      { claim: 'dato con publisher largo', url: 'https://nar.realtor/a', publisher: publisherLargo },
+    ])
+    expect(f).toBeDefined()
+    expect(f.publisher.length).toBeLessThanOrEqual(160)
+    expect(NewsletterSourceSchema.safeParse(f).success).toBe(true)
+  })
+
+  it('descarta una url que pasa el regex laxo pero no es una URL valida', () => {
+    const fuentes = sourcesFromFindings([
+      { claim: 'url rota', url: 'https://', publisher: 'X' },
+      { claim: 'url valida', url: 'https://ine.es/x', publisher: 'INE' },
+    ])
+    expect(fuentes).toHaveLength(1)
+    expect(fuentes[0].url).toBe('https://ine.es/x')
+  })
+
+  it('numera los ids consecutivos sobre las fuentes que sobreviven, no sobre el indice original', () => {
+    const fuentes = sourcesFromFindings([
+      { claim: 'primera', url: 'https://nar.realtor/a', publisher: 'NAR' },
+      { claim: 'descartada por url invalida', url: 'https://', publisher: 'X' },
+      { claim: 'tercera', url: 'https://redfin.com/b', publisher: 'Redfin' },
+    ])
+    expect(fuentes).toHaveLength(2)
+    expect(fuentes.map(f => f.id)).toEqual(['s1', 's2'])
+  })
 })

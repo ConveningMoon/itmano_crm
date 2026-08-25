@@ -1,7 +1,7 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import {
-  NewsletterContentSchema, NEWSLETTER_CONTENT_VERSION,
+  NewsletterContentSchema, NewsletterSourceSchema, NEWSLETTER_CONTENT_VERSION,
   type NewsletterContent, type NewsletterSource,
 } from '../content'
 import type { NewsletterDossier, ResearchFinding } from './research'
@@ -35,19 +35,38 @@ export interface DraftResult {
  * Los ids son `s1`, `s2`… y son los que los bloques citan en `sourceIds`. Se
  * generan aquí y se le dan al modelo hechos: si los inventara él, citaría ids
  * que no existen y `publishBlockers` bloquearía la edición entera.
+ *
+ * Doble red también aquí, no sólo en `content`: se sanea (recortar a los
+ * máximos del esquema) y LUEGO se valida con `NewsletterSourceSchema` — el
+ * mismo esquema que usará `parseNewsletterSources` al releer de la base. Sin
+ * esto, una fuente que hoy "parece" válida (pasa el regex laxo de URL, pero
+ * no es una URL bien formada; o trae un publisher larguísimo) sobrevive aquí
+ * y se descarta en silencio la próxima vez que se lea — dejando huérfano al
+ * bloque `stat` que la citaba, y `publishBlockers` reportando una fuente
+ * "inexistente" sobre una edición recién generada.
+ *
+ * El id se asigna DESPUÉS de filtrar: hay que numerar sobre las fuentes que
+ * sobreviven, nunca sobre el índice del hallazgo original — si la segunda de
+ * tres se descarta, las dos que quedan tienen que ser `s1` y `s2`, no `s1` y
+ * `s3`, porque esos ids son justo los que ve el prompt.
  */
 export function sourcesFromFindings(findings: ResearchFinding[]): NewsletterSource[] {
   const hoy = new Date().toISOString().slice(0, 10)
-  return findings
-    .filter(f => /^https?:\/\//.test(f.url))
-    .map((f, i) => ({
-      id:           `s${i + 1}`,
+  const sources: NewsletterSource[] = []
+  for (const f of findings) {
+    if (!/^https?:\/\//.test(f.url)) continue
+    const candidato = {
+      id:           `s${sources.length + 1}`,
       url:          f.url,
       title:        f.claim.slice(0, 300),
-      publisher:    f.publisher ?? '',
+      publisher:    (f.publisher ?? '').slice(0, 160),
       published_at: f.published_at,
       accessed_at:  hoy,
-    }))
+    }
+    const validado = NewsletterSourceSchema.safeParse(candidato)
+    if (validado.success) sources.push(validado.data)
+  }
+  return sources
 }
 
 /** Esquema JSON de la salida. Espeja NewsletterContentSchema de content.ts. */
@@ -88,9 +107,9 @@ function outputSchema(): Record<string, unknown> {
 
 function buildPrompt(args: {
   dossier: NewsletterDossier; language: string; brandName: string; voice: string | null
+  sources: NewsletterSource[]
 }): string {
-  const fuentes = sourcesFromFindings(args.dossier.findings)
-  const listado = fuentes
+  const listado = args.sources
     .map(f => `- ${f.id}: ${f.title} — ${f.publisher} (${f.url})`)
     .join('\n')
 
@@ -131,7 +150,7 @@ export async function draftEdition(args: {
     max_tokens:    16000,
     thinking:      { type: 'adaptive' },
     output_config: { format: { type: 'json_schema', schema: outputSchema() } },
-    messages:      [{ role: 'user', content: buildPrompt(args) }],
+    messages:      [{ role: 'user', content: buildPrompt({ ...args, sources }) }],
   })
   const response = await stream.finalMessage()
 
