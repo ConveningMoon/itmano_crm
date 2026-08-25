@@ -40,7 +40,7 @@ export default async function SettingsPage() {
   const canSeeBusiness = ctx.role !== 'agent'
 
   const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
+    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description, newsletter_source_domains').eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
     getEffectiveScoreRules(tenantId),
@@ -58,6 +58,13 @@ export default async function SettingsPage() {
   const tenant = tenantRow
     ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRow.description as string | null) ?? null) : null }
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
+
+  // Allowlist de newsletters: mismo enmascarado que la descripción del negocio
+  // arriba — un 'agent' ni ve la pestaña "Tu negocio", así que no hace falta
+  // que el dato viaje en su payload RSC. Sólo super_admin puede editarla
+  // (updateNewsletterSourceDomains repite el gate: la UI no es la única puerta).
+  const sourceDomains: string[] = canSeeBusiness ? ((tenantRow?.newsletter_source_domains as string[] | null) ?? []) : []
+  const canEditSources = ctx.role === 'super_admin'
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 
@@ -130,6 +137,8 @@ export default async function SettingsPage() {
         agentAccess={agentAccess}
         accessCount={accessCountRes.count ?? 0}
         businessProfile={businessProfile}
+        sourceDomains={sourceDomains}
+        canEditSources={canEditSources}
         scoringRules={scoringRules}
         recommendedRules={recommendedRules}
         // El modelo de scoring lo administra ITMANO — ver updateScoreRules.

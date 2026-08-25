@@ -42,6 +42,13 @@ describe('parseSourceDomains', () => {
     expect(parseSourceDomains('nar.realtor')).toEqual({ domains: [], rejected: [] })
     expect(parseSourceDomains({})).toEqual({ domains: [], rejected: [] })
   })
+
+  it('acepta lo que produce un textarea de una fuente por linea', () => {
+    const pegado = ['  nar.realtor  ', '', 'https://redfin.com/noticias', '   ', 'no-valido']
+    const r = parseSourceDomains(pegado)
+    expect(r.domains).toEqual(['nar.realtor', 'redfin.com'])
+    expect(r.rejected).toEqual(['no-valido'])
+  })
 })
 
 describe('canGenerateWithAi', () => {
