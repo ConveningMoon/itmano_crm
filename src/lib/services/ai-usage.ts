@@ -7,24 +7,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 // calculado con la tabla de precios por modelo. El registro es best-effort:
 // NUNCA hace fallar la acción que generó el contenido.
 
-export type AiFeature =
-  | 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy'
-  | 'lead_fit' | 'carousel_copy' | 'studio_prompt' | 'studio_image'
-  | 'newsletter_research' | 'newsletter_draft' | 'newsletter_cover'
-
-export const AI_FEATURE_LABELS: Record<string, string> = {
-  property_intake:    'Propiedades · Crear con IA',
-  email_draft:        'Correos · Borrador con IA',
-  sequence_bootstrap: 'Secuencias · 3 correos con IA',
-  hosted_page_copy:   'Páginas · Copy con IA',
-  lead_fit:           'Leads · Análisis de fit',
-  carousel_copy:      'Carruseles · Copy con IA',
-  studio_prompt:      'Estudio · Dirección de escena',
-  studio_image:       'Estudio · Generación de imagen',
-  newsletter_research: 'Newsletters · Investigación',
-  newsletter_draft:    'Newsletters · Redacción',
-  newsletter_cover:    'Newsletters · Portada',
-}
+// El tipo y las etiquetas viven en `ai-feature-labels.ts` (client-safe) porque
+// el panel de uso los necesita del lado del cliente y este archivo es
+// server-only. Se reexportan aquí para no romper a quien ya los importaba
+// desde `ai-usage`.
+export type { AiFeature } from '@/lib/services/ai-feature-labels'
+export { AI_FEATURE_LABELS } from '@/lib/services/ai-feature-labels'
+import type { AiFeature } from '@/lib/services/ai-feature-labels'
 
 // Costo por imagen de Nano Banana. Google no factura por token en imagen, así
 // que el ledger guarda un costo FIJO por unidad en vez de derivarlo del usage
