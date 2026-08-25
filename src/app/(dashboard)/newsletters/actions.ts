@@ -15,6 +15,7 @@ import { getEditionById } from '@/lib/data/newsletters'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { generateNewsletterDraft } from '@/lib/newsletters/ai/generate'
+import { generateCover } from '@/lib/newsletters/ai/cover'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -533,4 +534,38 @@ export async function generateEditionWithAi(input: unknown): Promise<Result<{ id
 
   revalidateAll(g.tenantSlug, channel.slug)
   return inserted
+}
+
+/**
+ * Genera la portada de una edición con IA (src/lib/newsletters/ai/cover.ts) y
+ * la deja guardada como `cover_source: 'ai'`.
+ *
+ * Mismo `guard()` y mismo control de propiedad que `updateEdition` y
+ * `publishEdition`: generar una portada escribe sobre la edición, no es un
+ * atajo aparte con permisos propios.
+ *
+ * Va DESPUÉS del texto a propósito — lo llama el editor, con el titular y la
+ * bajada ya guardados, no el flujo de generación inicial.
+ */
+export async function generateCoverForEdition(editionId: string): Promise<Result<{ url: string }>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+
+  const edition = await getEditionById(editionId, g.tenantId)
+  if (!edition) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: edition.tenantId, created_by_user_id: edition.createdByUserId,
+  })
+  if (denial) return denial
+
+  const result = await generateCover({ ctx: g.ctx, title: edition.title, topic: edition.dek ?? '' })
+  if (!result.ok) return result
+
+  const { error } = await g.db.from('newsletter_editions')
+    .update({ cover_image_url: result.url, cover_source: 'ai' })
+    .eq('id', editionId).eq('tenant_id', g.tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, edition.channelId), edition.slug)
+  return { ok: true, data: { url: result.url } }
 }

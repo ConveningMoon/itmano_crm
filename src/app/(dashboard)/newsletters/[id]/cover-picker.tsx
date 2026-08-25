@@ -4,17 +4,28 @@ import { useRef, useState } from 'react'
 import { Upload, Image as ImageIcon, Sparkles, Loader2 } from 'lucide-react'
 import type { StudioImage } from '@/lib/studio/types'
 import type { NewsletterCoverSource } from '@/lib/data/newsletters'
+import { generateCoverForEdition } from '../actions'
 
-// Portada de la edición. Dos vías funcionales (subir archivo / biblioteca del
-// Estudio) más un botón deshabilitado para "Generar con IA" — esa tercera vía
-// llega en otro plan, no se implementa aquí.
+// Portada de la edición. Tres vías: subir archivo, biblioteca del Estudio, o
+// generar con IA (src/lib/newsletters/ai/cover.ts). Las tres terminan igual
+// (onChange con la URL nueva); la que difiere es "Generar con IA", que primero
+// necesita el titular y la bajada YA GUARDADOS — por eso pide al padre que
+// guarde el formulario antes de llamar a la server action, con el mismo
+// `onBeforeGenerate` que usa "Publicar" para guardar antes de publicar.
 
 interface Props {
+  /** Sólo existe una vez creada la edición — ver NewEditionForm, que arma la
+   *  portada ANTES de tener id y por eso omite estas dos props: "Generar con
+   *  IA" ahí no tendría qué edición actualizar. */
+  editionId?:    string
   coverImageUrl: string
   coverSource:   NewsletterCoverSource
   studioImages:  StudioImage[]
   canEdit:       boolean
   onChange: (next: { coverImageUrl: string; coverSource: NewsletterCoverSource }) => void
+  /** Guarda el formulario tal como está antes de generar. La escena tiene que
+   *  reflejar el titular real, no uno que el usuario todavía no guardó. */
+  onBeforeGenerate?: () => Promise<{ ok: true } | { ok: false; error: string }>
 }
 
 type Tab = 'upload' | 'studio'
@@ -24,6 +35,10 @@ const SOURCE_LABEL: Record<NewsletterCoverSource, string> = {
   studio: 'Del Estudio',
   ai:     'Generada con IA',
 }
+
+// Mensaje genérico para cuando `res.json()` truena: mismo patrón que
+// uploadCoverFile/uploadBlockImage de este mismo archivo.
+const GENERATE_FALLBACK_ERROR = 'No se pudo generar la portada. Verifica tu conexión e intenta de nuevo.'
 
 // Route Handler, no Server Action — ver src/app/api/newsletters/media/route.ts:
 // una Server Action POSTea a la ruta de la página, que src/proxy.ts intercepta
@@ -39,9 +54,12 @@ async function uploadCoverFile(file: File): Promise<{ ok: true; url: string } | 
   }
 }
 
-export function CoverPicker({ coverImageUrl, coverSource, studioImages, canEdit, onChange }: Props) {
+export function CoverPicker({
+  editionId, coverImageUrl, coverSource, studioImages, canEdit, onChange, onBeforeGenerate,
+}: Props) {
   const [tab, setTab]           = useState<Tab>('upload')
   const [uploading, setUploading] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [error, setError]       = useState<string | null>(null)
   const fileInputRef            = useRef<HTMLInputElement>(null)
 
@@ -54,6 +72,23 @@ export function CoverPicker({ coverImageUrl, coverSource, studioImages, canEdit,
     setUploading(false)
     if (!res.ok) { setError(res.error); return }
     onChange({ coverImageUrl: res.url, coverSource: 'upload' })
+  }
+
+  async function handleGenerate() {
+    if (!editionId || !onBeforeGenerate) return
+    setError(null)
+    setGenerating(true)
+    const saved = await onBeforeGenerate()
+    if (!saved.ok) { setGenerating(false); setError(saved.error); return }
+    try {
+      const res = await generateCoverForEdition(editionId)
+      setGenerating(false)
+      if (!res.ok) { setError(res.error); return }
+      onChange({ coverImageUrl: res.data.url, coverSource: 'ai' })
+    } catch {
+      setGenerating(false)
+      setError(GENERATE_FALLBACK_ERROR)
+    }
   }
 
   return (
@@ -100,20 +135,25 @@ export function CoverPicker({ coverImageUrl, coverSource, studioImages, canEdit,
                   {t.label}
                 </button>
               ))}
-              <button
-                type="button"
-                disabled
-                title="Disponible próximamente"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '5px',
-                  padding: '6px 12px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
-                  background: 'transparent', color: 'var(--text-muted)',
-                  border: '1px solid var(--border-subtle)', cursor: 'not-allowed', opacity: 0.6,
-                }}
-              >
-                <Sparkles size={12} />
-                Generar con IA
-              </button>
+              {editionId && onBeforeGenerate && (
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  disabled={generating || uploading}
+                  title="Genera una portada con IA a partir del titular y la bajada guardados"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '5px',
+                    padding: '6px 12px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
+                    background: 'transparent', color: 'var(--text-muted)',
+                    border: '1px solid var(--border-subtle)',
+                    cursor: (generating || uploading) ? 'default' : 'pointer',
+                    opacity: (generating || uploading) ? 0.6 : 1,
+                  }}
+                >
+                  {generating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {generating ? 'Generando…' : 'Generar con IA'}
+                </button>
+              )}
             </div>
           )}
 
