@@ -2,14 +2,24 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Newspaper, ArrowUpRight } from 'lucide-react'
-import { getPublicTenant, getPublicEditions, getPublicNewsletterPaths, type PublicEdition } from './shared'
+import { Newspaper, ArrowUpRight, Mail } from 'lucide-react'
+import {
+  getPublicTenant, getPublicEditions, getPublicSeriesList,
+  getPublicNewsletterPaths, getPublicSeriesPaths,
+  type PublicEdition, type PublicSeries,
+} from './shared'
 import { formatEditionDate } from './nl-format'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from './nl-chrome'
 
-// Portada pública de newsletters del tenant — news.itmano.com/<slug>. Feed con
-// las ediciones publicadas de TODAS sus series, más reciente primero, cada una
-// con la insignia de su serie.
+// Portada pública de newsletters del tenant — news.itmano.com/<slug>.
+//
+// Dos secciones, en este orden: las SERIES del tenant (spec §6) y el feed de
+// las ediciones publicadas de todas ellas, más reciente primero.
+//
+// La lista de series no es decorativa: el formulario de suscripción vive en el
+// archivo de cada serie, y sin esta lista la única forma de llegar a él era
+// entrar por una edición ya publicada. Para una función cuyo objetivo es
+// captar suscriptores, eso dejaba la captación inalcanzable justo al principio.
 
 // ISR: la página no lee cookies ni searchParams, así que se cachea y se sirve
 // desde el edge en vez de renderizarse por visita — mismo razonamiento que el
@@ -18,12 +28,21 @@ import { pal, WRAP, DISPLAY, Masthead, Footer } from './nl-chrome'
 export const revalidate = 300
 
 // Obligatorio para que la ruta entre al manifiesto de prerender: sin esto,
-// `revalidate` no tiene efecto sobre un segmento dinámico (ver shared.ts). Un
-// tenant sin ediciones publicadas no aparece en la lista y se sirve bajo
-// demanda si alguien visita su portada (dynamicParams por defecto).
+// `revalidate` no tiene efecto sobre un segmento dinámico (ver shared.ts).
+//
+// Se cruzan las dos fuentes a propósito: un tenant que ya creó su serie pero
+// todavía no ha publicado nada tiene portada — con el enlace a su formulario de
+// suscripción — desde el primer día. Lo que no aparezca aquí se sirve bajo
+// demanda igual (dynamicParams por defecto).
 export async function generateStaticParams() {
-  const paths = await getPublicNewsletterPaths()
-  const slugs = new Set(paths.map(p => p.tenantSlug))
+  const [editionPaths, seriesPaths] = await Promise.all([
+    getPublicNewsletterPaths(),
+    getPublicSeriesPaths(),
+  ])
+  const slugs = new Set([
+    ...editionPaths.map(p => p.tenantSlug),
+    ...seriesPaths.map(p => p.tenantSlug),
+  ])
   return [...slugs].map(tenantSlug => ({ tenantSlug }))
 }
 
@@ -44,7 +63,10 @@ export default async function PublicNewsletterHomePage({ params }: { params: Par
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) notFound()
 
-  const editions = await getPublicEditions(tenant.id)
+  const [series, editions] = await Promise.all([
+    getPublicSeriesList(tenant.id),
+    getPublicEditions(tenant.id),
+  ])
   const P = pal(tenant.primary_color || '#C9A96E')
 
   return (
@@ -65,26 +87,83 @@ export default async function PublicNewsletterHomePage({ params }: { params: Par
             Newsletter
           </div>
           <h1 style={{ ...DISPLAY, fontSize: 'clamp(28px, 5vw, 44px)', margin: 0, color: P.ink }}>
-            Ediciones de {tenant.name}
+            La newsletter de {tenant.name}
           </h1>
         </div>
 
-        {editions.length === 0 ? (
-          <div style={{ background: P.paperAlt, borderRadius: '18px', padding: '56px 24px', textAlign: 'center' }}>
-            <Newspaper size={28} strokeWidth={1.2} color={P.textFaint} />
-            <p style={{ color: P.textSoft, margin: '14px 0 0', fontSize: '15px' }}>No hay ediciones publicadas todavía.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            {editions.map(edition => (
-              <EditionCard key={edition.id} tenantSlug={tenant.slug} edition={edition} P={P} />
-            ))}
-          </div>
+        {/* Series — la puerta al archivo de cada una y a su formulario de suscripción. */}
+        {series.length > 0 && (
+          <section style={{ marginBottom: '48px' }}>
+            <SectionTitle label="Series" P={P} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+              {series.map(s => (
+                <SeriesCard key={s.id} tenantSlug={tenant.slug} series={s} P={P} />
+              ))}
+            </div>
+          </section>
         )}
+
+        {/* Feed de ediciones recientes de TODAS las series. */}
+        <section>
+          {series.length > 0 && editions.length > 0 && <SectionTitle label="Ediciones recientes" P={P} />}
+
+          {editions.length === 0 ? (
+            <div style={{ background: P.paperAlt, borderRadius: '18px', padding: '56px 24px', textAlign: 'center' }}>
+              <Newspaper size={28} strokeWidth={1.2} color={P.textFaint} />
+              <p style={{ color: P.textSoft, margin: '14px 0 0', fontSize: '15px' }}>
+                {series.length > 0
+                  ? 'Todavía no hay ediciones publicadas. Suscríbete a una serie para recibir la primera.'
+                  : 'No hay ediciones publicadas todavía.'}
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              {editions.map(edition => (
+                <EditionCard key={edition.id} tenantSlug={tenant.slug} edition={edition} P={P} />
+              ))}
+            </div>
+          )}
+        </section>
 
         <Footer tenant={tenant} P={P} />
       </main>
     </div>
+  )
+}
+
+function SectionTitle({ label, P }: { label: string; P: ReturnType<typeof pal> }) {
+  return (
+    <h2 style={{
+      fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase',
+      color: P.textFaint, fontWeight: 700, margin: '0 0 16px',
+    }}>
+      {label}
+    </h2>
+  )
+}
+
+function SeriesCard({ tenantSlug, series, P }: { tenantSlug: string; series: PublicSeries; P: ReturnType<typeof pal> }) {
+  return (
+    <Link href={`/nl/${tenantSlug}/${series.slug}`} className="nlh-card" style={{
+      display: 'flex', flexDirection: 'column', gap: '10px', textDecoration: 'none', color: 'inherit',
+      background: '#fff', borderRadius: '16px', border: `1px solid ${P.line}`,
+      padding: '20px', boxShadow: P.cardShadow,
+    }}>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: '32px', height: '32px', borderRadius: '9px',
+        background: `${P.accent}1F`, color: P.accent,
+      }}>
+        <Mail size={15} strokeWidth={1.8} />
+      </span>
+      <span style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.01em', color: P.ink }}>
+        {series.name}
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: P.textSoft }}>
+        Ver el archivo y suscribirse
+        <ArrowUpRight size={13} color={P.accent} />
+      </span>
+    </Link>
   )
 }
 

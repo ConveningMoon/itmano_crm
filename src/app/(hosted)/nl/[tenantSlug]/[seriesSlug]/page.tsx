@@ -3,7 +3,10 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft, ArrowUpRight, Newspaper } from 'lucide-react'
-import { getPublicTenant, getPublicSeries, getPublicEditions, getPublicNewsletterPaths, type PublicEdition } from '../shared'
+import {
+  getPublicTenant, getPublicSeries, getPublicEditions,
+  getPublicNewsletterPaths, getPublicSeriesPaths, type PublicEdition,
+} from '../shared'
 import { formatEditionDate } from '../nl-format'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from '../nl-chrome'
 import { SubscribeForm } from './subscribe-form'
@@ -15,12 +18,22 @@ import { SubscribeForm } from './subscribe-form'
 export const revalidate = 300
 
 // Igual que la portada: sin esto `revalidate` no aplica a este segmento
-// dinámico. Sólo series con al menos una edición publicada.
+// dinámico.
+//
+// La lista sale de las SERIES ACTIVAS, no de las que ya publicaron algo: esta
+// página es la que lleva el formulario de suscripción, así que tiene que
+// existir desde que la serie se crea. Antes sólo entraban las series con al
+// menos una edición publicada y la captación quedaba inalcanzable al principio.
 export async function generateStaticParams() {
-  const paths = await getPublicNewsletterPaths()
+  const [seriesPaths, editionPaths] = await Promise.all([
+    getPublicSeriesPaths(),
+    getPublicNewsletterPaths(),
+  ])
   const seen = new Set<string>()
   const out: { tenantSlug: string; seriesSlug: string }[] = []
-  for (const p of paths) {
+  // Las ediciones publicadas se cruzan igualmente: cubren la serie que se
+  // desactivó pero conserva archivo público.
+  for (const p of [...seriesPaths, ...editionPaths]) {
     const key = `${p.tenantSlug}/${p.seriesSlug}`
     if (seen.has(key)) continue
     seen.add(key)

@@ -78,6 +78,32 @@ export async function getPublicTenant(tenantSlug: string): Promise<PublicTenant 
   return (data as PublicTenant | null) ?? null
 }
 
+/**
+ * Series publicables del tenant, para la portada.
+ *
+ * Filtra por `active` además de por `archived_at`: el intake exige
+ * `active = true` (ver api/intake/[publicId]/submit), así que anunciar una
+ * serie apagada sería anunciar un formulario de suscripción que rechaza el
+ * envío. El archivo de una serie apagada sigue siendo alcanzable por enlace
+ * directo — eso no cambia.
+ */
+export async function getPublicSeriesList(tenantId: string): Promise<PublicSeries[]> {
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from('acquisition_channels')
+    .select(PUBLIC_SERIES_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .eq('channel_type', 'newsletter')
+    .eq('active', true)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+  if (error || !data) return []
+  // reason: ver mapEdition — el cliente de Supabase no esta tipado en este repo
+  // y `columns()` ya valido la lista contra el esquema.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]) as PublicSeries[]
+}
+
 export async function getPublicSeries(tenantId: string, seriesSlug: string): Promise<PublicSeries | null> {
   const db = createAdminClient()
   const { data } = await db
@@ -173,6 +199,57 @@ export async function getPublicEdition(
 // Devuelve [] si la lectura falla: un build no debe caerse porque la base no
 // responda. Con dynamicParams (default true) las rutas que no estén en la
 // lista se renderizan bajo demanda y a partir de ahí se cachean igual.
+/**
+ * Rutas de SERIE a prerenderizar: todas las series activas, tengan o no una
+ * edición publicada.
+ *
+ * `getPublicNewsletterPaths` sólo conoce series que ya publicaron algo, y con
+ * eso la página de una serie recién creada —la que lleva el formulario de
+ * suscripción— quedaba fuera del manifiesto de prerender. Para una función
+ * cuyo objetivo es captar suscriptores, eso dejaba la captación inalcanzable
+ * justo al principio, que es cuando más falta hace.
+ *
+ * Devuelve [] si la lectura falla: un build no debe caerse porque la base no
+ * responda.
+ */
+export async function getPublicSeriesPaths(): Promise<
+  { tenantSlug: string; seriesSlug: string }[]
+> {
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from('acquisition_channels')
+    .select(columns('acquisition_channels', ['tenant_id', 'slug']))
+    .eq('channel_type', 'newsletter')
+    .eq('active', true)
+    .is('archived_at', null)
+  if (error || !data) return []
+
+  const tenantSlugById = await getTenantSlugMap(db)
+  if (!tenantSlugById) return []
+
+  // reason: ver mapEdition.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[])
+    .map(r => ({
+      tenantSlug: tenantSlugById.get(r.tenant_id as string),
+      seriesSlug: r.slug as string | undefined,
+    }))
+    .filter((p): p is { tenantSlug: string; seriesSlug: string } => !!p.tenantSlug && !!p.seriesSlug)
+}
+
+/** slug del tenant por id. null si la lectura falla (el llamador devuelve []). */
+async function getTenantSlugMap(
+  db: ReturnType<typeof createAdminClient>,
+): Promise<Map<string, string> | null> {
+  const { data, error } = await db.from('tenants').select(columns('tenants', ['id', 'slug']))
+  if (error || !data) return null
+  return new Map<string, string>(
+    // reason: ver mapEdition.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (data as any[]).map(t => [t.id as string, t.slug as string]),
+  )
+}
+
 export async function getPublicNewsletterPaths(): Promise<
   { tenantSlug: string; seriesSlug: string; editionSlug: string }[]
 > {
@@ -192,13 +269,8 @@ export async function getPublicNewsletterPaths(): Promise<
   })
   if (rows.length === 0) return []
 
-  const { data: tenantRows, error: tenantError } = await db.from('tenants').select('id, slug')
-  if (tenantError || !tenantRows) return []
-  const tenantSlugById = new Map<string, string>(
-    // reason: ver mapEdition.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (tenantRows as any[]).map(t => [t.id as string, t.slug as string]),
-  )
+  const tenantSlugById = await getTenantSlugMap(db)
+  if (!tenantSlugById) return []
 
   return rows
     .map(r => ({
