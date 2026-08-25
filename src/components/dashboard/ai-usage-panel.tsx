@@ -1,4 +1,5 @@
 import type { AiUsageSummary, AiUsageTotals, AgentAiBreakdown } from '@/lib/data/ai-usage'
+import { AI_FEATURE_LABELS } from '@/lib/services/ai-feature-labels'
 import { Sparkles, ArrowDownToLine, ArrowUpFromLine, DollarSign } from 'lucide-react'
 
 // Panel de uso de IA (tokens + costo). Componente presentacional puro, sin
@@ -6,16 +7,10 @@ import { Sparkles, ArrowDownToLine, ArrowUpFromLine, DollarSign } from 'lucide-r
 // Configuración (dentro del client de settings). Los datos llegan ya agregados
 // desde getAiUsageSummary.
 
-// Labels client-safe (duplicados a propósito del service server-only).
-const FEATURE_LABELS: Record<string, string> = {
-  property_intake:    'Propiedades · Crear con IA',
-  email_draft:        'Correos · Borrador con IA',
-  sequence_bootstrap: 'Secuencias · 3 correos con IA',
-  hosted_page_copy:   'Páginas · Textos con IA',
-}
-
+// El fallback `?? f` cubre una feature de una fila vieja que ya no exista en
+// el mapa: se muestra el literal antes que romper la pantalla.
 function featureLabel(f: string): string {
-  return FEATURE_LABELS[f] ?? f
+  return AI_FEATURE_LABELS[f] ?? f
 }
 
 function fmtInt(n: number): string {
