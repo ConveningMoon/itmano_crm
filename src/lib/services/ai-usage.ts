@@ -10,6 +10,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 export type AiFeature =
   | 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy'
   | 'lead_fit' | 'carousel_copy' | 'studio_prompt' | 'studio_image'
+  | 'newsletter_research' | 'newsletter_draft' | 'newsletter_cover'
 
 export const AI_FEATURE_LABELS: Record<string, string> = {
   property_intake:    'Propiedades · Crear con IA',
@@ -20,12 +21,26 @@ export const AI_FEATURE_LABELS: Record<string, string> = {
   carousel_copy:      'Carruseles · Copy con IA',
   studio_prompt:      'Estudio · Dirección de escena',
   studio_image:       'Estudio · Generación de imagen',
+  newsletter_research: 'Newsletters · Investigación',
+  newsletter_draft:    'Newsletters · Redacción',
+  newsletter_cover:    'Newsletters · Portada',
 }
 
 // Costo por imagen de Nano Banana. Google no factura por token en imagen, así
 // que el ledger guarda un costo FIJO por unidad en vez de derivarlo del usage
 // (ver `costUsdOverride` más abajo).
 export const IMAGE_UNIT_COST_USD = 0.039
+
+// Costo por búsqueda de la herramienta `web_search`: la API la factura aparte
+// de los tokens, a 10 USD por cada 1.000 búsquedas. Igual que con las imágenes,
+// el ledger guarda un costo por UNIDAD porque no se deriva del usage de tokens.
+export const WEB_SEARCH_UNIT_COST_USD = 0.01
+
+/** Lo que cuestan N búsquedas web. Nunca negativo. */
+export function webSearchCostUsd(searches: number): number {
+  if (!Number.isFinite(searches) || searches <= 0) return 0
+  return searches * WEB_SEARCH_UNIT_COST_USD
+}
 
 // Precios en USD por millón de tokens (fuente: docs de la Claude API).
 // claude-sonnet-5: $3 in / $15 out (precio de lista; hay intro $2/$10 hasta
