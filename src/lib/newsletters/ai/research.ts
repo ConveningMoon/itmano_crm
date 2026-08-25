@@ -42,6 +42,12 @@ export interface NewsletterDossier {
   searchErrors: string[]
   /** Texto crudo de la respuesta, para depurar cuando el JSON no parsee. */
   rawText:  string
+  /**
+   * Tokens reales de esta llamada. Sin esto el llamador no puede facturar el
+   * costo de la investigación — sólo el de las búsquedas — y Anthropic sí
+   * cobra estos tokens aunque el ledger los registre en cero.
+   */
+  usage: { input: number; output: number }
 }
 
 /**
@@ -214,5 +220,9 @@ export async function researchMarket(args: {
     searches,
     searchErrors: errores,
     rawText:  text.slice(0, 4000),
+    usage: {
+      input:  response.usage.input_tokens,
+      output: response.usage.output_tokens,
+    },
   }
 }

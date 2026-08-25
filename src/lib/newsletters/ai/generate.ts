@@ -2,7 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
-import { recordAiUsage, webSearchCostUsd } from '@/lib/services/ai-usage'
+import { recordAiUsage, webSearchCostUsd, computeCostUsd } from '@/lib/services/ai-usage'
 import { parseSourceDomains, canGenerateWithAi } from '../source-domains'
 import { researchMarket } from './research'
 import { draftEdition } from './draft'
@@ -22,7 +22,7 @@ const MODEL = 'claude-sonnet-5'
 // agencia que se edita en Ajustes → Tu negocio.
 const TENANT_COLUMNS = columns('tenants', [
   'name', 'description', 'newsletter_source_domains',
-  'primary_areas', 'secondary_areas', 'currency',
+  'primary_areas', 'secondary_areas',
 ])
 
 export interface GeneratedDraft {
@@ -94,15 +94,24 @@ export async function generateNewsletterDraft(args: {
     return { ok: false, error: `No se pudo investigar el mercado: ${detalle}` }
   }
 
-  // Se registra el costo de la búsqueda AUNQUE la redacción falle después: esas
-  // búsquedas ya se facturaron.
+  // Se registra el costo de la investigación AUNQUE la redacción falle después:
+  // esos tokens y esas búsquedas ya se facturaron.
+  //
+  // `costUsdOverride` es obligatorio aquí, no un simple paso-por: el costo de
+  // esta llamada no es sólo tokens (recordAiUsage lo calcularía con `usage`
+  // solo) ni sólo búsquedas (`webSearchCostUsd` solo) — es AMBOS a la vez, y
+  // Anthropic cobra los dos. Pasar sólo uno de los dos subestimaría el gasto
+  // real exactamente como lo hacía la versión anterior, que ignoraba los
+  // tokens de investigación por completo.
   await recordAiUsage({
     tenantId: ctx.tenant_id,
     userId:   ctx.user_id,
     feature:  'newsletter_research',
     model:    MODEL,
-    usage:    { input_tokens: 0, output_tokens: 0 },
-    costUsdOverride: webSearchCostUsd(dossier.searches),
+    usage:    { input_tokens: dossier.usage.input, output_tokens: dossier.usage.output },
+    costUsdOverride: computeCostUsd(MODEL, {
+      input_tokens: dossier.usage.input, output_tokens: dossier.usage.output,
+    }) + webSearchCostUsd(dossier.searches),
     metadata: { searches: dossier.searches, domains: domains.length, topic: dossier.topic },
   })
 

@@ -480,7 +480,16 @@ const GenerateInput = z.object({
 // columna: no es 'ai' porque ninguna IA generó esta imagen, y es la opción que
 // menos afirma sobre un origen que en realidad no existe todavía. El
 // CoverPicker del editor la reemplaza antes de publicar.
-const PLACEHOLDER_COVER_URL = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com'}/itmano_banner.webp`
+//
+// RUTA RELATIVA, no absoluta: las tres páginas públicas de newsletters pintan
+// `cover_image_url` con `next/image`, que valida cualquier `src` que no
+// empiece por `/` contra `images.remotePatterns` — donde sólo está el host de
+// Supabase Storage. Una URL absoluta a `app.itmano.com` (o al que sea
+// `NEXT_PUBLIC_APP_URL`) revienta con 500 en cuanto se publica, aunque la
+// sirva la misma app: el rewrite por host de `news.itmano.com` no cambia qué
+// host lleva el `src`. `/itmano_banner.webp` es el mismo patrón que ya usa
+// `brand-logo.tsx:19` para este asset.
+const PLACEHOLDER_COVER_URL = '/itmano_banner.webp'
 
 /**
  * Genera una edición con IA y la guarda como BORRADOR.
