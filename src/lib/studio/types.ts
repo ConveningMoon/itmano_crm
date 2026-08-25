@@ -5,7 +5,12 @@ export type StudioRecipe   = 'open_house' | 'new_listing' | 'sold' | 'event' | '
 export type SourceMode     = 'generate' | 'photo'
 export type ReferenceRole  = 'subject' | 'style' | 'composition'
 export type TextZone       = 'top' | 'bottom' | 'left'
-export type Aspect         = '1:1' | '4:5' | '9:16' | '16:9'
+// Fuente única de los aspectos válidos: el array manda y el tipo se deriva de
+// él. Antes el tipo era la única fuente y cada validación (`z.enum`) repetía
+// los literales a mano — se desincronizaban en silencio, porque `tsc` no
+// conecta un `z.enum` de strings sueltos con la unión `Aspect`.
+export const ASPECTS = ['1:1', '4:5', '9:16', '16:9'] as const
+export type Aspect         = typeof ASPECTS[number]
 export type StudioStatus   = 'pending' | 'generating' | 'composing' | 'ready' | 'failed'
 
 // La marca con la que se compone: sale de tenants + agents, nunca del código.

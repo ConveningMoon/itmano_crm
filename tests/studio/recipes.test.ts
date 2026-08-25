@@ -5,6 +5,7 @@ import {
 } from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
 import { DEFAULT_PALETTE, paletteRow } from '@/lib/studio/palettes'
+import { ASPECTS } from '@/lib/studio/types'
 import type { TemplateMeta } from '@/lib/studio/templates/meta'
 
 const base = { style: 'editorial', aspect: '4:5', palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } }
@@ -197,6 +198,24 @@ describe('parseStudioForm', () => {
       expect(r.data.palette).toEqual(DEFAULT_PALETTE)
       expect(r.data.has_reference).toBe(false)
     }
+  })
+})
+
+describe('aspecto — el schema deriva de ASPECTS, no de literales repetidos', () => {
+  // Si algún día alguien vuelve a escribir el enum a mano en recipes.ts, este
+  // test es el que se rompe: comprueba que el esquema real (el que valida el
+  // formulario de cualquier receta) acepta EXACTAMENTE lo que declara ASPECTS,
+  // ni más ni menos.
+  it('acepta todos los valores de ASPECTS', () => {
+    for (const aspect of ASPECTS) {
+      const r = parseStudioForm({ ...base, aspect, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
+      expect(r.ok).toBe(true)
+    }
+  })
+
+  it('rechaza un aspecto que no está en ASPECTS', () => {
+    const r = parseStudioForm({ ...base, aspect: '21:9', recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
+    expect(r.ok).toBe(false)
   })
 })
 

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
 import { DEFAULT_PALETTE } from './palettes'
-import type { ActionResult } from './types'
+import { ASPECTS, type ActionResult } from './types'
 import type { TemplateMeta } from './templates/meta'
 
 // Validación por receta, PURA y sin dependencias de servidor: corre antes de
@@ -69,7 +69,10 @@ const common = {
   // servía para nada. Se acepta también el formato viejo para que las piezas ya
   // guardadas se sigan recomponiendo.
   palette:        paletteSchema,
-  aspect:         z.enum(['1:1', '4:5', '9:16']),
+  // Deriva de ASPECTS (types.ts): un enum de literales sueltos aquí no lo
+  // vería `tsc` si se desincroniza del tipo `Aspect`, que es justo lo que pasó
+  // hasta que se cerró este hueco.
+  aspect:         z.enum(ASPECTS),
   // Cuántas referencias adjuntó. `has_reference` es el campo viejo —una sola
   // imagen, booleano— y se sigue leyendo para que las piezas guardadas antes
   // conserven su referencia al generar una variante. Ver `referenceCount`.

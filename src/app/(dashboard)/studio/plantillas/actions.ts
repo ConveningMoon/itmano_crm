@@ -12,7 +12,7 @@ import { listMockupOverrides, saveMockup, deleteMockup } from '@/lib/data/studio
 import { resolveMockups, mockupSlot } from '@/lib/studio/mockups'
 import { renderDocument } from '@/lib/studio/render/client'
 import { CANVAS } from '@/lib/studio/canvas'
-import type { ActionResult, StudioRecipe, Aspect } from '@/lib/studio/types'
+import { ASPECTS, type ActionResult, type StudioRecipe, type Aspect } from '@/lib/studio/types'
 
 // El guardia se repite aquí aunque la ruta ya lo tenga: una server action es un
 // endpoint HTTP y se puede invocar directamente.
@@ -23,7 +23,9 @@ const schema = z.object({
   label:   z.string().trim().min(1, 'El nombre es obligatorio').max(40),
   hint:    z.string().trim().max(60).default(''),
   recipes: z.array(z.enum(['open_house', 'new_listing', 'sold', 'event'])).min(1, 'Elige al menos una receta'),
-  aspects: z.array(z.enum(['4:5', '1:1', '9:16'])).min(1),
+  // Deriva de ASPECTS (types.ts), no de literales repetidos a mano: ver el
+  // comentario en la declaración de ASPECTS sobre por qué importa.
+  aspects: z.array(z.enum(ASPECTS)).min(1),
   html:    z.string().max(200_000),
   css:     z.string().max(200_000),
 })
