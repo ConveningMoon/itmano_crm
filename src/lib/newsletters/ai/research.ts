@@ -27,10 +27,19 @@ export interface ResearchFinding {
 
 export interface NewsletterDossier {
   topic:    string
+  /**
+   * Por qué el tema le importa a los clientes de esta agencia. Es contexto
+   * para el redactor del paso 2, NO contenido publicable: a diferencia de
+   * `findings`, no lleva URL, así que ninguna cifra que traiga se puede
+   * verificar. Lo que se publica sale de los bloques del paso 2, que sí
+   * exigen fuente.
+   */
   summary:  string
   findings: ResearchFinding[]
   /** Búsquedas realizadas CON ÉXITO. Alimenta el ledger de costos. */
   searches: number
+  /** Códigos de error de las búsquedas que fallaron (`collectSearchErrors`). */
+  searchErrors: string[]
   /** Texto crudo de la respuesta, para depurar cuando el JSON no parsee. */
   rawText:  string
 }
@@ -72,6 +81,25 @@ export function collectSearchErrors(content: unknown[]): string[] {
   return codes
 }
 
+/**
+ * Distingue un fallo real de la herramienta de que el modelo, simplemente, no
+ * buscó.
+ *
+ * `searches === 0` por sí solo no basta: el modelo puede decidir no buscar
+ * porque el tema no lo necesitaba, y eso no es un fallo — el orquestador ya
+ * rechaza un dossier sin hallazgos. Pero si además hay `searchErrors` (la
+ * herramienta respondió con `error_code`, p. ej. `max_uses_exceeded`), el
+ * modelo casi siempre igual devuelve el JSON pedido con `findings: []` porque
+ * el prompt le exige responder siempre con ese objeto — así que el `text` no
+ * queda vacío y el fallo de infraestructura se disfrazaría de "no había
+ * nada". Uno hay que verlo; el otro no.
+ */
+export function assertSearchInfraOk(searches: number, searchErrors: string[]): void {
+  if (searches === 0 && searchErrors.length > 0) {
+    throw new Error(`La búsqueda web falló: ${searchErrors.join(', ')}`)
+  }
+}
+
 /** Extrae el primer objeto JSON de un texto que puede traer prosa alrededor. */
 function extractJson(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{')
@@ -104,7 +132,7 @@ function buildPrompt(args: {
     ` un informe más corto que uno con cifras que nadie puede comprobar.`,
     ` No inventes cifras bajo ninguna circunstancia.`,
     `\n\nResponde SOLO con un objeto JSON válido, sin markdown y sin texto alrededor:`,
-    `\n{"topic":"el tema en una frase","summary":"por qué le importa a los clientes de esta agencia, 2-3 frases",`,
+    `\n{"topic":"el tema en una frase","summary":"por qué le importa a los clientes de esta agencia, 2-3 frases, EN TÉRMINOS CUALITATIVOS Y SIN CIFRAS — toda cifra va en findings, que es el único lugar con URL para respaldarla",`,
     `"findings":[{"claim":"el dato concreto, con su cifra","url":"https://...","publisher":"quién lo publica","published_at":"YYYY-MM-DD si se sabe"}]}`,
     `\n\nEscribe el contenido en ${args.language}.`,
   ].join('')
@@ -158,6 +186,12 @@ export async function researchMarket(args: {
     throw new Error(`La investigación no devolvió nada${detalle}.`)
   }
 
+  // El modelo responde con el JSON pedido incluso cuando la búsqueda falló
+  // por completo (el prompt le exige responder siempre), así que `text` no
+  // vacío no es garantía de que hubo búsqueda real. Sin esto, un fallo total
+  // de la herramienta se ve idéntico a que el modelo decidiera no buscar.
+  assertSearchInfraOk(searches, errores)
+
   const parsed = extractJson(text)
   const findings: ResearchFinding[] = Array.isArray(parsed?.findings)
     ? (parsed!.findings as unknown[])
@@ -178,6 +212,7 @@ export async function researchMarket(args: {
     summary:  String(parsed?.summary ?? '').trim(),
     findings,
     searches,
+    searchErrors: errores,
     rawText:  text.slice(0, 4000),
   }
 }

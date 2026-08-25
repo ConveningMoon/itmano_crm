@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractSearchCount, collectSearchErrors } from '@/lib/newsletters/ai/research'
+import { extractSearchCount, collectSearchErrors, assertSearchInfraOk } from '@/lib/newsletters/ai/research'
 
 // Forma real de un bloque de resultado con ÉXITO: `content` es una LISTA.
 const bloqueOk = {
@@ -50,5 +50,27 @@ describe('collectSearchErrors', () => {
 
   it('devuelve vacio ante basura', () => {
     expect(collectSearchErrors([null, 'x', {}])).toEqual([])
+  })
+})
+
+// Cubre la distincion entre "el modelo no busco" (no es fallo) y "la
+// herramienta fallo del todo" (si es fallo, y su codigo no se puede perder).
+describe('assertSearchInfraOk', () => {
+  it('no lanza si hubo al menos una busqueda con exito', () => {
+    expect(() => assertSearchInfraOk(1, [])).not.toThrow()
+    expect(() => assertSearchInfraOk(3, ['max_uses_exceeded'])).not.toThrow()
+  })
+
+  it('no lanza si no hubo busquedas ni errores: el modelo decidio no buscar', () => {
+    expect(() => assertSearchInfraOk(0, [])).not.toThrow()
+  })
+
+  it('lanza si no hubo busquedas con exito pero si hubo errores', () => {
+    expect(() => assertSearchInfraOk(0, ['max_uses_exceeded'])).toThrow(/max_uses_exceeded/)
+  })
+
+  it('el mensaje trae todos los codigos de error, no solo el primero', () => {
+    expect(() => assertSearchInfraOk(0, ['max_uses_exceeded', 'unavailable']))
+      .toThrow(/max_uses_exceeded.*unavailable/)
   })
 })
