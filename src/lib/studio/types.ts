@@ -5,7 +5,7 @@ export type StudioRecipe   = 'open_house' | 'new_listing' | 'sold' | 'event' | '
 export type SourceMode     = 'generate' | 'photo'
 export type ReferenceRole  = 'subject' | 'style' | 'composition'
 export type TextZone       = 'top' | 'bottom' | 'left'
-export type Aspect         = '1:1' | '4:5' | '9:16'
+export type Aspect         = '1:1' | '4:5' | '9:16' | '16:9'
 export type StudioStatus   = 'pending' | 'generating' | 'composing' | 'ready' | 'failed'
 
 // La marca con la que se compone: sale de tenants + agents, nunca del código.
