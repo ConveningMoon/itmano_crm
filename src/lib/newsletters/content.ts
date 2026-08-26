@@ -103,3 +103,24 @@ export function parseNewsletterSources(raw: unknown): NewsletterSource[] {
     .filter((r): r is { success: true; data: NewsletterSource } => r.success)
     .map(r => r.data)
 }
+
+/**
+ * Cómo se nombra una fuente en la sección "Fuentes".
+ *
+ * Vive aquí —y no en render.ts— porque la página pública y la vista previa del
+ * editor tienen que decir exactamente lo mismo, y render.ts es `server-only`:
+ * el editor no puede importarlo. Todo lo demás de esa vista previa es una copia
+ * deliberada; esto no, porque es justo donde se separaron.
+ *
+ * Colapsa cuando los dos valores coinciden. Una fuente generada con IA no trae
+ * título de artículo, así que `title` ES el medio (ver `sourcesFromFindings`) y
+ * la etiqueta salía como "NAR — NAR" en el 100% de las ediciones generadas. Una
+ * fuente subida a mano sí tiene título propio, y ahí "Título — Medio" es lo
+ * correcto: la comparación es por valor, no por origen.
+ */
+export function sourceLabel(source: Pick<NewsletterSource, 'title' | 'publisher'>): string {
+  const title     = source.title.trim()
+  const publisher = (source.publisher ?? '').trim()
+  if (!publisher || publisher === title) return title
+  return `${title} — ${publisher}`
+}

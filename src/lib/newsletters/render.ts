@@ -1,4 +1,5 @@
 import 'server-only'
+import { sourceLabel } from './content'
 import type { NewsletterContent, NewsletterSource } from './content'
 
 // Compilador único de bloques → HTML. Lo usan la página pública y la vista
@@ -88,7 +89,7 @@ export function renderNewsletterHtml(
   if (used.length > 0) {
     const items = used.map(s => {
       const url = safeUrl(s.url)
-      const label = escapeHtml(s.publisher ? `${s.title} — ${s.publisher}` : s.title)
+      const label = escapeHtml(sourceLabel(s))
       return url
         ? `<li><a href="${escapeHtml(url)}" rel="nofollow noopener" target="_blank">${label}</a></li>`
         : `<li>${label}</li>`

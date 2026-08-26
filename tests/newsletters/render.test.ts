@@ -70,3 +70,31 @@ describe('renderNewsletterHtml', () => {
     expect(renderNewsletterHtml(content, [])).not.toContain('javascript:')
   })
 })
+
+// La seccion "Fuentes" es lo que sostiene el argumento de la feature, y es el
+// tipo de detalle que solo se ve mirando la pagina: por eso se fija aqui.
+describe('etiqueta de las fuentes', () => {
+  const conStat = (ids: string[]): NewsletterContent => ({
+    v: NEWSLETTER_CONTENT_VERSION,
+    blocks: [{ type: 'stat', label: 'Precio medio', value: '$385.000', sourceIds: ids }],
+  })
+
+  it('no repite el medio cuando title y publisher coinciden', () => {
+    // Toda fuente generada con IA cae aqui: el dossier no trae titulo de
+    // articulo, asi que `title` ES el medio.
+    const html = renderNewsletterHtml(conStat(['s1']), [{ ...fuente, title: 'NAR', publisher: 'NAR' }])
+    expect(html).toContain('>NAR<')
+    expect(html).not.toContain('NAR — NAR')
+  })
+
+  it('sigue mostrando titulo y medio cuando son distintos', () => {
+    const html = renderNewsletterHtml(conStat(['s1']), [fuente])
+    expect(html).toContain('Informe NAR — NAR')
+  })
+
+  it('sin publisher muestra solo el titulo', () => {
+    const html = renderNewsletterHtml(conStat(['s1']), [{ ...fuente, publisher: '' }])
+    expect(html).toContain('>Informe NAR<')
+    expect(html).not.toContain('—')
+  })
+})
