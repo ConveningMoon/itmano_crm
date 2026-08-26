@@ -91,6 +91,12 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // Las excepciones de feat/newsletters (105, 106 y 107) se retiraron el
   // 2026-08-25: las tres migraciones están aplicadas a los DOS proyectos, así
   // que ya no hay nada que excusar y el test vuelve a vigilarlas de verdad.
+
+  // feat/newsletters-gestion: la 109 (caché del dossier) está aplicada SÓLO al
+  // sandbox, a la espera del permiso para producción. Retirar estas dos líneas
+  // al aplicarla allí — si se quedan, el test deja de vigilar la tabla.
+  'tabla:newsletter_dossiers':  'migración 109 (caché del dossier): sólo en sandbox',
+  'policy:newsletter_dossiers': 'migración 109 (caché del dossier): sólo en sandbox',
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
