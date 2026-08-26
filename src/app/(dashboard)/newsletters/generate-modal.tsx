@@ -23,6 +23,10 @@ interface Props {
   onClose:       () => void
   series:        NewsletterSeries[]
   sourceDomains: string[]
+  /** Sólo super_admin edita la allowlist (updateNewsletterSourceDomains repite
+   *  el gate). Para un `agent` la pestaña "Tu negocio" ni existe, así que
+   *  mandarlo allí es mandarlo a una puerta cerrada. */
+  canEditSources: boolean
 }
 
 type Stage = 'idle' | 'researching' | 'drafting'
@@ -58,7 +62,7 @@ function initialChannelId(series: NewsletterSeries[]): string {
   return series[0]?.id ?? ''
 }
 
-export function GenerateModal({ open, onClose, series, sourceDomains }: Props) {
+export function GenerateModal({ open, onClose, series, sourceDomains, canEditSources }: Props) {
   const router = useRouter()
   const [channelId, setChannelId] = useState(() => initialChannelId(series))
   const [topic, setTopic]         = useState('')
@@ -224,9 +228,15 @@ export function GenerateModal({ open, onClose, series, sourceDomains }: Props) {
                     Tu equipo todavía no tiene fuentes declaradas, así que la IA no
                     puede generar contenido: sin allowlist significaría buscar en
                     toda la web, y eso es justo lo que este diseño evita.{' '}
-                    <Link href="/settings?tab=negocio" style={{ color: 'var(--accent-gold)' }}>
-                      Declara fuentes en Ajustes → Tu negocio
-                    </Link>.
+                    {canEditSources ? (
+                      <>
+                        <Link href="/settings?tab=negocio" style={{ color: 'var(--accent-gold)' }}>
+                          Declara fuentes en Ajustes → Tu negocio
+                        </Link>.
+                      </>
+                    ) : (
+                      'Las fuentes las fija ITMANO. Escríbenos indicando tu mercado y las dejamos configuradas.'
+                    )}
                   </p>
                 </div>
               )}
@@ -261,7 +271,11 @@ export function GenerateModal({ open, onClose, series, sourceDomains }: Props) {
               <button
                 type="submit"
                 disabled={busy || isPending || !canGenerate || !channelId}
-                title={!canGenerate ? 'Declara fuentes primero en Ajustes → Tu negocio' : undefined}
+                title={!canGenerate
+                  ? (canEditSources
+                      ? 'Declara fuentes primero en Ajustes → Tu negocio'
+                      : 'Las fuentes las fija ITMANO. Escríbenos para configurarlas.')
+                  : undefined}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',

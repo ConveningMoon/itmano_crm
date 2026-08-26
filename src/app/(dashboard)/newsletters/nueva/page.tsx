@@ -4,7 +4,7 @@ import { Sparkles } from 'lucide-react'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
-import { getSeriesForTenant } from '@/lib/data/newsletters'
+import { getSeriesForTenant, getSourceDomainsFor } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { canGenerateWithAi } from '@/lib/newsletters/source-domains'
@@ -17,10 +17,12 @@ import { NewEditionForm } from './new-edition-form'
 //
 // El botón "Generar con IA" en sí vive en series-list.tsx (el modal se abre
 // desde ahí, junto a "Nueva edición"): esta página sólo enlaza de vuelta para
-// quien llegó aquí a escribir a mano y en realidad quería la vía rápida.
+// quien llegó aquí a escribir a mano y en realidad quería la vía rápida. El
+// enlace lleva `?generar=1` para que el modal se abra solo — enlazar a
+// /newsletters a secas prometía "Generar con IA" y dejaba al usuario delante de
+// la lista buscando el botón.
 
 const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
-const TENANT_COLUMNS       = columns('tenants', ['newsletter_source_domains'])
 
 export default async function NewEditionPage() {
   const ctx = await requireTenantContext()
@@ -35,14 +37,13 @@ export default async function NewEditionPage() {
   const plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
-  const [series, studioImages, { data: tenantRow }] = await Promise.all([
+  const [series, studioImages, sourceDomains] = await Promise.all([
     getSeriesForTenant(tenantId),
     getStudioImages(tenantId),
-    db.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).maybeSingle(),
+    // Ya normalizada: el banner de abajo se muestra según la MISMA lista con la
+    // que el servidor decidirá si puede generar.
+    getSourceDomainsFor(tenantId),
   ])
-  // reason: el cliente de Supabase no está tipado en este repo.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sourceDomains = ((tenantRow as any)?.newsletter_source_domains as string[] | null) ?? []
 
   return (
     <div style={{ maxWidth: '560px' }}>
@@ -56,7 +57,7 @@ export default async function NewEditionPage() {
             ¿Prefieres que la IA proponga el contenido?
           </span>
           <Link
-            href="/newsletters"
+            href="/newsletters?generar=1"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '5px',
               fontSize: '12px', fontWeight: 500, color: 'var(--accent-gold)', textDecoration: 'none',

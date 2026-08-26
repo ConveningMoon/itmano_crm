@@ -29,15 +29,24 @@ interface Props {
    *  antes de generar. Vacío = el botón se muestra igual, pero deshabilitado
    *  con su motivo (lo resuelve el propio modal, vía canGenerateWithAi). */
   sourceDomains: string[]
+  /** Sólo super_admin edita la allowlist. Cambia lo que el modal ofrece cuando
+   *  falta: ir a Ajustes, o a quién escribir. */
+  canEditSources: boolean
+  /** Llegó con `?generar=1` (banner de /newsletters/nueva): abre el modal. */
+  openGenerate: boolean
 }
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export function SeriesList({ series, sequences, agents, tenantSlug, sourceDomains }: Props) {
+export function SeriesList({
+  series, sequences, agents, tenantSlug, sourceDomains, canEditSources, openGenerate,
+}: Props) {
   const [showNewSeries, setShowNewSeries] = useState(false)
-  const [showGenerate, setShowGenerate]   = useState(false)
+  // Estado INICIAL, no efecto: si el usuario cierra el modal no vuelve a
+  // abrirse solo, y no hace falta reescribir la URL para conseguirlo.
+  const [showGenerate, setShowGenerate]   = useState(openGenerate)
 
   return (
     <>
@@ -136,6 +145,7 @@ export function SeriesList({ series, sequences, agents, tenantSlug, sourceDomain
         onClose={() => setShowGenerate(false)}
         series={series}
         sourceDomains={sourceDomains}
+        canEditSources={canEditSources}
       />
     </>
   )
