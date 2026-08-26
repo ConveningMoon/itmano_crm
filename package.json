@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/check-sharp-tracing.mjs",
     "start": "next start",
     "lint": "eslint",
     "test:unit": "vitest run tests/actions tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/carousels tests/studio tests/access tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business tests/sources/page-link.test.ts tests/agent-api/ tests/newsletters",
