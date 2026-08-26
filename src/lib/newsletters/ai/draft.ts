@@ -69,8 +69,25 @@ export function sourcesFromFindings(findings: ResearchFinding[]): NewsletterSour
   return sources
 }
 
-/** Esquema JSON de la salida. Espeja NewsletterContentSchema de content.ts. */
-function outputSchema(): Record<string, unknown> {
+/**
+ * Esquema JSON de la salida. Espeja NewsletterContentSchema de content.ts.
+ *
+ * NO lleva `minItems`/`maxItems` con valores distintos de 0 o 1: la salida
+ * estructurada de la API los rechaza con 400 ("For 'array' type, 'minItems'
+ * values other than 0 or 1 are not supported") — no es un olvido, es un
+ * límite de la API. Esas cotas (mínimo de bloques, máximo de la edición,
+ * tamaño de una lista) siguen existiendo, sólo que en el otro lado de la
+ * doble red: las aplica `NewsletterContentSchema` con zod justo después,
+ * que además rechaza con un mensaje en español en vez de un 400 opaco. La
+ * única excepción real es `sourceIds: { minItems: 1 }` en el bloque `stat`:
+ * 1 SÍ está permitido, y es la restricción que garantiza que ningún dato
+ * salga sin fuente — se queda aquí porque la API la admite.
+ *
+ * Exportada (y no privada) para que un test estructural pueda recorrerla y
+ * cazar una regresión — un `minItems`/`maxItems` fuera de {0,1} que alguien
+ * vuelva a añadir — sin tener que llamar a la API para descubrirlo.
+ */
+export function outputSchema(): Record<string, unknown> {
   const bloque = {
     type: 'object',
     oneOf: [
@@ -98,7 +115,7 @@ function outputSchema(): Record<string, unknown> {
       title:       { type: 'string', description: 'Titular de la edición. Concreto, sin signos de exclamación.' },
       dek:         { type: 'string', description: 'Entradilla de una o dos frases.' },
       data_as_of:  { type: ['string', 'null'], description: 'Fecha YYYY-MM-DD a la que se refieren los datos, o null.' },
-      blocks:      { type: 'array', items: bloque, minItems: 3, maxItems: 40 },
+      blocks:      { type: 'array', items: bloque },
     },
     required: ['title', 'dek', 'data_as_of', 'blocks'],
     additionalProperties: false,

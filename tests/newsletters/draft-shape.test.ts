@@ -1,6 +1,31 @@
 import { describe, it, expect } from 'vitest'
-import { sourcesFromFindings } from '@/lib/newsletters/ai/draft'
+import { sourcesFromFindings, outputSchema } from '@/lib/newsletters/ai/draft'
 import { NewsletterSourceSchema } from '@/lib/newsletters/content'
+
+/**
+ * Recorre cualquier nodo del esquema JSON buscando `minItems`/`maxItems` con
+ * un valor fuera de {0, 1}. La API de salida estructurada devuelve 400 ante
+ * cualquiera de esos — un límite real, no una preferencia de estilo — así
+ * que esta comprobación es la que hubiera cazado la regresión sin gastar una
+ * llamada real a la API.
+ */
+function findInvalidItemBounds(node: unknown, path: string): string[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((v, i) => findInvalidItemBounds(v, `${path}[${i}]`))
+  }
+  if (!node || typeof node !== 'object') return []
+  const problemas: string[] = []
+  for (const clave of ['minItems', 'maxItems'] as const) {
+    const valor = (node as Record<string, unknown>)[clave]
+    if (typeof valor === 'number' && valor !== 0 && valor !== 1) {
+      problemas.push(`${path}.${clave} = ${valor}`)
+    }
+  }
+  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+    problemas.push(...findInvalidItemBounds(v, `${path}.${k}`))
+  }
+  return problemas
+}
 
 describe('sourcesFromFindings', () => {
   it('convierte hallazgos en fuentes validas para el esquema', () => {
@@ -69,5 +94,12 @@ describe('sourcesFromFindings', () => {
     ])
     expect(fuentes).toHaveLength(2)
     expect(fuentes.map(f => f.id)).toEqual(['s1', 's2'])
+  })
+})
+
+describe('outputSchema', () => {
+  it('no usa minItems ni maxItems fuera de {0, 1} — la API de salida estructurada los rechaza con 400', () => {
+    const problemas = findInvalidItemBounds(outputSchema(), 'schema')
+    expect(problemas).toEqual([])
   })
 })
