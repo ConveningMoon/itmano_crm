@@ -21,6 +21,12 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
 // La lista de rutas de abajo salió de mirar qué `.nft.json` del build mencionan
 // `node_modules/sharp/`. Si una ruta nueva empieza a usar sharp, hay que
 // añadirla aquí — o fallará igual de silenciosamente.
+//
+// "Hay que acordarse" no funcionó: newsletters llegó, empezó a usar sharp por
+// la portada con IA y nadie añadió sus rutas, así que la sección entera murió
+// en producción con el build en verde. Ese cruce lo hace ahora
+// `scripts/check-sharp-tracing.mjs`, que corre al final de `npm run build` y
+// rompe el build —el de Vercel incluido— en vez de dejar pasar el fallo.
 const SHARP_NATIVE = ["./node_modules/@img/**"]
 
 const nextConfig: NextConfig = {
@@ -63,6 +69,19 @@ const nextConfig: NextConfig = {
     // las fotos de ejemplo de public/studio/fixtures para renderizar la miniatura
     // al guardar. Mismo problema que la línea de arriba: public/ no se traza solo.
     "/studio/plantillas": ["./public/studio/fixtures/**", ...SHARP_NATIVE],
+    // Newsletters compone la portada con IA (ai/cover.ts -> finishFreeImage ->
+    // sharp), y ese import es de nivel superior en newsletters/actions.ts: el
+    // modulo entero carga sharp, asi que TODA action del modulo muere al
+    // cargarse si falta el .so — incluida crearSerie, que no toca una imagen.
+    // Eso es lo que se vio en produccion: "A server error occurred" antes de
+    // llegar al insert, con el build en verde.
+    //
+    // Las cuatro rutas salen de cruzar los .nft.json del build, igual que el
+    // resto. scripts/check-sharp-tracing.mjs hace ahora ese cruce solo.
+    "/newsletters": SHARP_NATIVE,
+    "/newsletters/[id]": SHARP_NATIVE,
+    "/newsletters/nueva": SHARP_NATIVE,
+    "/newsletters/serie/[id]": SHARP_NATIVE,
     // El resto de rutas que llaman a sharp. La lista sale de mirar qué
     // .nft.json del build mencionan node_modules/sharp/, no de suponerlo.
     "/admin": SHARP_NATIVE,
