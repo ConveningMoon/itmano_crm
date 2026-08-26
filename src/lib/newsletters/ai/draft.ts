@@ -5,6 +5,7 @@ import {
   type NewsletterContent, type NewsletterSource,
 } from '../content'
 import type { NewsletterDossier, ResearchFinding } from './research'
+import { AiSpentError, type AiSpend } from './spend'
 
 // Paso 2: redactar la edición a partir del dossier, SIN acceso a la web.
 //
@@ -36,6 +37,17 @@ export interface DraftResult {
   usage:     { input: number; output: number }
 }
 
+/** Lo que identifica a la fuente: el medio, y si no lo dio, el hostname. */
+function sourceTitleFor(f: ResearchFinding): string {
+  const publisher = (f.publisher ?? '').trim()
+  if (publisher) return publisher.slice(0, 300)
+  try {
+    return new URL(f.url).hostname.replace(/^www\./, '').slice(0, 300)
+  } catch {
+    return ''
+  }
+}
+
 /**
  * Los hallazgos del dossier son las fuentes de la edición.
  *
@@ -56,18 +68,35 @@ export interface DraftResult {
  * sobreviven, nunca sobre el índice del hallazgo original — si la segunda de
  * tres se descarta, las dos que quedan tienen que ser `s1` y `s2`, no `s1` y
  * `s3`, porque esos ids son justo los que ve el prompt.
+ *
+ * Se DEDUPLICA por URL, conservando el primer hallazgo. Tres cifras sacadas del
+ * mismo artículo son tres hallazgos legítimos, pero una sola fuente: sin esto,
+ * la sección "Fuentes" de la página pública lista el mismo enlace tres veces y
+ * parece que la edición se apoya en más material del que tiene.
+ *
+ * Y `title` NO es la afirmación. El esquema (§3.4) define `title` como el
+ * título de la FUENTE; el dossier no trae título de artículo, así que se usa lo
+ * que sí la identifica —el medio y, si no lo dio, el hostname—. La afirmación
+ * ya vive en el bloque que la cita: repetirla aquí convertía la lista de
+ * fuentes en una lista de frases sueltas.
  */
 export function sourcesFromFindings(findings: ResearchFinding[]): NewsletterSource[] {
   const hoy = new Date().toISOString().slice(0, 10)
   const sources: NewsletterSource[] = []
+  const urlsVistas = new Set<string>()
   for (const f of findings) {
     if (!/^https?:\/\//.test(f.url)) continue
+    if (urlsVistas.has(f.url)) continue
+    urlsVistas.add(f.url)
     const candidato = {
       id:           `s${sources.length + 1}`,
       url:          f.url,
-      title:        f.claim.slice(0, 300),
+      title:        sourceTitleFor(f),
       publisher:    (f.publisher ?? '').slice(0, 160),
-      published_at: f.published_at,
+      // Se recorta igual que `title` y `publisher`: el esquema tope la fecha en
+      // 30 caracteres, y sin esto una fecha larga no recorta el campo — descarta
+      // la fuente ENTERA, que es justo el mecanismo que este saneo introdujo.
+      published_at: f.published_at?.slice(0, 30),
       accessed_at:  hoy,
     }
     const validado = NewsletterSourceSchema.safeParse(candidato)
@@ -139,8 +168,19 @@ function buildPrompt(args: {
   dossier: NewsletterDossier; language: string; brandName: string; voice: string | null
   sources: NewsletterSource[]
 }): string {
-  const listado = args.sources
-    .map(f => `- ${f.id}: ${f.title} — ${f.publisher} (${f.url})`)
+  // El listado se arma sobre los HALLAZGOS, no sobre las fuentes: lo que el
+  // redactor necesita ver es cada dato con el id que debe citar. Desde que
+  // `sourcesFromFindings` deduplica por URL y `title` identifica al medio en vez
+  // de repetir la afirmación, una lista de fuentes ya no contiene ninguna cifra
+  // y el modelo se quedaría sin material. Dos hallazgos del mismo artículo
+  // comparten id, que es exactamente lo que se quiere.
+  const idPorUrl = new Map(args.sources.map(s => [s.url, s.id]))
+  const listado = args.dossier.findings
+    .map(f => {
+      const id = idPorUrl.get(f.url)
+      return id ? `- ${id}: ${f.claim} — ${f.publisher} (${f.url})` : null
+    })
+    .filter((l): l is string => l !== null)
     .join('\n')
 
   return [
@@ -159,7 +199,13 @@ function buildPrompt(args: {
   ].join('')
 }
 
-/** Redacta la edición. Lanza si la salida no valida contra el esquema del repo. */
+/**
+ * Redacta la edición. Lanza si la salida no valida contra el esquema del repo.
+ *
+ * Todo fallo posterior a la respuesta del modelo sale como `AiSpentError` con
+ * el gasto ya causado; el previo (dossier sin fuentes utilizables) como `Error`
+ * a secas, porque no llegó a costar nada.
+ */
 export async function draftEdition(args: {
   dossier:   NewsletterDossier
   language:  string
@@ -187,11 +233,19 @@ export async function draftEdition(args: {
   })
   const response = await stream.finalMessage()
 
+  // Desde aquí la llamada YA está cobrada: todo fallo sale con su gasto encima
+  // para que el orquestador lo registre antes de devolver `{ ok: false }`. La
+  // redacción no busca, así que `searches` es 0.
+  const spend: AiSpend = {
+    usage:    { input: response.usage.input_tokens, output: response.usage.output_tokens },
+    searches: 0,
+  }
+
   // El resultado ya no viene en un bloque de texto: viene en `tool_use.input`,
   // y el SDK ya lo entrega como objeto — no hay JSON que parsear a mano.
   const block = response.content.find(b => b.type === 'tool_use')
   if (!block || block.type !== 'tool_use') {
-    throw new Error('La redacción no devolvió el contenido estructurado.')
+    throw new AiSpentError('La redacción no devolvió el contenido estructurado.', spend)
   }
   const parsed = block.input as Record<string, unknown>
 
@@ -202,7 +256,7 @@ export async function draftEdition(args: {
     blocks: parsed.blocks,
   })
   if (!contenido.success) {
-    throw new Error(`La redacción no cumple el formato: ${contenido.error.issues[0].message}`)
+    throw new AiSpentError(`La redacción no cumple el formato: ${contenido.error.issues[0].message}`, spend)
   }
 
   const conocidas = new Set(sources.map(s => s.id))
@@ -210,7 +264,7 @@ export async function draftEdition(args: {
     const ids = b.type === 'stat' ? b.sourceIds : b.type === 'paragraph' ? (b.sourceIds ?? []) : []
     for (const id of ids) {
       if (!conocidas.has(id)) {
-        throw new Error('La redacción citó una fuente que no existe.')
+        throw new AiSpentError('La redacción citó una fuente que no existe.', spend)
       }
     }
   }
@@ -225,9 +279,6 @@ export async function draftEdition(args: {
     content:  contenido.data,
     sources,
     dataAsOf,
-    usage: {
-      input:  response.usage.input_tokens,
-      output: response.usage.output_tokens,
-    },
+    usage: spend.usage,
   }
 }

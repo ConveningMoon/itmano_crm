@@ -61,6 +61,41 @@ describe('sourcesFromFindings', () => {
     expect(sourcesFromFindings([])).toEqual([])
   })
 
+  it('deduplica por url: tres cifras del mismo articulo son UNA fuente', () => {
+    // Sin esto la seccion "Fuentes" de la pagina publica lista el mismo enlace
+    // tres veces y aparenta mas material del que hay.
+    const fuentes = sourcesFromFindings([
+      { claim: 'el precio subio 4%',  url: 'https://nar.realtor/informe', publisher: 'NAR' },
+      { claim: 'el inventario cayo',  url: 'https://nar.realtor/informe', publisher: 'NAR' },
+      { claim: 'los dias en mercado', url: 'https://nar.realtor/informe', publisher: 'NAR' },
+      { claim: 'otra cosa',           url: 'https://ine.es/x',            publisher: 'INE' },
+    ])
+    expect(fuentes).toHaveLength(2)
+    expect(fuentes.map(f => f.url)).toEqual(['https://nar.realtor/informe', 'https://ine.es/x'])
+    expect(fuentes.map(f => f.id)).toEqual(['s1', 's2'])
+  })
+
+  it('title identifica a la fuente, no repite la afirmacion (spec 3.4)', () => {
+    const [conMedio, sinMedio] = sourcesFromFindings([
+      { claim: 'El precio medio subio 4%', url: 'https://nar.realtor/a',     publisher: 'NAR' },
+      { claim: 'El inventario cayo 9%',    url: 'https://www.redfin.com/b',  publisher: '  ' },
+    ])
+    expect(conMedio.title).toBe('NAR')
+    expect(conMedio.title).not.toContain('4%')
+    // Sin publisher, lo que identifica a la fuente es su host.
+    expect(sinMedio.title).toBe('redfin.com')
+  })
+
+  it('recorta published_at en vez de descartar la fuente entera', () => {
+    // El esquema tope la fecha en 30 caracteres: sin recortar, una fecha larga
+    // no invalida el campo, invalida la fuente.
+    const [f] = sourcesFromFindings([
+      { claim: 'a', url: 'https://ine.es/x', publisher: 'INE', published_at: 'F'.repeat(80) },
+    ])
+    expect(f).toBeDefined()
+    expect(f.published_at?.length).toBeLessThanOrEqual(30)
+  })
+
   it('recorta un publisher que excede el maximo del esquema, en vez de descartar la fuente', () => {
     const publisherLargo = 'N'.repeat(200)
     const [f] = sourcesFromFindings([

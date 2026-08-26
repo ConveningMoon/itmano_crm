@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  MAX_SOURCE_DOMAINS, normalizeDomain, parseSourceDomains, canGenerateWithAi,
+  MAX_SOURCE_DOMAINS, normalizeDomain, parseSourceDomains, canGenerateWithAi, urlIsAllowed,
 } from '@/lib/newsletters/source-domains'
 
 describe('normalizeDomain', () => {
@@ -59,5 +59,40 @@ describe('canGenerateWithAi', () => {
 
   it('con al menos uno, si', () => {
     expect(canGenerateWithAi(['nar.realtor'])).toBe(true)
+  })
+})
+
+// `allowed_domains` cierra la búsqueda, pero la URL de cada hallazgo la escribe
+// el modelo en texto libre. Esto es lo que vuelve a cerrar la escritura.
+describe('urlIsAllowed', () => {
+  const domains = ['nar.realtor', 'fred.stlouisfed.org']
+
+  it('acepta el dominio exacto', () => {
+    expect(urlIsAllowed('https://nar.realtor/informe', domains)).toBe(true)
+  })
+
+  it('acepta un subdominio', () => {
+    expect(urlIsAllowed('https://www.nar.realtor/a/b?x=1', domains)).toBe(true)
+    expect(urlIsAllowed('https://data.fred.stlouisfed.org/series', domains)).toBe(true)
+  })
+
+  it('rechaza un sufijo tramposo', () => {
+    expect(urlIsAllowed('https://evil-nar.realtor/a', domains)).toBe(false)
+    expect(urlIsAllowed('https://narrealtor.com/a', domains)).toBe(false)
+  })
+
+  it('rechaza otro dominio', () => {
+    expect(urlIsAllowed('https://zillow.com/a', domains)).toBe(false)
+  })
+
+  it('rechaza una URL invalida o un esquema que no es http(s)', () => {
+    expect(urlIsAllowed('no soy una url', domains)).toBe(false)
+    expect(urlIsAllowed('', domains)).toBe(false)
+    expect(urlIsAllowed('javascript:alert(1)', domains)).toBe(false)
+    expect(urlIsAllowed('ftp://nar.realtor/a', domains)).toBe(false)
+  })
+
+  it('sin allowlist no pasa nada', () => {
+    expect(urlIsAllowed('https://nar.realtor/a', [])).toBe(false)
   })
 })

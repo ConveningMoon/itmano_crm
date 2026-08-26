@@ -1,6 +1,7 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
-import { MAX_SOURCE_DOMAINS } from '../source-domains'
+import { MAX_SOURCE_DOMAINS, urlIsAllowed } from '../source-domains'
+import { AiSpentError, type AiSpend } from './spend'
 
 // Paso 1 del pipeline: investigar el mercado de la agencia con la herramienta
 // de servidor `web_search`, restringida a la allowlist del tenant.
@@ -15,8 +16,17 @@ import { MAX_SOURCE_DOMAINS } from '../source-domains'
 
 const MODEL = 'claude-sonnet-5'
 
-/** Tope de búsquedas por generación. Acota el gasto y el tiempo de respuesta. */
-const MAX_SEARCHES = 6
+/**
+ * Tope de búsquedas por generación. Está aquí por COSTE, no por capricho.
+ *
+ * Cada resultado de búsqueda se reenvía en cada turno interno del modelo, así
+ * que el gasto crece más que linealmente con este número: con 5–6 búsquedas una
+ * edición salía por ~$0,60 contra un presupuesto Growth de $30/mes compartido
+ * con TODA la IA del tenant. Con 4 el material sigue sobrando —6 búsquedas
+ * dejaban 13 fuentes y la edición usa un puñado— y la factura baja de golpe.
+ * Subirlo otra vez es una decisión de precio, no de calidad.
+ */
+const MAX_SEARCHES = 4
 
 export interface ResearchFinding {
   claim:         string
@@ -147,6 +157,10 @@ function buildPrompt(args: {
 /**
  * Investiga y devuelve el dossier. Lanza si no hay nada utilizable — el
  * llamador lo convierte en `{ ok: false }`; aquí no se decide cómo se muestra.
+ *
+ * Todo fallo POSTERIOR a la respuesta de la API sale como `AiSpentError` con el
+ * gasto ya causado, para que el orquestador lo registre antes de rendirse. Los
+ * anteriores (sin fuentes declaradas) salen como `Error` a secas: no costaron.
  */
 export async function researchMarket(args: {
   topic:     string | null
@@ -187,16 +201,27 @@ export async function researchMarket(args: {
     .join('')
     .trim()
 
+  // A partir de aquí Anthropic YA cobró esta llamada, así que todo fallo se
+  // lanza con el gasto encima: el orquestador lo registra antes de rendirse.
+  const spend: AiSpend = {
+    usage:    { input: response.usage.input_tokens, output: response.usage.output_tokens },
+    searches,
+  }
+
   if (!text) {
     const detalle = errores.length ? ` (${errores.join(', ')})` : ''
-    throw new Error(`La investigación no devolvió nada${detalle}.`)
+    throw new AiSpentError(`La investigación no devolvió nada${detalle}.`, spend)
   }
 
   // El modelo responde con el JSON pedido incluso cuando la búsqueda falló
   // por completo (el prompt le exige responder siempre), así que `text` no
   // vacío no es garantía de que hubo búsqueda real. Sin esto, un fallo total
   // de la herramienta se ve idéntico a que el modelo decidiera no buscar.
-  assertSearchInfraOk(searches, errores)
+  try {
+    assertSearchInfraOk(searches, errores)
+  } catch (e) {
+    throw new AiSpentError(e instanceof Error ? e.message : 'La búsqueda web falló.', spend)
+  }
 
   const parsed = extractJson(text)
   const findings: ResearchFinding[] = Array.isArray(parsed?.findings)
@@ -208,9 +233,14 @@ export async function researchMarket(args: {
           publisher:    String(f.publisher ?? '').trim(),
           published_at: typeof f.published_at === 'string' ? f.published_at : undefined,
         }))
-        // Un hallazgo sin URL no sirve para nada aquí: el paso 2 no podría
-        // citarlo y publishBlockers acabaría bloqueando la edición.
-        .filter(f => f.claim && /^https?:\/\//.test(f.url))
+        // Dos filtros distintos. Un hallazgo sin URL no sirve para nada aquí:
+        // el paso 2 no podría citarlo y publishBlockers acabaría bloqueando la
+        // edición. Y uno con una URL FUERA de la allowlist es peor que inútil:
+        // la búsqueda estaba cerrada, pero el JSON lo escribe el modelo, así
+        // que un dominio ajeno sólo puede venir de una alucinación o de un
+        // `topic` redactado para inducirla — y acabaría publicado con la marca
+        // del cliente encima.
+        .filter(f => f.claim && urlIsAllowed(f.url, args.domains))
     : []
 
   return {
@@ -220,9 +250,6 @@ export async function researchMarket(args: {
     searches,
     searchErrors: errores,
     rawText:  text.slice(0, 4000),
-    usage: {
-      input:  response.usage.input_tokens,
-      output: response.usage.output_tokens,
-    },
+    usage: spend.usage,
   }
 }

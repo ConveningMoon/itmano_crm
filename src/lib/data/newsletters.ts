@@ -5,6 +5,7 @@ import {
   parseNewsletterContent, parseNewsletterSources,
   type NewsletterContent, type NewsletterSource,
 } from '@/lib/newsletters/content'
+import { parseSourceDomains } from '@/lib/newsletters/source-domains'
 
 // Acceso a datos de newsletters. La SERIE es una fila de acquisition_channels
 // con channel_type = 'newsletter'; las EDICIONES son tabla propia.
@@ -179,4 +180,34 @@ export async function getEditionById(id: string, tenantId: string): Promise<News
     .eq('tenant_id', tenantId)
     .maybeSingle()
   return data ? mapEdition(data) : null
+}
+
+const SOURCE_DOMAINS_COLUMNS = columns('tenants', ['newsletter_source_domains'])
+
+/**
+ * La allowlist de fuentes del tenant, YA NORMALIZADA.
+ *
+ * Única puerta de lectura de `tenants.newsletter_source_domains`. Antes cada
+ * pantalla la leía cruda y sólo el orquestador de IA la pasaba por
+ * `parseSourceDomains`: una fila sembrada a mano por ITMANO con un valor que la
+ * herramienta rechaza —una IP, un TLD desnudo, una URL entera— hacía que el
+ * modal enseñara la lista llena y habilitara el botón, y que el servidor
+ * rechazara la generación acto seguido. La UI y el servidor tienen que estar
+ * mirando exactamente la misma lista.
+ *
+ * Lo que se descarta no se devuelve: `parseSourceDomains` ya separa lo
+ * rechazado, y quien lo necesita para avisar es la pantalla de Ajustes, que lo
+ * calcula sobre lo que el usuario acaba de escribir.
+ */
+export async function getSourceDomainsFor(tenantId: string): Promise<string[]> {
+  const db = createAdminClient()
+  const { data } = await db
+    .from('tenants')
+    .select(SOURCE_DOMAINS_COLUMNS)
+    .eq('id', tenantId)
+    .maybeSingle()
+  // reason: el cliente de Supabase no está tipado en este repo; columns() ya
+  // validó la lista contra el esquema.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return parseSourceDomains((data as any)?.newsletter_source_domains).domains
 }

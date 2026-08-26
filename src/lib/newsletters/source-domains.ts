@@ -80,3 +80,38 @@ export function parseSourceDomains(raw: unknown): { domains: string[]; rejected:
 export function canGenerateWithAi(domains: string[] | null): boolean {
   return Array.isArray(domains) && domains.length > 0
 }
+
+/**
+ * ¿Esta URL pertenece a la allowlist?
+ *
+ * `allowed_domains` cierra la BÚSQUEDA, pero el dossier que devuelve el modelo
+ * es texto libre: la URL de cada hallazgo la escribe él. Y `topic` es texto
+ * libre del tenant que entra literal al prompt, así que un tema redactado a
+ * propósito puede inducir a citar un dominio ajeno que acabaría publicado en la
+ * página pública bajo la marca del cliente. Esto vuelve a cerrar la ESCRITURA
+ * con el mismo criterio con el que estaba cerrada la búsqueda.
+ *
+ * La coincidencia es por sufijo CON PUNTO: `nar.realtor` acepta
+ * `www.nar.realtor` y rechaza `evil-nar.realtor`. Un `endsWith` desnudo dejaría
+ * pasar el segundo, que es exactamente el ataque.
+ */
+export function urlIsAllowed(url: string, domains: string[]): boolean {
+  if (typeof url !== 'string' || !Array.isArray(domains) || domains.length === 0) return false
+
+  let host: string
+  try {
+    const parsed = new URL(url.trim())
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    host = parsed.hostname.toLowerCase().replace(/\.$/, '')
+  } catch {
+    return false
+  }
+  if (!host) return false
+
+  return domains.some(d => {
+    if (typeof d !== 'string') return false
+    const dominio = d.trim().toLowerCase().replace(/\.$/, '')
+    if (!dominio) return false
+    return host === dominio || host.endsWith(`.${dominio}`)
+  })
+}
