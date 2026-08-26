@@ -91,6 +91,9 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // Las excepciones de feat/newsletters (105, 106 y 107) se retiraron el
   // 2026-08-25: las tres migraciones están aplicadas a los DOS proyectos, así
   // que ya no hay nada que excusar y el test vuelve a vigilarlas de verdad.
+
+  // La excepción de la 109 (caché del dossier) se retiró el 2026-08-26: está
+  // aplicada a los DOS proyectos, así que el test vuelve a vigilarla de verdad.
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra

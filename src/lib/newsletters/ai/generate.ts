@@ -6,6 +6,7 @@ import { recordAiUsage, webSearchCostUsd, computeCostUsd } from '@/lib/services/
 import { canGenerateWithAi } from '../source-domains'
 import { getSourceDomainsFor } from '@/lib/data/newsletters'
 import { researchMarket } from './research'
+import { cacheKeyFor, readCachedDossier, writeCachedDossier, type CachedDossier } from './dossier-cache'
 import { draftEdition } from './draft'
 import { spendOf, type AiSpend } from './spend'
 import type { NewsletterContent, NewsletterSource } from '../content'
@@ -42,6 +43,8 @@ export interface GeneratedDraft {
     domains:  string[]
     searches: number
     at:       string
+    /** true cuando la investigación salió del caché y no se pagó. */
+    cached:   boolean
   }
 }
 
@@ -112,6 +115,61 @@ export async function generateNewsletterDraft(args: {
   }
 
   // ── Paso 1: investigar ────────────────────────────────────────────────────
+  //
+  // Antes de gastar, mira el caché (newsletter_dossiers, migración 109). Sólo
+  // hay llave cuando el tenant escribió un tema: con el tema propuesto por la
+  // IA, reutilizar devolvería la misma edición una y otra vez. Ver
+  // dossier-cache.ts.
+  const cacheKey = cacheKeyFor(args.topic, args.language)
+  const cached: CachedDossier | null = cacheKey
+    ? await readCachedDossier(ctx.tenant_id, cacheKey, domains)
+    : null
+
+  if (cached) {
+    // Un acierto NO se registra en el ledger: no hubo llamada a Anthropic ni
+    // búsquedas, así que apuntarlo inflaría el gasto del tenant con dinero que
+    // nadie cobró. Lo que sí queda es la marca `cached` en `aiRun`.
+    const blockedDraftCached = await assertAiWithinLimit(ctx)
+    if (blockedDraftCached) return blockedDraftCached
+
+    let draftFromCache
+    try {
+      draftFromCache = await draftEdition({
+        dossier: { ...cached, searchErrors: [], rawText: '', usage: { input: 0, output: 0 } },
+        language: args.language, brandName, voice,
+      })
+    } catch (e) {
+      const spend = spendOf(e)
+      if (spend) {
+        await registrar('newsletter_draft', spend, { topic: cached.topic, failed: true, cached: true })
+      }
+      const detalle = e instanceof Error ? e.message : 'error desconocido'
+      return { ok: false, error: `No se pudo redactar la edición: ${detalle}` }
+    }
+
+    await registrar('newsletter_draft', { usage: draftFromCache.usage, searches: 0 },
+      { topic: cached.topic, sources: draftFromCache.sources.length, cached: true })
+
+    return {
+      ok: true,
+      data: {
+        title:    draftFromCache.title,
+        dek:      draftFromCache.dek,
+        content:  draftFromCache.content,
+        sources:  draftFromCache.sources,
+        dataAsOf: draftFromCache.dataAsOf,
+        aiRun: {
+          model:    MODEL,
+          topic:    args.topic,
+          domains,
+          searches: cached.searches,
+          at:       new Date().toISOString(),
+          cached:   true,
+        },
+      },
+    }
+  }
+
   let dossier
   try {
     dossier = await researchMarket({
@@ -146,6 +204,18 @@ export async function generateNewsletterDraft(args: {
       ok: false,
       error: 'La búsqueda no encontró datos respaldables en tus fuentes. Prueba con otro tema o añade más fuentes.',
     }
+  }
+
+  // Guardar es best-effort y va DESPUÉS de comprobar que hay hallazgos: un
+  // dossier vacío no ahorraría nada y convertiría el próximo intento del mismo
+  // tema en el mismo error, sin darle ocasión de buscar de nuevo.
+  if (cacheKey) {
+    await writeCachedDossier(ctx.tenant_id, cacheKey, domains, {
+      topic:    dossier.topic,
+      summary:  dossier.summary,
+      findings: dossier.findings,
+      searches: dossier.searches,
+    })
   }
 
   // El gate otra vez, ANTES del segundo gasto (spec §5: "en cada paso"). La
@@ -187,6 +257,7 @@ export async function generateNewsletterDraft(args: {
         domains,
         searches: dossier.searches,
         at:       new Date().toISOString(),
+        cached:   false,
       },
     },
   }

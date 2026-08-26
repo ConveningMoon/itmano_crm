@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { columns } from '@/lib/supabase/columns'
-import { getSeriesForTenant, getSourceDomainsFor } from '@/lib/data/newsletters'
+import { getSeriesForTenant, getArchivedSeriesForTenant, getSourceDomainsFor } from '@/lib/data/newsletters'
 import { listSequences } from '@/lib/data/email-sequences'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
@@ -78,9 +78,16 @@ export default async function NewslettersPage(
     )
   }
 
-  const [series, sequences] = tenant_id
-    ? await Promise.all([getSeriesForTenant(tenant_id), listSequences(tenant_id)])
-    : [[], []]
+  // Las archivadas van a la misma pantalla, en su propio bloque: archivar una
+  // serie sin dejarla a la vista la volvería inalcanzable, y eliminarla —el
+  // segundo paso del patrón de Fuentes— sólo se puede hacer desde su detalle.
+  const [series, archivedSeries, sequences] = tenant_id
+    ? await Promise.all([
+        getSeriesForTenant(tenant_id),
+        getArchivedSeriesForTenant(tenant_id),
+        listSequences(tenant_id),
+      ])
+    : [[], [], []]
 
   let agents: Array<{ id: string; name: string }> = []
   let tenantSlug = ''
@@ -107,6 +114,7 @@ export default async function NewslettersPage(
   return (
     <SeriesList
       series={series}
+      archivedSeries={archivedSeries}
       sequences={sequences}
       agents={agents}
       tenantSlug={tenantSlug}
