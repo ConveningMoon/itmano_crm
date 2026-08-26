@@ -1,30 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { sourcesFromFindings, outputSchema } from '@/lib/newsletters/ai/draft'
+import { sourcesFromFindings, editionToolSchema } from '@/lib/newsletters/ai/draft'
 import { NewsletterSourceSchema } from '@/lib/newsletters/content'
 
-/**
- * Recorre cualquier nodo del esquema JSON buscando `minItems`/`maxItems` con
- * un valor fuera de {0, 1}. La API de salida estructurada devuelve 400 ante
- * cualquiera de esos — un límite real, no una preferencia de estilo — así
- * que esta comprobación es la que hubiera cazado la regresión sin gastar una
- * llamada real a la API.
- */
-function findInvalidItemBounds(node: unknown, path: string): string[] {
-  if (Array.isArray(node)) {
-    return node.flatMap((v, i) => findInvalidItemBounds(v, `${path}[${i}]`))
-  }
-  if (!node || typeof node !== 'object') return []
-  const problemas: string[] = []
-  for (const clave of ['minItems', 'maxItems'] as const) {
-    const valor = (node as Record<string, unknown>)[clave]
-    if (typeof valor === 'number' && valor !== 0 && valor !== 1) {
-      problemas.push(`${path}.${clave} = ${valor}`)
+// Forma mínima que nos interesa comprobar de `editionToolSchema()`. No es el
+// tipo completo de JSON Schema — sólo lo que el test necesita para navegarlo.
+interface BloqueVariante {
+  properties: { type: { const: string }; sourceIds?: { minItems?: number } }
+  required: string[]
+}
+interface EditionSchemaShape {
+  type: string
+  required: string[]
+  properties: {
+    blocks: {
+      type: string
+      minItems: number
+      maxItems: number
+      items: { oneOf: BloqueVariante[] }
     }
   }
-  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-    problemas.push(...findInvalidItemBounds(v, `${path}.${k}`))
-  }
-  return problemas
 }
 
 describe('sourcesFromFindings', () => {
@@ -97,9 +91,28 @@ describe('sourcesFromFindings', () => {
   })
 })
 
-describe('outputSchema', () => {
-  it('no usa minItems ni maxItems fuera de {0, 1} — la API de salida estructurada los rechaza con 400', () => {
-    const problemas = findInvalidItemBounds(outputSchema(), 'schema')
-    expect(problemas).toEqual([])
+describe('editionToolSchema', () => {
+  // Esto es un input_schema de tool use, no el `schema` de output_config —
+  // por eso SÍ puede llevar minItems/maxItems y oneOf. El test comprueba la
+  // forma que draftEdition necesita, no un límite de la API (ese límite se
+  // reprodujo contra la API real, no se vigila con una comprobación estática
+  // sobre este esquema).
+  const schema = editionToolSchema() as unknown as EditionSchemaShape
+
+  it('exige en el nivel superior justo los campos que draftEdition lee del input', () => {
+    expect(schema.type).toBe('object')
+    expect(schema.required.sort()).toEqual(['blocks', 'data_as_of', 'dek', 'title'])
+  })
+
+  it('cubre los tipos de bloque que entiende NewsletterContentSchema (menos "image", que la IA no genera)', () => {
+    const tipos = schema.properties.blocks.items.oneOf.map(b => b.properties.type.const)
+    expect(tipos.sort()).toEqual(['callout', 'heading', 'list', 'paragraph', 'quote', 'stat'])
+  })
+
+  it('el bloque stat exige sourceIds con minItems 1 — ningún dato sin fuente', () => {
+    const stat = schema.properties.blocks.items.oneOf.find(b => b.properties.type.const === 'stat')
+    expect(stat).toBeDefined()
+    expect(stat?.required).toContain('sourceIds')
+    expect(stat?.properties.sourceIds?.minItems).toBe(1)
   })
 })

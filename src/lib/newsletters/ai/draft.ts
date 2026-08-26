@@ -13,10 +13,17 @@ import type { NewsletterDossier, ResearchFinding } from './research'
 // en la newsletter. Y una de la API: la salida estructurada y las citas de
 // documento son mutuamente excluyentes (devuelve 400 si se combinan).
 //
-// La forma se pide con `output_config.format` y DESPUÉS se valida con el mismo
-// zod que usa el editor. Doble red: el modelo produce la forma, zod la verifica.
-// El esquema JSON se escribe a mano, como ya hace carousels/copy.ts — el repo no
-// tiene conversor de zod a JSON Schema y no merece uno por esto.
+// La forma se pide con FORCED TOOL USE, no con salida estructurada
+// (`output_config.format`): se probó primero con salida estructurada y la API
+// la rechazó dos veces — `minItems` distinto de 0/1 primero, `oneOf` después,
+// que es justo lo que necesita el union discriminado de bloques. El
+// `input_schema` de una herramienta sí admite ambos, y es el mismo patrón que
+// ya usa `carousels/copy.ts` en este repo.
+//
+// Y DESPUÉS, igual que si fuera salida estructurada, se valida con el mismo
+// zod que usa el editor. Doble red: el modelo produce la forma, zod la
+// verifica. El esquema JSON se escribe a mano, como ya hace carousels/copy.ts
+// — el repo no tiene conversor de zod a JSON Schema y no merece uno por esto.
 
 const MODEL = 'claude-sonnet-5'
 
@@ -70,24 +77,21 @@ export function sourcesFromFindings(findings: ResearchFinding[]): NewsletterSour
 }
 
 /**
- * Esquema JSON de la salida. Espeja NewsletterContentSchema de content.ts.
+ * Esquema del `input` de la herramienta `write_edition`. Espeja
+ * `NewsletterContentSchema` de content.ts.
  *
- * NO lleva `minItems`/`maxItems` con valores distintos de 0 o 1: la salida
- * estructurada de la API los rechaza con 400 ("For 'array' type, 'minItems'
- * values other than 0 or 1 are not supported") — no es un olvido, es un
- * límite de la API. Esas cotas (mínimo de bloques, máximo de la edición,
- * tamaño de una lista) siguen existiendo, sólo que en el otro lado de la
- * doble red: las aplica `NewsletterContentSchema` con zod justo después,
- * que además rechaza con un mensaje en español en vez de un 400 opaco. La
- * única excepción real es `sourceIds: { minItems: 1 }` en el bloque `stat`:
- * 1 SÍ está permitido, y es la restricción que garantiza que ningún dato
- * salga sin fuente — se queda aquí porque la API la admite.
- *
- * Exportada (y no privada) para que un test estructural pueda recorrerla y
- * cazar una regresión — un `minItems`/`maxItems` fuera de {0,1} que alguien
- * vuelva a añadir — sin tener que llamar a la API para descubrirlo.
+ * Es un `input_schema` de tool use, NO el `schema` de `output_config.format`:
+ * la salida estructurada no admite `oneOf` (necesario para el union
+ * discriminado de bloques) ni `minItems`/`maxItems` fuera de {0, 1}. El
+ * `input_schema` de una herramienta sí admite las dos cosas — verificado
+ * contra la API real — así que aquí SÍ llevan sus cotas de verdad (3..40
+ * bloques, `sourceIds` con al menos 1 elemento en `stat`). Eso no vuelve
+ * redundante a `NewsletterContentSchema`: sigue siendo la red que decide si
+ * el contenido es válido PARA ESTE REPO, y la que da el mensaje en español
+ * cuando algo no cuadra — el modelo puede respetar la forma y aun así violar
+ * una regla que sólo zod conoce (p. ej. los máximos de caracteres por bloque).
  */
-export function outputSchema(): Record<string, unknown> {
+export function editionToolSchema(): Anthropic.Tool.InputSchema {
   const bloque = {
     type: 'object',
     oneOf: [
@@ -115,10 +119,19 @@ export function outputSchema(): Record<string, unknown> {
       title:       { type: 'string', description: 'Titular de la edición. Concreto, sin signos de exclamación.' },
       dek:         { type: 'string', description: 'Entradilla de una o dos frases.' },
       data_as_of:  { type: ['string', 'null'], description: 'Fecha YYYY-MM-DD a la que se refieren los datos, o null.' },
-      blocks:      { type: 'array', items: bloque },
+      blocks:      { type: 'array', items: bloque, minItems: 3, maxItems: 40 },
     },
     required: ['title', 'dek', 'data_as_of', 'blocks'],
     additionalProperties: false,
+  }
+}
+
+/** La herramienta de forced tool use que le arranca la edición al modelo. */
+function buildTool(): Anthropic.Tool {
+  return {
+    name: 'write_edition',
+    description: 'Devuelve la edición completa de la newsletter: título, entradilla, fecha de los datos y los bloques de contenido.',
+    input_schema: editionToolSchema(),
   }
 }
 
@@ -161,28 +174,26 @@ export async function draftEdition(args: {
   const client = new Anthropic()
 
   // Streaming: una edición completa puede acercarse al techo de max_tokens y una
-  // petición larga sin stream se arriesga al timeout HTTP del SDK.
+  // petición larga sin stream se arriesga al timeout HTTP del SDK. Con forced
+  // tool use el bloque `tool_use` se acumula igual durante el stream;
+  // `finalMessage()` lo entrega completo, no hay que reensamblarlo a mano.
   const stream = client.messages.stream({
-    model:         MODEL,
-    max_tokens:    16000,
-    thinking:      { type: 'adaptive' },
-    output_config: { format: { type: 'json_schema', schema: outputSchema() } },
-    messages:      [{ role: 'user', content: buildPrompt({ ...args, sources }) }],
+    model:       MODEL,
+    max_tokens:  16000,
+    thinking:    { type: 'adaptive' },
+    tools:       [buildTool()],
+    tool_choice: { type: 'tool', name: 'write_edition' },
+    messages:    [{ role: 'user', content: buildPrompt({ ...args, sources }) }],
   })
   const response = await stream.finalMessage()
 
-  const text = (response.content as { type: string; text?: string }[])
-    .filter(b => b.type === 'text')
-    .map(b => b.text ?? '')
-    .join('')
-    .trim()
-
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(text) as Record<string, unknown>
-  } catch {
-    throw new Error('La redacción no devolvió un JSON válido.')
+  // El resultado ya no viene en un bloque de texto: viene en `tool_use.input`,
+  // y el SDK ya lo entrega como objeto — no hay JSON que parsear a mano.
+  const block = response.content.find(b => b.type === 'tool_use')
+  if (!block || block.type !== 'tool_use') {
+    throw new Error('La redacción no devolvió el contenido estructurado.')
   }
+  const parsed = block.input as Record<string, unknown>
 
   // La red de zod: aunque el modelo respete el esquema JSON, esto es lo que
   // decide si el contenido es válido PARA ESTE REPO.
