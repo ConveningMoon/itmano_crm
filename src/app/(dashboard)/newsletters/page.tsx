@@ -15,7 +15,7 @@ import { SeriesList } from './series-list'
 // plan del tenant NO vive en `tenants`: hay que leerlo de `subscriptions`.
 
 const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
-const TENANT_COLUMNS       = columns('tenants', ['slug'])
+const TENANT_COLUMNS       = columns('tenants', ['slug', 'newsletter_source_domains'])
 const AGENT_COLUMNS        = columns('agents', ['id', 'name'])
 
 export default async function NewslettersPage() {
@@ -69,6 +69,10 @@ export default async function NewslettersPage() {
 
   let agents: Array<{ id: string; name: string }> = []
   let tenantSlug = ''
+  // La allowlist va A LA VISTA en el modal de generación (GenerateModal): el
+  // cliente tiene que ver de qué fuentes va a salir su contenido antes de
+  // pedirlo. Mismo dato y mismo cast que settings/page.tsx.
+  let sourceDomains: string[] = []
   if (tenant_id) {
     const [{ data: agentRows }, { data: tenantRow }] = await Promise.all([
       db.from('agents').select(AGENT_COLUMNS).eq('tenant_id', tenant_id).eq('active', true).order('name'),
@@ -79,7 +83,9 @@ export default async function NewslettersPage() {
     agents = ((agentRows ?? []) as any[]).map(a => ({ id: a.id as string, name: a.name as string }))
     // reason: ver arriba.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tenantSlug = (tenantRow as any)?.slug ?? ''
+    const tenantRowAny = tenantRow as any
+    tenantSlug = tenantRowAny?.slug ?? ''
+    sourceDomains = (tenantRowAny?.newsletter_source_domains as string[] | null) ?? []
   }
 
   return (
@@ -88,6 +94,7 @@ export default async function NewslettersPage() {
       sequences={sequences}
       agents={agents}
       tenantSlug={tenantSlug}
+      sourceDomains={sourceDomains}
     />
   )
 }
