@@ -2,6 +2,7 @@
 
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
+import { guarded } from '@/lib/actions/guarded'
 import { requireTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteEdition, assertCanWriteChannel, requireChannelWriteAccess } from '@/lib/auth/guards'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -117,7 +118,7 @@ const SeriesInput = z.object({
   agentId:         z.string().nullable(),
 })
 
-export async function createSeries(input: unknown): Promise<Result<{ id: string }>> {
+async function createSeriesImpl(input: unknown): Promise<Result<{ id: string }>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const denied = requireChannelWriteAccess(g.ctx)
@@ -158,13 +159,22 @@ export async function createSeries(input: unknown): Promise<Result<{ id: string 
       ? 'Ya existe otra fuente con ese nombre. Elige uno distinto.'
       : error.message }
   }
-  revalidateAll(g.tenantSlug, slug)
+  // `maybeSingle()` devuelve data null SIN error cuando el insert no puede
+  // leer de vuelta la fila que acaba de escribir. Leerle `.id` a ese null
+  // lanzaba un TypeError que salía del action como excepción: el cliente veía
+  // la pantalla genérica de Next en vez de un motivo. Ahora es un `{ ok: false }`
+  // como cualquier otro fallo.
   // reason: ver guard().
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { ok: true, data: { id: (data as any).id } }
+  const creada = (data as any)?.id as string | undefined
+  if (!creada) {
+    return { ok: false, error: 'La serie se creó pero la base no devolvió su id. Recarga la página para verla.' }
+  }
+  revalidateAll(g.tenantSlug, slug)
+  return { ok: true, data: { id: creada } }
 }
 
-export async function updateSeries(id: string, input: unknown): Promise<Result<null>> {
+async function updateSeriesImpl(id: string, input: unknown): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const denied = requireChannelWriteAccess(g.ctx)
@@ -243,7 +253,7 @@ async function loadSeriesForWrite(
   return row
 }
 
-export async function archiveSeries(id: string): Promise<Result<null>> {
+async function archiveSeriesImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const denied = requireChannelWriteAccess(g.ctx)
@@ -267,7 +277,7 @@ export async function archiveSeries(id: string): Promise<Result<null>> {
   return { ok: true, data: null }
 }
 
-export async function restoreSeries(id: string): Promise<Result<null>> {
+async function restoreSeriesImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const denied = requireChannelWriteAccess(g.ctx)
@@ -287,7 +297,7 @@ export async function restoreSeries(id: string): Promise<Result<null>> {
   return { ok: true, data: null }
 }
 
-export async function deleteSeries(id: string): Promise<Result<null>> {
+async function deleteSeriesImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const denied = requireChannelWriteAccess(g.ctx)
@@ -416,9 +426,15 @@ async function insertEditionRow(
       ? 'Ya existe otra edición con ese titular en esta serie. Cámbialo un poco.'
       : error.message }
   }
+  // Mismo caso que en createSeries: data null sin error no puede convertirse en
+  // un TypeError que escape del action.
   // reason: ver guard().
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { ok: true, data: { id: (data as any).id } }
+  const creada = (data as any)?.id as string | undefined
+  if (!creada) {
+    return { ok: false, error: 'La edición se creó pero la base no devolvió su id. Recarga la página para verla.' }
+  }
+  return { ok: true, data: { id: creada } }
 }
 
 // `coverImageUrl` acepta URL absoluta (subida, Estudio o IA — todas públicas y
@@ -455,7 +471,7 @@ const EditionInput = z.object({
   dataAsOf:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
 })
 
-export async function createEdition(input: unknown): Promise<Result<{ id: string }>> {
+async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const parsed = EditionInput.safeParse(input)
@@ -481,7 +497,7 @@ export async function createEdition(input: unknown): Promise<Result<{ id: string
   return inserted
 }
 
-export async function updateEdition(id: string, input: unknown): Promise<Result<null>> {
+async function updateEditionImpl(id: string, input: unknown): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const parsed = EditionInput.safeParse(input)
@@ -511,7 +527,7 @@ export async function updateEdition(id: string, input: unknown): Promise<Result<
   return { ok: true, data: null }
 }
 
-export async function publishEdition(id: string): Promise<Result<null>> {
+async function publishEditionImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
 
@@ -559,7 +575,7 @@ export async function publishEdition(id: string): Promise<Result<null>> {
   return { ok: true, data: null }
 }
 
-export async function unpublishEdition(id: string): Promise<Result<null>> {
+async function unpublishEditionImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const existing = await getEditionById(id, g.tenantId)
@@ -588,7 +604,7 @@ export async function unpublishEdition(id: string): Promise<Result<null>> {
  * de si está fuera. Lo que la saca de la web es `status`, que
  * `getPublicEditions` filtra por 'published'.
  */
-export async function archiveEdition(id: string): Promise<Result<null>> {
+async function archiveEditionImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const existing = await getEditionById(id, g.tenantId)
@@ -611,7 +627,7 @@ export async function archiveEdition(id: string): Promise<Result<null>> {
  * que volver a pasar por `publishEdition`, que es quien comprueba el estado de
  * la suscripción y los bloqueos de contenido.
  */
-export async function restoreEdition(id: string): Promise<Result<null>> {
+async function restoreEditionImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const existing = await getEditionById(id, g.tenantId)
@@ -629,7 +645,7 @@ export async function restoreEdition(id: string): Promise<Result<null>> {
   return { ok: true, data: null }
 }
 
-export async function deleteEdition(id: string): Promise<Result<null>> {
+async function deleteEditionImpl(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
   const existing = await getEditionById(id, g.tenantId)
@@ -688,7 +704,7 @@ const GenerateInput = z.object({
  * decida. La portada se elige después — por eso entra con el marcador que el
  * CoverPicker sustituye.
  */
-export async function generateEditionWithAi(input: unknown): Promise<Result<{ id: string }>> {
+async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: string }>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
 
@@ -736,7 +752,7 @@ export async function generateEditionWithAi(input: unknown): Promise<Result<{ id
  * Va DESPUÉS del texto a propósito — lo llama el editor, con el titular y la
  * bajada ya guardados, no el flujo de generación inicial.
  */
-export async function generateCoverForEdition(editionId: string): Promise<Result<{ url: string }>> {
+async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ url: string }>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
 
@@ -757,4 +773,73 @@ export async function generateCoverForEdition(editionId: string): Promise<Result
 
   revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, edition.channelId), edition.slug)
   return { ok: true, data: { url: result.url } }
+}
+
+
+// ─── El borde con el cliente ─────────────────────────────────────────────────
+//
+// Cada action de este módulo sale por `guarded`: pase lo que pase dentro, el
+// cliente recibe `{ ok: false, error }` con la causa, nunca una excepción. Sin
+// esto, cualquier fallo inesperado —una fila que vuelve null, un helper que
+// lanza dos capas abajo— llegaba al navegador como la pantalla genérica de Next
+// ("A server error occurred"), que no dice qué pasó ni deja rastro que el
+// usuario pueda contar. Ver src/lib/actions/guarded.ts.
+//
+// Los nombres exportados son los de siempre; lo que cambia es que la
+// implementación vive en `<nombre>Impl` y nadie la llama directamente.
+
+export async function createSeries(input: unknown): Promise<Result<{ id: string }>> {
+  return guarded('createSeries', () => createSeriesImpl(input))
+}
+
+export async function updateSeries(id: string, input: unknown): Promise<Result<null>> {
+  return guarded('updateSeries', () => updateSeriesImpl(id, input))
+}
+
+export async function archiveSeries(id: string): Promise<Result<null>> {
+  return guarded('archiveSeries', () => archiveSeriesImpl(id))
+}
+
+export async function restoreSeries(id: string): Promise<Result<null>> {
+  return guarded('restoreSeries', () => restoreSeriesImpl(id))
+}
+
+export async function deleteSeries(id: string): Promise<Result<null>> {
+  return guarded('deleteSeries', () => deleteSeriesImpl(id))
+}
+
+export async function createEdition(input: unknown): Promise<Result<{ id: string }>> {
+  return guarded('createEdition', () => createEditionImpl(input))
+}
+
+export async function updateEdition(id: string, input: unknown): Promise<Result<null>> {
+  return guarded('updateEdition', () => updateEditionImpl(id, input))
+}
+
+export async function publishEdition(id: string): Promise<Result<null>> {
+  return guarded('publishEdition', () => publishEditionImpl(id))
+}
+
+export async function unpublishEdition(id: string): Promise<Result<null>> {
+  return guarded('unpublishEdition', () => unpublishEditionImpl(id))
+}
+
+export async function archiveEdition(id: string): Promise<Result<null>> {
+  return guarded('archiveEdition', () => archiveEditionImpl(id))
+}
+
+export async function restoreEdition(id: string): Promise<Result<null>> {
+  return guarded('restoreEdition', () => restoreEditionImpl(id))
+}
+
+export async function deleteEdition(id: string): Promise<Result<null>> {
+  return guarded('deleteEdition', () => deleteEditionImpl(id))
+}
+
+export async function generateEditionWithAi(input: unknown): Promise<Result<{ id: string }>> {
+  return guarded('generateEditionWithAi', () => generateEditionWithAiImpl(input))
+}
+
+export async function generateCoverForEdition(editionId: string): Promise<Result<{ url: string }>> {
+  return guarded('generateCoverForEdition', () => generateCoverForEditionImpl(editionId))
 }
