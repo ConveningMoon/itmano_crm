@@ -5,10 +5,19 @@ import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import type { EmailSequence } from '@/lib/data/email-sequences'
-import { createSeries } from './actions'
+import type { NewsletterSeries } from '@/lib/data/newsletters'
+import { createSeries, updateSeries } from './actions'
 
-// Modal de "Nueva serie" — nombre, secuencia de seguimiento (opcional) y
-// agente responsable (opcional). createSeries nunca lanza: siempre { ok }.
+// Modal de serie — nombre, secuencia de seguimiento (opcional) y agente
+// responsable (opcional). Crea o edita según venga `series`: los tres campos
+// que se piden al crear son EXACTAMENTE los que se pueden cambiar después
+// (SeriesInput en actions.ts es el mismo esquema para las dos acciones), así
+// que un segundo formulario sólo serviría para que los dos se separen.
+//
+// El slug NO está aquí: no cambia al renombrar porque la URL pública ya se
+// compartió (ver updateSeries).
+//
+// Ninguna de las dos actions lanza: siempre { ok }.
 
 interface AgentOption {
   id:   string
@@ -20,6 +29,8 @@ interface Props {
   onClose:   () => void
   sequences: EmailSequence[]
   agents:    AgentOption[]
+  /** Presente = editar esa serie; ausente = crear una nueva. */
+  series?:   NewsletterSeries | null
 }
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -37,15 +48,28 @@ const INPUT_STYLE: React.CSSProperties = {
 
 const EMPTY = { name: '', emailSequenceId: '', agentId: '' }
 
-export function NewSeriesModal({ open, onClose, sequences, agents }: Props) {
+function initialFor(series: NewsletterSeries | null | undefined) {
+  if (!series) return EMPTY
+  return {
+    name:            series.name,
+    emailSequenceId: series.emailSequenceId ?? '',
+    agentId:         series.agentId ?? '',
+  }
+}
+
+export function SeriesModal({ open, onClose, sequences, agents, series }: Props) {
   const router = useRouter()
-  const [form, setForm]   = useState(EMPTY)
+  const editing = Boolean(series)
+  // `key` en el sitio de uso remonta el modal cuando cambia la serie, así que
+  // el estado inicial basta: no hace falta un efecto que sincronice props con
+  // estado (el patrón que se desincroniza en cuanto alguien añade un campo).
+  const [form, setForm]   = useState(() => initialFor(series))
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleClose() {
     setError(null)
-    setForm(EMPTY)
+    setForm(initialFor(series))
     onClose()
   }
 
@@ -53,11 +77,14 @@ export function NewSeriesModal({ open, onClose, sequences, agents }: Props) {
     e.preventDefault()
     setError(null)
     startTransition(async () => {
-      const res = await createSeries({
+      const payload = {
         name:            form.name,
         emailSequenceId: form.emailSequenceId || null,
         agentId:         form.agentId || null,
-      })
+      }
+      const res = series
+        ? await updateSeries(series.id, payload)
+        : await createSeries(payload)
       if (res.ok) {
         router.refresh()
         handleClose()
@@ -77,7 +104,7 @@ export function NewSeriesModal({ open, onClose, sequences, agents }: Props) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Nueva serie
+            {editing ? 'Editar serie' : 'Nueva serie'}
           </div>
           <button
             onClick={handleClose}
@@ -172,7 +199,9 @@ export function NewSeriesModal({ open, onClose, sequences, agents }: Props) {
                 opacity: (isPending || !form.name.trim()) ? 0.7 : 1,
               }}
             >
-              {isPending ? 'Creando…' : 'Crear serie'}
+              {isPending
+                ? (editing ? 'Guardando…' : 'Creando…')
+                : (editing ? 'Guardar cambios' : 'Crear serie')}
             </button>
           </div>
         </form>

@@ -201,6 +201,126 @@ export async function updateSeries(id: string, input: unknown): Promise<Result<n
   return { ok: true, data: null }
 }
 
+// ─── Archivar → eliminar una serie ──────────────────────────────────
+
+// Mismo mecanismo que /sources para cualquier otro canal (`archiveChannel` /
+// `deleteChannelPermanently` en sources/actions.ts): la serie ES una fila de
+// acquisition_channels, así que archivar es `active = false` + `archived_at`, y
+// eliminar sólo se permite sobre lo ya archivado.
+//
+// Las series de newsletter NO aparecen en /sources —la consulta base de esa
+// página filtra por lead_magnet/event/contact_form—, por eso el mismo par de
+// acciones tiene que existir aquí en vez de reutilizar aquellas.
+const SERIES_STATE_COLUMNS = columns('acquisition_channels', [
+  'id', 'tenant_id', 'agent_id', 'channel_type', 'slug', 'name', 'archived_at',
+])
+
+interface SeriesRow {
+  id:          string
+  tenant_id:   string
+  agent_id:    string | null
+  slug:        string
+  name:        string
+  archived_at: string | null
+}
+
+/** Carga la serie comprobando tenant, tipo y propiedad del agente. */
+async function loadSeriesForWrite(
+  g: { ctx: TenantContext; tenantId: string; db: ReturnType<typeof createAdminClient> },
+  id: string,
+): Promise<SeriesRow | { error: string }> {
+  const { data } = await g.db
+    .from('acquisition_channels')
+    .select(SERIES_STATE_COLUMNS)
+    .eq('id', id)
+    .eq('tenant_id', g.tenantId)
+    .eq('channel_type', 'newsletter')
+    .maybeSingle()
+  const row = data as SeriesRow | null
+  if (!row) return { error: 'Esa serie no existe.' }
+  const notMine = assertCanWriteChannel(g.ctx, row)
+  if (notMine) return { error: notMine.error }
+  return row
+}
+
+export async function archiveSeries(id: string): Promise<Result<null>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+  const denied = requireChannelWriteAccess(g.ctx)
+  if (denied) return denied
+  const series = await loadSeriesForWrite(g, id)
+  if ('error' in series) return { ok: false, error: series.error }
+
+  // `active = false` además de `archived_at`: el intake exige `active = true`
+  // (api/intake/[publicId]/submit), así que sin las dos cosas el formulario de
+  // suscripción de una serie retirada seguiría aceptando altas.
+  const { error } = await g.db.from('acquisition_channels')
+    .update({ active: false, archived_at: new Date().toISOString() })
+    .eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
+  if (error) return { ok: false, error: error.message }
+
+  // Las ediciones NO se tocan: siguen publicadas en la base. Lo que las saca de
+  // la web es que `getPublicSeries` descarta la serie archivada (ver
+  // (hosted)/nl/[tenantSlug]/shared.ts), y por eso hay que revalidar la ruta de
+  // la serie — si no, el archivo público se sigue sirviendo desde el caché.
+  revalidateAll(g.tenantSlug, series.slug)
+  return { ok: true, data: null }
+}
+
+export async function restoreSeries(id: string): Promise<Result<null>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+  const denied = requireChannelWriteAccess(g.ctx)
+  if (denied) return denied
+  const series = await loadSeriesForWrite(g, id)
+  if ('error' in series) return { ok: false, error: series.error }
+
+  // Restaurar existe porque el par archivar→eliminar de Fuentes no lo tiene y
+  // eso convierte un clic de más en una pérdida: aquí la serie arrastra sus
+  // suscriptores y su archivo público, que es demasiado para dejarlo sin vuelta.
+  const { error } = await g.db.from('acquisition_channels')
+    .update({ active: true, archived_at: null })
+    .eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
+  if (error) return { ok: false, error: error.message }
+
+  revalidateAll(g.tenantSlug, series.slug)
+  return { ok: true, data: null }
+}
+
+export async function deleteSeries(id: string): Promise<Result<null>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+  const denied = requireChannelWriteAccess(g.ctx)
+  if (denied) return denied
+  const series = await loadSeriesForWrite(g, id)
+  if ('error' in series) return { ok: false, error: series.error }
+
+  // El mismo cierre que deleteChannelPermanently: sólo se elimina lo archivado.
+  if (!series.archived_at) {
+    return { ok: false, error: 'Primero archiva la serie antes de eliminarla permanentemente.' }
+  }
+
+  // newsletter_editions.channel_id es ON DELETE CASCADE: borrar la serie borra
+  // TODAS sus ediciones, publicadas incluidas. La UI lo dice con esas palabras
+  // antes de confirmar; aquí no hay nada que añadir salvo dejarlo escrito.
+  //
+  // Los leads suscritos se conservan: su FK es ON DELETE SET NULL, así que
+  // pierden la atribución al canal pero no desaparecen — mismo criterio que
+  // deleteChannelPermanently.
+  const { error: orphanErr } = await g.db.from('leads')
+    .update({ acquisition_channel_id: null })
+    .eq('tenant_id', g.tenantId)
+    .eq('acquisition_channel_id', id)
+  if (orphanErr) return { ok: false, error: orphanErr.message }
+
+  const { error } = await g.db.from('acquisition_channels')
+    .delete().eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
+  if (error) return { ok: false, error: error.message }
+
+  revalidateAll(g.tenantSlug, series.slug)
+  return { ok: true, data: null }
+}
+
 /**
  * El mismo control de propiedad que usa `createEdition` para aceptar un
  * `channelId` que llega del cliente: sin esto, cualquiera podía colgar una
@@ -459,6 +579,56 @@ export async function unpublishEdition(id: string): Promise<Result<null>> {
   return { ok: true, data: null }
 }
 
+/**
+ * Retira una edición de circulación sin borrarla. Es el paso previo obligado a
+ * eliminarla — el patrón de Fuentes: archivar y luego, si de verdad sobra,
+ * eliminar.
+ *
+ * `published_at` NO se limpia: es el hecho de cuándo salió, no el interruptor
+ * de si está fuera. Lo que la saca de la web es `status`, que
+ * `getPublicEditions` filtra por 'published'.
+ */
+export async function archiveEdition(id: string): Promise<Result<null>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+  const existing = await getEditionById(id, g.tenantId)
+  if (!existing) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: existing.tenantId, created_by_user_id: existing.createdByUserId,
+  })
+  if (denial) return denial
+
+  const { error } = await g.db.from('newsletter_editions')
+    .update({ status: 'archived' })
+    .eq('id', id).eq('tenant_id', g.tenantId)
+  if (error) return { ok: false, error: error.message }
+  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
+  return { ok: true, data: null }
+}
+
+/**
+ * Devuelve una edición archivada a BORRADOR, no a publicada: republicar tiene
+ * que volver a pasar por `publishEdition`, que es quien comprueba el estado de
+ * la suscripción y los bloqueos de contenido.
+ */
+export async function restoreEdition(id: string): Promise<Result<null>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+  const existing = await getEditionById(id, g.tenantId)
+  if (!existing) return { ok: false, error: 'Esa edición no existe.' }
+  const denial = assertCanWriteEdition(g.ctx, {
+    tenant_id: existing.tenantId, created_by_user_id: existing.createdByUserId,
+  })
+  if (denial) return denial
+
+  const { error } = await g.db.from('newsletter_editions')
+    .update({ status: 'draft' })
+    .eq('id', id).eq('tenant_id', g.tenantId)
+  if (error) return { ok: false, error: error.message }
+  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
+  return { ok: true, data: null }
+}
+
 export async function deleteEdition(id: string): Promise<Result<null>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
@@ -468,6 +638,13 @@ export async function deleteEdition(id: string): Promise<Result<null>> {
     tenant_id: existing.tenantId, created_by_user_id: existing.createdByUserId,
   })
   if (denial) return denial
+
+  // Mismo cierre que deleteChannelPermanently en /sources: sólo se elimina lo
+  // archivado. Sin esto, el botón de eliminar borraba de un clic una edición
+  // publicada — y una edición publicada tiene una URL que ya se compartió.
+  if (existing.status !== 'archived') {
+    return { ok: false, error: 'Primero archiva la edición antes de eliminarla permanentemente.' }
+  }
 
   // El slug de la serie se resuelve ANTES del delete: después, la edición ya no
   // existe para decir de qué serie colgaba.

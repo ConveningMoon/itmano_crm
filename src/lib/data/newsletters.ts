@@ -22,6 +22,8 @@ export interface NewsletterSeries {
   emailSequenceId:   string | null
   emailSequenceName: string | null
   agentId:           string | null
+  /** ISO cuando la serie está archivada; null mientras está viva. */
+  archivedAt:        string | null
   subscriberCount:   number
   editionCount:      number
   lastEditionAt:     string | null
@@ -53,6 +55,7 @@ export interface NewsletterEdition {
 
 const SERIES_COLUMNS = columns('acquisition_channels', [
   'id', 'tenant_id', 'name', 'slug', 'active', 'email_sequence_id', 'agent_id',
+  'archived_at',
 ])
 
 const EDITION_COLUMNS = columns('newsletter_editions', [
@@ -91,15 +94,23 @@ function mapEdition(row: any): NewsletterEdition {
   }
 }
 
-export async function getSeriesForTenant(tenantId: string): Promise<NewsletterSeries[]> {
+/**
+ * Series de un tenant, vivas o archivadas según `archived`.
+ *
+ * Un solo cuerpo para los dos casos: la lista de archivadas necesita
+ * exactamente los mismos conteos (suscriptores, ediciones) que la de vivas
+ * —son lo que hay que mirar antes de eliminar una serie para siempre— y
+ * duplicar el cálculo es cómo se desincronizan dos vistas que deben coincidir.
+ */
+async function listSeries(tenantId: string, archived: boolean): Promise<NewsletterSeries[]> {
   const db = createAdminClient()
-  const { data } = await db
+  let q = db
     .from('acquisition_channels')
     .select(SERIES_COLUMNS)
     .eq('tenant_id', tenantId)
     .eq('channel_type', 'newsletter')
-    .is('archived_at', null)
-    .order('created_at', { ascending: false })
+  q = archived ? q.not('archived_at', 'is', null) : q.is('archived_at', null)
+  const { data } = await q.order('created_at', { ascending: false })
 
   // reason: ver mapEdition.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,15 +158,37 @@ export async function getSeriesForTenant(tenantId: string): Promise<NewsletterSe
     emailSequenceId:   r.email_sequence_id ?? null,
     emailSequenceName: r.email_sequence_id ? (seqName.get(r.email_sequence_id) ?? null) : null,
     agentId:           r.agent_id ?? null,
+    archivedAt:        r.archived_at ?? null,
     subscriberCount:   subs.get(r.id) ?? 0,
     editionCount:      editions.get(r.id)?.count ?? 0,
     lastEditionAt:     editions.get(r.id)?.last ?? null,
   }))
 }
 
+export async function getSeriesForTenant(tenantId: string): Promise<NewsletterSeries[]> {
+  return listSeries(tenantId, false)
+}
+
+/**
+ * Las series archivadas. Existen para poder eliminarlas: archivar y luego
+ * eliminar (el patrón de Fuentes) no se puede completar si lo archivado
+ * desaparece de la pantalla.
+ */
+export async function getArchivedSeriesForTenant(tenantId: string): Promise<NewsletterSeries[]> {
+  return listSeries(tenantId, true)
+}
+
+/**
+ * Una serie por id, viva o archivada. Mira las dos listas a propósito: la
+ * pantalla de detalle tiene que seguir abriendo una serie recién archivada,
+ * que es justo donde vive el botón de eliminarla.
+ */
 export async function getSeriesById(id: string, tenantId: string): Promise<NewsletterSeries | null> {
-  const all = await getSeriesForTenant(tenantId)
-  return all.find(s => s.id === id) ?? null
+  const [live, archived] = await Promise.all([
+    getSeriesForTenant(tenantId),
+    getArchivedSeriesForTenant(tenantId),
+  ])
+  return [...live, ...archived].find(s => s.id === id) ?? null
 }
 
 export async function getEditionsForSeries(channelId: string, tenantId: string): Promise<NewsletterEdition[]> {
