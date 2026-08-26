@@ -7,7 +7,7 @@ import { assertCanWriteEdition, assertCanWriteChannel, requireChannelWriteAccess
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
-import { publishBlockers } from '@/lib/newsletters/publishable'
+import { publishBlockers, PLACEHOLDER_COVER_URL } from '@/lib/newsletters/publishable'
 import { NewsletterContentSchema, NewsletterSourceSchema } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
@@ -488,25 +488,18 @@ const GenerateInput = z.object({
   language:  z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]),
 })
 
-// Portada temporal: la generación de imagen llega en otra tarea (Task 7), y
-// `cover_image_url` es NOT NULL. Se apunta al banner genérico de ITMANO —el
-// mismo que usa `brand-logo.tsx` cuando un tenant no tiene logo— en vez de
-// inventar un asset nuevo o depender de `hosted_page`, que hoy no se lee para
-// series de newsletter (sólo lo usan lead magnets, eventos y formularios bajo
-// /hp). `cover_source` se guarda como 'upload', el valor por defecto de la
-// columna: no es 'ai' porque ninguna IA generó esta imagen, y es la opción que
-// menos afirma sobre un origen que en realidad no existe todavía. El
-// CoverPicker del editor la reemplaza antes de publicar.
+// Portada de arranque: `cover_image_url` es NOT NULL y la portada propia se
+// genera DESPUÉS del texto (generateCoverForEdition, más abajo en este mismo
+// archivo), para que la pieza refleje el titular real. Hasta entonces se apunta
+// al banner genérico de ITMANO —el mismo que usa `brand-logo.tsx` cuando un
+// tenant no tiene logo— en vez de inventar un asset nuevo. `cover_source` se
+// guarda como 'upload', el valor por defecto de la columna: no es 'ai' porque
+// ninguna IA generó esta imagen.
 //
-// RUTA RELATIVA, no absoluta: las tres páginas públicas de newsletters pintan
-// `cover_image_url` con `next/image`, que valida cualquier `src` que no
-// empiece por `/` contra `images.remotePatterns` — donde sólo está el host de
-// Supabase Storage. Una URL absoluta a `app.itmano.com` (o al que sea
-// `NEXT_PUBLIC_APP_URL`) revienta con 500 en cuanto se publica, aunque la
-// sirva la misma app: el rewrite por host de `news.itmano.com` no cambia qué
-// host lleva el `src`. `/itmano_banner.webp` es el mismo patrón que ya usa
-// `brand-logo.tsx:19` para este asset.
-const PLACEHOLDER_COVER_URL = '/itmano_banner.webp'
+// El literal vive en `publishable.ts` porque quien lo pone y quien lo bloquea
+// tienen que mirar el mismo valor: `publishBlockers` impide publicar mientras
+// la portada siga siendo este marcador (fuga de marca en un producto
+// white-label). Ahí está también el porqué de la ruta relativa.
 
 /**
  * Genera una edición con IA y la guarda como BORRADOR.
