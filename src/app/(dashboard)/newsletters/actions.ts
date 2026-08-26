@@ -301,6 +301,22 @@ async function insertEditionRow(
   return { ok: true, data: { id: (data as any).id } }
 }
 
+// `coverImageUrl` acepta URL absoluta (subida, Estudio o IA — todas públicas y
+// con protocolo) O una ruta relativa que empieza en "/": el ÚNICO caso es
+// `PLACEHOLDER_COVER_URL` más abajo (`/itmano_banner.webp`), deliberadamente
+// relativo para que `next/image` no la rechace contra `images.remotePatterns`.
+// Antes era `z.string().url(msg)` a secas, que rechaza cualquier ruta sin
+// protocolo: TODA edición recién nacida de `generateEditionWithAi` traía esa
+// portada relativa, así que ni "Guardar borrador" ni nada que dependiera de
+// guardar primero (como generar la portada con IA) podía completarse hasta que
+// alguien le cambiara la portada a mano — con el mismo mensaje que debía
+// resolver el problema.
+const COVER_URL_MESSAGE = 'La edición necesita una imagen de portada'
+const coverImageUrlSchema = z.string().min(1, COVER_URL_MESSAGE).refine(
+  v => /^https?:\/\//i.test(v) || (v.startsWith('/') && !v.startsWith('//')),
+  COVER_URL_MESSAGE,
+)
+
 const EditionInput = z.object({
   channelId:     z.string().uuid(),
   title:         z.string().trim().min(1, 'La edición necesita un titular').max(200),
@@ -309,7 +325,7 @@ const EditionInput = z.object({
   // cualquier trigrama hasta el CHECK de la base, que rebota con un error crudo
   // de Postgres en inglés.
   language:      z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]),
-  coverImageUrl: z.string().url('La edición necesita una imagen de portada'),
+  coverImageUrl: coverImageUrlSchema,
   coverSource:   z.enum(['upload', 'studio', 'ai']),
   content:       NewsletterContentSchema,
   sources:       z.array(NewsletterSourceSchema).max(40),

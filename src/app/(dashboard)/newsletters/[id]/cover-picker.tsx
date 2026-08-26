@@ -75,19 +75,31 @@ export function CoverPicker({
   }
 
   async function handleGenerate() {
-    if (!editionId || !onBeforeGenerate) return
+    // Sin `editionId`/`onBeforeGenerate` este botón no debería ni pintarse (ver
+    // más abajo), pero si algo cambiara eso, el fallo se explica en vez de
+    // quedarse callado — un botón que no responde y no dice por qué es peor
+    // que un error.
+    if (!editionId || !onBeforeGenerate) {
+      setError('No se pudo generar la portada: falta el id de la edición.')
+      return
+    }
     setError(null)
     setGenerating(true)
-    const saved = await onBeforeGenerate()
-    if (!saved.ok) { setGenerating(false); setError(saved.error); return }
+    // Todo el flujo va en un solo `try/finally`: `onBeforeGenerate` (que
+    // guarda el formulario) puede rechazar tanto como `generateCoverForEdition`,
+    // y antes sólo la segunda llamada estaba protegida — un rechazo de la
+    // primera moría como una promesa sin capturar, sin pintar nada en pantalla
+    // y con `generating` atascado en `true` para siempre.
     try {
+      const saved = await onBeforeGenerate()
+      if (!saved.ok) { setError(saved.error); return }
       const res = await generateCoverForEdition(editionId)
-      setGenerating(false)
       if (!res.ok) { setError(res.error); return }
       onChange({ coverImageUrl: res.data.url, coverSource: 'ai' })
     } catch {
-      setGenerating(false)
       setError(GENERATE_FALLBACK_ERROR)
+    } finally {
+      setGenerating(false)
     }
   }
 
