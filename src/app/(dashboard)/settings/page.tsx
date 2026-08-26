@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getEffectiveScoreRules, getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
@@ -8,6 +9,7 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
 import { getBusinessProfile } from '@/lib/data/business-profile'
+import { getSourceDomainsFor } from '@/lib/data/newsletters'
 import { EMPTY_PROFILE } from '@/lib/business/profile'
 import { getFitEvidence } from '@/lib/data/fit-evidence'
 import type { FitEvidence } from '@/lib/scoring/calibration'
@@ -39,8 +41,12 @@ export default async function SettingsPage() {
   // que no existe para él.
   const canSeeBusiness = ctx.role !== 'agent'
 
-  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
+  const TENANT_COLUMNS = columns('tenants', [
+    'id', 'name', 'slug', 'primary_color', 'logo_url', 'description',
+  ])
+
+  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, sourceDomains] = await Promise.all([
+    supabase.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
     getEffectiveScoreRules(tenantId),
@@ -53,11 +59,24 @@ export default async function SettingsPage() {
     getSubscription(tenantId),
     isAgentViewer ? Promise.resolve(null) : getAgentAiBreakdown(tenantId),
     wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
+    // Allowlist de newsletters: por getSourceDomainsFor, la única puerta del
+    // repo. Se lee aparte del resto de `tenants` porque devuelve la lista YA
+    // normalizada — que es lo que tiene que verse aquí y en el modal de
+    // generación, no el crudo de la columna.
+    canSeeBusiness ? getSourceDomainsFor(tenantId) : Promise.resolve([] as string[]),
   ])
 
-  const tenant = tenantRow
-    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRow.description as string | null) ?? null) : null }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
+  const tenantRowAny = tenantRow as any
+  const tenant = tenantRowAny
+    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
+
+  // Mismo enmascarado que la descripción del negocio arriba — un 'agent' ni ve
+  // la pestaña "Tu negocio", así que el dato ni se consulta ni viaja en su
+  // payload RSC. Sólo super_admin puede editarla (updateNewsletterSourceDomains
+  // repite el gate: la UI no es la única puerta).
+  const canEditSources = ctx.role === 'super_admin'
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 
@@ -130,6 +149,8 @@ export default async function SettingsPage() {
         agentAccess={agentAccess}
         accessCount={accessCountRes.count ?? 0}
         businessProfile={businessProfile}
+        sourceDomains={sourceDomains}
+        canEditSources={canEditSources}
         scoringRules={scoringRules}
         recommendedRules={recommendedRules}
         // El modelo de scoring lo administra ITMANO — ver updateScoreRules.

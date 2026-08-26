@@ -107,6 +107,20 @@ export function EditionEditor({ edition, seriesName, canEdit, studioImages, publ
     })
   }
 
+  // Guarda el formulario ANTES de generar la portada con IA: la escena tiene
+  // que reflejar el titular y la bajada reales, y `generateCoverForEdition`
+  // sólo conoce lo que ya está guardado en la fila. Mismo criterio que
+  // `handlePublish`, que también guarda antes del segundo paso.
+  async function handleSaveBeforeGenerate(): Promise<{ ok: true } | { ok: false; error: string }> {
+    setError(null)
+    const validationError = validateForSave()
+    if (validationError) { setError(validationError); return { ok: false, error: validationError } }
+    const res = await updateEdition(edition.id, buildInput())
+    if (!res.ok) { setError(res.error); return res }
+    setSavedAt(new Date())
+    return { ok: true }
+  }
+
   function handlePublish() {
     setError(null)
     const validationError = validateForSave()
@@ -186,11 +200,13 @@ export function EditionEditor({ edition, seriesName, canEdit, studioImages, publ
         </div>
 
         <CoverPicker
+          editionId={edition.id}
           coverImageUrl={coverImageUrl}
           coverSource={coverSource}
           studioImages={studioImages}
           canEdit={canEdit}
           onChange={next => { setCoverImageUrl(next.coverImageUrl); setCoverSource(next.coverSource) }}
+          onBeforeGenerate={handleSaveBeforeGenerate}
         />
 
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>

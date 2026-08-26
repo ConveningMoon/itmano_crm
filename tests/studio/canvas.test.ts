@@ -34,3 +34,34 @@ describe('canvas', () => {
     expect(CANVAS['9:16'].height - (bottom.y + bottom.height)).toBeGreaterThanOrEqual(200)
   })
 })
+
+describe('formato apaisado 16:9', () => {
+  it('tiene lienzo de 1920x1080', () => {
+    expect(CANVAS['16:9']).toEqual({ width: 1920, height: 1080 })
+  })
+
+  it('admite las mismas zonas que los formatos anchos', () => {
+    expect(allowedZones('16:9')).toEqual(['top', 'bottom', 'left'])
+  })
+
+  it('la banda de texto cabe dentro del lienzo', () => {
+    for (const zona of allowedZones('16:9')) {
+      const b = textBand('16:9', zona)
+      expect(b.x).toBeGreaterThanOrEqual(0)
+      expect(b.y).toBeGreaterThanOrEqual(0)
+      expect(b.x + b.width).toBeLessThanOrEqual(CANVAS['16:9'].width)
+      expect(b.y + b.height).toBeLessThanOrEqual(CANVAS['16:9'].height)
+    }
+  })
+
+  it('resolveZone respeta una zona admitida', () => {
+    expect(resolveZone('16:9', 'bottom')).toBe('bottom')
+  })
+
+  it('no altera la geometria de los formatos existentes', () => {
+    expect(CANVAS['1:1']).toEqual({ width: 1080, height: 1080 })
+    expect(CANVAS['4:5']).toEqual({ width: 1080, height: 1350 })
+    expect(CANVAS['9:16']).toEqual({ width: 1080, height: 1920 })
+    expect(allowedZones('9:16')).toEqual(['top', 'bottom'])
+  })
+})

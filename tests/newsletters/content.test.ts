@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   NewsletterContentSchema, parseNewsletterContent, parseNewsletterSources,
-  NEWSLETTER_CONTENT_VERSION,
+  NEWSLETTER_CONTENT_VERSION, CONTENT_LIMITS,
 } from '@/lib/newsletters/content'
 
 const heading = { type: 'heading', level: 2, text: 'El mercado en agosto' } as const
@@ -57,5 +57,26 @@ describe('parseNewsletterSources', () => {
   it('devuelve lista vacia ante basura', () => {
     expect(parseNewsletterSources(null)).toEqual([])
     expect(parseNewsletterSources({ nope: true })).toEqual([])
+  })
+})
+
+// La IA produce el dato CON su contexto, que es lo que lo hace util. Con el
+// tope viejo de 40, "48 dias (frente a 37 el ano anterior)" cabia por los pelos
+// y el siguiente tiraba la edicion entera.
+describe('el value de un stat admite el dato con su contexto', () => {
+  it('acepta un valor con la comparacion incluida', () => {
+    const doc = {
+      v: NEWSLETTER_CONTENT_VERSION,
+      blocks: [{ ...stat, value: '48 dias en mercado (frente a 37 el ano anterior)' }],
+    }
+    expect(NewsletterContentSchema.safeParse(doc).success).toBe(true)
+  })
+
+  it('sigue teniendo tope', () => {
+    const doc = {
+      v: NEWSLETTER_CONTENT_VERSION,
+      blocks: [{ ...stat, value: 'V'.repeat(CONTENT_LIMITS.statValue + 1) }],
+    }
+    expect(NewsletterContentSchema.safeParse(doc).success).toBe(false)
   })
 })

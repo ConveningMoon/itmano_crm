@@ -9,6 +9,10 @@ export const CANVAS: Record<Aspect, { width: number; height: number }> = {
   '1:1':  { width: 1080, height: 1080 },
   '4:5':  { width: 1080, height: 1350 },
   '9:16': { width: 1080, height: 1920 },
+  // Apaisado editorial: portadas de newsletter y previsualización al compartir.
+  // 1920x1080 en vez de 1200x630 porque el compositor trabaja a resolución alta
+  // y el recorte a la proporción de Open Graph lo hace el navegador.
+  '16:9': { width: 1920, height: 1080 },
 }
 
 export const MARGIN = 84

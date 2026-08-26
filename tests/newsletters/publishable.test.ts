@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { publishBlockers } from '@/lib/newsletters/publishable'
+import { publishBlockers, PLACEHOLDER_COVER_URL } from '@/lib/newsletters/publishable'
 import type { NewsletterContent } from '@/lib/newsletters/content'
 import { NEWSLETTER_CONTENT_VERSION } from '@/lib/newsletters/content'
 
@@ -26,6 +26,18 @@ describe('publishBlockers', () => {
   it('bloquea sin portada', () => {
     const codes = publishBlockers({ ...base, coverImageUrl: null }).map(b => b.code)
     expect(codes).toContain('no_cover')
+  })
+
+  it('bloquea con la portada marcador, que es el banner de ITMANO', () => {
+    // El producto es white-label: publicar asi pone el logo de ITMANO en el
+    // escaparate publico del cliente. Toda edicion generada con IA nace asi.
+    const blockers = publishBlockers({ ...base, coverImageUrl: PLACEHOLDER_COVER_URL })
+    expect(blockers.map(b => b.code)).toContain('portada_placeholder')
+    expect(blockers.find(b => b.code === 'portada_placeholder')?.detail).toContain('portada propia')
+  })
+
+  it('no confunde el marcador con una portada propia', () => {
+    expect(publishBlockers({ ...base, coverImageUrl: '/otra-portada.webp' })).toEqual([])
   })
 
   it('bloquea sin titulo', () => {

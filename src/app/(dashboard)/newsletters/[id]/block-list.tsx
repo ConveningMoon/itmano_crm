@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Plus, Trash2, ChevronUp, ChevronDown, X, Upload, Loader2 } from 'lucide-react'
+import { sourceLabel } from '@/lib/newsletters/content'
 import type { NewsletterBlock, NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 
 // Columna izquierda: bloques editables. Columna derecha: vista previa en JSX
@@ -10,6 +11,10 @@ import type { NewsletterBlock, NewsletterContent, NewsletterSource } from '@/lib
 // pública se parezcan. render.ts es server-only y no se puede importar aquí;
 // por eso las funciones de abajo (safeUrl, la unión de bloques) son una copia
 // deliberada de su lógica, no una reexportación.
+//
+// La excepción es `sourceLabel`: vive en content.ts (client-safe) y la importan
+// los dos. Es donde la copia deliberada ya se separó una vez, y una etiqueta
+// distinta aquí y en la página pública es una regresión que sólo se ve mirando.
 
 // Route Handler, no Server Action — ver src/app/api/newsletters/media/route.ts:
 // una Server Action POSTea a la ruta de la página, que src/proxy.ts intercepta
@@ -609,7 +614,7 @@ function SourcesPreview({ blocks, sources }: { blocks: NewsletterBlock[]; source
       <ol>
         {used.map(s => {
           const url = safeUrl(s.url)
-          const label = s.publisher ? `${s.title} — ${s.publisher}` : s.title
+          const label = sourceLabel(s)
           return (
             <li key={s.id}>
               {url ? <a href={url} rel="nofollow noopener" target="_blank">{label}</a> : label}

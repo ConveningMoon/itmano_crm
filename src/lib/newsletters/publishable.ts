@@ -13,9 +13,27 @@ export interface PublishableInput {
 }
 
 export interface PublishBlocker {
-  code:   'no_cover' | 'no_title' | 'stat_sin_fuente' | 'fuente_inexistente' | 'contenido_invalido'
+  code:   'no_cover' | 'portada_placeholder' | 'no_title' | 'stat_sin_fuente'
+        | 'fuente_inexistente' | 'contenido_invalido'
   detail: string
 }
+
+/**
+ * La portada con la que nace toda edición generada con IA, porque
+ * `cover_image_url` es NOT NULL y la portada propia se genera después.
+ *
+ * Vive aquí y no en la server action porque quien la pone y quien la bloquea
+ * tienen que estar mirando exactamente el mismo literal: es el banner de
+ * ITMANO, y el producto es white-label. Publicar con él pone el logo de ITMANO
+ * en el escaparate público del cliente, bajo su propio dominio y su marca. No
+ * es un descuido estético, es una fuga de marca — por eso es un bloqueo de
+ * publicación y no un aviso.
+ *
+ * RUTA RELATIVA a propósito: las páginas públicas la pintan con `next/image`,
+ * que valida cualquier `src` que no empiece por `/` contra
+ * `images.remotePatterns`.
+ */
+export const PLACEHOLDER_COVER_URL = '/itmano_banner.webp'
 
 export function publishBlockers(input: PublishableInput): PublishBlocker[] {
   const blockers: PublishBlocker[] = []
@@ -27,6 +45,11 @@ export function publishBlockers(input: PublishableInput): PublishBlocker[] {
   // comprueba para dar el motivo antes de que la base lo rechace.
   if (!input.coverImageUrl) {
     blockers.push({ code: 'no_cover', detail: 'La edición necesita una imagen de portada.' })
+  } else if (input.coverImageUrl.trim() === PLACEHOLDER_COVER_URL) {
+    blockers.push({
+      code:   'portada_placeholder',
+      detail: 'La portada todavía es el marcador de ITMANO. Genera o sube una portada propia antes de publicar.',
+    })
   }
   if (!input.content) {
     blockers.push({ code: 'contenido_invalido', detail: 'El contenido no es válido o está vacío.' })

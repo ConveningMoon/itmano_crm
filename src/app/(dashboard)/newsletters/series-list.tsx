@@ -2,16 +2,18 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Plus, ExternalLink } from 'lucide-react'
+import { Plus, ExternalLink, Sparkles } from 'lucide-react'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { NewsletterSeries } from '@/lib/data/newsletters'
 import type { EmailSequence } from '@/lib/data/email-sequences'
 import { NewSeriesModal } from './new-series-modal'
+import { GenerateModal } from './generate-modal'
 
 // Lista de series de newsletter — el equivalente a la lista de fuentes en
 // /sources, pero para este canal. "Nueva edición" navega a /newsletters/nueva
 // (editor de una edición dentro de una serie); "Nueva serie" abre el modal de
-// esta misma página.
+// esta misma página; "Generar con IA" abre el modal de generación — mismo
+// patrón de botón que abre un ModalShell.
 
 interface AgentOption {
   id:   string
@@ -19,18 +21,32 @@ interface AgentOption {
 }
 
 interface Props {
-  series:     NewsletterSeries[]
-  sequences:  EmailSequence[]
-  agents:     AgentOption[]
-  tenantSlug: string
+  series:        NewsletterSeries[]
+  sequences:     EmailSequence[]
+  agents:        AgentOption[]
+  tenantSlug:    string
+  /** tenants.newsletter_source_domains — la allowlist que GenerateModal enseña
+   *  antes de generar. Vacío = el botón se muestra igual, pero deshabilitado
+   *  con su motivo (lo resuelve el propio modal, vía canGenerateWithAi). */
+  sourceDomains: string[]
+  /** Sólo super_admin edita la allowlist. Cambia lo que el modal ofrece cuando
+   *  falta: ir a Ajustes, o a quién escribir. */
+  canEditSources: boolean
+  /** Llegó con `?generar=1` (banner de /newsletters/nueva): abre el modal. */
+  openGenerate: boolean
 }
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export function SeriesList({ series, sequences, agents, tenantSlug }: Props) {
+export function SeriesList({
+  series, sequences, agents, tenantSlug, sourceDomains, canEditSources, openGenerate,
+}: Props) {
   const [showNewSeries, setShowNewSeries] = useState(false)
+  // Estado INICIAL, no efecto: si el usuario cierra el modal no vuelve a
+  // abrirse solo, y no hace falta reescribir la URL para conseguirlo.
+  const [showGenerate, setShowGenerate]   = useState(openGenerate)
 
   return (
     <>
@@ -67,6 +83,18 @@ export function SeriesList({ series, sequences, agents, tenantSlug }: Props) {
             <Plus size={14} />
             Nueva edición
           </Link>
+          <button
+            onClick={() => setShowGenerate(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
+            }}
+          >
+            <Sparkles size={14} />
+            Generar con IA
+          </button>
           <button
             onClick={() => setShowNewSeries(true)}
             style={{
@@ -110,6 +138,14 @@ export function SeriesList({ series, sequences, agents, tenantSlug }: Props) {
         onClose={() => setShowNewSeries(false)}
         sequences={sequences}
         agents={agents}
+      />
+
+      <GenerateModal
+        open={showGenerate}
+        onClose={() => setShowGenerate(false)}
+        series={series}
+        sourceDomains={sourceDomains}
+        canEditSources={canEditSources}
       />
     </>
   )
