@@ -15,6 +15,13 @@ import { EditionEditor } from './edition-editor'
 // properties/[id]/page.tsx: la página siempre carga (lectura abierta al
 // tenant), sólo se restringe la ESCRITURA vía `canEdit`.
 
+// El editor genera la portada con IA como Server Action de ESTA ruta
+// (generateCoverForEdition → Claude + Nano Banana + sharp) y desde aquí también
+// se puede reintentar una edición completa. Mismo techo que /newsletters por la
+// misma medición (107–222 s de punta a punta): una generación que muere por
+// límite de plataforma ya se pagó, y `recordAiUsage` nunca llega a correr.
+export const maxDuration = 300
+
 const TENANT_COLUMNS       = columns('tenants', ['slug'])
 const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
 
