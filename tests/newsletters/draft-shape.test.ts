@@ -1,17 +1,25 @@
 import { describe, it, expect } from 'vitest'
 import { sourcesFromFindings, editionToolSchema } from '@/lib/newsletters/ai/draft'
-import { NewsletterSourceSchema } from '@/lib/newsletters/content'
+import { NewsletterSourceSchema, NewsletterContentSchema, NEWSLETTER_CONTENT_VERSION, CONTENT_LIMITS } from '@/lib/newsletters/content'
 
 // Forma mínima que nos interesa comprobar de `editionToolSchema()`. No es el
 // tipo completo de JSON Schema — sólo lo que el test necesita para navegarlo.
 interface BloqueVariante {
-  properties: { type: { const: string }; sourceIds?: { minItems?: number } }
+  properties: {
+    type:      { const: string }
+    sourceIds?: { minItems?: number }
+    text?:     { maxLength?: number }
+    label?:    { maxLength?: number }
+    value?:    { maxLength?: number }
+  }
   required: string[]
 }
 interface EditionSchemaShape {
   type: string
   required: string[]
   properties: {
+    title: { maxLength?: number }
+    dek:   { maxLength?: number }
     blocks: {
       type: string
       minItems: number
@@ -149,5 +157,44 @@ describe('editionToolSchema', () => {
     expect(stat).toBeDefined()
     expect(stat?.required).toContain('sourceIds')
     expect(stat?.properties.sourceIds?.minItems).toBe(1)
+  })
+})
+
+// El modelo solo puede respetar un tope si el esquema se lo dice. Cuando no se
+// lo decia, una edicion entera se perdia por un `value` de 41 caracteres,
+// DESPUES de haber pagado la investigacion.
+describe('los topes del input_schema y los de zod son los mismos', () => {
+  const schema = editionToolSchema() as unknown as EditionSchemaShape
+  const variantes = schema.properties.blocks.items.oneOf
+  const variante = (tipo: string) =>
+    variantes.find(v => v.properties.type.const === tipo)!
+
+  it('declara maxLength en el value del stat, que es el tope que se rompia', () => {
+    expect(variante('stat').properties.value?.maxLength).toBe(CONTENT_LIMITS.statValue)
+    expect(variante('stat').properties.label?.maxLength).toBe(CONTENT_LIMITS.statLabel)
+  })
+
+  it('declara maxLength en el texto de cada bloque, el titular y la entradilla', () => {
+    expect(variante('heading').properties.text?.maxLength).toBe(CONTENT_LIMITS.heading)
+    expect(variante('paragraph').properties.text?.maxLength).toBe(CONTENT_LIMITS.paragraph)
+    expect(variante('quote').properties.text?.maxLength).toBe(CONTENT_LIMITS.quote)
+    expect(variante('callout').properties.text?.maxLength).toBe(CONTENT_LIMITS.callout)
+    expect(schema.properties.title.maxLength).toBe(CONTENT_LIMITS.editionTitle)
+    expect(schema.properties.dek.maxLength).toBe(CONTENT_LIMITS.editionDek)
+  })
+
+  it('lo que cabe segun el esquema de la herramienta valida en zod', () => {
+    // La invariante de verdad: un valor del largo maximo que el esquema anuncia
+    // NO puede ser rechazado por el zod que corre justo despues.
+    const doc = {
+      v: NEWSLETTER_CONTENT_VERSION,
+      blocks: [{
+        type: 'stat',
+        label: 'L'.repeat(CONTENT_LIMITS.statLabel),
+        value: 'V'.repeat(CONTENT_LIMITS.statValue),
+        sourceIds: ['s1'],
+      }],
+    }
+    expect(NewsletterContentSchema.safeParse(doc).success).toBe(true)
   })
 })

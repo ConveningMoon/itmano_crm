@@ -8,7 +8,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { publishBlockers, PLACEHOLDER_COVER_URL } from '@/lib/newsletters/publishable'
-import { NewsletterContentSchema, NewsletterSourceSchema } from '@/lib/newsletters/content'
+import { NewsletterContentSchema, NewsletterSourceSchema, CONTENT_LIMITS } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
 import { getEditionById } from '@/lib/data/newsletters'
@@ -319,8 +319,11 @@ const coverImageUrlSchema = z.string().min(1, COVER_URL_MESSAGE).refine(
 
 const EditionInput = z.object({
   channelId:     z.string().uuid(),
-  title:         z.string().trim().min(1, 'La edición necesita un titular').max(200),
-  dek:           z.string().trim().max(400).nullable(),
+  // Los topes salen de CONTENT_LIMITS, la misma constante que declara el
+  // `input_schema` con el que la IA redacta: si aquí cabe menos de lo que allí
+  // se pide, la edición se pierde al guardarla.
+  title:         z.string().trim().min(1, 'La edición necesita un titular').max(CONTENT_LIMITS.editionTitle),
+  dek:           z.string().trim().max(CONTENT_LIMITS.editionDek).nullable(),
   // El enum del repo, no una longitud: `z.string().min(2).max(3)` dejaba pasar
   // cualquier trigrama hasta el CHECK de la base, que rebota con un error crudo
   // de Postgres en inglés.

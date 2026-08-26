@@ -22,43 +22,76 @@ export const NEWSLETTER_CONTENT_VERSION = 1 as const
 const text = (max: number, vacio: string, largo: string) =>
   z.string().trim().min(1, vacio).max(max, largo)
 
+/**
+ * Los topes de longitud, en UN solo sitio.
+ *
+ * Existen como constante y no como literales dentro de cada `text(...)` porque
+ * hay un segundo consumidor: el `input_schema` de la herramienta con la que la
+ * IA redacta (`ai/draft.ts` -> `editionToolSchema`). Ese esquema es lo unico que
+ * le dice al modelo cuanto cabe; mientras no lo declaro, el modelo no tenia
+ * forma de respetar el limite y una edicion entera se perdia por un `value` de
+ * 41 caracteres DESPUES de haber pagado la investigacion. Un tope duplicado a
+ * mano es exactamente como los dos lados vuelven a separarse.
+ *
+ * `statValue` son 80 y no 40: la IA produce el dato CON su contexto -"48 dias
+ * (frente a 37 el ano anterior)"- y eso es un dato mejor que "48 dias". El
+ * limite viejo lo dejaba pasar por los pelos y rechazaba el siguiente. Subirlo
+ * es mas laxo, asi que ningun contenido ya guardado deja de validar: no hay
+ * migracion ni riesgo para las ediciones vivas.
+ */
+export const CONTENT_LIMITS = {
+  heading:          200,
+  paragraph:        4000,
+  listItem:         400,
+  quote:            600,
+  quoteAttribution: 160,
+  callout:          600,
+  statLabel:        80,
+  statValue:        80,
+  imageAlt:         200,
+  imageCaption:     300,
+  /** No son del bloque sino de la fila, pero los produce la misma herramienta. */
+  editionTitle:     200,
+  editionDek:       400,
+} as const
+
 const HeadingBlock = z.object({
   type: z.literal('heading'),
   level: z.union([z.literal(2), z.literal(3)]),
-  text: text(200, 'El encabezado no puede quedar vacío.', 'El encabezado es demasiado largo (máximo 200 caracteres).'),
+  text: text(CONTENT_LIMITS.heading, 'El encabezado no puede quedar vacío.', `El encabezado es demasiado largo (máximo ${CONTENT_LIMITS.heading} caracteres).`),
 })
 const ParagraphBlock = z.object({
   type: z.literal('paragraph'),
-  text: text(4000, 'El párrafo no puede quedar vacío.', 'El párrafo es demasiado largo (máximo 4.000 caracteres).'),
+  text: text(CONTENT_LIMITS.paragraph, 'El párrafo no puede quedar vacío.', 'El párrafo es demasiado largo (máximo 4.000 caracteres).'),
   sourceIds: z.array(z.string()).max(8, 'Un párrafo cita como máximo 8 fuentes.').optional(),
 })
 const ListBlock = z.object({
   type: z.literal('list'), style: z.enum(['bullet', 'number']),
-  items: z.array(text(400, 'Ningún elemento de la lista puede quedar vacío.', 'Un elemento de la lista es demasiado largo (máximo 400 caracteres).'))
+  items: z.array(text(CONTENT_LIMITS.listItem, 'Ningún elemento de la lista puede quedar vacío.', `Un elemento de la lista es demasiado largo (máximo ${CONTENT_LIMITS.listItem} caracteres).`))
     .min(1, 'La lista necesita al menos un elemento.')
     .max(20, 'La lista admite como máximo 20 elementos.'),
 })
 const ImageBlock = z.object({
   type: z.literal('image'),
   url: z.string().url('La imagen necesita una URL válida: súbela o pega su dirección completa.'),
-  alt: text(200, 'La imagen necesita un texto alternativo que describa lo que muestra.', 'El texto alternativo es demasiado largo (máximo 200 caracteres).'),
-  caption: z.string().trim().max(300, 'El pie de imagen es demasiado largo (máximo 300 caracteres).').optional(),
+  alt: text(CONTENT_LIMITS.imageAlt, 'La imagen necesita un texto alternativo que describa lo que muestra.', `El texto alternativo es demasiado largo (máximo ${CONTENT_LIMITS.imageAlt} caracteres).`),
+  caption: z.string().trim().max(CONTENT_LIMITS.imageCaption, `El pie de imagen es demasiado largo (máximo ${CONTENT_LIMITS.imageCaption} caracteres).`).optional(),
 })
 const QuoteBlock = z.object({
   type: z.literal('quote'),
-  text: text(600, 'La cita no puede quedar vacía.', 'La cita es demasiado larga (máximo 600 caracteres).'),
-  attribution: z.string().trim().max(160, 'La atribución de la cita es demasiado larga (máximo 160 caracteres).').optional(),
+  text: text(CONTENT_LIMITS.quote, 'La cita no puede quedar vacía.', `La cita es demasiado larga (máximo ${CONTENT_LIMITS.quote} caracteres).`),
+  attribution: z.string().trim().max(CONTENT_LIMITS.quoteAttribution, `La atribución de la cita es demasiado larga (máximo ${CONTENT_LIMITS.quoteAttribution} caracteres).`).optional(),
 })
 const CalloutBlock = z.object({
   type: z.literal('callout'), tone: z.enum(['info', 'warning']),
-  text: text(600, 'El aviso no puede quedar vacío.', 'El aviso es demasiado largo (máximo 600 caracteres).'),
+  text: text(CONTENT_LIMITS.callout, 'El aviso no puede quedar vacío.', `El aviso es demasiado largo (máximo ${CONTENT_LIMITS.callout} caracteres).`),
 })
 // El único bloque cuyas fuentes son OBLIGATORIAS: un dato numérico sin respaldo
 // es exactamente lo que este sistema existe para impedir.
 const StatBlock = z.object({
   type: z.literal('stat'),
-  label: text(80, 'El dato necesita una etiqueta que diga qué mide.', 'La etiqueta del dato es demasiado larga (máximo 80 caracteres).'),
-  value: text(40, 'El dato necesita un valor.', 'El valor del dato es demasiado largo (máximo 40 caracteres).'),
+  label: text(CONTENT_LIMITS.statLabel, 'El dato necesita una etiqueta que diga qué mide.', `La etiqueta del dato es demasiado larga (máximo ${CONTENT_LIMITS.statLabel} caracteres).`),
+  value: text(CONTENT_LIMITS.statValue, 'El dato necesita un valor.', `El valor del dato es demasiado largo (máximo ${CONTENT_LIMITS.statValue} caracteres).`),
   sourceIds: z.array(z.string())
     .min(1, 'Todo dato necesita al menos una fuente que lo respalde.')
     .max(8, 'Un dato cita como máximo 8 fuentes.'),

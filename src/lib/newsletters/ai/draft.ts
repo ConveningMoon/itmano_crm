@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import {
   NewsletterContentSchema, NewsletterSourceSchema, NEWSLETTER_CONTENT_VERSION,
+  CONTENT_LIMITS,
   type NewsletterContent, type NewsletterSource,
 } from '../content'
 import type { NewsletterDossier, ResearchFinding } from './research'
@@ -121,22 +122,34 @@ export function sourcesFromFindings(findings: ResearchFinding[]): NewsletterSour
  * una regla que sólo zod conoce (p. ej. los máximos de caracteres por bloque).
  */
 export function editionToolSchema(): Anthropic.Tool.InputSchema {
+  // `maxLength` en CADA campo que zod acota, con el número de CONTENT_LIMITS.
+  // Es lo único que le dice al modelo cuánto cabe: sin esto respetaba los topes
+  // por casualidad, y una edición entera se perdía —después de pagar la
+  // investigación— porque un `value` se pasó de largo. Los números salen de la
+  // misma constante que usa el zod que lo valida después, para que no puedan
+  // separarse.
+  const L = CONTENT_LIMITS
   const bloque = {
     type: 'object',
     oneOf: [
-      { properties: { type: { const: 'heading' },   level: { enum: [2, 3] }, text: { type: 'string' } },
+      { properties: { type: { const: 'heading' },   level: { enum: [2, 3] },
+                      text: { type: 'string', maxLength: L.heading } },
         required: ['type', 'level', 'text'] },
-      { properties: { type: { const: 'paragraph' }, text: { type: 'string' },
+      { properties: { type: { const: 'paragraph' }, text: { type: 'string', maxLength: L.paragraph },
                       sourceIds: { type: 'array', items: { type: 'string' } } },
         required: ['type', 'text'] },
       { properties: { type: { const: 'list' }, style: { enum: ['bullet', 'number'] },
-                      items: { type: 'array', items: { type: 'string' } } },
+                      items: { type: 'array', items: { type: 'string', maxLength: L.listItem } } },
         required: ['type', 'style', 'items'] },
-      { properties: { type: { const: 'quote' }, text: { type: 'string' }, attribution: { type: 'string' } },
+      { properties: { type: { const: 'quote' }, text: { type: 'string', maxLength: L.quote },
+                      attribution: { type: 'string', maxLength: L.quoteAttribution } },
         required: ['type', 'text'] },
-      { properties: { type: { const: 'callout' }, tone: { enum: ['info', 'warning'] }, text: { type: 'string' } },
+      { properties: { type: { const: 'callout' }, tone: { enum: ['info', 'warning'] },
+                      text: { type: 'string', maxLength: L.callout } },
         required: ['type', 'tone', 'text'] },
-      { properties: { type: { const: 'stat' }, label: { type: 'string' }, value: { type: 'string' },
+      { properties: { type: { const: 'stat' },
+                      label: { type: 'string', maxLength: L.statLabel },
+                      value: { type: 'string', maxLength: L.statValue },
                       sourceIds: { type: 'array', items: { type: 'string' }, minItems: 1 } },
         required: ['type', 'label', 'value', 'sourceIds'] },
     ],
@@ -145,8 +158,10 @@ export function editionToolSchema(): Anthropic.Tool.InputSchema {
   return {
     type: 'object',
     properties: {
-      title:       { type: 'string', description: 'Titular de la edición. Concreto, sin signos de exclamación.' },
-      dek:         { type: 'string', description: 'Entradilla de una o dos frases.' },
+      title:       { type: 'string', maxLength: L.editionTitle,
+                     description: 'Titular de la edición. Concreto, sin signos de exclamación.' },
+      dek:         { type: 'string', maxLength: L.editionDek,
+                     description: 'Entradilla de una o dos frases.' },
       data_as_of:  { type: ['string', 'null'], description: 'Fecha YYYY-MM-DD a la que se refieren los datos, o null.' },
       blocks:      { type: 'array', items: bloque, minItems: 3, maxItems: 40 },
     },
@@ -196,6 +211,13 @@ function buildPrompt(args: {
     `\n4. Si un dato te falta, escribe la edición sin él. Un texto más corto es preferible a uno con una cifra inventada.`,
     `\n5. Tono sobrio y profesional. Sin emojis. Sin signos de exclamación. Sin promesas de rentabilidad.`,
     `\n6. Entre 4 y 10 bloques. Empieza por un heading de nivel 2.`,
+    // El tope que de verdad se rompe. Va también en el prompt y no sólo en el
+    // esquema: `value` es el campo más estrecho con diferencia y el modelo
+    // tiende a meterle el contexto del dato ("48 días, frente a 37 el año
+    // anterior"), que es justo lo que lo hace útil. Decirle dónde cortar sale
+    // mucho más barato que rechazarle la edición entera después de pagarla.
+    `\n7. El "value" de un bloque "stat" no puede pasar de ${CONTENT_LIMITS.statValue} caracteres:`,
+    ` la cifra y, si cabe, una comparación breve. El contexto largo va en un párrafo.`,
   ].join('')
 }
 
