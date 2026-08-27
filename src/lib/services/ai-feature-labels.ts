@@ -12,7 +12,7 @@
 export type AiFeature =
   | 'property_intake' | 'email_draft' | 'sequence_bootstrap' | 'hosted_page_copy'
   | 'lead_fit' | 'carousel_copy' | 'studio_prompt' | 'studio_image'
-  | 'newsletter_research' | 'newsletter_draft' | 'newsletter_cover'
+  | 'newsletter_sources' | 'newsletter_research' | 'newsletter_draft' | 'newsletter_cover'
 
 export const AI_FEATURE_LABELS: Record<string, string> = {
   property_intake:    'Propiedades · Crear con IA',
@@ -23,6 +23,7 @@ export const AI_FEATURE_LABELS: Record<string, string> = {
   carousel_copy:      'Carruseles · Copy con IA',
   studio_prompt:      'Estudio · Dirección de escena',
   studio_image:       'Estudio · Generación de imagen',
+  newsletter_sources:  'Newsletters · Fuentes del mercado',
   newsletter_research: 'Newsletters · Investigación',
   newsletter_draft:    'Newsletters · Redacción',
   newsletter_cover:    'Newsletters · Portada',

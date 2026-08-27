@@ -4,10 +4,9 @@ import { Sparkles } from 'lucide-react'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
-import { getSeriesForTenant, getSourceDomainsFor } from '@/lib/data/newsletters'
+import { getSeriesForTenant } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
-import { canGenerateWithAi } from '@/lib/newsletters/source-domains'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
 
@@ -37,17 +36,17 @@ export default async function NewEditionPage() {
   const plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
-  const [series, studioImages, sourceDomains] = await Promise.all([
+  // El banner de "Generar con IA" ya no depende de que existan fuentes: se
+  // preparan solas en la primera generación (ai/source-catalog.ts), así que
+  // condicionarlo escondía la feature justo a quien todavía no la ha usado.
+  const [series, studioImages] = await Promise.all([
     getSeriesForTenant(tenantId),
     getStudioImages(tenantId),
-    // Ya normalizada: el banner de abajo se muestra según la MISMA lista con la
-    // que el servidor decidirá si puede generar.
-    getSourceDomainsFor(tenantId),
   ])
 
   return (
     <div style={{ maxWidth: '560px' }}>
-      {canGenerateWithAi(sourceDomains) && (
+      {(
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
           padding: '10px 14px', marginBottom: '16px', borderRadius: '10px',

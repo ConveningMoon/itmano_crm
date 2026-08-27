@@ -12,6 +12,9 @@ import { publishBlockers, PLACEHOLDER_COVER_URL } from '@/lib/newsletters/publis
 import { NewsletterContentSchema, NewsletterSourceSchema, CONTENT_LIMITS } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
+import { deleteOrphanMedia } from '@/lib/newsletters/media'
+import { buildNewsletterIntegrationPrompt } from '@/lib/services/newsletter-integration-prompt'
+import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { getEditionById } from '@/lib/data/newsletters'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
@@ -523,6 +526,16 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
   }).eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
+
+  // La portada anterior deja de existir para el producto en cuanto se guarda
+  // la nueva: sin esto, cada cambio dejaba un archivo huérfano en el bucket que
+  // ya no aparece en ninguna pantalla y que nadie iba a borrar nunca. Va
+  // DESPUÉS del update, y sólo si de verdad cambió — ver media.ts para las tres
+  // condiciones que se comprueban antes de tocar el storage.
+  if (existing.coverImageUrl !== d.coverImageUrl) {
+    await deleteOrphanMedia(g.db, g.tenantId, existing.coverImageUrl, id)
+  }
+
   revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
   return { ok: true, data: null }
 }
@@ -669,6 +682,11 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
   const { error } = await g.db.from('newsletter_editions')
     .delete().eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
+
+  // Su portada se queda sin dueño al borrar la fila. Se limpia DESPUÉS del
+  // delete: así `sigueEnUso` ya no puede contar a la propia edición.
+  await deleteOrphanMedia(g.db, g.tenantId, existing.coverImageUrl, id)
+
   revalidateAll(g.tenantSlug, seriesSlug, existing.slug)
   return { ok: true, data: null }
 }
@@ -771,8 +789,63 @@ async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ 
     .eq('id', editionId).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
 
+  // Generar portadas con IA invita a iterar, así que es aquí donde más rápido
+  // se acumulaban huérfanos: cada reintento dejaba la anterior en el bucket.
+  await deleteOrphanMedia(g.db, g.tenantId, edition.coverImageUrl, editionId)
+
   revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, edition.channelId), edition.slug)
   return { ok: true, data: { url: result.url } }
+}
+
+
+// ─── Prompt de integración ───────────────────────────────────────────────────
+
+const SERIES_INTEGRATION_COLUMNS = columns('acquisition_channels', [
+  'id', 'tenant_id', 'name', 'slug', 'public_id', 'channel_type', 'email_sequence_id',
+])
+
+/**
+ * El contrato de integración de una serie, generado desde los datos VIGENTES.
+ *
+ * Mismo papel que `getIntegrationInfo` de /sources para los demás canales: el
+ * tenant copia esto y se lo pasa a quien lleva su web (persona o IA). Se
+ * regenera en cada lectura a propósito — vincular una secuencia o publicar el
+ * archivo cambia el texto sin que nadie tenga que acordarse de actualizarlo.
+ */
+async function getSeriesIntegrationPromptImpl(seriesId: string): Promise<Result<{ prompt: string }>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+
+  const { data } = await g.db
+    .from('acquisition_channels')
+    .select(SERIES_INTEGRATION_COLUMNS)
+    .eq('id', seriesId)
+    .eq('tenant_id', g.tenantId)
+    .eq('channel_type', 'newsletter')
+    .maybeSingle()
+  const serie = data as {
+    name: string; slug: string; public_id: string; email_sequence_id: string | null
+  } | null
+  if (!serie) return { ok: false, error: 'Esa serie no existe.' }
+
+  const { data: tenantRow } = await g.db
+    .from('tenants').select(columns('tenants', ['name'])).eq('id', g.tenantId).maybeSingle()
+  const tenantName = (tenantRow as { name?: string } | null)?.name ?? 'tu agencia'
+
+  const prompt = buildNewsletterIntegrationPrompt({
+    tenantName,
+    seriesName:  serie.name,
+    publicId:    serie.public_id,
+    baseUrl:     process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com',
+    archiveUrl:  g.tenantSlug ? hostedNewsletterUrl(g.tenantSlug, serie.slug) : null,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    // Pública por diseño: es la misma que viaja en cada página del CRM y la que
+    // el front del cliente tiene que usar. La service_role no sale de aquí.
+    anonKey:     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+    hasSequence: serie.email_sequence_id !== null,
+  })
+
+  return { ok: true, data: { prompt } }
 }
 
 
@@ -842,4 +915,8 @@ export async function generateEditionWithAi(input: unknown): Promise<Result<{ id
 
 export async function generateCoverForEdition(editionId: string): Promise<Result<{ url: string }>> {
   return guarded('generateCoverForEdition', () => generateCoverForEditionImpl(editionId))
+}
+
+export async function getSeriesIntegrationPrompt(seriesId: string): Promise<Result<{ prompt: string }>> {
+  return guarded('getSeriesIntegrationPrompt', () => getSeriesIntegrationPromptImpl(seriesId))
 }
