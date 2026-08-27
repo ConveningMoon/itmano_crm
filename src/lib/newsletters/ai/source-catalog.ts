@@ -35,13 +35,17 @@ const MODEL = 'claude-sonnet-5'
  * normalización, con esto se puede generar igual — con menos color local, pero
  * con datos citables.
  *
- * Deliberadamente institucional y sin muro de pago: son organismos que
- * publican series de vivienda, tipos y demografía en abierto, más dos agencias
- * de noticias que cubren mercado inmobiliario sin bloquear al rastreador. Las
- * fuentes de un país concreto (NAR y Redfin en EE. UU., el INE e Idealista en
- * España) NO van aquí: las pone el modelo según dónde opere la agencia, que es
- * lo que evita que un tenant de Barcelona reciba una lista pensada para
- * Virginia.
+ * Deliberadamente institucional: organismos que publican series de vivienda,
+ * tipos y demografía en abierto. Las fuentes de un país concreto (NAR y Redfin
+ * en EE. UU., el INE e Idealista en España) NO van aquí: las pone el modelo
+ * según dónde opere la agencia, que es lo que evita que un tenant de Barcelona
+ * reciba una lista pensada para Virginia.
+ *
+ * Aquí NO va prensa. Reuters y AP estaban en esta lista y tumbaron la primera
+ * generación real con un 400: `allowed_domains` se valida contra lo que el
+ * rastreador de Anthropic puede leer, y los grandes diarios lo bloquean por
+ * robots.txt. Un organismo público no lo hace nunca — por eso el suelo, que es
+ * la parte que no puede fallar, es sólo institucional.
  */
 export const GLOBAL_SOURCE_DOMAINS: readonly string[] = [
   'oecd.org',
@@ -49,8 +53,6 @@ export const GLOBAL_SOURCE_DOMAINS: readonly string[] = [
   'worldbank.org',
   'bis.org',
   'tradingeconomics.com',
-  'reuters.com',
-  'apnews.com',
 ]
 
 const TOOL_NAME = 'propose_sources'
@@ -96,8 +98,15 @@ function buildPrompt(args: {
     ' de estadística, catastro/registro, banco central, agencias de vivienda).',
     '\n2. Los portales inmobiliarios y fuentes de datos de mercado más usados en ese país.',
     '\n3. Fuentes de hipotecas y tipos de interés de ese país.',
-    '\n4. Prensa seria, nacional y local de esa zona, que cubra vivienda y economía.',
+    '\n4. Prensa que cubra vivienda y economía de esa zona, pero SOLO medios de',
+    ' acceso abierto.',
     '\n5. Alguna referencia internacional de mercado inmobiliario.',
+    '\n\nUNA REGLA QUE TUMBA TODO SI FALLA: los grandes diarios de pago y la mayoría',
+    ' de cadenas de prensa (The New York Times, The Wall Street Journal, Reuters, AP,',
+    ' y los periódicos locales de grupos grandes) BLOQUEAN a los rastreadores',
+    ' automáticos en su robots.txt. Si incluyes uno solo, la busqueda entera se',
+    ' rechaza y no se genera nada. Ante la duda, pon el organismo oficial y no el',
+    ' periódico.',
     '\n\nReglas estrictas:',
     '\n- Devuelve HOSTNAMES, no URLs: "nar.realtor", no "https://www.nar.realtor/research".',
     '\n- Sin "www.".',
@@ -221,4 +230,35 @@ export async function ensureSourceDomains(
   }
 
   return { domains: finales, generated: true }
+}
+
+/**
+ * Quita dominios de la allowlist guardada y devuelve la lista resultante.
+ *
+ * La usa el orquestador cuando la API rechaza la búsqueda por dominios que su
+ * rastreador no puede leer: se podan, se guarda la lista limpia y se reintenta.
+ * Guardar es lo que hace que el problema se arregle UNA vez y no en cada
+ * generación — y es necesario porque qué sitio bloquea al rastreador cambia con
+ * el tiempo, así que ninguna lista curada a mano aguanta.
+ */
+export async function pruneSourceDomains(
+  tenantId: string,
+  remove: string[],
+): Promise<string[]> {
+  const fuera = new Set(remove.map(d => d.trim().toLowerCase()).filter(Boolean))
+  if (fuera.size === 0) return []
+
+  const db = createAdminClient()
+  const { data } = await db
+    .from('tenants').select(SOURCE_COLUMNS).eq('id', tenantId).maybeSingle()
+  // reason: el cliente de Supabase no está tipado en este repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const actuales = parseSourceDomains((data as any)?.newsletter_source_domains).domains
+  const restantes = actuales.filter(d => !fuera.has(d))
+  if (restantes.length === actuales.length) return actuales
+
+  const { error } = await db
+    .from('tenants').update({ newsletter_source_domains: restantes }).eq('id', tenantId)
+  if (error) console.error('[newsletter-sources] no se pudo podar:', error.message)
+  return restantes
 }

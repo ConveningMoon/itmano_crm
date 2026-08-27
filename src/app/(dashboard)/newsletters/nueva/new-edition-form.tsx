@@ -3,13 +3,14 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Sparkles } from 'lucide-react'
 import type { NewsletterSeries, NewsletterCoverSource } from '@/lib/data/newsletters'
 import type { StudioImage } from '@/lib/studio/types'
 import { NEWSLETTER_CONTENT_VERSION } from '@/lib/newsletters/content'
 import { SUPPORTED_LANGUAGE_CODES, LANGUAGE_CONFIG } from '@/lib/config'
 import { CoverPicker } from '../[id]/cover-picker'
 import { createEdition } from '../actions'
+import { GenerateModal } from '../generate-modal'
 
 // Formulario mínimo de creación: serie, titular, idioma y portada. El
 // contenido nace con UN bloque (heading con el titular) porque
@@ -17,12 +18,15 @@ import { createEdition } from '../actions'
 // construye ya dentro del editor completo (/newsletters/[id]).
 
 interface Props {
-  series:       NewsletterSeries[]
-  studioImages: StudioImage[]
+  series:        NewsletterSeries[]
+  studioImages:  StudioImage[]
+  /** Las fuentes ya preparadas del tenant, para que el panel de IA las enseñe. */
+  sourceDomains: string[]
 }
 
-export function NewEditionForm({ series, studioImages }: Props) {
+export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
   const router = useRouter()
+  const [showGenerate, setShowGenerate]   = useState(false)
   const [channelId, setChannelId]         = useState(series[0]?.id ?? '')
   const [title, setTitle]                 = useState('')
   const [language, setLanguage]           = useState('es')
@@ -74,12 +78,36 @@ export function NewEditionForm({ series, studioImages }: Props) {
   return (
     <div style={{ maxWidth: '560px' }}>
       <BackLink />
-      <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '20px' }}>
-        Nueva edición
-      </h1>
+      {/* "Generar con IA" vive AQUÍ, junto al título, y abre el panel en esta
+          misma página. Antes era un banner con un enlace a /newsletters?generar=1:
+          parecía un campo del formulario y además te sacaba de la pantalla en la
+          que ya estabas creando la edición. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '12px', flexWrap: 'wrap', marginBottom: '20px',
+      }}>
+        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
+          Nueva edición
+        </h1>
+        <button
+          type="button"
+          onClick={() => setShowGenerate(true)}
+          className="nl-generate-cta"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+            background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+            border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
+          }}
+        >
+          <Sparkles size={14} />
+          Generar con IA
+        </button>
+      </div>
 
       <style>{`
         .nl-new-input:focus { border-color: var(--border-accent) !important; }
+        .nl-generate-cta:hover { border-color: var(--border-hover) !important; color: var(--text-primary) !important; }
       `}</style>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -157,6 +185,13 @@ export function NewEditionForm({ series, studioImages }: Props) {
           </button>
         </div>
       </form>
+
+      <GenerateModal
+        open={showGenerate}
+        onClose={() => setShowGenerate(false)}
+        series={series}
+        sourceDomains={sourceDomains}
+      />
     </div>
   )
 }

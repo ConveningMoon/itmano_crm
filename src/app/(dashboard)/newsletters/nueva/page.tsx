@@ -1,10 +1,8 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { Sparkles } from 'lucide-react'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
-import { getSeriesForTenant } from '@/lib/data/newsletters'
+import { getSeriesForTenant, getSourceDomainsFor } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
@@ -14,12 +12,23 @@ import { NewEditionForm } from './new-edition-form'
 // del Estudio, luego el formulario (client) hace su trabajo y navega al editor
 // completo en /newsletters/<id>.
 //
-// El botón "Generar con IA" en sí vive en series-list.tsx (el modal se abre
-// desde ahí, junto a "Nueva edición"): esta página sólo enlaza de vuelta para
-// quien llegó aquí a escribir a mano y en realidad quería la vía rápida. El
-// enlace lleva `?generar=1` para que el modal se abra solo — enlazar a
-// /newsletters a secas prometía "Generar con IA" y dejaba al usuario delante de
-// la lista buscando el botón.
+// "Generar con IA" se abre DESDE AQUÍ, en el mismo formulario y sin navegar:
+// es la otra forma de hacer lo mismo que esta pantalla, así que sacar al
+// usuario a /newsletters para ofrecérsela era pedirle que se fuera de donde ya
+// estaba. El botón vive junto al título, en new-edition-form.tsx.
+
+// La generación con IA corre como Server Action DENTRO de esta ruta
+// (GenerateModal → generateEditionWithAi): investigación con búsqueda web y
+// redacción, encadenadas. Medido de punta a punta: 107–222 s. Sin este techo
+// Vercel mata la función a mitad de camino con los tokens de Anthropic ya
+// cobrados y sin llegar a registrarlos en el ledger — el usuario ve un error de
+// plataforma y el gasto no aparece por ningún lado. En local no se nota porque
+// `npm run dev` no tiene ese límite.
+//
+// Vivía en /newsletters, que es de donde se abría antes el modal. Al mover el
+// botón aquí había que mover esto con él: el techo aplica a la ruta que EJECUTA
+// la action, no a la que tenía el botón.
+export const maxDuration = 300
 
 const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
 
@@ -36,38 +45,17 @@ export default async function NewEditionPage() {
   const plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
-  // El banner de "Generar con IA" ya no depende de que existan fuentes: se
-  // preparan solas en la primera generación (ai/source-catalog.ts), así que
-  // condicionarlo escondía la feature justo a quien todavía no la ha usado.
-  const [series, studioImages] = await Promise.all([
+  const [series, studioImages, sourceDomains] = await Promise.all([
     getSeriesForTenant(tenantId),
     getStudioImages(tenantId),
+    // Vacío = este tenant nunca ha generado; el panel lo explica y se preparan
+    // solas en esa primera generación (ai/source-catalog.ts).
+    getSourceDomainsFor(tenantId),
   ])
 
   return (
     <div style={{ maxWidth: '560px' }}>
-      {(
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
-          padding: '10px 14px', marginBottom: '16px', borderRadius: '10px',
-          border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
-        }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            ¿Prefieres que la IA proponga el contenido?
-          </span>
-          <Link
-            href="/newsletters?generar=1"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px',
-              fontSize: '12px', fontWeight: 500, color: 'var(--accent-gold)', textDecoration: 'none',
-            }}
-          >
-            <Sparkles size={12} />
-            Generar con IA
-          </Link>
-        </div>
-      )}
-      <NewEditionForm series={series} studioImages={studioImages} />
+      <NewEditionForm series={series} studioImages={studioImages} sourceDomains={sourceDomains} />
     </div>
   )
 }
