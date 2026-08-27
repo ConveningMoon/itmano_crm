@@ -74,7 +74,7 @@ export function renderNewsletterHtml(
         )
         break
       case 'stat':
-        block.sourceIds.forEach(id => cited.add(id))
+        block.sourceIds?.forEach(id => cited.add(id))
         parts.push(
           `<div class="nl-stat"><span class="nl-stat-value">${escapeHtml(block.value)}</span>` +
           `<span class="nl-stat-label">${escapeHtml(block.label)}</span></div>`,

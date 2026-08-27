@@ -24,8 +24,22 @@ describe('NewsletterContentSchema', () => {
     expect(NewsletterContentSchema.safeParse(doc).success).toBe(true)
   })
 
-  it('rechaza un stat sin fuentes', () => {
-    const doc = { v: NEWSLETTER_CONTENT_VERSION, blocks: [{ ...stat, sourceIds: [] }] }
+  it('acepta un stat SIN fuentes — citar es opcional', () => {
+    // Fue obligatorio, y con IA tenía sentido: llega con las URLs en la mano.
+    // Escrita a mano o importada, la regla convertía una garantía en un muro:
+    // el bloque nacía inválido y no dejaba publicar.
+    const sinLista = { v: NEWSLETTER_CONTENT_VERSION, blocks: [{ ...stat, sourceIds: [] }] }
+    expect(NewsletterContentSchema.safeParse(sinLista).success).toBe(true)
+
+    const sinCampo = { v: NEWSLETTER_CONTENT_VERSION, blocks: [{ type: 'stat', label: stat.label, value: stat.value }] }
+    expect(NewsletterContentSchema.safeParse(sinCampo).success).toBe(true)
+  })
+
+  it('sigue rechazando un stat que cite más de 8 fuentes', () => {
+    const doc = {
+      v: NEWSLETTER_CONTENT_VERSION,
+      blocks: [{ ...stat, sourceIds: Array.from({ length: 9 }, (_, i) => `s${i}`) }],
+    }
     expect(NewsletterContentSchema.safeParse(doc).success).toBe(false)
   })
 

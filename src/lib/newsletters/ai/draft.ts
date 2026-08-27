@@ -150,8 +150,8 @@ export function editionToolSchema(): Anthropic.Tool.InputSchema {
       { properties: { type: { const: 'stat' },
                       label: { type: 'string', maxLength: L.statLabel },
                       value: { type: 'string', maxLength: L.statValue },
-                      sourceIds: { type: 'array', items: { type: 'string' }, minItems: 1 } },
-        required: ['type', 'label', 'value', 'sourceIds'] },
+                      sourceIds: { type: 'array', items: { type: 'string' } } },
+        required: ['type', 'label', 'value'] },
     ],
   }
 
@@ -283,7 +283,7 @@ export async function draftEdition(args: {
 
   const conocidas = new Set(sources.map(s => s.id))
   for (const b of contenido.data.blocks) {
-    const ids = b.type === 'stat' ? b.sourceIds : b.type === 'paragraph' ? (b.sourceIds ?? []) : []
+    const ids = (b.type === 'stat' || b.type === 'paragraph') ? (b.sourceIds ?? []) : []
     for (const id of ids) {
       if (!conocidas.has(id)) {
         throw new AiSpentError('La redacción citó una fuente que no existe.', spend)

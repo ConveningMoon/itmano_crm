@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { storagePathFor, NEWSLETTER_MEDIA_BUCKET } from '@/lib/newsletters/media'
+import { storagePathFor, editionMediaUrls, NEWSLETTER_MEDIA_BUCKET } from '@/lib/newsletters/media'
+import type { NewsletterContent } from '@/lib/newsletters/content'
 
 // `storagePathFor` es el cierre que decide qué se puede borrar. Todo lo que
 // devuelva null queda intocable, así que lo que se prueba aquí es sobre todo lo
@@ -48,5 +49,49 @@ describe('storagePathFor', () => {
     const ruta = storagePathFor(`${BASE}/${NEWSLETTER_MEDIA_BUCKET}/tenant-otro/x.png`)
     expect(ruta).toBe('tenant-otro/x.png')
     expect(ruta!.startsWith('tenant-aj/')).toBe(false)
+  })
+})
+
+// `editionMediaUrls` es lo que decide qué imágenes tiene una edición. Se usa
+// para dos cosas distintas: limpiar al borrarla, y comparar antes/después al
+// guardarla para detectar la que se quitó.
+
+const img = (url: string) => ({ type: 'image' as const, url, alt: 'alt' })
+
+describe('editionMediaUrls', () => {
+  const content: NewsletterContent = {
+    v: 1,
+    blocks: [
+      { type: 'heading', level: 2, text: 'Titular' },
+      img('https://x.co/storage/v1/object/public/newsletter-media/t/a.png'),
+      img('https://x.co/storage/v1/object/public/newsletter-media/t/b.png'),
+    ],
+  }
+
+  it('junta la portada con las imágenes de los bloques', () => {
+    const urls = editionMediaUrls('https://x.co/storage/v1/object/public/newsletter-media/t/cover.png', content)
+    expect(urls).toHaveLength(3)
+    expect(urls).toContain('https://x.co/storage/v1/object/public/newsletter-media/t/a.png')
+    expect(urls).toContain('https://x.co/storage/v1/object/public/newsletter-media/t/cover.png')
+  })
+
+  it('deduplica cuando la portada se reutiliza en el cuerpo', () => {
+    // Pasa en cuanto alguien vuelve a elegir una imagen que ya había subido.
+    // Sin deduplicar, el segundo borrado de la misma ruta parece un fallo.
+    const repetida = 'https://x.co/storage/v1/object/public/newsletter-media/t/a.png'
+    expect(editionMediaUrls(repetida, content)).toHaveLength(2)
+  })
+
+  it('aguanta una edición sin contenido y sin portada', () => {
+    expect(editionMediaUrls(null, null)).toEqual([])
+    expect(editionMediaUrls('', null)).toEqual([])
+  })
+
+  it('la diferencia antes/después detecta el bloque de imagen borrado', () => {
+    // Es exactamente lo que hace updateEdition: lo que estaba y ya no está.
+    const antes = editionMediaUrls(null, content)
+    const despues = new Set(editionMediaUrls(null, { v: 1, blocks: [content.blocks[0], content.blocks[1]] }))
+    const borradas = antes.filter(u => !despues.has(u))
+    expect(borradas).toEqual(['https://x.co/storage/v1/object/public/newsletter-media/t/b.png'])
   })
 })

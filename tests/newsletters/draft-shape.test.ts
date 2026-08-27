@@ -152,11 +152,15 @@ describe('editionToolSchema', () => {
     expect(tipos.sort()).toEqual(['callout', 'heading', 'list', 'paragraph', 'quote', 'stat'])
   })
 
-  it('el bloque stat exige sourceIds con minItems 1 — ningún dato sin fuente', () => {
+  it('el bloque stat admite sourceIds pero ya no los exige', () => {
+    // La cita dejó de ser obligatoria (ver content.ts). El prompt SÍ se la
+    // sigue pidiendo al modelo —tiene el dossier delante— pero el esquema ya
+    // no tumba una edición ya pagada porque a un dato le faltara la fuente.
     const stat = schema.properties.blocks.items.oneOf.find(b => b.properties.type.const === 'stat')
     expect(stat).toBeDefined()
-    expect(stat?.required).toContain('sourceIds')
-    expect(stat?.properties.sourceIds?.minItems).toBe(1)
+    expect(stat?.required).not.toContain('sourceIds')
+    expect(stat?.properties.sourceIds).toBeDefined()
+    expect(stat?.properties.sourceIds?.minItems).toBeUndefined()
   })
 })
 
