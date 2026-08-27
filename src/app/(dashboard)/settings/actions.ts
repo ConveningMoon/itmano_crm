@@ -10,7 +10,6 @@ import {
   type BusinessProfileInput,
 } from '@/lib/data/business-profile'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
-import { parseSourceDomains } from '@/lib/newsletters/source-domains'
 import { recalibrate } from '@/lib/scoring/calibration'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { detectCutout } from '@/lib/studio/agent-photo'
@@ -1057,45 +1056,6 @@ export async function saveBusinessProfile(
 // web: lo que no esté aquí no se encuentra, así que no se puede citar. Es lo
 // que hace verificable a la newsletter por construcción, no por instrucción.
 //
-// SOLO ITMANO la edita, mismo criterio que updateScoreRules: es parte de lo
-// que el cliente está comprando, no un ajuste libre. El resto del equipo la ve
-// en modo lectura en la pantalla, pero el gate real está aquí — una server
-// action es un endpoint HTTP y la UI deshabilitada no es la única puerta.
-
-const NewsletterSourceDomainsInputSchema = z.array(z.string().max(300)).max(500)
-
-export async function updateNewsletterSourceDomains(
-  input: unknown,
-): Promise<
-  | { ok: true; data: { domains: string[]; rejected: string[] } }
-  | { ok: false; error: string }
-> {
-  const ctx = await getCurrentTenantContext()
-  if (ctx.role !== 'super_admin') {
-    return { ok: false, error: 'Las fuentes de newsletters las fija ITMANO.' }
-  }
-
-  const tenantId = ctx.tenant_id
-  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
-
-  const parsedInput = NewsletterSourceDomainsInputSchema.safeParse(input)
-  if (!parsedInput.success) {
-    return { ok: false, error: 'Formato de entrada inválido.' }
-  }
-
-  const { domains, rejected } = parseSourceDomains(parsedInput.data)
-
-  const supabase = createAdminClient()
-  const { error } = await supabase
-    .from('tenants')
-    .update({ newsletter_source_domains: domains })
-    .eq('id', tenantId)
-  if (error) return { ok: false, error: error.message }
-
-  revalidatePath('/settings')
-  return { ok: true, data: { domains, rejected } }
-}
-
 // ─── Portada del agente (bucket tenant-assets) ────────────────────────────────
 // Ruta: <tenant_id>/agents/<agent_id>/cover-<uuid>.<ext>. La sube el propio
 // agente (requireSelfOrManager), igual que su descripción: es su foto.

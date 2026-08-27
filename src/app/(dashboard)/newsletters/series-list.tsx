@@ -28,13 +28,10 @@ interface Props {
   sequences:     EmailSequence[]
   agents:        AgentOption[]
   tenantSlug:    string
-  /** tenants.newsletter_source_domains — la allowlist que GenerateModal enseña
-   *  antes de generar. Vacío = el botón se muestra igual, pero deshabilitado
-   *  con su motivo (lo resuelve el propio modal, vía canGenerateWithAi). */
+  /** tenants.newsletter_source_domains — las fuentes que GenerateModal enseña
+   *  antes de generar. Vacío = este tenant todavía no ha generado nunca, y se
+   *  prepararán solas en esa primera generación. */
   sourceDomains: string[]
-  /** Sólo super_admin edita la allowlist. Cambia lo que el modal ofrece cuando
-   *  falta: ir a Ajustes, o a quién escribir. */
-  canEditSources: boolean
   /** Llegó con `?generar=1` (banner de /newsletters/nueva): abre el modal. */
   openGenerate: boolean
 }
@@ -44,7 +41,7 @@ function fmtDate(iso: string): string {
 }
 
 export function SeriesList({
-  series, archivedSeries, sequences, agents, tenantSlug, sourceDomains, canEditSources, openGenerate,
+  series, archivedSeries, sequences, agents, tenantSlug, sourceDomains, openGenerate,
 }: Props) {
   const [showNewSeries, setShowNewSeries] = useState(false)
   // Estado INICIAL, no efecto: si el usuario cierra el modal no vuelve a
@@ -168,7 +165,6 @@ export function SeriesList({
         onClose={() => setShowGenerate(false)}
         series={series}
         sourceDomains={sourceDomains}
-        canEditSources={canEditSources}
       />
     </>
   )

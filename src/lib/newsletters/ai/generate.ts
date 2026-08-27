@@ -4,7 +4,7 @@ import { columns } from '@/lib/supabase/columns'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { recordAiUsage, webSearchCostUsd, computeCostUsd } from '@/lib/services/ai-usage'
 import { canGenerateWithAi } from '../source-domains'
-import { getSourceDomainsFor } from '@/lib/data/newsletters'
+import { ensureSourceDomains } from './source-catalog'
 import { researchMarket } from './research'
 import { cacheKeyFor, readCachedDossier, writeCachedDossier, type CachedDossier } from './dossier-cache'
 import { draftEdition } from './draft'
@@ -66,11 +66,26 @@ export async function generateNewsletterDraft(args: {
   const tenant = tenantRow as any
   if (!tenant) return { ok: false, error: 'No se pudo leer la configuración de la agencia.' }
 
-  const domains = await getSourceDomainsFor(ctx.tenant_id)
+  const brandName = String(tenant.name ?? 'la agencia')
+  const areas       = Array.isArray(tenant.primary_areas) ? (tenant.primary_areas as string[]) : []
+  const secundarias = Array.isArray(tenant.secondary_areas) ? (tenant.secondary_areas as string[]) : []
+
+  // Las fuentes ya no se le piden al cliente: se generan solas la primera vez
+  // que genera con IA, a partir de sus zonas y su descripción. Ver
+  // source-catalog.ts — el porqué está ahí.
+  const { domains } = await ensureSourceDomains(ctx, {
+    name:           brandName,
+    description:    typeof tenant.description === 'string' ? tenant.description : null,
+    areas,
+    secondaryAreas: secundarias,
+  })
+  // Sigue siendo un cierre y no una súplica: sin allowlist no se genera. Pero
+  // ahora llegar aquí con la lista vacía es un fallo del sistema, no una tarea
+  // pendiente del usuario, y el mensaje lo dice así.
   if (!canGenerateWithAi(domains)) {
     return {
       ok: false,
-      error: 'Todavía no hay fuentes declaradas para tu mercado. Configúralas en Ajustes → Tu negocio antes de generar.',
+      error: 'No se pudieron preparar las fuentes de tu mercado. Vuelve a intentarlo en un momento.',
     }
   }
 
@@ -78,9 +93,6 @@ export async function generateNewsletterDraft(args: {
   const blocked = await assertAiWithinLimit(ctx)
   if (blocked) return blocked
 
-  const brandName = String(tenant.name ?? 'la agencia')
-  const areas       = Array.isArray(tenant.primary_areas) ? (tenant.primary_areas as string[]) : []
-  const secundarias = Array.isArray(tenant.secondary_areas) ? (tenant.secondary_areas as string[]) : []
   // El "mercado" de la agencia son sus zonas declaradas: es el dato que ya
   // existe y el que de verdad acota la búsqueda.
   const market = [...areas, ...secundarias].join(', ')

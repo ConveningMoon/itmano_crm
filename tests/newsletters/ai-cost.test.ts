@@ -18,6 +18,7 @@ describe('etiquetas de las features nuevas', () => {
     expect(AI_FEATURE_LABELS.newsletter_research).toBe('Newsletters · Investigación')
     expect(AI_FEATURE_LABELS.newsletter_draft).toBe('Newsletters · Redacción')
     expect(AI_FEATURE_LABELS.newsletter_cover).toBe('Newsletters · Portada')
+    expect(AI_FEATURE_LABELS.newsletter_sources).toBe('Newsletters · Fuentes del mercado')
   })
 })
 
@@ -39,6 +40,7 @@ const ALL_FEATURES: Record<AiFeature, true> = {
   carousel_copy:        true,
   studio_prompt:        true,
   studio_image:         true,
+  newsletter_sources:   true,
   newsletter_research:  true,
   newsletter_draft:     true,
   newsletter_cover:     true,

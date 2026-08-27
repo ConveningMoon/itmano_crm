@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ExternalLink, Pencil, Archive, ArchiveRestore, Trash2, Plus,
+  ArrowLeft, ExternalLink, Pencil, Archive, ArchiveRestore, Trash2, Plus, Code2, Copy, Check,
 } from 'lucide-react'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { LANGUAGE_CONFIG } from '@/lib/config'
@@ -15,6 +15,7 @@ import { SeriesModal } from '../../series-modal'
 import {
   archiveSeries, restoreSeries, deleteSeries,
   archiveEdition, restoreEdition, unpublishEdition, deleteEdition,
+  getSeriesIntegrationPrompt,
 } from '../../actions'
 
 // Ediciones de una serie + gestión de la serie. Es la pantalla que faltaba: sin
@@ -115,6 +116,11 @@ export function SeriesDetail({
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  // Prompt de integración: se pide al abrirlo, no al cargar la página — casi
+  // nadie lo necesita y armarlo lee tres filas más.
+  const [integration, setIntegration] = useState<string | null>(null)
+  const [showIntegration, setShowIntegration] = useState(false)
+  const [copied, setCopied] = useState(false)
   // Un solo diálogo a la vez: qué se está confirmando, sobre qué fila.
   const [confirm, setConfirm] = useState<
     | { kind: 'archive_series' }
@@ -198,6 +204,23 @@ export function SeriesDetail({
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button className="nl-ghost" style={GHOST_BTN} onClick={() => setEditing(true)}>
               <Pencil size={13} /> Editar
+            </button>
+            <button
+              className="nl-ghost"
+              style={GHOST_BTN}
+              disabled={pending}
+              onClick={() => {
+                setShowIntegration(true)
+                if (integration !== null) return
+                setError(null)
+                start(async () => {
+                  const res = await getSeriesIntegrationPrompt(series.id)
+                  if (res.ok) setIntegration(res.data.prompt)
+                  else { setError(res.error); setShowIntegration(false) }
+                })
+              }}
+            >
+              <Code2 size={13} /> Integración
             </button>
             {archived ? (
               <>
@@ -338,6 +361,62 @@ export function SeriesDetail({
         onCancel={() => setConfirm(null)}
         onConfirm={() => confirm?.kind === 'archive_edition' && run(() => archiveEdition(confirm.edition.id))}
       />
+
+      <ModalShell open={showIntegration} onClose={() => { setShowIntegration(false); setCopied(false) }} maxWidth={720}>
+        <div style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '6px', fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Opciones de integración
+          </div>
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.6, margin: '0 0 16px' }}>
+            Copia esto y pásaselo a quien lleva tu web —persona o IA—. Lleva el contrato
+            completo: el formulario de suscripción y, si lo quieres, cómo mostrar las
+            ediciones en tu propio sitio. Se genera con los datos de hoy, así que
+            vuelve aquí si cambias la secuencia vinculada.
+          </p>
+
+          {integration === null ? (
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>Preparando…</p>
+          ) : (
+            <>
+              <pre style={{
+                margin: 0, padding: '14px', maxHeight: '46vh', overflow: 'auto',
+                background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
+                borderRadius: '8px', fontSize: '11.5px', lineHeight: 1.6,
+                color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>
+                {integration}
+              </pre>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="nl-ghost"
+                  style={GHOST_BTN}
+                  onClick={() => { setShowIntegration(false); setCopied(false) }}
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(integration).then(
+                      () => { setCopied(true); setTimeout(() => setCopied(false), 2000) },
+                      () => setError('Tu navegador no dejó copiar. Selecciona el texto y cópialo a mano.'),
+                    )
+                  }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '6px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
+                    background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                    border: 'none', cursor: 'pointer',
+                  }}
+                >
+                  {copied ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </ModalShell>
 
       <ConfirmDialog
         open={confirm?.kind === 'delete_edition'}

@@ -2,11 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { X, Sparkles, Loader2, AlertTriangle } from 'lucide-react'
+import { X, Sparkles, Loader2, Globe } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import type { NewsletterSeries } from '@/lib/data/newsletters'
-import { canGenerateWithAi } from '@/lib/newsletters/source-domains'
 import { SUPPORTED_LANGUAGE_CODES, LANGUAGE_CONFIG } from '@/lib/config'
 import { generateEditionWithAi } from './actions'
 
@@ -17,16 +15,20 @@ import { generateEditionWithAi } from './actions'
 // que tarda, porque generateEditionWithAi hace dos llamadas al modelo con
 // búsqueda web por medio — decenas de segundos, no el instante de crear una
 // serie.
+//
+// La allowlist ya NO es un requisito que el usuario tenga que cumplir antes:
+// se genera sola en la primera generación, a partir de las zonas de "Tu
+// negocio" (ver lib/newsletters/ai/source-catalog.ts). Por eso aquí se ENSEÑA,
+// que sigue siendo el argumento, pero no se BLOQUEA: pedirle al cliente que
+// escriba hostnames era el paso que sobraba.
 
 interface Props {
   open:          boolean
   onClose:       () => void
   series:        NewsletterSeries[]
+  /** Las fuentes ya preparadas de este tenant. Vacío = todavía no ha generado
+   *  nunca, y se prepararán en esta misma generación. */
   sourceDomains: string[]
-  /** Sólo super_admin edita la allowlist (updateNewsletterSourceDomains repite
-   *  el gate). Para un `agent` la pestaña "Tu negocio" ni existe, así que
-   *  mandarlo allí es mandarlo a una puerta cerrada. */
-  canEditSources: boolean
 }
 
 type Stage = 'idle' | 'researching' | 'drafting'
@@ -62,7 +64,7 @@ function initialChannelId(series: NewsletterSeries[]): string {
   return series[0]?.id ?? ''
 }
 
-export function GenerateModal({ open, onClose, series, sourceDomains, canEditSources }: Props) {
+export function GenerateModal({ open, onClose, series, sourceDomains }: Props) {
   const router = useRouter()
   const [channelId, setChannelId] = useState(() => initialChannelId(series))
   const [topic, setTopic]         = useState('')
@@ -72,7 +74,6 @@ export function GenerateModal({ open, onClose, series, sourceDomains, canEditSou
   const [isPending, startTransition] = useTransition()
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const canGenerate = canGenerateWithAi(sourceDomains)
   const busy = stage !== 'idle'
 
   useEffect(() => () => { if (draftTimer.current) clearTimeout(draftTimer.current) }, [])
@@ -93,7 +94,6 @@ export function GenerateModal({ open, onClose, series, sourceDomains, canEditSou
     e.preventDefault()
     setError(null)
     if (!channelId) { setError('Elige una serie.'); return }
-    if (!canGenerate) return
 
     setStage('researching')
     draftTimer.current = setTimeout(() => setStage('drafting'), DRAFTING_AFTER_MS)
@@ -193,15 +193,15 @@ export function GenerateModal({ open, onClose, series, sourceDomains, canEditSou
               </select>
             </div>
 
-            {/* La allowlist a la vista — el punto entero de esta pantalla: el
+            {/* Las fuentes a la vista — el punto entero de esta pantalla: el
                 cliente tiene que ver de dónde va a salir su contenido antes de
-                pedirlo. Mismo criterio de lista que la vista de sólo lectura de
-                newsletter-sources-section.tsx. */}
+                pedirlo. Ya no es una tarea suya: si aún no las tiene, se
+                preparan en esta misma generación a partir de sus zonas. */}
             <div style={{
               padding: '12px 14px', borderRadius: '8px',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-overlay)',
             }}>
-              {canGenerate ? (
+              {sourceDomains.length > 0 ? (
                 <>
                   <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.5 }}>
                     La IA solo podrá citar estas fuentes:
@@ -223,20 +223,13 @@ export function GenerateModal({ open, onClose, series, sourceDomains, canEditSou
                 </>
               ) : (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <AlertTriangle size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <Globe size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-                    Tu equipo todavía no tiene fuentes declaradas, así que la IA no
-                    puede generar contenido: sin allowlist significaría buscar en
-                    toda la web, y eso es justo lo que este diseño evita.{' '}
-                    {canEditSources ? (
-                      <>
-                        <Link href="/settings?tab=negocio" style={{ color: 'var(--accent-gold)' }}>
-                          Declara fuentes en Ajustes → Tu negocio
-                        </Link>.
-                      </>
-                    ) : (
-                      'Las fuentes las fija ITMANO. Escríbenos indicando tu mercado y las dejamos configuradas.'
-                    )}
+                    En esta primera generación se preparan las fuentes de tu mercado
+                    a partir de las zonas de <strong style={{ color: 'var(--text-primary)' }}>Tu negocio</strong>:
+                    estadística oficial, portales inmobiliarios, hipotecas y prensa
+                    de tu zona. A partir de ahí la IA sólo podrá citar esas fuentes,
+                    y las verás aquí en las siguientes ediciones.
                   </p>
                 </div>
               )}
@@ -270,18 +263,13 @@ export function GenerateModal({ open, onClose, series, sourceDomains, canEditSou
               </button>
               <button
                 type="submit"
-                disabled={busy || isPending || !canGenerate || !channelId}
-                title={!canGenerate
-                  ? (canEditSources
-                      ? 'Declara fuentes primero en Ajustes → Tu negocio'
-                      : 'Las fuentes las fija ITMANO. Escríbenos para configurarlas.')
-                  : undefined}
+                disabled={busy || isPending || !channelId}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
                   background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
-                  cursor: (busy || !canGenerate || !channelId) ? 'not-allowed' : 'pointer',
-                  opacity: (busy || !canGenerate || !channelId) ? 0.6 : 1,
+                  cursor: (busy || !channelId) ? 'not-allowed' : 'pointer',
+                  opacity: (busy || !channelId) ? 0.6 : 1,
                 }}
               >
                 {busy

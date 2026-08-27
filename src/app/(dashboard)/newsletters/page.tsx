@@ -119,7 +119,6 @@ export default async function NewslettersPage(
       agents={agents}
       tenantSlug={tenantSlug}
       sourceDomains={sourceDomains}
-      canEditSources={role === 'super_admin'}
       openGenerate={generar === '1'}
     />
   )

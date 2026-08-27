@@ -21,7 +21,6 @@ import { CalibrationPanel } from './calibration-panel'
 import type { FitEvidence } from '@/lib/scoring/calibration'
 import { BusinessProfileSection } from './business-profile-section'
 import type { BusinessProfile } from '@/lib/business/profile'
-import { NewsletterSourcesSection } from './newsletter-sources-section'
 import { Tabs } from '@/components/ui/tabs'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
@@ -1455,10 +1454,8 @@ interface Props {
   agentAccess: Record<string, boolean>
   accessCount: number
   businessProfile: BusinessProfile
-  sourceDomains: string[]
   // Sólo super_admin edita la allowlist de newsletters — el resto del equipo
   // la ve en solo lectura. Mismo criterio que canEditScoring.
-  canEditSources: boolean
   scoringRules: ScoreRule[]
   // Valores recomendados por ITMANO (reglas globales) por id de regla — para el
   // botón "Restablecer a recomendados" del scoring.
@@ -1483,7 +1480,7 @@ interface Props {
 }
 
 export function SettingsClient({
-  tenant, agents, agentAccess, accessCount, businessProfile, sourceDomains, canEditSources, scoringRules, recommendedRules,
+  tenant, agents, agentAccess, accessCount, businessProfile, scoringRules, recommendedRules,
   canEditScoring, fitEvidence, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
 }: Props) {
@@ -1526,7 +1523,6 @@ export function SettingsClient({
                 Sólo la agencia — cómo se presenta cada agente lo escribe él
                 mismo, en su fila de la pestaña Agentes. */}
             <AgencyDescriptionCard initial={tenant.description} canManage={canManageAgents} />
-            <NewsletterSourcesSection domains={sourceDomains} canEdit={canEditSources} />
           </div>
         ),
         scoring: (
