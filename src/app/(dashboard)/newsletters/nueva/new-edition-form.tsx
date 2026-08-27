@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Sparkles } from 'lucide-react'
+import { ArrowLeft, Sparkles, Upload } from 'lucide-react'
 import type { NewsletterSeries, NewsletterCoverSource } from '@/lib/data/newsletters'
 import type { StudioImage } from '@/lib/studio/types'
 import { NEWSLETTER_CONTENT_VERSION } from '@/lib/newsletters/content'
@@ -11,6 +11,7 @@ import { SUPPORTED_LANGUAGE_CODES, LANGUAGE_CONFIG } from '@/lib/config'
 import { CoverPicker } from '../[id]/cover-picker'
 import { createEdition } from '../actions'
 import { GenerateModal } from '../generate-modal'
+import { ImportModal } from '../import-modal'
 
 // Formulario mínimo de creación: serie, titular, idioma y portada. El
 // contenido nace con UN bloque (heading con el titular) porque
@@ -27,6 +28,7 @@ interface Props {
 export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
   const router = useRouter()
   const [showGenerate, setShowGenerate]   = useState(false)
+  const [showImport, setShowImport]       = useState(false)
   const [channelId, setChannelId]         = useState(series[0]?.id ?? '')
   const [title, setTitle]                 = useState('')
   const [language, setLanguage]           = useState('es')
@@ -89,20 +91,39 @@ export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
         <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
           Nueva edición
         </h1>
-        <button
-          type="button"
-          onClick={() => setShowGenerate(true)}
-          className="nl-generate-cta"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '8px 14px', fontSize: '13px', fontWeight: 500,
-            background: 'var(--bg-surface)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
-          }}
-        >
-          <Sparkles size={14} />
-          Generar con IA
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setShowGenerate(true)}
+            className="nl-generate-cta"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
+            }}
+          >
+            <Sparkles size={14} />
+            Generar con IA
+          </button>
+          {/* La alternativa gratuita: redactar en la IA que el cliente ya paga
+              y traer el JSON. Va al lado y no escondido, porque para quien ya
+              tiene su propia IA es el camino por defecto, no el de repuesto. */}
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="nl-generate-cta"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--bg-surface)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
+            }}
+          >
+            <Upload size={14} />
+            Importar de tu IA
+          </button>
+        </div>
       </div>
 
       <style>{`
@@ -191,6 +212,12 @@ export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
         onClose={() => setShowGenerate(false)}
         series={series}
         sourceDomains={sourceDomains}
+      />
+
+      <ImportModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        series={series}
       />
     </div>
   )

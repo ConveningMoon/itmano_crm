@@ -9,7 +9,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { publishBlockers, PLACEHOLDER_COVER_URL } from '@/lib/newsletters/publishable'
-import { NewsletterContentSchema, NewsletterSourceSchema, CONTENT_LIMITS } from '@/lib/newsletters/content'
+import {
+  NewsletterContentSchema, NewsletterSourceSchema, CONTENT_LIMITS,
+  NEWSLETTER_CONTENT_VERSION,
+} from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
 import { deleteOrphanMedia, editionMediaUrls } from '@/lib/newsletters/media'
@@ -527,13 +530,19 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
 
   if (error) return { ok: false, error: error.message }
 
-  // La portada anterior deja de existir para el producto en cuanto se guarda
-  // la nueva: sin esto, cada cambio dejaba un archivo huérfano en el bucket que
-  // ya no aparece en ninguna pantalla y que nadie iba a borrar nunca. Va
-  // DESPUÉS del update, y sólo si de verdad cambió — ver media.ts para las tres
-  // condiciones que se comprueban antes de tocar el storage.
-  if (existing.coverImageUrl !== d.coverImageUrl) {
-    await deleteOrphanMedia(g.db, g.tenantId, existing.coverImageUrl, id)
+  // Toda imagen que la edición TENÍA y ya no tiene deja de existir para el
+  // producto: la portada al cambiarla, y la de un bloque de imagen al borrar
+  // ese bloque. Antes sólo se miraba la portada, así que quitar una imagen del
+  // cuerpo la dejaba en el bucket para siempre.
+  //
+  // Se comparan los dos conjuntos en vez de mirar campo a campo porque mover
+  // una imagen de bloque a portada (o al revés) no debe borrar nada. Va DESPUÉS
+  // del update — ver media.ts para las tres condiciones que se comprueban antes
+  // de tocar el storage.
+  const antes = editionMediaUrls(existing.coverImageUrl, existing.content)
+  const ahora = new Set(editionMediaUrls(d.coverImageUrl, d.content))
+  for (const url of antes) {
+    if (!ahora.has(url)) await deleteOrphanMedia(g.db, g.tenantId, url, id)
   }
 
   revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
@@ -802,6 +811,129 @@ async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ 
 }
 
 
+// ─── Importar una edición escrita por la IA del cliente ──────────────────────
+
+const ImportInput = z.object({
+  channelId: z.string().uuid(),
+  json:      z.string().trim().min(2, 'Pega el JSON que te devolvió tu IA.').max(200_000, 'El JSON es demasiado grande.'),
+})
+
+/**
+ * La forma que se acepta desde fuera. Deliberadamente más laxa que
+ * `EditionInput`: aquí no llegan ni portada ni `coverSource` —los pone el
+ * sistema— y `sources` es opcional.
+ */
+const ImportedEdition = z.object({
+  title:    z.string().trim().min(1, 'El JSON no trae "title".').max(CONTENT_LIMITS.editionTitle),
+  dek:      z.string().trim().max(CONTENT_LIMITS.editionDek).nullable().optional(),
+  language: z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]).optional(),
+  dataAsOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '"dataAsOf" debe ser una fecha AAAA-MM-DD.').nullable().optional(),
+  // Fuentes con la forma que puede producir una IA ajena: `accessed_at` NO se
+  // le pide porque es "cuándo lo consultamos NOSOTROS", un dato que ella no
+  // tiene. Lo pone el sistema al importar, que es exactamente cuando ocurre.
+  sources:  z.array(z.object({
+    id:           z.string().trim().min(1, 'Cada fuente necesita un "id".').max(40),
+    url:          z.string().url('Cada fuente necesita una "url" válida, empezando por https://'),
+    title:        z.string().trim().min(1, 'Cada fuente necesita un "title".').max(300),
+    publisher:    z.string().trim().max(160).optional(),
+    published_at: z.string().trim().max(30).optional(),
+  })).max(40).optional(),
+  blocks:   z.array(z.unknown()).min(1, 'El JSON no trae ningún bloque en "blocks".').max(40),
+})
+
+/**
+ * Crea una edición a partir del JSON que devolvió la IA del propio cliente.
+ *
+ * Existe por dinero: generar con nuestra IA cuesta entre $0,60 y $0,90 por
+ * edición y lo paga ITMANO. Quien ya tiene su suscripción de IA puede redactar
+ * allí y traer el resultado — cero coste para nosotros, cero pasos extra para
+ * él. Ver `import-prompt.ts` para el contrato que se le enseña.
+ *
+ * Nace como BORRADOR y con la portada marcador, exactamente igual que una
+ * edición generada por nosotros: el JSON no trae imágenes, así que la portada
+ * se elige después en el editor.
+ */
+async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: string }>> {
+  const g = await guard()
+  if (!g.ctx) return { ok: false, error: g.error }
+  const parsed = ImportInput.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
+
+  const channel = await resolveEditionChannel(g.db, g.tenantId, parsed.data.channelId)
+  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
+
+  // Un modelo devuelve el JSON envuelto en ```json a poco que se descuide, y
+  // decirle al usuario "JSON inválido" cuando el problema son tres tildes
+  // invertidas es hacerle depurar algo que podemos arreglar nosotros.
+  const limpio = parsed.data.json
+    .replace(/^\s*```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
+    .trim()
+
+  let crudo: unknown
+  try {
+    crudo = JSON.parse(limpio)
+  } catch {
+    return { ok: false, error: 'Eso no es un JSON válido. Copia la respuesta de tu IA completa, sin texto alrededor.' }
+  }
+
+  const edicion = ImportedEdition.safeParse(crudo)
+  if (!edicion.success) {
+    const issue = edicion.error.issues[0]
+    const donde = issue.path.length > 0 ? ` (en "${issue.path.join('.')}")` : ''
+    return { ok: false, error: `${issue.message}${donde}` }
+  }
+  const d = edicion.data
+
+  // Las imágenes se rechazan con su motivo en vez de colarse o desaparecer sin
+  // avisar: un JSON puede traer una URL, pero publicarla bajo la marca del
+  // cliente significa depender de un servidor que no controlamos.
+  const conImagen = d.blocks.some(b => (b as { type?: unknown } | null)?.type === 'image')
+  if (conImagen) {
+    return {
+      ok: false,
+      error: 'El JSON trae bloques de imagen y esos no se pueden importar. Quítalos: la portada y las imágenes se eligen después, en el editor.',
+    }
+  }
+
+  const content = NewsletterContentSchema.safeParse({
+    v: NEWSLETTER_CONTENT_VERSION,
+    blocks: d.blocks,
+  })
+  if (!content.success) {
+    const issue = content.error.issues[0]
+    // `blocks.3.text` le dice al usuario QUÉ bloque revisar; sin eso, un JSON
+    // de cuarenta bloques con un fallo es una búsqueda a ciegas.
+    const donde = issue.path.length > 0 ? ` (en "${issue.path.join('.')}")` : ''
+    return { ok: false, error: `${issue.message}${donde}` }
+  }
+
+  const hoy = new Date().toISOString().slice(0, 10)
+  const sources: NewsletterSource[] = (d.sources ?? []).map(f => ({
+    id:           f.id,
+    url:          f.url,
+    title:        f.title,
+    publisher:    f.publisher ?? '',
+    published_at: f.published_at,
+    accessed_at:  hoy,
+  }))
+
+  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, channel.id, {
+    title:         d.title,
+    dek:           d.dek?.trim() || null,
+    language:      d.language ?? 'es',
+    coverImageUrl: PLACEHOLDER_COVER_URL,
+    coverSource:   'upload',
+    content:       content.data,
+    sources,
+    dataAsOf:      d.dataAsOf ?? null,
+  })
+  if (!inserted.ok) return inserted
+
+  revalidateAll(g.tenantSlug, channel.slug)
+  return inserted
+}
+
 // ─── Prompt de integración ───────────────────────────────────────────────────
 
 const SERIES_INTEGRATION_COLUMNS = columns('acquisition_channels', [
@@ -923,4 +1055,8 @@ export async function generateCoverForEdition(editionId: string): Promise<Result
 
 export async function getSeriesIntegrationPrompt(seriesId: string): Promise<Result<{ prompt: string }>> {
   return guarded('getSeriesIntegrationPrompt', () => getSeriesIntegrationPromptImpl(seriesId))
+}
+
+export async function createEditionFromJson(input: unknown): Promise<Result<{ id: string }>> {
+  return guarded('createEditionFromJson', () => createEditionFromJsonImpl(input))
 }

@@ -40,7 +40,7 @@ function emptyForm(): FormState {
 
 function countCitations(content: NewsletterContent, sourceId: string): number {
   return content.blocks.filter(b => {
-    if (b.type === 'stat') return b.sourceIds.includes(sourceId)
+    if (b.type === 'stat') return b.sourceIds?.includes(sourceId) ?? false
     if (b.type === 'paragraph') return b.sourceIds?.includes(sourceId) ?? false
     return false
   }).length

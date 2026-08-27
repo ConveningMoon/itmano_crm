@@ -59,11 +59,10 @@ export function publishBlockers(input: PublishableInput): PublishBlocker[] {
   const known = new Set(input.sources.map(s => s.id))
 
   for (const block of input.content.blocks) {
-    if (block.type === 'stat') {
-      if (block.sourceIds.length === 0) {
-        blockers.push({ code: 'stat_sin_fuente', detail: `El dato "${block.label}" no tiene fuente.` })
-        continue
-      }
+    // Un dato SIN fuente ya no bloquea (ver content.ts). Lo que sigue
+    // bloqueando es citar una que no existe: eso no es una edición sin
+    // respaldo, es una edición que promete un respaldo que no está.
+    if (block.type === 'stat' && block.sourceIds) {
       for (const id of block.sourceIds) {
         if (!known.has(id)) {
           blockers.push({

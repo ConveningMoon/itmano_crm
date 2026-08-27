@@ -232,8 +232,11 @@ function BlockCard({
   onMove:   (dir: -1 | 1) => void
   onUploadImage: (file: File) => void
 }) {
-  const invalidStatSources = block.type === 'stat' ? block.sourceIds.filter(id => !knownSourceIds.has(id)) : []
-  const statNeedsSource = block.type === 'stat' && (block.sourceIds.length === 0 || invalidStatSources.length > 0)
+  // Citar es opcional; citar MAL, no. Lo único que se marca en rojo es un id
+  // que ya no existe — que es lo que sigue impidiendo publicar.
+  const statSourceIds = block.type === 'stat' ? (block.sourceIds ?? []) : []
+  const invalidStatSources = statSourceIds.filter(id => !knownSourceIds.has(id))
+  const statNeedsSource = block.type === 'stat' && invalidStatSources.length > 0
 
   return (
     <div style={{
@@ -482,23 +485,21 @@ function BlockCard({
             />
           </div>
           <div>
-            <label style={SMALL_LABEL}>Fuentes citadas (obligatorio)</label>
+            <label style={SMALL_LABEL}>Fuentes citadas (opcional)</label>
             <SourceToggles
               sources={sources}
-              selected={block.sourceIds}
+              selected={statSourceIds}
               disabled={!canEdit}
               onToggle={id => {
-                const next = block.sourceIds.includes(id)
-                  ? block.sourceIds.filter(x => x !== id)
-                  : [...block.sourceIds, id]
+                const next = statSourceIds.includes(id)
+                  ? statSourceIds.filter(x => x !== id)
+                  : [...statSourceIds, id]
                 onChange({ ...block, sourceIds: next })
               }}
             />
             {statNeedsSource && (
               <p style={{ fontSize: '11px', color: 'var(--accent-coral)', margin: '6px 0 0' }}>
-                {block.sourceIds.length === 0
-                  ? 'Este dato no tiene fuente. No podrás publicar mientras falte.'
-                  : 'Este dato cita una fuente que ya no existe.'}
+                Este dato cita una fuente que ya no existe.
               </p>
             )}
           </div>
@@ -603,7 +604,7 @@ function BlockPreview({ block }: { block: NewsletterBlock }) {
 function SourcesPreview({ blocks, sources }: { blocks: NewsletterBlock[]; sources: NewsletterSource[] }) {
   const cited = new Set<string>()
   for (const b of blocks) {
-    if (b.type === 'stat') b.sourceIds.forEach(id => cited.add(id))
+    if (b.type === 'stat') b.sourceIds?.forEach(id => cited.add(id))
     if (b.type === 'paragraph') b.sourceIds?.forEach(id => cited.add(id))
   }
   const used = sources.filter(s => cited.has(s.id))

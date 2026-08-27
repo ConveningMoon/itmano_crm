@@ -86,15 +86,24 @@ const CalloutBlock = z.object({
   type: z.literal('callout'), tone: z.enum(['info', 'warning']),
   text: text(CONTENT_LIMITS.callout, 'El aviso no puede quedar vacío.', `El aviso es demasiado largo (máximo ${CONTENT_LIMITS.callout} caracteres).`),
 })
-// El único bloque cuyas fuentes son OBLIGATORIAS: un dato numérico sin respaldo
-// es exactamente lo que este sistema existe para impedir.
+// Las fuentes de un dato son OPCIONALES.
+//
+// Fueron obligatorias, y el motivo era bueno: un dato numérico sin respaldo es
+// lo que este sistema nació para impedir. Pero esa regla sólo se sostiene
+// cuando el contenido lo produce la investigación con IA, que llega con las
+// URLs en la mano. En cuanto una edición se escribe a mano —o se importa
+// desde la IA del propio cliente— exigir una fuente por cada cifra convierte
+// una garantía en un obstáculo: el bloque nace inválido y no deja publicar.
+//
+// La garantía no desaparece, cambia de sitio: el camino con IA sigue pidiendo
+// la cita en su prompt (tiene el dossier delante, citarla no le cuesta nada), y
+// `publishBlockers` sigue rechazando una edición que cite una fuente que no
+// existe. Lo que se retira es el "toda cifra necesita fuente" a secas.
 const StatBlock = z.object({
   type: z.literal('stat'),
   label: text(CONTENT_LIMITS.statLabel, 'El dato necesita una etiqueta que diga qué mide.', `La etiqueta del dato es demasiado larga (máximo ${CONTENT_LIMITS.statLabel} caracteres).`),
   value: text(CONTENT_LIMITS.statValue, 'El dato necesita un valor.', `El valor del dato es demasiado largo (máximo ${CONTENT_LIMITS.statValue} caracteres).`),
-  sourceIds: z.array(z.string())
-    .min(1, 'Todo dato necesita al menos una fuente que lo respalde.')
-    .max(8, 'Un dato cita como máximo 8 fuentes.'),
+  sourceIds: z.array(z.string()).max(8, 'Un dato cita como máximo 8 fuentes.').optional(),
 })
 
 export const NewsletterBlockSchema = z.discriminatedUnion('type', [
