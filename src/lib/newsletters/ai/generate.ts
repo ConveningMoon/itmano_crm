@@ -4,8 +4,8 @@ import { columns } from '@/lib/supabase/columns'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import { recordAiUsage, webSearchCostUsd, computeCostUsd } from '@/lib/services/ai-usage'
 import { canGenerateWithAi } from '../source-domains'
-import { ensureSourceDomains } from './source-catalog'
-import { researchMarket } from './research'
+import { ensureSourceDomains, pruneSourceDomains } from './source-catalog'
+import { researchMarket, parseInaccessibleDomains } from './research'
 import { cacheKeyFor, readCachedDossier, writeCachedDossier, type CachedDossier } from './dossier-cache'
 import { draftEdition } from './draft'
 import { spendOf, type AiSpend } from './spend'
@@ -182,12 +182,47 @@ export async function generateNewsletterDraft(args: {
     }
   }
 
+  // `allowed_domains` se valida ANTES de inferir: basta un dominio que bloquee
+  // al rastreador de Anthropic para que la llamada entera vuelva con un 400 y
+  // sin cobrar. Le pasó a la primera generación real — la lista automática
+  // traía prensa que bloquea a los rastreadores de IA, que es lo normal en los
+  // grandes diarios.
+  //
+  // El error nombra los culpables, así que se podan de la allowlist guardada y
+  // se reintenta UNA vez. Guardar la lista limpia es lo que hace que el
+  // problema se arregle una sola vez y no en cada generación. Y tiene que ser
+  // en caliente: qué sitio bloquea al rastreador cambia con el tiempo, así que
+  // ninguna lista curada a mano aguanta sola.
+  let usable = domains
   let dossier
+  let sinFuentesUtiles = false
   try {
-    dossier = await researchMarket({
-      topic: args.topic, language: args.language, market, areas, domains, brandName,
-    })
+    try {
+      dossier = await researchMarket({
+        topic: args.topic, language: args.language, market, areas, domains: usable, brandName,
+      })
+    } catch (primero) {
+      const bloqueados = parseInaccessibleDomains(primero)
+      if (bloqueados.length === 0) throw primero
+
+      usable = await pruneSourceDomains(ctx.tenant_id, bloqueados)
+      if (!canGenerateWithAi(usable)) {
+        // Se sale por el catch de fuera para no duplicar el registro de gasto;
+        // este camino no gastó nada (el 400 se rechaza antes de inferir).
+        sinFuentesUtiles = true
+        throw primero
+      }
+      dossier = await researchMarket({
+        topic: args.topic, language: args.language, market, areas, domains: usable, brandName,
+      })
+    }
   } catch (e) {
+    if (sinFuentesUtiles) {
+      return {
+        ok: false,
+        error: 'Ninguna de las fuentes de tu mercado admite la búsqueda automática. Escríbenos y te dejamos una lista nueva.',
+      }
+    }
     // La investigación lanza en dos sitios que están DESPUÉS de la respuesta de
     // la API (sin texto, y fallo de infraestructura de búsqueda): ~187.000
     // tokens de entrada ya cobrados, entre $0,5 y $0,9. Sin esto, ese gasto
@@ -208,7 +243,7 @@ export async function generateNewsletterDraft(args: {
   await registrar(
     'newsletter_research',
     { usage: dossier.usage, searches: dossier.searches },
-    { searches: dossier.searches, domains: domains.length, topic: dossier.topic },
+    { searches: dossier.searches, domains: usable.length, topic: dossier.topic },
   )
 
   if (dossier.findings.length === 0) {
@@ -222,7 +257,10 @@ export async function generateNewsletterDraft(args: {
   // dossier vacío no ahorraría nada y convertiría el próximo intento del mismo
   // tema en el mismo error, sin darle ocasión de buscar de nuevo.
   if (cacheKey) {
-    await writeCachedDossier(ctx.tenant_id, cacheKey, domains, {
+    // `usable`, no `domains`: si hubo poda, el dossier salió de la lista corta.
+    // Guardar la larga haría que `readCachedDossier` lo descartara siempre por
+    // no coincidir la allowlist — un caché que nunca acierta.
+    await writeCachedDossier(ctx.tenant_id, cacheKey, usable, {
       topic:    dossier.topic,
       summary:  dossier.summary,
       findings: dossier.findings,
@@ -266,7 +304,7 @@ export async function generateNewsletterDraft(args: {
       aiRun: {
         model:    MODEL,
         topic:    args.topic,
-        domains,
+        domains:  usable,
         searches: dossier.searches,
         at:       new Date().toISOString(),
         cached:   false,

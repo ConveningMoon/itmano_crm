@@ -155,6 +155,39 @@ function buildPrompt(args: {
 }
 
 /**
+ * Los dominios que el rastreador de Anthropic NO puede leer, sacados del error.
+ *
+ * `allowed_domains` se valida ANTES de inferir: si uno solo de la lista bloquea
+ * al rastreador, la llamada entera vuelve con un 400 y este mensaje —
+ *
+ *   The following domains are not accessible to our user agent:
+ *   ['apnews.com', 'nytimes.com', 'pilotonline.com', ...]
+ *
+ * — sin cobrar nada. Es el fallo que tumbó la primera generación real: la lista
+ * automática traía prensa que bloquea a los rastreadores de IA por robots.txt,
+ * que es lo normal en los grandes diarios.
+ *
+ * Devolver los nombres permite podarlos y reintentar en vez de rendirse. Y hay
+ * que poder hacerlo en caliente: qué sitio bloquea al rastreador cambia con el
+ * tiempo, así que una lista curada a mano se pudre sola.
+ */
+export function parseInaccessibleDomains(error: unknown): string[] {
+  const mensaje =
+    typeof error === 'string' ? error
+    : error instanceof Error ? error.message
+    : ''
+  if (!mensaje.includes('not accessible to our user agent')) return []
+
+  // Los nombres van entre comillas dentro de un array estilo Python.
+  const lista = mensaje.slice(mensaje.indexOf('not accessible to our user agent'))
+  const encontrados = lista.match(/['"]([a-z0-9.-]+\.[a-z]{2,})['"]/gi) ?? []
+  const limpios = encontrados
+    .map(m => m.replace(/['"]/g, '').trim().toLowerCase())
+    .filter(Boolean)
+  return [...new Set(limpios)]
+}
+
+/**
  * Investiga y devuelve el dossier. Lanza si no hay nada utilizable — el
  * llamador lo convierte en `{ ok: false }`; aquí no se decide cómo se muestra.
  *

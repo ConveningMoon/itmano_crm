@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
+import type { NewsletterContent } from './content'
 
 // Limpieza del bucket `newsletter-media`.
 //
@@ -119,4 +120,23 @@ export async function deleteOrphanMedia(
   } catch (e) {
     console.error('[newsletter-media] no se pudo limpiar', ruta, e)
   }
+}
+
+/**
+ * Todas las imágenes de una edición: la portada y las de sus bloques.
+ *
+ * Deduplicadas, porque reutilizar la portada dentro del cuerpo es lo normal en
+ * cuanto alguien vuelve a elegir una imagen que ya subió — y borrar dos veces
+ * la misma ruta hace que el segundo intento parezca un fallo.
+ */
+export function editionMediaUrls(
+  coverImageUrl: string | null | undefined,
+  content: NewsletterContent | null,
+): string[] {
+  const urls = new Set<string>()
+  if (coverImageUrl) urls.add(coverImageUrl)
+  for (const bloque of content?.blocks ?? []) {
+    if (bloque.type === 'image' && bloque.url) urls.add(bloque.url)
+  }
+  return [...urls]
 }

@@ -12,7 +12,7 @@ import { publishBlockers, PLACEHOLDER_COVER_URL } from '@/lib/newsletters/publis
 import { NewsletterContentSchema, NewsletterSourceSchema, CONTENT_LIMITS } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
-import { deleteOrphanMedia } from '@/lib/newsletters/media'
+import { deleteOrphanMedia, editionMediaUrls } from '@/lib/newsletters/media'
 import { buildNewsletterIntegrationPrompt } from '@/lib/services/newsletter-integration-prompt'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { getEditionById } from '@/lib/data/newsletters'
@@ -683,9 +683,13 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
     .delete().eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
 
-  // Su portada se queda sin dueño al borrar la fila. Se limpia DESPUÉS del
-  // delete: así `sigueEnUso` ya no puede contar a la propia edición.
-  await deleteOrphanMedia(g.db, g.tenantId, existing.coverImageUrl, id)
+  // Al borrar la fila, TODAS sus imágenes se quedan sin dueño: la portada y las
+  // de los bloques de imagen. Antes sólo se limpiaba la portada y el cuerpo se
+  // quedaba en el bucket para siempre. Se hace DESPUÉS del delete: así
+  // `sigueEnUso` ya no puede contar a la propia edición.
+  for (const url of editionMediaUrls(existing.coverImageUrl, existing.content)) {
+    await deleteOrphanMedia(g.db, g.tenantId, url, id)
+  }
 
   revalidateAll(g.tenantSlug, seriesSlug, existing.slug)
   return { ok: true, data: null }
