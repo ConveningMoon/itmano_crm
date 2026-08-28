@@ -14,7 +14,7 @@ import {
   NEWSLETTER_CONTENT_VERSION,
 } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
-import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
+import { slugify, uniqueSlug, isUniqueViolation, genPublicId } from '@/lib/newsletters/slug'
 import { deleteOrphanMedia, editionMediaUrls } from '@/lib/newsletters/media'
 import { buildNewsletterIntegrationPrompt } from '@/lib/services/newsletter-integration-prompt'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
@@ -68,16 +68,6 @@ async function seriesSlugFor(
  */
 function ownerAgentFor(ctx: TenantContext, requested: string | null): string | null {
   return ctx.role === 'agent' ? (ctx.agent_id ?? null) : requested
-}
-
-// Mismo generador que usa src/app/(dashboard)/sources/actions.ts para las
-// demás fuentes: el CHECK de la base (`^chn_[a-z0-9]{12}$`) exige exactamente
-// 12 caracteres [a-z0-9], y solo un bucle sobre ese alfabeto lo garantiza.
-function genPublicId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let s = ''
-  for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
-  return `chn_${s}`
 }
 
 const TENANT_COLUMNS = columns('tenants', ['slug'])

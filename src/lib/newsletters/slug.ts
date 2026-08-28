@@ -92,3 +92,13 @@ export function isUniqueViolation(error: { code?: string | null; message?: strin
   const msg = error.message ?? ''
   return /duplicate key value|_unique|_slug_idx/i.test(msg)
 }
+
+// Mismo generador que usa src/app/(dashboard)/sources/actions.ts para las
+// demás fuentes: el CHECK de la base (`^chn_[a-z0-9]{12}$`) exige exactamente
+// 12 caracteres [a-z0-9], y solo un bucle sobre ese alfabeto lo garantiza.
+export function genPublicId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let s = ''
+  for (let i = 0; i < 12; i++) s += chars[Math.floor(Math.random() * chars.length)]
+  return `chn_${s}`
+}
