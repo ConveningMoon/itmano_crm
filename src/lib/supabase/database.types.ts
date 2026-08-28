@@ -727,6 +727,7 @@ export type Database = {
         Row: {
           channel_id: string
           created_at: string
+          edition_id: string | null
           id: string
           tenant_id: string
           traffic_source: string | null
@@ -736,6 +737,7 @@ export type Database = {
         Insert: {
           channel_id: string
           created_at?: string
+          edition_id?: string | null
           id?: string
           tenant_id: string
           traffic_source?: string | null
@@ -745,6 +747,7 @@ export type Database = {
         Update: {
           channel_id?: string
           created_at?: string
+          edition_id?: string | null
           id?: string
           tenant_id?: string
           traffic_source?: string | null
@@ -757,6 +760,13 @@ export type Database = {
             columns: ["channel_id"]
             isOneToOne: false
             referencedRelation: "acquisition_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_page_views_edition_id_fkey"
+            columns: ["edition_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_editions"
             referencedColumns: ["id"]
           },
           {
@@ -1529,6 +1539,7 @@ export type Database = {
         Row: {
           ai_generated: boolean
           ai_run: Json | null
+          category: string
           channel_id: string
           content: Json
           cover_image_url: string
@@ -1553,6 +1564,7 @@ export type Database = {
         Insert: {
           ai_generated?: boolean
           ai_run?: Json | null
+          category?: string
           channel_id: string
           content?: Json
           cover_image_url: string
@@ -1577,6 +1589,7 @@ export type Database = {
         Update: {
           ai_generated?: boolean
           ai_run?: Json | null
+          category?: string
           channel_id?: string
           content?: Json
           cover_image_url?: string
