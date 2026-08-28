@@ -38,5 +38,8 @@ create index if not exists channel_page_views_edition_idx
   on public.channel_page_views (edition_id)
   where edition_id is not null;
 
--- `anon` escribe vistas por el beacon; necesita poder poner la columna.
-grant insert (edition_id) on public.channel_page_views to anon;
+-- Sin grant a `anon` aquí: el beacon de vistas (`/api/intake/[publicId]/view`)
+-- escribe con `createAdminClient()` (service_role), nunca con la clave anónima.
+-- Y aunque `anon` insertara, la policy `channel_page_views_insert` (migración
+-- 003) exige `is_super_admin() OR tenant_id = get_my_tenant_id()`, que `anon`
+-- no cumple nunca — RLS ya le cierra la puerta a esta tabla por completo.
