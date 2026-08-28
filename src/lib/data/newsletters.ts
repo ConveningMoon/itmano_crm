@@ -6,6 +6,7 @@ import {
   type NewsletterContent, type NewsletterSource,
 } from '@/lib/newsletters/content'
 import { parseSourceDomains } from '@/lib/newsletters/source-domains'
+import { parseCategory, type NewsletterCategory } from '@/lib/newsletters/category'
 
 // Acceso a datos de newsletters. La SERIE es una fila de acquisition_channels
 // con channel_type = 'newsletter'; las EDICIONES son tabla propia.
@@ -43,6 +44,7 @@ export interface NewsletterEdition {
   content:              NewsletterContent | null
   sources:              NewsletterSource[]
   dataAsOf:             string | null
+  category:             NewsletterCategory
   status:               NewsletterStatus
   publishedAt:          string | null
   aiGenerated:          boolean
@@ -61,7 +63,7 @@ const SERIES_COLUMNS = columns('acquisition_channels', [
 const EDITION_COLUMNS = columns('newsletter_editions', [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'cover_source', 'content', 'sources',
-  'data_as_of', 'status', 'published_at', 'ai_generated', 'unpublished_by_billing',
+  'data_as_of', 'category', 'status', 'published_at', 'ai_generated', 'unpublished_by_billing',
   'created_by_agent_id', 'created_by_user_id', 'created_at', 'updated_at',
 ])
 
@@ -83,6 +85,7 @@ function mapEdition(row: any): NewsletterEdition {
     content:              parseNewsletterContent(row.content),
     sources:              parseNewsletterSources(row.sources),
     dataAsOf:             row.data_as_of ?? null,
+    category:             parseCategory(row.category),
     status:               row.status,
     publishedAt:          row.published_at ?? null,
     aiGenerated:          row.ai_generated === true,
@@ -200,6 +203,24 @@ export async function getEditionsForSeries(channelId: string, tenantId: string):
     .eq('channel_id', channelId)
     .order('created_at', { ascending: false })
   // reason: ver mapEdition.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data ?? []) as any[]).map(mapEdition)
+}
+
+/**
+ * Todas las ediciones del tenant, en cualquier estado, la más reciente primero.
+ *
+ * Sustituye a `getEditionsForSeries`: con una sola newsletter por tenant, filtrar
+ * por canal ya no distingue nada.
+ */
+export async function getEditionsForTenant(tenantId: string): Promise<NewsletterEdition[]> {
+  const db = createAdminClient()
+  const { data } = await db
+    .from('newsletter_editions')
+    .select(EDITION_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+  // reason: el cliente de Supabase no está tipado en este repo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return ((data ?? []) as any[]).map(mapEdition)
 }
