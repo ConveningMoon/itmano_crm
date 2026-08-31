@@ -7,6 +7,7 @@ import { getPublicTenant, getPublicEdition, getPublicNewsletterPaths } from '../
 import { formatDataAsOf, formatEditionDate } from '../nl-format'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from '../nl-chrome'
 import { renderNewsletterHtml } from '@/lib/newsletters/render'
+import { EditionViewBeacon } from './edition-view-beacon'
 
 // Lectura pública de una edición — news.itmano.com/<tenant-slug>/<edición>.
 // La edición cuelga directamente del tenant: ya no hay serie de por medio.
@@ -55,6 +56,7 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
 
   return (
     <div style={{ background: P.paper, color: P.ink, minHeight: '100vh' }}>
+      <EditionViewBeacon editionId={edition.id} />
       <style>{`
         .nl-article h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: ${P.ink}; margin: 36px 0 14px; }
         .nl-article h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: ${P.ink}; margin: 28px 0 12px; }
