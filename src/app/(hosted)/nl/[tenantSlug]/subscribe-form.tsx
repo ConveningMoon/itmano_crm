@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { Pal } from '../nl-chrome'
+import type { Pal } from './nl-chrome'
 
 // Formulario de suscripción a una serie de newsletter — postea al intake
 // público (/api/intake/<publicId>/submit), mismo contrato y endpoint que

@@ -52,7 +52,7 @@ export async function restoreAfterReactivation(tenantId: string): Promise<Reacti
   const republished = ((restoredNewsletters ?? []) as any[]) as RevalidatableEdition[]
 
   // Sin esto, el archivo del cliente que acaba de volver a pagar sigue
-  // apareciendo vacío hasta que expire la ventana de ISR (300 s en las tres
+  // apareciendo vacío hasta que expire la ventana de ISR (300 s en las dos
   // rutas). Best-effort: no puede tumbar la reactivación.
   if (republished.length > 0) await revalidateNewsletterPaths(supabase, tenantId, republished)
 

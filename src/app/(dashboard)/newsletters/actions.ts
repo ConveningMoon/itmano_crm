@@ -32,37 +32,13 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 // Cada action revalida su ruta pública además de la del CRM: publicar tiene que
 // verse ya, no en la próxima ventana de ISR.
 //
-// El slug de la SERIE no es opcional en la práctica: sin él, las dos rutas más
-// profundas nunca se revalidan y publicar deja hasta `revalidate` segundos de
-// 404 cacheado (y despublicar, otros tantos de edición legible). Por eso toda
-// action que toca una edición existente lo resuelve antes con `seriesSlugFor`.
-//
-// Las actions de CREACIÓN ya no lo pasan: con una sola newsletter por tenant,
-// el slug de la serie deja de formar parte de la URL pública (tarea siguiente).
-function revalidateAll(tenantSlug: string, seriesSlug?: string | null, editionSlug?: string | null) {
+// Con una sola newsletter por tenant, la URL pública ya no lleva slug de serie:
+// sólo tenant y edición.
+function revalidateAll(tenantSlug: string, editionSlug?: string | null) {
   revalidatePath('/newsletters')
   if (!tenantSlug) return
   revalidatePath(`/nl/${tenantSlug}`)
-  if (!seriesSlug) return
-  revalidatePath(`/nl/${tenantSlug}/${seriesSlug}`)
-  if (editionSlug) revalidatePath(`/nl/${tenantSlug}/${seriesSlug}/${editionSlug}`)
-}
-
-const CHANNEL_SLUG_COLUMNS = columns('acquisition_channels', ['slug'])
-
-/** Slug del canal de newsletter al que cuelga una edición — el que falta para revalidar. */
-async function seriesSlugFor(
-  db: ReturnType<typeof createAdminClient>,
-  tenantId: string,
-  channelId: string,
-): Promise<string | null> {
-  const { data } = await db
-    .from('acquisition_channels')
-    .select(CHANNEL_SLUG_COLUMNS)
-    .eq('id', channelId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-  return (data as { slug: string } | null)?.slug ?? null
+  if (editionSlug) revalidatePath(`/nl/${tenantSlug}/${editionSlug}`)
 }
 
 const TENANT_COLUMNS = columns('tenants', ['slug'])
@@ -294,7 +270,7 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
     if (!ahora.has(url)) await deleteOrphanMedia(g.db, g.tenantId, url, id)
   }
 
-  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
+  revalidateAll(g.tenantSlug, existing.slug)
   return { ok: true, data: null }
 }
 
@@ -342,7 +318,7 @@ async function publishEditionImpl(id: string): Promise<Result<null>> {
     .eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, edition.channelId), edition.slug)
+  revalidateAll(g.tenantSlug, edition.slug)
   return { ok: true, data: null }
 }
 
@@ -362,7 +338,7 @@ async function unpublishEditionImpl(id: string): Promise<Result<null>> {
   if (error) return { ok: false, error: error.message }
   // Despublicar es el caso donde MÁS importa llegar a la ruta de la edición:
   // sin revalidarla, la pieza retirada se sigue sirviendo desde el caché.
-  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
+  revalidateAll(g.tenantSlug, existing.slug)
   return { ok: true, data: null }
 }
 
@@ -389,7 +365,7 @@ async function archiveEditionImpl(id: string): Promise<Result<null>> {
     .update({ status: 'archived' })
     .eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
+  revalidateAll(g.tenantSlug, existing.slug)
   return { ok: true, data: null }
 }
 
@@ -412,7 +388,7 @@ async function restoreEditionImpl(id: string): Promise<Result<null>> {
     .update({ status: 'draft' })
     .eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, existing.channelId), existing.slug)
+  revalidateAll(g.tenantSlug, existing.slug)
   return { ok: true, data: null }
 }
 
@@ -433,10 +409,6 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
     return { ok: false, error: 'Primero archiva la edición antes de eliminarla permanentemente.' }
   }
 
-  // El slug de la serie se resuelve ANTES del delete: después, la edición ya no
-  // existe para decir de qué colgaba.
-  const seriesSlug = await seriesSlugFor(g.db, g.tenantId, existing.channelId)
-
   const { error } = await g.db.from('newsletter_editions')
     .delete().eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
@@ -449,7 +421,7 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
     await deleteOrphanMedia(g.db, g.tenantId, url, id)
   }
 
-  revalidateAll(g.tenantSlug, seriesSlug, existing.slug)
+  revalidateAll(g.tenantSlug, existing.slug)
   return { ok: true, data: null }
 }
 
@@ -558,7 +530,7 @@ async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ 
   // se acumulaban huérfanos: cada reintento dejaba la anterior en el bucket.
   await deleteOrphanMedia(g.db, g.tenantId, edition.coverImageUrl, editionId)
 
-  revalidateAll(g.tenantSlug, await seriesSlugFor(g.db, g.tenantId, edition.channelId), edition.slug)
+  revalidateAll(g.tenantSlug, edition.slug)
   return { ok: true, data: { url: result.url } }
 }
 
@@ -747,7 +719,7 @@ async function getNewsletterIntegrationPromptImpl(): Promise<Result<{ prompt: st
     seriesName:  channel.name,
     publicId:    channel.public_id,
     baseUrl:     process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com',
-    archiveUrl:  g.tenantSlug ? hostedNewsletterUrl(g.tenantSlug, channel.slug) : null,
+    archiveUrl:  g.tenantSlug ? hostedNewsletterUrl(g.tenantSlug) : null,
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     // Pública por diseño: es la misma que viaja en cada página del CRM y la que
     // el front del cliente tiene que usar. La service_role no sale de aquí.
