@@ -8,8 +8,12 @@ import {
 import { parseSourceDomains } from '@/lib/newsletters/source-domains'
 import { parseCategory, type NewsletterCategory } from '@/lib/newsletters/category'
 
-// Acceso a datos de newsletters. La SERIE es una fila de acquisition_channels
-// con channel_type = 'newsletter'; las EDICIONES son tabla propia.
+// Acceso a datos de newsletters. Un tenant tiene UNA sola newsletter, un canal
+// implícito (fila de acquisition_channels con channel_type = 'newsletter',
+// creado por el sistema — ver src/lib/newsletters/channel.ts) que el usuario
+// nunca ve ni elige. Lo que se lista y edita aquí son las EDICIONES, cada una
+// con una categoría (informativo/educativo/análisis/anuncio) como etiqueta
+// para el lector, no como una serie propia.
 
 export type NewsletterStatus      = 'draft' | 'published' | 'archived'
 export type NewsletterCoverSource = 'upload' | 'studio' | 'ai'

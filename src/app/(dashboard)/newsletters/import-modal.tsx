@@ -143,7 +143,7 @@ export function ImportModal({ open, onClose }: Props) {
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
-              <label style={LABEL_STYLE}>Categoría</label>
+              <label style={LABEL_STYLE}>Categoría (si el JSON no la trae)</label>
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value as NewsletterCategory)}

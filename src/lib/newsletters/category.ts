@@ -19,10 +19,15 @@ export const CATEGORY_LABELS: Record<NewsletterCategory, string> = {
 
 const VALIDAS = new Set<string>(NEWSLETTER_CATEGORIES)
 
-/** Parse defensivo: una fila nunca debería traer otra cosa, pero si la trae
- *  no puede tumbar la lista entera. */
-export function parseCategory(raw: unknown): NewsletterCategory {
+/**
+ * Parse defensivo: una fila nunca debería traer otra cosa, pero si la trae no
+ * puede tumbar la lista entera. `fallback` existe para quien tiene un valor
+ * mejor que 'informativo' a mano cuando el crudo no sirve — por ejemplo, el
+ * import de JSON externo, donde lo mejor a mano es lo que la persona eligió
+ * en el selector del modal.
+ */
+export function parseCategory(raw: unknown, fallback: NewsletterCategory = 'informativo'): NewsletterCategory {
   return typeof raw === 'string' && VALIDAS.has(raw)
     ? (raw as NewsletterCategory)
-    : 'informativo'
+    : fallback
 }

@@ -7,13 +7,16 @@ import { ModalShell } from '@/components/motion/modal-shell'
 import { SUPPORTED_LANGUAGE_CODES, LANGUAGE_CONFIG } from '@/lib/config'
 import { generateEditionWithAi } from './actions'
 
-// Modal de "Generar con IA" — el hermano del de "Nueva serie" (mismo
-// ModalShell, mismos estilos de campo), pero con dos cosas que ese no tiene:
-// la allowlist a la vista (el argumento de venta entero de esta feature: el
-// cliente ve de dónde va a salir su contenido ANTES de pedirlo) y un aviso de
-// que tarda, porque generateEditionWithAi hace dos llamadas al modelo con
-// búsqueda web por medio — decenas de segundos, no el instante de crear una
-// serie.
+// Modal de "Generar con IA": mismo ModalShell y mismos estilos de campo que
+// el resto de modales del módulo, con dos cosas propias: la allowlist a la
+// vista (el argumento de venta entero de esta feature: el cliente ve de dónde
+// va a salir su contenido ANTES de pedirlo) y un aviso de que tarda, porque
+// generateEditionWithAi hace dos llamadas al modelo con búsqueda web por
+// medio — decenas de segundos, no el instante de guardar un formulario.
+//
+// No pide serie ni categoría: con una sola newsletter por tenant no hay serie
+// que elegir, y la categoría la decide después quien edite (nace en
+// 'informativo' y se cambia en el editor, ver actions.ts).
 //
 // La allowlist ya NO es un requisito que el usuario tenga que cumplir antes:
 // se genera sola en la primera generación, a partir de las zonas de "Tu
@@ -71,9 +74,9 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
 
   useEffect(() => () => { if (draftTimer.current) clearTimeout(draftTimer.current) }, [])
 
-  // Se limpia al CERRAR, no al abrir — mismo criterio que new-series-modal:
-  // así la próxima apertura ya arranca en limpio, sin poner un setState dentro
-  // de un efecto disparado por el cambio de `open`.
+  // Se limpia al CERRAR, no al abrir: así la próxima apertura ya arranca en
+  // limpio, sin poner un setState dentro de un efecto disparado por el cambio
+  // de `open`.
   function handleClose() {
     if (busy) return // ya se pagó la investigación/redacción — no se cierra a medias.
     setTopic('')

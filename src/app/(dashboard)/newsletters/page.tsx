@@ -88,7 +88,8 @@ export default async function NewslettersPage() {
     getNewsletterStats(tenant_id),
     db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle(),
     sequenceId
-      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS).eq('sequence_id', sequenceId)
+      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS)
+          .eq('tenant_id', tenant_id).eq('sequence_id', sequenceId)
       : Promise.resolve({ data: null }),
   ])
   // reason: el cliente de Supabase no está tipado en este repo.

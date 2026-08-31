@@ -14,7 +14,7 @@ import {
   NEWSLETTER_CONTENT_VERSION,
 } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
-import { NEWSLETTER_CATEGORIES } from '@/lib/newsletters/category'
+import { NEWSLETTER_CATEGORIES, parseCategory, type NewsletterCategory } from '@/lib/newsletters/category'
 import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
 import { deleteOrphanMedia, editionMediaUrls } from '@/lib/newsletters/media'
@@ -567,8 +567,10 @@ async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ 
 
 const ImportInput = z.object({
   json:     z.string().trim().min(2, 'Pega el JSON que te devolvió tu IA.').max(200_000, 'El JSON es demasiado grande.'),
-  // La elige la persona en el modal, igual que en el formulario manual — no
-  // depende de que la IA externa se acuerde de incluir "category" en su JSON.
+  // El valor por DEFECTO, para cuando el JSON no trae "category" (o trae algo
+  // que no es una de las cuatro válidas). Si el JSON sí la trae, gana ella:
+  // la IA del cliente acaba de escribir la pieza y sabe mejor que nadie si es
+  // informativa o educativa — descartar su elección tira información buena.
   category: z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
 })
 
@@ -582,7 +584,11 @@ const ImportedEdition = z.object({
   dek:      z.string().trim().max(CONTENT_LIMITS.editionDek).nullable().optional(),
   language: z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]).optional(),
   dataAsOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '"dataAsOf" debe ser una fecha AAAA-MM-DD.').nullable().optional(),
-  category: z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
+  // Deliberadamente sin `z.enum(...)`: un valor que no es una de las cuatro
+  // categorías válidas NO debe tumbar la importación entera por un campo que
+  // de todos modos tiene un valor de repuesto (el del selector). `parseCategory`
+  // hace la validación real más abajo, con ese repuesto como fallback.
+  category: z.string().trim().optional(),
   // Fuentes con la forma que puede producir una IA ajena: `accessed_at` NO se
   // le pide porque es "cuándo lo consultamos NOSOTROS", un dato que ella no
   // tiene. Lo pone el sistema al importar, que es exactamente cuando ocurre.
@@ -686,9 +692,11 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
     content:       content.data,
     sources,
     dataAsOf:      d.dataAsOf ?? null,
-    // La del formulario manda sobre la del JSON: es la elección explícita de
-    // quien importa, no una inferencia de una IA ajena.
-    category:      parsed.data.category,
+    // La del JSON gana cuando la trae y es válida: es la elección de la IA que
+    // acaba de escribir la pieza. Si no la trae (o trae algo que no es una de
+    // las cuatro), cae a la del selector del modal — el `z.enum(...)` de
+    // `ImportInput` ya garantiza que sea una de las cuatro.
+    category:      parseCategory(d.category, parsed.data.category as NewsletterCategory),
   })
   if (!inserted.ok) return inserted
 
