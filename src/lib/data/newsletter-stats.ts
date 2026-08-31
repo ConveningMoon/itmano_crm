@@ -1,12 +1,18 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
-import { ensureNewsletterChannel } from '@/lib/newsletters/channel'
 
 // Estadísticas de la newsletter del tenant, por edición y en total.
 //
 // `aggregateStats` es pura a propósito: no toca la base, así que se prueba
 // con datos de mentira sin mocks. `getNewsletterStats` sólo lee y delega.
+//
+// Recibe `channelId` ya resuelto en vez de resolverlo por dentro: su único
+// llamador (newsletters/page.tsx) ya corre `ensureNewsletterChannel` una línea
+// antes para preparar la página, y ese helper ESCRIBE (puede crear el canal).
+// Un getter que escribe es una sorpresa; repetir la resolución aquí además
+// duplicaba la lectura. Devolver `SIN_DATOS` sigue siendo el llamador quien
+// decide — ver newsletters/page.tsx.
 
 export interface EditionStats {
   views:       number
@@ -81,18 +87,25 @@ const STATS_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'status'])
 const STATS_VIEW_COLUMNS    = columns('channel_page_views', ['edition_id'])
 const STATS_LEAD_COLUMNS    = columns('leads', ['metadata'])
 
-const SIN_DATOS: NewsletterStats = {
+/**
+ * Estadísticas en cero. Exportada para que el llamador la use cuando el canal
+ * de newsletter todavía no existe (o no se pudo resolver) — el mismo caso que
+ * antes resolvía `getNewsletterStats` por dentro.
+ */
+export const SIN_DATOS: NewsletterStats = {
   totals:    { subscribers: 0, published: 0, drafts: 0, views: 0 },
   byEdition: new Map(),
 }
 
 /**
  * Extrae el `edition_id` que capturó a un suscriptor desde
- * `metadata -> 'newsletter_subscriber' ->> 'edition_id'`.
+ * `metadata -> 'newsletter_subscriber' ->> 'edition_id'`. La escribe
+ * `subscriberMetadata` (src/lib/newsletters/subscriber.ts) cuando el
+ * formulario de la edición manda `edition_id` — ver SubscribeForm.
  *
- * Acceso defensivo: hoy ningún lead trae esta clave (la escribe una tarea
- * posterior, cuando el formulario público la mande), y un lead viejo con
- * `metadata` en cualquier otra forma no puede romper la agregación.
+ * Acceso defensivo igual: un suscriptor de la PORTADA nunca trae esta clave
+ * (no viene de ninguna edición), y un lead viejo con `metadata` en cualquier
+ * otra forma no puede romper la agregación.
  */
 function editionIdFromMetadata(metadata: unknown): string | null {
   if (!metadata || typeof metadata !== 'object') return null
@@ -103,21 +116,17 @@ function editionIdFromMetadata(metadata: unknown): string | null {
 }
 
 /**
- * Estadísticas de la newsletter del tenant.
- *
- * Best-effort: si el canal de newsletter no se puede resolver, devuelve
- * totales en cero en vez de propagar el error — una pantalla de estadísticas
- * nunca puede tumbar la página que la contiene.
+ * Estadísticas de la newsletter del tenant. `channelId` es el canal implícito
+ * ya resuelto (`ensureNewsletterChannel`) — este getter sólo lee, nunca crea
+ * nada.
  */
-export async function getNewsletterStats(tenantId: string): Promise<NewsletterStats> {
+export async function getNewsletterStats(tenantId: string, channelId: string): Promise<NewsletterStats> {
   const db = createAdminClient()
-  const canal = await ensureNewsletterChannel(db, tenantId)
-  if ('error' in canal) return SIN_DATOS
 
   const [{ data: editionRows }, { data: viewRows }, { data: leadRows }] = await Promise.all([
     db.from('newsletter_editions').select(STATS_EDITION_COLUMNS).eq('tenant_id', tenantId),
     db.from('channel_page_views').select(STATS_VIEW_COLUMNS).eq('tenant_id', tenantId).not('edition_id', 'is', null),
-    db.from('leads').select(STATS_LEAD_COLUMNS).eq('tenant_id', tenantId).eq('acquisition_channel_id', canal.id),
+    db.from('leads').select(STATS_LEAD_COLUMNS).eq('tenant_id', tenantId).eq('acquisition_channel_id', channelId),
   ])
 
   // reason: el cliente de Supabase no está tipado en este repo; columns() ya

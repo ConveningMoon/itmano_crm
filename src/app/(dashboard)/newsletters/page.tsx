@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { columns } from '@/lib/supabase/columns'
 import { getEditionsForTenant } from '@/lib/data/newsletters'
-import { getNewsletterStats } from '@/lib/data/newsletter-stats'
+import { getNewsletterStats, SIN_DATOS as ESTADISTICAS_VACIAS } from '@/lib/data/newsletter-stats'
 import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
@@ -83,9 +83,12 @@ export default async function NewslettersPage() {
     ? null
     : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
 
+  // getNewsletterStats sólo lee: si el canal no se pudo resolver (`canal`
+  // trae `error`), las estadísticas van en cero sin llamarla — nada que
+  // agregar sin un channel_id real.
   const [editions, stats, { data: tenantRow }, { data: stepRows }] = await Promise.all([
     getEditionsForTenant(tenant_id),
-    getNewsletterStats(tenant_id),
+    'error' in canal ? Promise.resolve(ESTADISTICAS_VACIAS) : getNewsletterStats(tenant_id, canal.id),
     db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle(),
     sequenceId
       ? db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS)
