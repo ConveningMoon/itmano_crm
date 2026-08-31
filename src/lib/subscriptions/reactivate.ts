@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths, type RevalidatableEdition } from '@/lib/newsletters/revalidate'
 
-const RESTORED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug', 'channel_id'])
+const RESTORED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug'])
 
 export interface ReactivationReport {
   propertiesRepublished:  number

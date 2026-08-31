@@ -4,7 +4,7 @@ import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths, type RevalidatableEdition } from '@/lib/newsletters/revalidate'
 
-const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug', 'channel_id'])
+const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug'])
 
 // Los plazos de 14 y 60 dias no los dispara ningun webhook: hacen falta pasadas
 // programadas. Diario, via cron-job.org (misma infraestructura que el

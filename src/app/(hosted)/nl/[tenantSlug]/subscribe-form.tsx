@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import type { Pal } from './nl-chrome'
 
-// Formulario de suscripción a una serie de newsletter — postea al intake
+// Formulario de suscripción a la newsletter del tenant — postea al intake
 // público (/api/intake/<publicId>/submit), mismo contrato y endpoint que
 // hp/[tenantSlug]/[channelSlug]/hosted-form.tsx, pero con menos campos: sólo
 // lo que hace falta para dar de alta a un lector, más la PRUEBA del
@@ -13,7 +13,7 @@ import type { Pal } from './nl-chrome'
 // El suscriptor entra al CRM marcado `newsletter_subscriber` (ver
 // src/lib/newsletters/subscriber.ts): no dispara análisis de IA ni contamina
 // los quintiles de calidad (migración 106). Lo que recibe es la SECUENCIA
-// vinculada a la serie — el sistema todavía no envía las ediciones por
+// vinculada a la newsletter — el sistema todavía no envía las ediciones por
 // correo, así que el copy nunca lo promete.
 
 function visitorId(): string {
@@ -87,8 +87,8 @@ export function SubscribeForm({
       <div style={{ ...cardStyle, padding: '28px 24px', textAlign: 'center' }}>
         <p style={{ fontSize: '15px', color: P.ink, lineHeight: 1.6, margin: 0 }}>
           {already
-            ? 'Ya estabas suscrito a esta serie — sigues inscrito.'
-            : 'Listo. En breve empiezas a recibir contenido de esta serie.'}
+            ? 'Ya estabas suscrito — sigues inscrito.'
+            : 'Listo. En breve empiezas a recibir la newsletter.'}
         </p>
       </div>
     )
@@ -107,7 +107,7 @@ export function SubscribeForm({
   return (
     <div style={{ ...cardStyle, padding: '26px 24px' }}>
       <h2 style={{ fontSize: '17px', fontWeight: 700, color: P.ink, margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-        Suscríbete a esta serie
+        Suscríbete a la newsletter
       </h2>
       <p style={{ fontSize: '13px', color: P.textSoft, margin: '0 0 18px', lineHeight: 1.5 }}>
         Deja tus datos para recibir el contenido de {tenantName}.
