@@ -12,6 +12,7 @@ import {
 import { publishBlockers } from '@/lib/newsletters/publishable'
 import type { NewsletterEdition, NewsletterCoverSource, NewsletterStatus } from '@/lib/data/newsletters'
 import type { StudioImage } from '@/lib/studio/types'
+import { NEWSLETTER_CATEGORIES, CATEGORY_LABELS, type NewsletterCategory } from '@/lib/newsletters/category'
 import { SUPPORTED_LANGUAGE_CODES, LANGUAGE_CONFIG } from '@/lib/config'
 import { updateEdition, publishEdition, unpublishEdition } from '../actions'
 import { CoverPicker } from './cover-picker'
@@ -26,7 +27,6 @@ import { SourcesPanel } from './sources-panel'
 
 interface Props {
   edition:      NewsletterEdition
-  seriesName:   string | null
   canEdit:      boolean
   studioImages: StudioImage[]
   publicUrl:    string | null
@@ -39,12 +39,13 @@ const STATUS_COLOR: Record<NewsletterStatus, string> = {
   draft: 'var(--accent-gold)', published: 'var(--accent-green)', archived: 'var(--text-muted)',
 }
 
-export function EditionEditor({ edition, seriesName, canEdit, studioImages, publicUrl }: Props) {
+export function EditionEditor({ edition, canEdit, studioImages, publicUrl }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   const [title, setTitle]         = useState(edition.title)
   const [dek, setDek]             = useState(edition.dek ?? '')
+  const [category, setCategory]   = useState<NewsletterCategory>(edition.category)
   const [language, setLanguage]   = useState(edition.language)
   const [coverImageUrl, setCoverImageUrl] = useState(edition.coverImageUrl)
   const [coverSource, setCoverSource]     = useState<NewsletterCoverSource>(edition.coverSource)
@@ -81,7 +82,6 @@ export function EditionEditor({ edition, seriesName, canEdit, studioImages, publ
 
   function buildInput() {
     return {
-      channelId:     edition.channelId,
       title:         title.trim(),
       dek:           dek.trim() || null,
       language,
@@ -90,6 +90,7 @@ export function EditionEditor({ edition, seriesName, canEdit, studioImages, publ
       content,
       sources,
       dataAsOf:      dataAsOf || null,
+      category,
     }
   }
 
@@ -195,7 +196,6 @@ export function EditionEditor({ edition, seriesName, canEdit, studioImages, publ
             }}>
               {STATUS_LABEL[status]}
             </span>
-            {seriesName && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{seriesName}</span>}
           </div>
         </div>
 
@@ -233,6 +233,22 @@ export function EditionEditor({ edition, seriesName, canEdit, studioImages, publ
               {SUPPORTED_LANGUAGE_CODES.map(code => (
                 <option key={code} value={code} style={{ background: '#16181C' }}>
                   {LANGUAGE_CONFIG[code].label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={SMALL_LABEL}>Categoría</label>
+            <select
+              value={category}
+              disabled={!canEdit}
+              onChange={e => setCategory(e.target.value as NewsletterCategory)}
+              className="nl-editor-input"
+              style={{ ...FIELD_INPUT_STYLE, width: '160px', cursor: 'pointer' }}
+            >
+              {NEWSLETTER_CATEGORIES.map(c => (
+                <option key={c} value={c} style={{ background: '#16181C' }}>
+                  {CATEGORY_LABELS[c]}
                 </option>
               ))}
             </select>

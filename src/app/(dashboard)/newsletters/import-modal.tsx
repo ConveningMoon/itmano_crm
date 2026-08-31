@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { X, Upload, Copy, Check, Loader2 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { buildImportPrompt } from '@/lib/newsletters/import-prompt'
-import type { NewsletterSeries } from '@/lib/data/newsletters'
+import { NEWSLETTER_CATEGORIES, CATEGORY_LABELS, type NewsletterCategory } from '@/lib/newsletters/category'
 import { createEditionFromJson } from './actions'
 
 // "Importar de tu IA" — la alternativa gratuita a generar con la nuestra.
@@ -18,7 +18,6 @@ import { createEditionFromJson } from './actions'
 interface Props {
   open:    boolean
   onClose: () => void
-  series:  NewsletterSeries[]
 }
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -36,14 +35,14 @@ const INPUT_STYLE: React.CSSProperties = {
 
 type Tab = 'json' | 'prompt'
 
-export function ImportModal({ open, onClose, series }: Props) {
+export function ImportModal({ open, onClose }: Props) {
   const router = useRouter()
-  const [tab, setTab]             = useState<Tab>('json')
-  const [channelId, setChannelId] = useState(series[0]?.id ?? '')
-  const [json, setJson]           = useState('')
-  const [error, setError]         = useState<string | null>(null)
-  const [copied, setCopied]       = useState(false)
-  const [pending, start]          = useTransition()
+  const [tab, setTab]           = useState<Tab>('json')
+  const [category, setCategory] = useState<NewsletterCategory>('informativo')
+  const [json, setJson]         = useState('')
+  const [error, setError]       = useState<string | null>(null)
+  const [copied, setCopied]     = useState(false)
+  const [pending, start]        = useTransition()
 
   const prompt = buildImportPrompt()
 
@@ -58,7 +57,7 @@ export function ImportModal({ open, onClose, series }: Props) {
     e.preventDefault()
     setError(null)
     start(async () => {
-      const res = await createEditionFromJson({ channelId, json })
+      const res = await createEditionFromJson({ category, json })
       // Se va al editor, igual que al generar con IA: la edición nace en
       // borrador y sin portada, así que lo siguiente SIEMPRE es abrirla.
       if (res.ok) router.push(`/newsletters/${res.data.id}`)
@@ -144,17 +143,16 @@ export function ImportModal({ open, onClose, series }: Props) {
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
-              <label style={LABEL_STYLE}>Serie *</label>
+              <label style={LABEL_STYLE}>Categoría</label>
               <select
-                value={channelId}
-                onChange={e => setChannelId(e.target.value)}
-                required
+                value={category}
+                onChange={e => setCategory(e.target.value as NewsletterCategory)}
                 disabled={pending}
                 className="nl-import-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
-                {series.map(s => (
-                  <option key={s.id} value={s.id} style={{ background: '#16181C' }}>{s.name}</option>
+                {NEWSLETTER_CATEGORIES.map(c => (
+                  <option key={c} value={c} style={{ background: '#16181C' }}>{CATEGORY_LABELS[c]}</option>
                 ))}
               </select>
             </div>
@@ -200,13 +198,13 @@ export function ImportModal({ open, onClose, series }: Props) {
               </button>
               <button
                 type="submit"
-                disabled={pending || !json.trim() || !channelId}
+                disabled={pending || !json.trim()}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
                   background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
-                  cursor: (pending || !json.trim() || !channelId) ? 'not-allowed' : 'pointer',
-                  opacity: (pending || !json.trim() || !channelId) ? 0.6 : 1,
+                  cursor: (pending || !json.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (pending || !json.trim()) ? 0.6 : 1,
                 }}
               >
                 {pending

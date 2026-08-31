@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { guarded } from '@/lib/actions/guarded'
 import { requireTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
-import { assertCanWriteEdition, assertCanWriteChannel, requireChannelWriteAccess } from '@/lib/auth/guards'
+import { assertCanWriteEdition } from '@/lib/auth/guards'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { canUseNewsletters } from '@/lib/access/newsletters'
@@ -14,7 +14,9 @@ import {
   NEWSLETTER_CONTENT_VERSION,
 } from '@/lib/newsletters/content'
 import type { NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
-import { slugify, uniqueSlug, isUniqueViolation, genPublicId } from '@/lib/newsletters/slug'
+import { NEWSLETTER_CATEGORIES } from '@/lib/newsletters/category'
+import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
+import { slugify, uniqueSlug, isUniqueViolation } from '@/lib/newsletters/slug'
 import { deleteOrphanMedia, editionMediaUrls } from '@/lib/newsletters/media'
 import { buildNewsletterIntegrationPrompt } from '@/lib/services/newsletter-integration-prompt'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
@@ -33,7 +35,10 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 // El slug de la SERIE no es opcional en la práctica: sin él, las dos rutas más
 // profundas nunca se revalidan y publicar deja hasta `revalidate` segundos de
 // 404 cacheado (y despublicar, otros tantos de edición legible). Por eso toda
-// action que toca una edición lo resuelve antes con `seriesSlugFor`.
+// action que toca una edición existente lo resuelve antes con `seriesSlugFor`.
+//
+// Las actions de CREACIÓN ya no lo pasan: con una sola newsletter por tenant,
+// el slug de la serie deja de formar parte de la URL pública (tarea siguiente).
 function revalidateAll(tenantSlug: string, seriesSlug?: string | null, editionSlug?: string | null) {
   revalidatePath('/newsletters')
   if (!tenantSlug) return
@@ -44,9 +49,8 @@ function revalidateAll(tenantSlug: string, seriesSlug?: string | null, editionSl
 }
 
 const CHANNEL_SLUG_COLUMNS = columns('acquisition_channels', ['slug'])
-const CHANNEL_GUARD_COLUMNS = columns('acquisition_channels', ['id', 'tenant_id', 'agent_id', 'channel_type', 'slug'])
 
-/** Slug de la serie a la que cuelga una edición — el que falta para revalidar. */
+/** Slug del canal de newsletter al que cuelga una edición — el que falta para revalidar. */
 async function seriesSlugFor(
   db: ReturnType<typeof createAdminClient>,
   tenantId: string,
@@ -59,15 +63,6 @@ async function seriesSlugFor(
     .eq('tenant_id', tenantId)
     .maybeSingle()
   return (data as { slug: string } | null)?.slug ?? null
-}
-
-/**
- * Un agente sólo puede crear o mantener series a su nombre: no las regala ni
- * las convierte en "Toda la agencia". Mismo criterio que `ownerAgentFor` de
- * sources/actions.ts.
- */
-function ownerAgentFor(ctx: TenantContext, requested: string | null): string | null {
-  return ctx.role === 'agent' ? (ctx.agent_id ?? null) : requested
 }
 
 const TENANT_COLUMNS = columns('tenants', ['slug'])
@@ -108,253 +103,6 @@ async function guard() {
   return { ctx, tenantId, db, tenantSlug: (tenant?.slug as string) ?? '', error: null }
 }
 
-const SeriesInput = z.object({
-  name:            z.string().trim().min(1, 'La serie necesita un nombre').max(120),
-  emailSequenceId: z.string().uuid().nullable(),
-  agentId:         z.string().nullable(),
-})
-
-async function createSeriesImpl(input: unknown): Promise<Result<{ id: string }>> {
-  const g = await guard()
-  if (!g.ctx) return { ok: false, error: g.error }
-  const denied = requireChannelWriteAccess(g.ctx)
-  if (denied) return denied
-  const parsed = SeriesInput.safeParse(input)
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
-
-  // El índice único de la base es (tenant_id, slug) sobre TODOS los canales del
-  // tenant, no sólo sobre las series: llamar "Contacto" a una serie cuando ya
-  // hay un formulario "Contacto" reventaba con el error crudo de Postgres, en
-  // inglés, en pantalla. Se busca el primer slug libre entre todos los canales.
-  const { data: taken } = await g.db
-    .from('acquisition_channels')
-    .select(CHANNEL_SLUG_COLUMNS)
-    .eq('tenant_id', g.tenantId)
-  const slug = uniqueSlug(
-    slugify(parsed.data.name),
-    // reason: el cliente de Supabase no está tipado en este repo.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((taken ?? []) as any[]).map(c => c.slug as string),
-  )
-
-  const { data, error } = await g.db.from('acquisition_channels').insert({
-    tenant_id:         g.tenantId,
-    public_id:         genPublicId(),
-    channel_type:      'newsletter',
-    name:              parsed.data.name,
-    slug,
-    email_sequence_id: parsed.data.emailSequenceId,
-    agent_id:          ownerAgentFor(g.ctx, parsed.data.agentId),
-  }).select('id').maybeSingle()
-
-  // La comprobación de arriba quita el caso corriente, no la carrera de dos
-  // creaciones simultáneas: el índice sigue siendo la garantía y aquí sólo se
-  // traduce su mensaje.
-  if (error) {
-    return { ok: false, error: isUniqueViolation(error)
-      ? 'Ya existe otra fuente con ese nombre. Elige uno distinto.'
-      : error.message }
-  }
-  // `maybeSingle()` devuelve data null SIN error cuando el insert no puede
-  // leer de vuelta la fila que acaba de escribir. Leerle `.id` a ese null
-  // lanzaba un TypeError que salía del action como excepción: el cliente veía
-  // la pantalla genérica de Next en vez de un motivo. Ahora es un `{ ok: false }`
-  // como cualquier otro fallo.
-  // reason: ver guard().
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const creada = (data as any)?.id as string | undefined
-  if (!creada) {
-    return { ok: false, error: 'La serie se creó pero la base no devolvió su id. Recarga la página para verla.' }
-  }
-  revalidateAll(g.tenantSlug, slug)
-  return { ok: true, data: { id: creada } }
-}
-
-async function updateSeriesImpl(id: string, input: unknown): Promise<Result<null>> {
-  const g = await guard()
-  if (!g.ctx) return { ok: false, error: g.error }
-  const denied = requireChannelWriteAccess(g.ctx)
-  if (denied) return denied
-  const parsed = SeriesInput.safeParse(input)
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
-
-  // Un `agent` sólo administra las series que son suyas — el mismo guard que
-  // /sources aplica a cualquier otro canal. Sin esto, arreglar el permiso de
-  // las ediciones y dejar abierta la serie era incoherente: un agente podía
-  // renombrar o revincular la serie de un compañero.
-  const { data: channelRow } = await g.db
-    .from('acquisition_channels')
-    .select(CHANNEL_GUARD_COLUMNS)
-    .eq('id', id)
-    .eq('tenant_id', g.tenantId)
-    .eq('channel_type', 'newsletter')
-    .maybeSingle()
-  const channel = channelRow as { tenant_id: string; agent_id: string | null; slug: string } | null
-  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
-  const notMine = assertCanWriteChannel(g.ctx, channel)
-  if (notMine) return notMine
-
-  const { error } = await g.db.from('acquisition_channels').update({
-    name:              parsed.data.name,
-    email_sequence_id: parsed.data.emailSequenceId,
-    agent_id:          ownerAgentFor(g.ctx, parsed.data.agentId),
-  }).eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
-
-  if (error) return { ok: false, error: error.message }
-  // El slug NO cambia al renombrar: la URL pública ya está compartida e
-  // indexada. Se revalida el archivo de la serie porque su título sí cambia.
-  revalidateAll(g.tenantSlug, channel.slug)
-  return { ok: true, data: null }
-}
-
-// ─── Archivar → eliminar una serie ──────────────────────────────────
-
-// Mismo mecanismo que /sources para cualquier otro canal (`archiveChannel` /
-// `deleteChannelPermanently` en sources/actions.ts): la serie ES una fila de
-// acquisition_channels, así que archivar es `active = false` + `archived_at`, y
-// eliminar sólo se permite sobre lo ya archivado.
-//
-// Las series de newsletter NO aparecen en /sources —la consulta base de esa
-// página filtra por lead_magnet/event/contact_form—, por eso el mismo par de
-// acciones tiene que existir aquí en vez de reutilizar aquellas.
-const SERIES_STATE_COLUMNS = columns('acquisition_channels', [
-  'id', 'tenant_id', 'agent_id', 'channel_type', 'slug', 'name', 'archived_at',
-])
-
-interface SeriesRow {
-  id:          string
-  tenant_id:   string
-  agent_id:    string | null
-  slug:        string
-  name:        string
-  archived_at: string | null
-}
-
-/** Carga la serie comprobando tenant, tipo y propiedad del agente. */
-async function loadSeriesForWrite(
-  g: { ctx: TenantContext; tenantId: string; db: ReturnType<typeof createAdminClient> },
-  id: string,
-): Promise<SeriesRow | { error: string }> {
-  const { data } = await g.db
-    .from('acquisition_channels')
-    .select(SERIES_STATE_COLUMNS)
-    .eq('id', id)
-    .eq('tenant_id', g.tenantId)
-    .eq('channel_type', 'newsletter')
-    .maybeSingle()
-  const row = data as SeriesRow | null
-  if (!row) return { error: 'Esa serie no existe.' }
-  const notMine = assertCanWriteChannel(g.ctx, row)
-  if (notMine) return { error: notMine.error }
-  return row
-}
-
-async function archiveSeriesImpl(id: string): Promise<Result<null>> {
-  const g = await guard()
-  if (!g.ctx) return { ok: false, error: g.error }
-  const denied = requireChannelWriteAccess(g.ctx)
-  if (denied) return denied
-  const series = await loadSeriesForWrite(g, id)
-  if ('error' in series) return { ok: false, error: series.error }
-
-  // `active = false` además de `archived_at`: el intake exige `active = true`
-  // (api/intake/[publicId]/submit), así que sin las dos cosas el formulario de
-  // suscripción de una serie retirada seguiría aceptando altas.
-  const { error } = await g.db.from('acquisition_channels')
-    .update({ active: false, archived_at: new Date().toISOString() })
-    .eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
-  if (error) return { ok: false, error: error.message }
-
-  // Las ediciones NO se tocan: siguen publicadas en la base. Lo que las saca de
-  // la web es que `getPublicSeries` descarta la serie archivada (ver
-  // (hosted)/nl/[tenantSlug]/shared.ts), y por eso hay que revalidar la ruta de
-  // la serie — si no, el archivo público se sigue sirviendo desde el caché.
-  revalidateAll(g.tenantSlug, series.slug)
-  return { ok: true, data: null }
-}
-
-async function restoreSeriesImpl(id: string): Promise<Result<null>> {
-  const g = await guard()
-  if (!g.ctx) return { ok: false, error: g.error }
-  const denied = requireChannelWriteAccess(g.ctx)
-  if (denied) return denied
-  const series = await loadSeriesForWrite(g, id)
-  if ('error' in series) return { ok: false, error: series.error }
-
-  // Restaurar existe porque el par archivar→eliminar de Fuentes no lo tiene y
-  // eso convierte un clic de más en una pérdida: aquí la serie arrastra sus
-  // suscriptores y su archivo público, que es demasiado para dejarlo sin vuelta.
-  const { error } = await g.db.from('acquisition_channels')
-    .update({ active: true, archived_at: null })
-    .eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
-  if (error) return { ok: false, error: error.message }
-
-  revalidateAll(g.tenantSlug, series.slug)
-  return { ok: true, data: null }
-}
-
-async function deleteSeriesImpl(id: string): Promise<Result<null>> {
-  const g = await guard()
-  if (!g.ctx) return { ok: false, error: g.error }
-  const denied = requireChannelWriteAccess(g.ctx)
-  if (denied) return denied
-  const series = await loadSeriesForWrite(g, id)
-  if ('error' in series) return { ok: false, error: series.error }
-
-  // El mismo cierre que deleteChannelPermanently: sólo se elimina lo archivado.
-  if (!series.archived_at) {
-    return { ok: false, error: 'Primero archiva la serie antes de eliminarla permanentemente.' }
-  }
-
-  // newsletter_editions.channel_id es ON DELETE CASCADE: borrar la serie borra
-  // TODAS sus ediciones, publicadas incluidas. La UI lo dice con esas palabras
-  // antes de confirmar; aquí no hay nada que añadir salvo dejarlo escrito.
-  //
-  // Los leads suscritos se conservan: su FK es ON DELETE SET NULL, así que
-  // pierden la atribución al canal pero no desaparecen — mismo criterio que
-  // deleteChannelPermanently.
-  const { error: orphanErr } = await g.db.from('leads')
-    .update({ acquisition_channel_id: null })
-    .eq('tenant_id', g.tenantId)
-    .eq('acquisition_channel_id', id)
-  if (orphanErr) return { ok: false, error: orphanErr.message }
-
-  const { error } = await g.db.from('acquisition_channels')
-    .delete().eq('id', id).eq('tenant_id', g.tenantId).eq('channel_type', 'newsletter')
-  if (error) return { ok: false, error: error.message }
-
-  revalidateAll(g.tenantSlug, series.slug)
-  return { ok: true, data: null }
-}
-
-/**
- * El mismo control de propiedad que usa `createEdition` para aceptar un
- * `channelId` que llega del cliente: sin esto, cualquiera podía colgar una
- * edición del canal de OTRO tenant (misma tenant_id propia, pero channel_id
- * ajeno) — la fila quedaría visible en la página pública de un tercero. Mismo
- * mensaje para "no existe" y "no es tuyo": no le confirmes al atacante que el
- * id es real.
- *
- * Un solo camino de validación para las dos formas de crear una edición (a
- * mano y con IA): duplicarlo es cómo se desincronizan.
- */
-async function resolveEditionChannel(
-  db: ReturnType<typeof createAdminClient>,
-  tenantId: string,
-  channelId: string,
-): Promise<{ id: string; slug: string } | null> {
-  const { data: channelRow } = await db
-    .from('acquisition_channels')
-    .select(CHANNEL_GUARD_COLUMNS)
-    .eq('id', channelId)
-    .maybeSingle()
-  // reason: el cliente de Supabase no está tipado en este repo.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channel = channelRow as any
-  if (!channel || channel.tenant_id !== tenantId || channel.channel_type !== 'newsletter') return null
-  return { id: channel.id as string, slug: channel.slug as string }
-}
-
 interface EditionRowFields {
   title:         string
   dek:           string | null
@@ -364,6 +112,7 @@ interface EditionRowFields {
   content:       NewsletterContent
   sources:       NewsletterSource[]
   dataAsOf:      string | null
+  category:      string
   /** Sólo true cuando la edición nace del orquestador de IA. */
   aiGenerated?:  boolean
   aiRun?:        Record<string, unknown> | null
@@ -410,6 +159,7 @@ async function insertEditionRow(
     content:             fields.content,
     sources:             fields.sources,
     data_as_of:          fields.dataAsOf,
+    category:            fields.category,
     status:              'draft',
     ai_generated:        fields.aiGenerated ?? false,
     ai_run:              fields.aiRun ?? null,
@@ -419,11 +169,14 @@ async function insertEditionRow(
 
   if (error) {
     return { ok: false, error: isUniqueViolation(error)
-      ? 'Ya existe otra edición con ese titular en esta serie. Cámbialo un poco.'
+      ? 'Ya existe otra edición con ese titular. Cámbialo un poco.'
       : error.message }
   }
-  // Mismo caso que en createSeries: data null sin error no puede convertirse en
-  // un TypeError que escape del action.
+  // `maybeSingle()` devuelve data null SIN error cuando el insert no puede
+  // leer de vuelta la fila que acaba de escribir. Leerle `.id` a ese null
+  // lanzaba un TypeError que salía del action como excepción: el cliente veía
+  // la pantalla genérica de Next en vez de un motivo. Ahora es un `{ ok: false }`
+  // como cualquier otro fallo.
   // reason: ver guard().
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const creada = (data as any)?.id as string | undefined
@@ -450,7 +203,6 @@ const coverImageUrlSchema = z.string().min(1, COVER_URL_MESSAGE).refine(
 )
 
 const EditionInput = z.object({
-  channelId:     z.string().uuid(),
   // Los topes salen de CONTENT_LIMITS, la misma constante que declara el
   // `input_schema` con el que la IA redacta: si aquí cabe menos de lo que allí
   // se pide, la edición se pierde al guardarla.
@@ -465,6 +217,7 @@ const EditionInput = z.object({
   content:       NewsletterContentSchema,
   sources:       z.array(NewsletterSourceSchema).max(40),
   dataAsOf:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  category:      z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
 })
 
 async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>> {
@@ -474,10 +227,14 @@ async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
   const d = parsed.data
 
-  const channel = await resolveEditionChannel(g.db, g.tenantId, d.channelId)
-  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
+  const canal = await ensureNewsletterChannel(g.db, g.tenantId)
+  if ('error' in canal) return { ok: false, error: canal.error }
+  // La secuencia se prepara aquí y no al suscribirse: así el usuario la ve en
+  // /emails desde su primera edición y puede escribirle los correos antes de
+  // que llegue nadie. Best-effort: sin secuencia se puede escribir igual.
+  await ensureNewsletterSequence(g.db, g.tenantId, canal.id)
 
-  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, channel.id, {
+  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         d.title,
     dek:           d.dek,
     language:      d.language,
@@ -486,10 +243,11 @@ async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>
     content:       d.content,
     sources:       d.sources,
     dataAsOf:      d.dataAsOf,
+    category:      d.category,
   })
   if (!inserted.ok) return inserted
 
-  revalidateAll(g.tenantSlug, channel.slug)
+  revalidateAll(g.tenantSlug)
   return inserted
 }
 
@@ -516,6 +274,7 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
     content:         d.content,
     sources:         d.sources,
     data_as_of:      d.dataAsOf,
+    category:        d.category,
   }).eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
@@ -675,7 +434,7 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
   }
 
   // El slug de la serie se resuelve ANTES del delete: después, la edición ya no
-  // existe para decir de qué serie colgaba.
+  // existe para decir de qué colgaba.
   const seriesSlug = await seriesSlugFor(g.db, g.tenantId, existing.channelId)
 
   const { error } = await g.db.from('newsletter_editions')
@@ -700,9 +459,8 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
 // (mismo hallazgo documentado en src/app/api/properties/media/route.ts).
 
 const GenerateInput = z.object({
-  channelId: z.string().uuid(),
-  topic:     z.string().trim().max(200).nullable(),
-  language:  z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]),
+  topic:    z.string().trim().max(200).nullable(),
+  language: z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]),
 })
 
 // Portada de arranque: `cover_image_url` es NOT NULL y la portada propia se
@@ -723,7 +481,8 @@ const GenerateInput = z.object({
  *
  * La IA nunca publica: devuelve el id para que el editor lo abra y una persona
  * decida. La portada se elige después — por eso entra con el marcador que el
- * CoverPicker sustituye.
+ * CoverPicker sustituye. La categoría tampoco la elige la IA: nace en
+ * 'informativo' y se cambia luego en el editor.
  */
 async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: string }>> {
   const g = await guard()
@@ -732,10 +491,12 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
   const parsed = GenerateInput.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
 
-  // Mismo control de propiedad que crear una edición a mano: el canal existe,
-  // es de este tenant y es una serie de newsletter.
-  const channel = await resolveEditionChannel(g.db, g.tenantId, parsed.data.channelId)
-  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
+  const canal = await ensureNewsletterChannel(g.db, g.tenantId)
+  if ('error' in canal) return { ok: false, error: canal.error }
+  // La secuencia se prepara aquí y no al suscribirse: así el usuario la ve en
+  // /emails desde su primera edición y puede escribirle los correos antes de
+  // que llegue nadie. Best-effort: sin secuencia se puede escribir igual.
+  await ensureNewsletterSequence(g.db, g.tenantId, canal.id)
 
   const generado = await generateNewsletterDraft({
     ctx:      g.ctx,
@@ -744,7 +505,7 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
   })
   if (!generado.ok) return generado
 
-  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, channel.id, {
+  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         generado.data.title,
     dek:           generado.data.dek || null,
     language:      parsed.data.language,
@@ -753,12 +514,13 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
     content:       generado.data.content,
     sources:       generado.data.sources,
     dataAsOf:      generado.data.dataAsOf,
+    category:      'informativo',
     aiGenerated:   true,
     aiRun:         generado.data.aiRun,
   })
   if (!inserted.ok) return inserted
 
-  revalidateAll(g.tenantSlug, channel.slug)
+  revalidateAll(g.tenantSlug)
   return inserted
 }
 
@@ -804,8 +566,10 @@ async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ 
 // ─── Importar una edición escrita por la IA del cliente ──────────────────────
 
 const ImportInput = z.object({
-  channelId: z.string().uuid(),
-  json:      z.string().trim().min(2, 'Pega el JSON que te devolvió tu IA.').max(200_000, 'El JSON es demasiado grande.'),
+  json:     z.string().trim().min(2, 'Pega el JSON que te devolvió tu IA.').max(200_000, 'El JSON es demasiado grande.'),
+  // La elige la persona en el modal, igual que en el formulario manual — no
+  // depende de que la IA externa se acuerde de incluir "category" en su JSON.
+  category: z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
 })
 
 /**
@@ -818,6 +582,7 @@ const ImportedEdition = z.object({
   dek:      z.string().trim().max(CONTENT_LIMITS.editionDek).nullable().optional(),
   language: z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]).optional(),
   dataAsOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '"dataAsOf" debe ser una fecha AAAA-MM-DD.').nullable().optional(),
+  category: z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
   // Fuentes con la forma que puede producir una IA ajena: `accessed_at` NO se
   // le pide porque es "cuándo lo consultamos NOSOTROS", un dato que ella no
   // tiene. Lo pone el sistema al importar, que es exactamente cuando ocurre.
@@ -849,8 +614,12 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
   const parsed = ImportInput.safeParse(input)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
 
-  const channel = await resolveEditionChannel(g.db, g.tenantId, parsed.data.channelId)
-  if (!channel) return { ok: false, error: 'Esa serie no existe.' }
+  const canal = await ensureNewsletterChannel(g.db, g.tenantId)
+  if ('error' in canal) return { ok: false, error: canal.error }
+  // La secuencia se prepara aquí y no al suscribirse: así el usuario la ve en
+  // /emails desde su primera edición y puede escribirle los correos antes de
+  // que llegue nadie. Best-effort: sin secuencia se puede escribir igual.
+  await ensureNewsletterSequence(g.db, g.tenantId, canal.id)
 
   // Un modelo devuelve el JSON envuelto en ```json a poco que se descuide, y
   // decirle al usuario "JSON inválido" cuando el problema son tres tildes
@@ -908,7 +677,7 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
     accessed_at:  hoy,
   }))
 
-  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, channel.id, {
+  const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         d.title,
     dek:           d.dek?.trim() || null,
     language:      d.language ?? 'es',
@@ -917,42 +686,49 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
     content:       content.data,
     sources,
     dataAsOf:      d.dataAsOf ?? null,
+    // La del formulario manda sobre la del JSON: es la elección explícita de
+    // quien importa, no una inferencia de una IA ajena.
+    category:      parsed.data.category,
   })
   if (!inserted.ok) return inserted
 
-  revalidateAll(g.tenantSlug, channel.slug)
+  revalidateAll(g.tenantSlug)
   return inserted
 }
 
 // ─── Prompt de integración ───────────────────────────────────────────────────
 
-const SERIES_INTEGRATION_COLUMNS = columns('acquisition_channels', [
+const CHANNEL_INTEGRATION_COLUMNS = columns('acquisition_channels', [
   'id', 'tenant_id', 'name', 'slug', 'public_id', 'channel_type', 'email_sequence_id',
 ])
 
 /**
- * El contrato de integración de una serie, generado desde los datos VIGENTES.
+ * El contrato de integración de la newsletter del tenant, generado desde los
+ * datos VIGENTES del canal implícito.
  *
  * Mismo papel que `getIntegrationInfo` de /sources para los demás canales: el
  * tenant copia esto y se lo pasa a quien lleva su web (persona o IA). Se
  * regenera en cada lectura a propósito — vincular una secuencia o publicar el
  * archivo cambia el texto sin que nadie tenga que acordarse de actualizarlo.
  */
-async function getSeriesIntegrationPromptImpl(seriesId: string): Promise<Result<{ prompt: string }>> {
+async function getNewsletterIntegrationPromptImpl(): Promise<Result<{ prompt: string }>> {
   const g = await guard()
   if (!g.ctx) return { ok: false, error: g.error }
 
+  const canal = await ensureNewsletterChannel(g.db, g.tenantId)
+  if ('error' in canal) return { ok: false, error: canal.error }
+
   const { data } = await g.db
     .from('acquisition_channels')
-    .select(SERIES_INTEGRATION_COLUMNS)
-    .eq('id', seriesId)
+    .select(CHANNEL_INTEGRATION_COLUMNS)
+    .eq('id', canal.id)
     .eq('tenant_id', g.tenantId)
     .eq('channel_type', 'newsletter')
     .maybeSingle()
-  const serie = data as {
+  const channel = data as {
     name: string; slug: string; public_id: string; email_sequence_id: string | null
   } | null
-  if (!serie) return { ok: false, error: 'Esa serie no existe.' }
+  if (!channel) return { ok: false, error: 'No se pudo preparar tu newsletter.' }
 
   const { data: tenantRow } = await g.db
     .from('tenants').select(columns('tenants', ['name'])).eq('id', g.tenantId).maybeSingle()
@@ -960,15 +736,15 @@ async function getSeriesIntegrationPromptImpl(seriesId: string): Promise<Result<
 
   const prompt = buildNewsletterIntegrationPrompt({
     tenantName,
-    seriesName:  serie.name,
-    publicId:    serie.public_id,
+    seriesName:  channel.name,
+    publicId:    channel.public_id,
     baseUrl:     process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com',
-    archiveUrl:  g.tenantSlug ? hostedNewsletterUrl(g.tenantSlug, serie.slug) : null,
+    archiveUrl:  g.tenantSlug ? hostedNewsletterUrl(g.tenantSlug, channel.slug) : null,
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     // Pública por diseño: es la misma que viaja en cada página del CRM y la que
     // el front del cliente tiene que usar. La service_role no sale de aquí.
     anonKey:     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
-    hasSequence: serie.email_sequence_id !== null,
+    hasSequence: channel.email_sequence_id !== null,
   })
 
   return { ok: true, data: { prompt } }
@@ -986,26 +762,6 @@ async function getSeriesIntegrationPromptImpl(seriesId: string): Promise<Result<
 //
 // Los nombres exportados son los de siempre; lo que cambia es que la
 // implementación vive en `<nombre>Impl` y nadie la llama directamente.
-
-export async function createSeries(input: unknown): Promise<Result<{ id: string }>> {
-  return guarded('createSeries', () => createSeriesImpl(input))
-}
-
-export async function updateSeries(id: string, input: unknown): Promise<Result<null>> {
-  return guarded('updateSeries', () => updateSeriesImpl(id, input))
-}
-
-export async function archiveSeries(id: string): Promise<Result<null>> {
-  return guarded('archiveSeries', () => archiveSeriesImpl(id))
-}
-
-export async function restoreSeries(id: string): Promise<Result<null>> {
-  return guarded('restoreSeries', () => restoreSeriesImpl(id))
-}
-
-export async function deleteSeries(id: string): Promise<Result<null>> {
-  return guarded('deleteSeries', () => deleteSeriesImpl(id))
-}
 
 export async function createEdition(input: unknown): Promise<Result<{ id: string }>> {
   return guarded('createEdition', () => createEditionImpl(input))
@@ -1043,8 +799,8 @@ export async function generateCoverForEdition(editionId: string): Promise<Result
   return guarded('generateCoverForEdition', () => generateCoverForEditionImpl(editionId))
 }
 
-export async function getSeriesIntegrationPrompt(seriesId: string): Promise<Result<{ prompt: string }>> {
-  return guarded('getSeriesIntegrationPrompt', () => getSeriesIntegrationPromptImpl(seriesId))
+export async function getNewsletterIntegrationPrompt(): Promise<Result<{ prompt: string }>> {
+  return guarded('getNewsletterIntegrationPrompt', () => getNewsletterIntegrationPromptImpl())
 }
 
 export async function createEditionFromJson(input: unknown): Promise<Result<{ id: string }>> {

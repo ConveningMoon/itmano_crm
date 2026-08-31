@@ -1,26 +1,25 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { columns } from '@/lib/supabase/columns'
-import { getSeriesForTenant, getArchivedSeriesForTenant } from '@/lib/data/newsletters'
-import { listSequences } from '@/lib/data/email-sequences'
+import { getEditionsForTenant } from '@/lib/data/newsletters'
+import { getNewsletterStats } from '@/lib/data/newsletter-stats'
+import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
-import { SeriesList } from './series-list'
+import { EditionsList } from './editions-list'
 
-// Índice de series de newsletter — el equivalente a /sources para este canal:
-// aquí el tenant ve sus series y crea una nueva. Las ediciones se crean y
-// editan en /newsletters/nueva y /newsletters/[id].
-//
-// Igual que las server actions de este módulo (ver actions.ts → guard()), el
-// plan del tenant NO vive en `tenants`: hay que leerlo de `subscriptions`.
+// Pantalla única de la newsletter del tenant — ya no hay series que elegir
+// antes: el canal implícito se prepara aquí, ANTES de leer nada, para que
+// exista desde la primera visita y el formulario público responda sin que el
+// usuario haya hecho nada.
 
 const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
-const TENANT_COLUMNS       = columns('tenants', ['slug'])
-const AGENT_COLUMNS        = columns('agents', ['id', 'name'])
+const TENANT_COLUMNS = columns('tenants', ['slug'])
+const SEQUENCE_STEP_COLUMNS = columns('email_sequence_steps', ['id'])
 
 export default async function NewslettersPage() {
   const ctx = await requireTenantContext()
-  const { tenant_id, role } = ctx
+  const { tenant_id, role, user_id } = ctx
   const db = createAdminClient()
 
   // super_admin en modo hub (sin tenant seleccionado) no tiene subscripción
@@ -63,39 +62,49 @@ export default async function NewslettersPage() {
     )
   }
 
-  // Las archivadas van a la misma pantalla, en su propio bloque: archivar una
-  // serie sin dejarla a la vista la volvería inalcanzable, y eliminarla —el
-  // segundo paso del patrón de Fuentes— sólo se puede hacer desde su detalle.
-  const [series, archivedSeries, sequences] = tenant_id
-    ? await Promise.all([
-        getSeriesForTenant(tenant_id),
-        getArchivedSeriesForTenant(tenant_id),
-        listSequences(tenant_id),
-      ])
-    : [[], [], []]
-
-  let agents: Array<{ id: string; name: string }> = []
-  let tenantSlug = ''
-  if (tenant_id) {
-    const [{ data: agentRows }, { data: tenantRow }] = await Promise.all([
-      db.from('agents').select(AGENT_COLUMNS).eq('tenant_id', tenant_id).eq('active', true).order('name'),
-      db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle(),
-    ])
-    // reason: ver arriba — cliente de Supabase no tipado en este repo.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    agents = ((agentRows ?? []) as any[]).map(a => ({ id: a.id as string, name: a.name as string }))
-    // reason: ver arriba.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  if (!tenant_id) {
+    return (
+      <EditionsList
+        editions={[]}
+        stats={{ totals: { subscribers: 0, published: 0, drafts: 0, views: 0 }, byEdition: {} }}
+        tenantSlug=""
+        sequenceId={null}
+        sequenceEmpty={false}
+        myUserId={user_id}
+        isAgent={role === 'agent'}
+      />
+    )
   }
 
+  // Prepara la newsletter ANTES de leer: así existe desde la primera visita y
+  // el formulario público responde sin que el usuario haya hecho nada.
+  const canal = await ensureNewsletterChannel(db, tenant_id)
+  const sequenceId = 'error' in canal
+    ? null
+    : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
+
+  const [editions, stats, { data: tenantRow }, { data: stepRows }] = await Promise.all([
+    getEditionsForTenant(tenant_id),
+    getNewsletterStats(tenant_id),
+    db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle(),
+    sequenceId
+      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS).eq('sequence_id', sequenceId)
+      : Promise.resolve({ data: null }),
+  ])
+  // reason: el cliente de Supabase no está tipado en este repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  const sequenceEmpty = sequenceId !== null && (stepRows?.length ?? 0) === 0
+
   return (
-    <SeriesList
-      series={series}
-      archivedSeries={archivedSeries}
-      sequences={sequences}
-      agents={agents}
+    <EditionsList
+      editions={editions}
+      stats={{ totals: stats.totals, byEdition: Object.fromEntries(stats.byEdition) }}
       tenantSlug={tenantSlug}
+      sequenceId={sequenceId}
+      sequenceEmpty={sequenceEmpty}
+      myUserId={user_id}
+      isAgent={role === 'agent'}
     />
   )
 }

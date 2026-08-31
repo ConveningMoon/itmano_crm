@@ -1,4 +1,5 @@
 import { CONTENT_LIMITS } from './content'
+import { NEWSLETTER_CATEGORIES } from './category'
 
 // El contrato de importación: la edición escrita por la IA del propio cliente.
 //
@@ -36,6 +37,7 @@ export function buildImportPrompt(): string {
     '  "dek": "una entradilla de una o dos frases (opcional)",',
     '  "language": "es",',
     '  "dataAsOf": "2026-08-27",',
+    '  "category": "informativo",',
     '  "sources": [',
     '    { "id": "s1", "title": "Nombre del medio u organismo", "url": "https://..." }',
     '  ],',
@@ -57,6 +59,8 @@ export function buildImportPrompt(): string {
     '· "tone" sólo "info", "warning" o "success".',
     '· "language" es un código de dos letras: es, en, pt…',
     '· "dataAsOf" es la fecha a la que se refieren los datos, en formato AAAA-MM-DD. Opcional.',
+    `· "category" es opcional y admite exactamente estos valores: ${NEWSLETTER_CATEGORIES.join(', ')}.`,
+    '  Si no la incluyes, se usa "informativo".',
     '',
     '### Fuentes',
     '· "sources" es OPCIONAL. Si la incluyes, cada entrada necesita "id", "title" y "url".',
