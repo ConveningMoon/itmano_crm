@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import { normalizeIntent, extractFitDimensions, extractBudgetAmount, DERIVED_KEYS } from '@/lib/services/intake-fit'
@@ -43,6 +44,7 @@ const SubmitSchema = z.object({
   intent:       z.string().max(40).optional(), // buyer/seller path — drives fit extraction
   source_url:   z.string().max(2048).optional(),
   consent_text: z.string().max(2000).optional(), // prueba del consentimiento — obligatoria si el canal es newsletter
+  edition_id:   z.string().uuid().optional(), // desde qué edición se suscribió (sólo canal newsletter)
   website:      z.string().optional(), // honeypot — must be empty
 })
 
@@ -83,6 +85,33 @@ async function countDistinctLeadMagnetSubmissions(
     .in('id', channelIds)
     .eq('channel_type', 'lead_magnet')
   return (lm ?? []).length
+}
+
+const EDITION_ID_COLUMNS = columns('newsletter_editions', ['id'])
+
+/**
+ * Valida el `edition_id` que manda el formulario de suscripción antes de
+ * guardarlo: llega del cliente, así que hay que comprobar que la edición
+ * existe, es del MISMO tenant y cuelga del MISMO canal que este envío —
+ * nunca confiar en que el front no lo manipuló. Si no cuadra, devuelve
+ * `null` en vez de rechazar el envío: perder la atribución a la edición es
+ * preferible a perder al suscriptor.
+ */
+async function resolveSubscriptionEditionId(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId:  string,
+  channelId: string,
+  editionId: string | undefined,
+): Promise<string | null> {
+  if (!editionId) return null
+  const { data } = await db
+    .from('newsletter_editions')
+    .select(EDITION_ID_COLUMNS)
+    .eq('id', editionId)
+    .eq('tenant_id', tenantId)
+    .eq('channel_id', channelId)
+    .maybeSingle()
+  return data ? editionId : null
 }
 
 function ok(extra?: Record<string, unknown>): NextResponse {
@@ -276,7 +305,10 @@ export async function POST(
     // lead es nuevo: no hay fila previa que FASE 1 pueda leer más abajo si
     // este mismo envío también trae `intent` o `budget_amount`.
     if (channelType === 'newsletter') {
-      leadMetadata = subscriberMetadata({ channelId, consentText: parsed.consent_text as string, sourceUrl: parsed.source_url ?? '' })
+      const editionId = await resolveSubscriptionEditionId(db, tenantId, channelId, parsed.edition_id)
+      leadMetadata = subscriberMetadata({
+        channelId, consentText: parsed.consent_text as string, sourceUrl: parsed.source_url ?? '', editionId,
+      })
     }
 
     const { error: leadError } = await db.from('leads').insert({

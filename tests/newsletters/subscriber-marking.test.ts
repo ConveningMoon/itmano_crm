@@ -41,6 +41,34 @@ describe('subscriberMetadata', () => {
     expect(typeof sub.at).toBe('string')
   })
 
+  // Atribución de suscriptor a edición (hallazgo de la revisión): sin este
+  // campo, getNewsletterStats/aggregateStats no tiene de dónde leer qué
+  // edición captó al lector y el conteo por edición se queda en cero siempre.
+  it('guarda edition_id cuando se le pasa', () => {
+    const meta = subscriberMetadata({
+      channelId: 'abc', consentText: 'Acepto.', sourceUrl: 'https://news.itmano.com/aj',
+      editionId: 'edicion-1',
+    })
+    const sub = meta.newsletter_subscriber as Record<string, unknown>
+    expect(sub.edition_id).toBe('edicion-1')
+  })
+
+  it('omite edition_id cuando no se le pasa — suscripción desde la portada', () => {
+    const meta = subscriberMetadata({
+      channelId: 'abc', consentText: 'Acepto.', sourceUrl: 'https://news.itmano.com/aj',
+    })
+    const sub = meta.newsletter_subscriber as Record<string, unknown>
+    expect('edition_id' in sub).toBe(false)
+  })
+
+  it('también omite edition_id si llega null', () => {
+    const meta = subscriberMetadata({
+      channelId: 'abc', consentText: 'Acepto.', sourceUrl: 'https://news.itmano.com/aj', editionId: null,
+    })
+    const sub = meta.newsletter_subscriber as Record<string, unknown>
+    expect('edition_id' in sub).toBe(false)
+  })
+
   // La prueba va TAMBIÉN en su propia clave: graduateSubscriber borra
   // `newsletter_subscriber`, y si la prueba viviera sólo ahí dentro, graduar a
   // un lector destruiría el registro legal de su consentimiento.

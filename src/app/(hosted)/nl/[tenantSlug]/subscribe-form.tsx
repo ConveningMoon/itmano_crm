@@ -15,6 +15,11 @@ import type { Pal } from './nl-chrome'
 // los quintiles de calidad (migración 106). Lo que recibe es la SECUENCIA
 // vinculada a la newsletter — el sistema todavía no envía las ediciones por
 // correo, así que el copy nunca lo promete.
+//
+// Se renderiza en dos sitios: la portada del tenant (sin `editionId`, se
+// suscribió desde el archivo general) y la página de cada edición (con
+// `editionId`, para que las estadísticas por edición sepan qué edición captó
+// al lector — ver getNewsletterStats/aggregateStats).
 
 function visitorId(): string {
   try {
@@ -31,11 +36,13 @@ function visitorId(): string {
 }
 
 export function SubscribeForm({
-  publicId, tenantName, P,
+  publicId, tenantName, P, editionId,
 }: {
   publicId: string
   tenantName: string
   P: Pal
+  /** Edición desde la que se suscribe, si el formulario vive en una edición. */
+  editionId?: string
 }) {
   const [firstName, setFirstName] = useState('')
   const [email, setEmail]         = useState('')
@@ -64,6 +71,7 @@ export function SubscribeForm({
             visitor_id:   visitorId(),
             consent_text: consentText,
             source_url:   window.location.href,
+            ...(editionId ? { edition_id: editionId } : {}),
             website,
           }),
         })

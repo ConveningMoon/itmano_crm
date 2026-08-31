@@ -3,10 +3,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
-import { getPublicTenant, getPublicEdition, getPublicNewsletterPaths } from '../shared'
+import { getPublicTenant, getPublicEdition, getPublicNewsletterPaths, getPublicNewsletterChannel } from '../shared'
 import { formatDataAsOf, formatEditionDate } from '../nl-format'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from '../nl-chrome'
 import { renderNewsletterHtml } from '@/lib/newsletters/render'
+import { SubscribeForm } from '../subscribe-form'
 import { EditionViewBeacon } from './edition-view-beacon'
 
 // Lectura pública de una edición — news.itmano.com/<tenant-slug>/<edición>.
@@ -47,6 +48,15 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
   // mejor 404 que pintarla a medias. parseNewsletterContent ya corrió dentro
   // de getPublicEdition (shared.ts) — aquí sólo se comprueba el resultado.
   if (!edition || !edition.content) notFound()
+
+  // El formulario de suscripción vive también aquí, no sólo en la portada
+  // (hallazgo de la revisión): sin esto, quien llega directo a una edición
+  // por un enlace compartido nunca ve dónde suscribirse, y edition_id nunca
+  // se escribe — el conteo de suscriptores por edición se quedaba en cero
+  // para siempre. Mismo `SubscribeForm` que la portada, con `editionId` para
+  // que la atribución (getNewsletterStats/aggregateStats) sepa qué edición
+  // captó al lector.
+  const channel = await getPublicNewsletterChannel(tenant.id)
 
   const P = pal(tenant.primary_color || '#C9A96E')
   // Único caller server-side de renderNewsletterHtml para esta página: el HTML
@@ -120,6 +130,12 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
           garantía explícita antes de copiarse.
         */}
         <div className="nl-article" style={{ marginTop: '28px' }} dangerouslySetInnerHTML={{ __html: html }} />
+
+        {channel && (
+          <div style={{ marginTop: '40px' }}>
+            <SubscribeForm publicId={channel.publicId} tenantName={tenant.name} P={P} editionId={edition.id} />
+          </div>
+        )}
 
         <Footer tenant={tenant} P={P} />
       </main>
