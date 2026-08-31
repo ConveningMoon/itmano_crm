@@ -45,11 +45,20 @@ export type PublicEdition = {
 
 const PUBLIC_TENANT_COLUMNS = columns('tenants', ['id', 'name', 'slug', 'logo_url', 'primary_color'])
 
-const PUBLIC_EDITION_COLUMNS = columns('newsletter_editions', [
+// Exportada (no sólo la string ya unida) para que
+// tests/newsletters/public-edition-columns-parity.test.ts pueda compararla,
+// campo por campo, contra la copia que vive en
+// src/lib/services/newsletter-integration-prompt.ts — el prompt que le
+// promete a un desarrollador externo qué columnas puede pedir. Son dos
+// listas mantenidas a mano de las mismas 15 columnas; nada más las fuerza a
+// coincidir.
+export const PUBLIC_EDITION_COLUMN_LIST = [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'content', 'sources',
   'data_as_of', 'status', 'published_at', 'created_at',
-])
+] as const
+
+const PUBLIC_EDITION_COLUMNS = columns('newsletter_editions', PUBLIC_EDITION_COLUMN_LIST)
 
 export async function getPublicTenant(tenantSlug: string): Promise<PublicTenant | null> {
   const db = createAdminClient()
