@@ -679,7 +679,7 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
 // ─── Prompt de integración ───────────────────────────────────────────────────
 
 const CHANNEL_INTEGRATION_COLUMNS = columns('acquisition_channels', [
-  'id', 'tenant_id', 'name', 'slug', 'public_id', 'channel_type', 'email_sequence_id',
+  'id', 'tenant_id', 'slug', 'public_id', 'channel_type', 'email_sequence_id',
 ])
 
 /**
@@ -706,7 +706,7 @@ async function getNewsletterIntegrationPromptImpl(): Promise<Result<{ prompt: st
     .eq('channel_type', 'newsletter')
     .maybeSingle()
   const channel = data as {
-    name: string; slug: string; public_id: string; email_sequence_id: string | null
+    slug: string; public_id: string; email_sequence_id: string | null
   } | null
   if (!channel) return { ok: false, error: 'No se pudo preparar tu newsletter.' }
 
@@ -716,7 +716,7 @@ async function getNewsletterIntegrationPromptImpl(): Promise<Result<{ prompt: st
 
   const prompt = buildNewsletterIntegrationPrompt({
     tenantName,
-    seriesName:  channel.name,
+    tenantId:    g.tenantId,
     publicId:    channel.public_id,
     baseUrl:     process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.itmano.com',
     archiveUrl:  g.tenantSlug ? hostedNewsletterUrl(g.tenantSlug) : null,
