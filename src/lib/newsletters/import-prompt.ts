@@ -1,5 +1,6 @@
 import { CONTENT_LIMITS } from './content'
 import { NEWSLETTER_CATEGORIES } from './category'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // El contrato de importación: la edición escrita por la IA del propio cliente.
 //
@@ -57,14 +58,16 @@ export function buildImportPrompt(): string {
     '· Los tipos válidos son exactamente esos seis. Cualquier otro se rechaza.',
     '· "level" sólo admite 2 o 3. "style" sólo "bullet" o "number".',
     '· "tone" sólo "info" o "warning".',
-    '· "language" es un código de dos letras: es, en, pt…',
+    `· "language" es opcional y admite exactamente estos códigos: ${SUPPORTED_LANGUAGE_CODES.join(', ')}.`,
+    '  Si no lo incluyes, se usa "es".',
     '· "dataAsOf" es la fecha a la que se refieren los datos, en formato AAAA-MM-DD. Opcional.',
     `· "category" es opcional y admite exactamente estos valores: ${NEWSLETTER_CATEGORIES.join(', ')}.`,
     '  Si no la incluyes, se usa "informativo".',
     '',
     '### Fuentes',
     '· "sources" es OPCIONAL. Si la incluyes, cada entrada necesita "id", "title" y "url".',
-    '· Un bloque cita fuentes con "sourceIds", usando los ids de esa lista.',
+    '· Sólo los bloques "paragraph" y "stat" citan fuentes, con "sourceIds" y los ids',
+    '  de esa lista. En cualquier otro bloque el campo se descarta sin aviso.',
     '· Si citas un id que no está en "sources", la edición no se podrá publicar.',
     '  Es preferible no citar nada a citar algo que no existe.',
     '',
