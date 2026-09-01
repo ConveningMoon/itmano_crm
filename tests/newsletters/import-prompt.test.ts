@@ -72,4 +72,21 @@ describe('el prompt de importación es aceptado por el esquema real', () => {
     expect(prompt).toContain('"number"')
     expect(prompt).not.toContain('"ordered"')
   })
+
+  it('los valores de "tone" que anuncia son los que el esquema acepta', () => {
+    // Mismo hueco que en "style": el ejemplo sólo usa "info", y el prompt
+    // llegó a prometer un "success" que no existe en CalloutBlock — ni en el
+    // editor, ni en el JSON Schema del borrador, ni en el CSS del render.
+    const acepta = (tone: string) => NewsletterBlockSchema.safeParse({
+      type: 'callout', tone, text: 'Un aviso.',
+    }).success
+
+    expect(acepta('info')).toBe(true)
+    expect(acepta('warning')).toBe(true)
+    expect(acepta('success')).toBe(false)
+
+    expect(prompt).toContain('"info"')
+    expect(prompt).toContain('"warning"')
+    expect(prompt).not.toContain('"success"')
+  })
 })

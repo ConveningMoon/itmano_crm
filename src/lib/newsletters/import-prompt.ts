@@ -54,7 +54,7 @@ export function buildImportPrompt(): string {
     `· "blocks" es obligatorio y lleva entre 1 y 40 bloques, en el orden en que se leerán.`,
     '· Los tipos válidos son exactamente esos seis. Cualquier otro se rechaza.',
     '· "level" sólo admite 2 o 3. "style" sólo "bullet" u "number".',
-    '· "tone" sólo "info", "warning" o "success".',
+    '· "tone" sólo "info" o "warning".',
     '· "language" es un código de dos letras: es, en, pt…',
     '· "dataAsOf" es la fecha a la que se refieren los datos, en formato AAAA-MM-DD. Opcional.',
     '',
