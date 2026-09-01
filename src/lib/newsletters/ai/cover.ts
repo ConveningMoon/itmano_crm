@@ -17,7 +17,7 @@ import type { TenantContext } from '@/lib/auth/tenant-context'
 // sobre un `StudioForm` de listado — conceptos que una portada de newsletter
 // no tiene. Aquí no hace falta componer nada encima: la página pública ya
 // pinta el titular debajo de la imagen (ver
-// src/app/(hosted)/nl/[tenantSlug]/[seriesSlug]/[editionSlug]/page.tsx), así
+// src/app/(hosted)/nl/[tenantSlug]/[editionSlug]/page.tsx), así
 // que la portada es la foto sola, sin texto superpuesto.
 //
 // El "formulario" que se le pasa al director es sintético: recipe

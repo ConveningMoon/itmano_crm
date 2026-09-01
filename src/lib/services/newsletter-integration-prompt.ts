@@ -1,5 +1,5 @@
-// El prompt de integración de una serie de newsletter: lo que el tenant le pega
-// a su desarrollador (o a una IA) para conectar su web con el CRM.
+// El prompt de integración de la newsletter de un tenant: lo que el tenant le
+// pega a su desarrollador (o a una IA) para conectar su web con el CRM.
 //
 // Mismo papel que `integration-prompt.ts` cumple para lead magnets, eventos y
 // formularios, y por el mismo motivo: el contrato se escribe UNA vez, aquí, y
@@ -11,22 +11,30 @@
 
 export interface NewsletterIntegrationInput {
   tenantName:   string
-  seriesName:   string
+  /** El tenant, para filtrar la lectura pública por `tenant_id` en vez de por canal. */
+  tenantId:     string
   /** acquisition_channels.public_id — la llave del endpoint de suscripción. */
   publicId:     string
   /** Base del CRM, para el endpoint de intake. */
   baseUrl:      string
-  /** URL pública del archivo de la serie, o null si el tenant no tiene slug. */
+  /** URL pública de la newsletter del tenant, o null si el tenant no tiene slug. */
   archiveUrl:   string | null
   /** URL del proyecto Supabase, para leer las ediciones publicadas. */
   supabaseUrl:  string
   /** Clave anónima (pública por diseño: viaja en cada página del CRM). */
   anonKey:      string
-  /** true si la serie tiene una secuencia de seguimiento vinculada. */
+  /** true si la newsletter tiene una secuencia de seguimiento vinculada. */
   hasSequence:  boolean
 }
 
-/** Las ÚNICAS columnas que `anon` puede leer (migración 105, grants por columna). */
+/**
+ * Las ÚNICAS columnas que `anon` puede leer (migración 105, grants por columna).
+ *
+ * `category` (migración 110) NO está aquí a propósito: el grant real sólo se la
+ * da a `authenticated` y `service_role` (comprobado contra el sandbox). Añadirla
+ * sería repetir el bug que este archivo existe para evitar — un campo que el
+ * prompt promete y el servidor en realidad rechaza con 401.
+ */
 export const PUBLIC_EDITION_COLUMNS = [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'content', 'sources',
@@ -42,11 +50,11 @@ export function buildNewsletterIntegrationPrompt(input: NewsletterIntegrationInp
     'del CRM de ITMANO. Sigue este contrato exactamente: es todo lo que hace falta',
     'para captar suscriptores y, si quiere, mostrar las ediciones en el propio sitio.',
     '',
-    '### Serie',
-    `${input.seriesName} · ID público: ${input.publicId}`,
+    '### Tu newsletter',
+    `ID público: ${input.publicId}`,
     input.archiveUrl
       ? `Archivo público ya publicado por ITMANO: ${input.archiveUrl}`
-      : 'Esta serie todavía no tiene archivo público (falta el slug del tenant).',
+      : 'Tu newsletter todavía no tiene archivo público (falta el slug del tenant).',
     '',
     '## 1) Formulario de suscripción',
     '',
@@ -89,28 +97,28 @@ export function buildNewsletterIntegrationPrompt(input: NewsletterIntegrationInp
     '',
     '### Respuesta',
     '`200` con `{ "ok": true }` cuando entra. Cualquier otro código trae `error` con',
-    'el motivo. Reenviar el mismo email a la misma serie no duplica: refresca al',
+    'el motivo. Reenviar el mismo email a tu newsletter no duplica: refresca al',
     'suscriptor existente.',
     '',
     '### Qué pasa después',
     input.hasSequence
-      ? '  · El suscriptor entra en la secuencia de seguimiento vinculada a esta serie.'
-      : '  · Esta serie no tiene secuencia vinculada todavía, así que el suscriptor sólo queda registrado. Se vincula desde el CRM, sin tocar tu web.',
+      ? '  · El suscriptor entra en la secuencia de seguimiento vinculada a tu newsletter.'
+      : '  · Tu newsletter no tiene secuencia vinculada todavía, así que el suscriptor sólo queda registrado. Se vincula desde el CRM, sin tocar tu web.',
     '  · Se registra como suscriptor, NO como prospecto: no ensucia el pipeline ni',
     '    las métricas de calidad de leads. Si esa misma persona rellena después un',
     '    formulario de contacto o descarga una guía, el CRM la asciende sola.',
     '',
     '## 2) Mostrar las ediciones en tu propia web (opcional)',
     '',
-    `Si no quieres esto, ya está: enlaza a ${input.archiveUrl ?? 'la página pública de la serie'} y salta esta sección.`,
+    `Si no quieres esto, ya está: enlaza a ${input.archiveUrl ?? 'la página pública de tu newsletter'} y salta esta sección.`,
     '',
     'Las ediciones publicadas se leen con la clave anónima de Supabase:',
     '',
     `${fence}bash`,
     `GET ${input.supabaseUrl}/rest/v1/newsletter_editions`,
     `  ?select=${columnas}`,
-    `  &channel_id=eq.<UUID de la serie>`,
-    "  &status=eq.published",
+    `  &tenant_id=eq.${input.tenantId}`,
+    '  &status=eq.published',
     '  &order=published_at.desc',
     'apikey: <NEXT_PUBLIC_SUPABASE_ANON_KEY>',
     `Authorization: Bearer ${input.anonKey}`,
@@ -128,10 +136,17 @@ export function buildNewsletterIntegrationPrompt(input: NewsletterIntegrationInp
     '',
     '### El campo `content`',
     'Es JSON con la forma `{ "v": 1, "blocks": [...] }`. Cada bloque trae un `type`',
-    '(`heading`, `paragraph`, `stat`, `list`, `quote`, `image`, `divider`) y sus',
+    '(`heading`, `paragraph`, `list`, `image`, `quote`, `callout`, `stat`) y sus',
     'campos. Los bloques `stat` llevan `sourceIds` que apuntan a entradas de',
     '`sources`: si publicas una cifra, publica también su fuente — el sistema entero',
     'existe para que cada dato sea verificable.',
+    '',
+    '### La categoría de cada edición no es pública',
+    'En el CRM cada edición tiene una `category` (informativo, educativo, análisis',
+    'o anuncio) para organizar el contenido. No está en la lista de columnas de',
+    'arriba: `anon` no puede leerla hoy, así que no puedes filtrar ni mostrarla',
+    'desde tu web con la clave anónima. Si la necesitas, pídesela a ITMANO — es un',
+    'cambio en el grant del CRM, no algo que resuelvas desde tu lado.',
     '',
     '## 3) Errores que dan problemas',
     '  · `select=*` en la lectura → 401. Columnas explícitas siempre.',

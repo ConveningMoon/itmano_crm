@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths, type RevalidatableEdition } from '@/lib/newsletters/revalidate'
 
-const RESTORED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug', 'channel_id'])
+const RESTORED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug'])
 
 export interface ReactivationReport {
   propertiesRepublished:  number
@@ -52,7 +52,7 @@ export async function restoreAfterReactivation(tenantId: string): Promise<Reacti
   const republished = ((restoredNewsletters ?? []) as any[]) as RevalidatableEdition[]
 
   // Sin esto, el archivo del cliente que acaba de volver a pagar sigue
-  // apareciendo vacío hasta que expire la ventana de ISR (300 s en las tres
+  // apareciendo vacío hasta que expire la ventana de ISR (300 s en las dos
   // rutas). Best-effort: no puede tumbar la reactivación.
   if (republished.length > 0) await revalidateNewsletterPaths(supabase, tenantId, republished)
 

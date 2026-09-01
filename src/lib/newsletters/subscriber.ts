@@ -101,11 +101,18 @@ export function withNewsletterConsent(
  * Devuelve las DOS claves: la procedencia (`newsletter_subscriber`, que la
  * graduación quita) y la prueba de consentimiento (`newsletter_consent`, que no
  * se quita nunca).
+ *
+ * `editionId` es opcional: quien se suscribe desde la portada del tenant no
+ * viene de ninguna edición en particular. Cuando llega, `getNewsletterStats`
+ * (aggregateStats) lo usa para atribuir el suscriptor a la edición que lo
+ * captó — es la única escritura de esta clave, y sin ella el conteo por
+ * edición se queda en cero para siempre.
  */
 export function subscriberMetadata(args: {
   channelId:   string
   consentText: string
   sourceUrl:   string
+  editionId?:  string | null
 }): Record<string, unknown> {
   const at = new Date().toISOString()
   const consent = newsletterConsent({ consentText: args.consentText, sourceUrl: args.sourceUrl, at })
@@ -113,6 +120,7 @@ export function subscriberMetadata(args: {
     newsletter_subscriber: {
       at,
       channel_id: args.channelId,
+      ...(args.editionId ? { edition_id: args.editionId } : {}),
       consent,
     },
     newsletter_consent: consent,

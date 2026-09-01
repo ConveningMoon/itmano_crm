@@ -19,7 +19,7 @@ function makeFakeSupabase(rowsByTable: Record<string, Record<string, unknown>[]>
     const rows = rowsByTable[table] ?? []
     // El builder es THENABLE: `select()` ya no cierra la cadena, porque la
     // revalidación de las rutas públicas encadena `.select().eq().maybeSingle()`
-    // y `.select().eq().in()` sobre `tenants` y `acquisition_channels`.
+    // sobre `tenants`.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- doble encadenable de prueba, sin tipos de Supabase
     const builder: any = {
       update(payload: unknown) {
@@ -128,13 +128,14 @@ describe('restoreAfterReactivation', () => {
     expect(report).toEqual({ propertiesRepublished: 0, newslettersRepublished: 1 })
   })
 
-  it('newsletters: purga el caché de las tres rutas públicas al republicar', async () => {
+  it('newsletters: purga el caché de las dos rutas públicas al republicar', async () => {
     // Sin esto, el archivo del cliente que acaba de volver a pagar sigue
-    // apareciendo vacío hasta que expire la ventana de ISR (300 s).
+    // apareciendo vacío hasta que expire la ventana de ISR (300 s). Con una
+    // sola newsletter por tenant no hay slug de serie que resolver: la ruta
+    // de la edición cuelga directo del tenant.
     const fake = makeFakeSupabase({
-      newsletter_editions:   [{ id: 'n1', slug: 'agosto-2026', channel_id: 'ch1' }],
-      tenants:               [{ id: 'tenant-x', slug: 'aj' }],
-      acquisition_channels:  [{ id: 'ch1', slug: 'mercado' }],
+      newsletter_editions: [{ id: 'n1', slug: 'agosto-2026' }],
+      tenants:             [{ id: 'tenant-x', slug: 'aj' }],
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
     mockCreateAdminClient.mockReturnValue(fake.client as any)
@@ -143,8 +144,7 @@ describe('restoreAfterReactivation', () => {
 
     const paths = mockRevalidatePath.mock.calls.map(c => c[0])
     expect(paths).toContain('/nl/aj')
-    expect(paths).toContain('/nl/aj/mercado')
-    expect(paths).toContain('/nl/aj/mercado/agosto-2026')
+    expect(paths).toContain('/nl/aj/agosto-2026')
   })
 
   it('newsletters: sin nada que republicar no toca el caché', async () => {

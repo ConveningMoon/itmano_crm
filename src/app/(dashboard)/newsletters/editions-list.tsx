@@ -4,39 +4,38 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeft, ExternalLink, Pencil, Archive, ArchiveRestore, Trash2, Plus, Code2, Copy, Check,
+  ExternalLink, Pencil, Archive, ArchiveRestore, Trash2, Plus, Code2, Copy, Check,
 } from 'lucide-react'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { LANGUAGE_CONFIG } from '@/lib/config'
-import type { NewsletterSeries, NewsletterEdition, NewsletterStatus } from '@/lib/data/newsletters'
-import type { EmailSequence } from '@/lib/data/email-sequences'
+import { CATEGORY_LABELS } from '@/lib/newsletters/category'
+import type { NewsletterEdition, NewsletterStatus } from '@/lib/data/newsletters'
+import type { NewsletterTotals, EditionStats } from '@/lib/data/newsletter-stats'
 import { ModalShell } from '@/components/motion/modal-shell'
-import { SeriesModal } from '../../series-modal'
 import {
-  archiveSeries, restoreSeries, deleteSeries,
   archiveEdition, restoreEdition, unpublishEdition, deleteEdition,
-  getSeriesIntegrationPrompt,
-} from '../../actions'
+  getNewsletterIntegrationPrompt,
+} from './actions'
 
-// Ediciones de una serie + gestión de la serie. Es la pantalla que faltaba: sin
-// ella no había forma de abrir, retirar ni eliminar nada de lo ya creado.
+// Pantalla única de la newsletter: tira de totales, aviso de secuencia vacía y
+// la tabla de ediciones con sus acciones. Sustituye a series-list.tsx +
+// serie/[id]/series-detail.tsx — con una sola newsletter por tenant, ya no hay
+// nada que listar antes de llegar a las ediciones.
 //
-// Todo lo destructivo pasa por confirmación y por el mismo camino de dos pasos
-// que /sources: archivar primero, eliminar después. El servidor lo vuelve a
-// exigir (deleteSeries / deleteEdition) — un check de UI que el servidor no
-// repite no es un check.
-
-interface AgentOption { id: string; name: string }
+// Las acciones por fila y el modal de "Integración" vienen movidos tal cual de
+// series-detail.tsx: mismo comportamiento, mismo ConfirmDialog, adaptados a
+// que la action de integración ya no recibe el id de una serie.
 
 interface Props {
-  series:          NewsletterSeries
-  editions:        NewsletterEdition[]
-  sequences:       EmailSequence[]
-  agents:          AgentOption[]
-  tenantSlug:      string
-  canManageSeries: boolean
-  myUserId:        string
-  isAgent:         boolean
+  editions:      NewsletterEdition[]
+  stats:         { totals: NewsletterTotals; byEdition: Record<string, EditionStats> }
+  tenantSlug:    string
+  /** id de la secuencia "Newsletter", para el aviso. null si no se pudo crear. */
+  sequenceId:    string | null
+  /** true si esa secuencia no tiene ningún paso todavía. */
+  sequenceEmpty: boolean
+  myUserId:      string
+  isAgent:       boolean
 }
 
 const STATUS_LABEL: Record<NewsletterStatus, { label: string; color: string; bg: string }> = {
@@ -109,13 +108,12 @@ function ConfirmDialog({
   )
 }
 
-export function SeriesDetail({
-  series, editions, sequences, agents, tenantSlug, canManageSeries, myUserId, isAgent,
+export function EditionsList({
+  editions, stats, tenantSlug, sequenceId, sequenceEmpty, myUserId, isAgent,
 }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [editing, setEditing] = useState(false)
   // Prompt de integración: se pide al abrirlo, no al cargar la página — casi
   // nadie lo necesita y armarlo lee tres filas más.
   const [integration, setIntegration] = useState<string | null>(null)
@@ -123,15 +121,10 @@ export function SeriesDetail({
   const [copied, setCopied] = useState(false)
   // Un solo diálogo a la vez: qué se está confirmando, sobre qué fila.
   const [confirm, setConfirm] = useState<
-    | { kind: 'archive_series' }
-    | { kind: 'delete_series' }
     | { kind: 'archive_edition'; edition: NewsletterEdition }
     | { kind: 'delete_edition';  edition: NewsletterEdition }
     | null
   >(null)
-
-  const archived  = series.archivedAt !== null
-  const publicUrl = tenantSlug ? hostedNewsletterUrl(tenantSlug, series.slug) : null
 
   /** Corre una action y refresca; deja el error a la vista si falla. */
   function run(fn: () => Promise<{ ok: true; data: null } | { ok: false; error: string }>) {
@@ -157,87 +150,50 @@ export function SeriesDetail({
         @media (prefers-reduced-motion: reduce) { .nl-row { transition: none !important; } }
       `}</style>
 
-      <div style={{ marginBottom: '20px' }}>
-        <Link
-          href="/newsletters"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
-        >
-          <ArrowLeft size={13} />
-          Newsletters
-        </Link>
-      </div>
-
-      {/* Cabecera de la serie */}
+      {/* Cabecera */}
       <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
         gap: '12px', flexWrap: 'wrap', marginBottom: '24px',
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-              {series.name}
-            </h1>
-            <span style={{
-              fontSize: '10px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: archived ? 'var(--accent-coral)' : 'var(--accent-green)',
-              background: archived ? 'rgba(201,123,107,0.12)' : 'rgba(107,163,104,0.12)',
-              padding: '2px 8px', borderRadius: '10px',
-            }}>
-              {archived ? 'Archivada' : 'Activa'}
-            </span>
-          </div>
+          <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            Newsletter
+          </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            {series.subscriberCount} {series.subscriberCount === 1 ? 'suscriptor' : 'suscriptores'}
-            {' · '}
-            {editions.length} {editions.length === 1 ? 'edición' : 'ediciones'}
-            {' · '}
-            {series.emailSequenceName ? `Secuencia: ${series.emailSequenceName}` : 'Sin secuencia vinculada'}
+            Contenido editorial con captación de suscriptores, publicado con tu marca.
           </p>
-          {archived && series.archivedAt && (
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-              Archivada el {fmtDate(series.archivedAt)}. No aparece en la web ni acepta suscripciones nuevas.
-            </p>
-          )}
         </div>
-
-        {canManageSeries && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button className="nl-ghost" style={GHOST_BTN} onClick={() => setEditing(true)}>
-              <Pencil size={13} /> Editar
-            </button>
-            <button
-              className="nl-ghost"
-              style={GHOST_BTN}
-              disabled={pending}
-              onClick={() => {
-                setShowIntegration(true)
-                if (integration !== null) return
-                setError(null)
-                start(async () => {
-                  const res = await getSeriesIntegrationPrompt(series.id)
-                  if (res.ok) setIntegration(res.data.prompt)
-                  else { setError(res.error); setShowIntegration(false) }
-                })
-              }}
-            >
-              <Code2 size={13} /> Integración
-            </button>
-            {archived ? (
-              <>
-                <button className="nl-ghost" style={GHOST_BTN} onClick={() => run(() => restoreSeries(series.id))}>
-                  <ArchiveRestore size={13} /> Restaurar
-                </button>
-                <button className="nl-danger" style={GHOST_BTN} onClick={() => setConfirm({ kind: 'delete_series' })}>
-                  <Trash2 size={13} /> Eliminar
-                </button>
-              </>
-            ) : (
-              <button className="nl-danger" style={GHOST_BTN} onClick={() => setConfirm({ kind: 'archive_series' })}>
-                <Archive size={13} /> Archivar
-              </button>
-            )}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Link
+            href="/newsletters/nueva"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--accent-gold)', color: 'var(--bg-base)',
+              borderRadius: '8px', border: 'none', textDecoration: 'none',
+            }}
+          >
+            <Plus size={14} />
+            Nueva edición
+          </Link>
+          <button
+            className="nl-ghost"
+            style={GHOST_BTN}
+            disabled={pending}
+            onClick={() => {
+              setShowIntegration(true)
+              if (integration !== null) return
+              setError(null)
+              start(async () => {
+                const res = await getNewsletterIntegrationPrompt()
+                if (res.ok) setIntegration(res.data.prompt)
+                else { setError(res.error); setShowIntegration(false) }
+              })
+            }}
+          >
+            <Code2 size={13} /> Integración
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -249,19 +205,31 @@ export function SeriesDetail({
         </p>
       )}
 
-      {publicUrl && !archived && (
-        <a
-          href={publicUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '5px',
-            fontSize: '12px', color: 'var(--text-secondary)', textDecoration: 'none', marginBottom: '20px',
-          }}
-        >
-          <ExternalLink size={12} />
-          Ver página pública
-        </a>
+      {/* Tira de totales */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: '12px', marginBottom: '20px',
+      }}>
+        <StatTile label="Suscriptores" value={stats.totals.subscribers} />
+        <StatTile label="Publicadas" value={stats.totals.published} />
+        <StatTile label="Borradores" value={stats.totals.drafts} />
+        <StatTile label="Vistas" value={stats.totals.views} />
+      </div>
+
+      {/* Aviso de secuencia vacía */}
+      {sequenceEmpty && sequenceId && (
+        <div style={{
+          padding: '12px 16px', borderRadius: '8px', marginBottom: '20px',
+          border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
+        }}>
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+            Tu secuencia <strong style={{ color: 'var(--text-secondary)' }}>Newsletter</strong> todavía
+            no tiene correos, así que quien se suscriba no recibirá nada.{' '}
+            <Link href={`/emails/${sequenceId}`} style={{ color: 'var(--accent-gold)' }}>
+              Añadir el primero →
+            </Link>
+          </p>
+        </div>
       )}
 
       {/* Ediciones */}
@@ -269,21 +237,9 @@ export function SeriesDetail({
         background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
         borderRadius: '12px', overflow: 'hidden',
       }}>
-        <div style={{
-          padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-        }}>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Ediciones
-          </span>
-          <Link href="/newsletters/nueva" style={{ ...GHOST_BTN, textDecoration: 'none' }} className="nl-ghost">
-            <Plus size={13} /> Nueva edición
-          </Link>
-        </div>
-
         {editions.length === 0 ? (
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '28px 20px', margin: 0, textAlign: 'center' }}>
-            Esta serie todavía no tiene ediciones.
+            Todavía no hay ninguna edición.
           </p>
         ) : (
           <div>
@@ -291,8 +247,8 @@ export function SeriesDetail({
               <EditionRow
                 key={ed.id}
                 edition={ed}
-                seriesSlug={series.slug}
                 tenantSlug={tenantSlug}
+                edStats={stats.byEdition[ed.id]}
                 canWrite={!isAgent || ed.createdByUserId === myUserId}
                 pending={pending}
                 onUnpublish={() => run(() => unpublishEdition(ed.id))}
@@ -304,49 +260,6 @@ export function SeriesDetail({
           </div>
         )}
       </div>
-
-      <SeriesModal
-        key={series.id}
-        open={editing}
-        onClose={() => setEditing(false)}
-        sequences={sequences}
-        agents={agents}
-        series={series}
-      />
-
-      <ConfirmDialog
-        open={confirm?.kind === 'archive_series'}
-        title="Archivar serie"
-        detail={<>
-          <strong style={{ color: 'var(--text-primary)' }}>{series.name}</strong> saldrá de la web
-          y dejará de aceptar suscripciones. Sus {editions.length} {editions.length === 1 ? 'edición' : 'ediciones'} y
-          sus {series.subscriberCount} {series.subscriberCount === 1 ? 'suscriptor' : 'suscriptores'} se conservan,
-          y puedes restaurarla cuando quieras.
-        </>}
-        confirmLabel="Archivar serie"
-        pending={pending}
-        danger
-        onCancel={() => setConfirm(null)}
-        onConfirm={() => run(() => archiveSeries(series.id))}
-      />
-
-      <ConfirmDialog
-        open={confirm?.kind === 'delete_series'}
-        title="Eliminar serie definitivamente"
-        detail={<>
-          Se elimina <strong style={{ color: 'var(--text-primary)' }}>{series.name}</strong> y
-          con ella <strong style={{ color: 'var(--text-primary)' }}>
-            sus {editions.length} {editions.length === 1 ? 'edición' : 'ediciones'}
-          </strong>, publicadas incluidas. Esto no se puede deshacer.
-          Los {series.subscriberCount} {series.subscriberCount === 1 ? 'suscriptor' : 'suscriptores'} se
-          conservan como leads, sólo pierden la atribución a esta serie.
-        </>}
-        confirmLabel="Eliminar definitivamente"
-        pending={pending}
-        danger
-        onCancel={() => setConfirm(null)}
-        onConfirm={() => run(() => deleteSeries(series.id))}
-      />
 
       <ConfirmDialog
         open={confirm?.kind === 'archive_edition'}
@@ -435,13 +348,25 @@ export function SeriesDetail({
   )
 }
 
+function StatTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div style={{
+      padding: '14px 16px', borderRadius: '10px',
+      border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
+    }}>
+      <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)' }}>{value}</div>
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{label}</div>
+    </div>
+  )
+}
+
 function EditionRow({
-  edition, seriesSlug, tenantSlug, canWrite, pending,
+  edition, tenantSlug, edStats, canWrite, pending,
   onUnpublish, onRestore, onArchive, onDelete,
 }: {
   edition:     NewsletterEdition
-  seriesSlug:  string
   tenantSlug:  string
+  edStats:     EditionStats | undefined
   canWrite:    boolean
   pending:     boolean
   onUnpublish: () => void
@@ -452,7 +377,7 @@ function EditionRow({
   const cfg = STATUS_LABEL[edition.status]
   const lang = LANGUAGE_CONFIG[edition.language as keyof typeof LANGUAGE_CONFIG]
   const publicUrl = tenantSlug && edition.status === 'published'
-    ? hostedNewsletterUrl(tenantSlug, seriesSlug, edition.slug)
+    ? hostedNewsletterUrl(tenantSlug, edition.slug)
     : null
 
   return (
@@ -478,6 +403,9 @@ function EditionRow({
           }}>
             {cfg.label}
           </span>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {CATEGORY_LABELS[edition.category]}
+          </span>
           {lang && (
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lang.label}</span>
           )}
@@ -486,6 +414,11 @@ function EditionRow({
               ? `Publicada el ${fmtDate(edition.publishedAt)}`
               : `Creada el ${fmtDate(edition.createdAt)}`}
           </span>
+          {edStats && (
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              · {edStats.views} {edStats.views === 1 ? 'vista' : 'vistas'} · {edStats.subscribers} {edStats.subscribers === 1 ? 'suscriptor' : 'suscriptores'}
+            </span>
+          )}
           {edition.aiGenerated && (
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>· Generada con IA</span>
           )}

@@ -4,33 +4,33 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Sparkles, Upload } from 'lucide-react'
-import type { NewsletterSeries, NewsletterCoverSource } from '@/lib/data/newsletters'
+import type { NewsletterCoverSource } from '@/lib/data/newsletters'
 import type { StudioImage } from '@/lib/studio/types'
 import { NEWSLETTER_CONTENT_VERSION } from '@/lib/newsletters/content'
+import { NEWSLETTER_CATEGORIES, CATEGORY_LABELS, type NewsletterCategory } from '@/lib/newsletters/category'
 import { SUPPORTED_LANGUAGE_CODES, LANGUAGE_CONFIG } from '@/lib/config'
 import { CoverPicker } from '../[id]/cover-picker'
 import { createEdition } from '../actions'
 import { GenerateModal } from '../generate-modal'
 import { ImportModal } from '../import-modal'
 
-// Formulario mínimo de creación: serie, titular, idioma y portada. El
+// Formulario mínimo de creación: titular, categoría, idioma y portada. El
 // contenido nace con UN bloque (heading con el titular) porque
 // NewsletterContentSchema exige al menos uno — el resto de la edición se
 // construye ya dentro del editor completo (/newsletters/[id]).
 
 interface Props {
-  series:        NewsletterSeries[]
   studioImages:  StudioImage[]
   /** Las fuentes ya preparadas del tenant, para que el panel de IA las enseñe. */
   sourceDomains: string[]
 }
 
-export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
+export function NewEditionForm({ studioImages, sourceDomains }: Props) {
   const router = useRouter()
   const [showGenerate, setShowGenerate]   = useState(false)
   const [showImport, setShowImport]       = useState(false)
-  const [channelId, setChannelId]         = useState(series[0]?.id ?? '')
   const [title, setTitle]                 = useState('')
+  const [category, setCategory]           = useState<NewsletterCategory>('informativo')
   const [language, setLanguage]           = useState('es')
   const [coverImageUrl, setCoverImageUrl] = useState('')
   const [coverSource, setCoverSource]     = useState<NewsletterCoverSource>('upload')
@@ -40,13 +40,11 @@ export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!channelId) { setError('Elige una serie.'); return }
     if (!title.trim()) { setError('La edición necesita un titular.'); return }
     if (!coverImageUrl) { setError('La edición necesita una imagen de portada.'); return }
 
     startTransition(async () => {
       const res = await createEdition({
-        channelId,
         title: title.trim(),
         dek: null,
         language,
@@ -58,23 +56,11 @@ export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
         },
         sources: [],
         dataAsOf: null,
+        category,
       })
       if (!res.ok) { setError(res.error); return }
       router.push(`/newsletters/${res.data.id}`)
     })
-  }
-
-  if (series.length === 0) {
-    return (
-      <div style={{ maxWidth: '480px' }}>
-        <BackLink />
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-          Todavía no hay ninguna serie. Crea una desde{' '}
-          <Link href="/newsletters" style={{ color: 'var(--accent-gold)' }}>Newsletters</Link>{' '}
-          antes de escribir una edición.
-        </p>
-      </div>
-    )
   }
 
   return (
@@ -133,15 +119,15 @@ export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
-          <label style={LABEL_STYLE}>Serie *</label>
+          <label style={LABEL_STYLE}>Categoría</label>
           <select
-            value={channelId}
-            onChange={e => setChannelId(e.target.value)}
+            value={category}
+            onChange={e => setCategory(e.target.value as NewsletterCategory)}
             className="nl-new-input"
             style={{ ...INPUT_STYLE, cursor: 'pointer' }}
           >
-            {series.map(s => (
-              <option key={s.id} value={s.id} style={{ background: '#16181C' }}>{s.name}</option>
+            {NEWSLETTER_CATEGORIES.map(c => (
+              <option key={c} value={c} style={{ background: '#16181C' }}>{CATEGORY_LABELS[c]}</option>
             ))}
           </select>
         </div>
@@ -210,14 +196,12 @@ export function NewEditionForm({ series, studioImages, sourceDomains }: Props) {
       <GenerateModal
         open={showGenerate}
         onClose={() => setShowGenerate(false)}
-        series={series}
         sourceDomains={sourceDomains}
       />
 
       <ImportModal
         open={showImport}
         onClose={() => setShowImport(false)}
-        series={series}
       />
     </div>
   )

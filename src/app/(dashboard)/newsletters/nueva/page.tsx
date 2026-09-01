@@ -2,15 +2,16 @@ import { redirect } from 'next/navigation'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
-import { getSeriesForTenant, getSourceDomainsFor } from '@/lib/data/newsletters'
+import { getSourceDomainsFor } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
 
-// Creación de una edición nueva. Server Component: fetch de series + biblioteca
-// del Estudio, luego el formulario (client) hace su trabajo y navega al editor
-// completo en /newsletters/<id>.
+// Creación de una edición nueva. Server Component: fetch de la biblioteca del
+// Estudio y las fuentes del tenant, luego el formulario (client) hace su
+// trabajo y navega al editor completo en /newsletters/<id>. El canal implícito
+// se resuelve dentro de las actions que crean la edición, no aquí.
 //
 // "Generar con IA" se abre DESDE AQUÍ, en el mismo formulario y sin navegar:
 // es la otra forma de hacer lo mismo que esta pantalla, así que sacar al
@@ -45,8 +46,7 @@ export default async function NewEditionPage() {
   const plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
-  const [series, studioImages, sourceDomains] = await Promise.all([
-    getSeriesForTenant(tenantId),
+  const [studioImages, sourceDomains] = await Promise.all([
     getStudioImages(tenantId),
     // Vacío = este tenant nunca ha generado; el panel lo explica y se preparan
     // solas en esa primera generación (ai/source-catalog.ts).
@@ -55,7 +55,7 @@ export default async function NewEditionPage() {
 
   return (
     <div style={{ maxWidth: '560px' }}>
-      <NewEditionForm series={series} studioImages={studioImages} sourceDomains={sourceDomains} />
+      <NewEditionForm studioImages={studioImages} sourceDomains={sourceDomains} />
     </div>
   )
 }
