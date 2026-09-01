@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildImportPrompt } from '@/lib/newsletters/import-prompt'
 import {
-  NewsletterContentSchema, NEWSLETTER_CONTENT_VERSION, CONTENT_LIMITS,
+  NewsletterContentSchema, NewsletterBlockSchema, NEWSLETTER_CONTENT_VERSION, CONTENT_LIMITS,
 } from '@/lib/newsletters/content'
 
 // El prompt de importación ES el contrato: lo que dice aquí es lo que el
@@ -54,5 +54,22 @@ describe('el prompt de importación es aceptado por el esquema real', () => {
 
   it('dice que las fuentes son opcionales', () => {
     expect(prompt).toContain('"sources" es OPCIONAL')
+  })
+
+  it('los valores de "style" que anuncia son los que el esquema acepta', () => {
+    // El ejemplo del prompt sólo usa "bullet", así que la lista numerada
+    // viajaba sin cobertura: el prompt decía "ordered" y el esquema
+    // ListBlock sólo conoce "bullet" | "number".
+    const acepta = (style: string) => NewsletterBlockSchema.safeParse({
+      type: 'list', style, items: ['Un punto'],
+    }).success
+
+    expect(acepta('bullet')).toBe(true)
+    expect(acepta('number')).toBe(true)
+    expect(acepta('ordered')).toBe(false)
+
+    expect(prompt).toContain('"bullet"')
+    expect(prompt).toContain('"number"')
+    expect(prompt).not.toContain('"ordered"')
   })
 })
