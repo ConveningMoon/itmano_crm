@@ -37,11 +37,9 @@ export function hostedPropertiesUrl(tenantSlug: string): string {
   return `https://properties.${HOSTED_BASE_DOMAIN}/${tenantSlug}`
 }
 
-/** URL pública de una newsletter: portada, serie o edición. */
-export function hostedNewsletterUrl(
-  tenantSlug: string, seriesSlug?: string, editionSlug?: string,
-): string {
-  const path = [tenantSlug, seriesSlug, editionSlug].filter(Boolean).join('/')
+/** URL pública de una newsletter: portada del tenant, o una edición suya. */
+export function hostedNewsletterUrl(tenantSlug: string, editionSlug?: string): string {
+  const path = [tenantSlug, editionSlug].filter(Boolean).join('/')
   return `https://news.${HOSTED_BASE_DOMAIN}/${path}`
 }
 

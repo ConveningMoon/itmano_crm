@@ -334,6 +334,16 @@ Los emails de auth (Supabase Auth SMTP) siempre salen por `mail.itmano.com`.
 
 Los medios viven en el bucket público `property-media`; las subidas pasan solo por el cliente service-role. **Cuando un host nuevo sirva esas imágenes, hay que agregarlo a `images.remotePatterns` del `next.config.ts` del proyecto web** — `next/image` bloquea hosts no listados, y esto ya causó una falla silenciosa de imágenes.
 
+### Newsletters — una por tenant, sin series
+
+Cada tenant tiene **UNA newsletter implícita**, no varias series a elegir: una fila de `acquisition_channels` con `channel_type = 'newsletter'`, creada por el sistema la primera vez que se escribe una edición (`ensureNewsletterChannel`, `src/lib/newsletters/channel.ts`). El usuario no la crea ni la nombra. Un índice único parcial (migración 110) impide un segundo canal de newsletter por tenant. Las URLs públicas son `news.itmano.com/<tenant>/<edicion>`, sin segmento de serie.
+
+Lo que antes distinguía una serie lo hace ahora la **categoría** de la edición (`informativo` · `educativo` · `análisis` · `anuncio`, columna `category` de `newsletter_editions`, migración 110): es una etiqueta para el lector, no un canal ni una secuencia propia — si algún día hiciera falta un público o una secuencia por categoría, eso son series otra vez.
+
+**Exposición pública, mismo patrón que `properties`:** una policy de RLS limita `anon` a ediciones `published` y no degradadas por billing; los grants por columna (migración 105) limitan además qué columnas puede leer `anon` — un `select('*')` devuelve 401, no un resultado parcial. **`category` no está en ese grant** (sólo `authenticated` y `service_role` la leen): la constante `PUBLIC_EDITION_COLUMNS` de `src/lib/services/newsletter-integration-prompt.ts` tiene que coincidir exactamente con el grant real, verificado contra la base — documentar ahí una columna vedada es el mismo bug que ya pasó una vez con un tipo de bloque que el esquema no tenía.
+
+Las estadísticas por edición (vistas, suscriptores) viven en `src/lib/data/newsletter-stats.ts`: se atribuye el suscriptor a la edición desde la que se suscribió; quien se suscribe desde la portada del tenant cuenta sólo en el total.
+
 ---
 
 ## Convenciones de código
@@ -505,6 +515,7 @@ Esto existe porque la migración 082 quitó `attention_when` de `leads_list`, el
 | Perfil de negocio del tenant | `src/lib/business/profile.ts` (puro) + `src/lib/data/business-profile.ts` |
 | Scoring, transiciones de estado, notificaciones | La tabla `lead_score_rules` vía MCP + `src/lib/scoring/` |
 | Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
+| Newsletters | `src/lib/newsletters/*`, `src/lib/data/newsletters.ts`, `src/lib/data/newsletter-stats.ts` |
 | Auth o el proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs de Supabase SSR |
 | Migraciones o RLS | La migración más reciente en `supabase/migrations/` |
 | Un `.select()` con lista de columnas | `columns()` de `src/lib/supabase/columns.ts` |

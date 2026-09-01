@@ -53,6 +53,13 @@ mercado con datos citables, generados en minutos, con su marca.
 
 ### 3.1 La serie es un canal de adquisición
 
+> **Superada — 2026-08-31.** El modelo de series descrito en esta sección se
+> retiró: un tenant tiene UNA newsletter implícita, no varias series a elegir.
+> Ver `docs/superpowers/plans/2026-08-27-newsletters-sin-series.md`. Se deja el
+> texto tal cual, como registro de por qué se decidió así en su momento — el
+> canal de adquisición como soporte (sin tabla propia) sigue vigente, lo que
+> cambió es que el usuario ya no ve ni elige esa fila.
+
 Se añade `'newsletter'` al CHECK de `acquisition_channels.channel_type`. La
 serie **es** una fila de esa tabla; no hay tabla de series.
 

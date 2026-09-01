@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { Pal } from '../nl-chrome'
+import type { Pal } from './nl-chrome'
 
-// Formulario de suscripción a una serie de newsletter — postea al intake
+// Formulario de suscripción a la newsletter del tenant — postea al intake
 // público (/api/intake/<publicId>/submit), mismo contrato y endpoint que
 // hp/[tenantSlug]/[channelSlug]/hosted-form.tsx, pero con menos campos: sólo
 // lo que hace falta para dar de alta a un lector, más la PRUEBA del
@@ -13,8 +13,13 @@ import type { Pal } from '../nl-chrome'
 // El suscriptor entra al CRM marcado `newsletter_subscriber` (ver
 // src/lib/newsletters/subscriber.ts): no dispara análisis de IA ni contamina
 // los quintiles de calidad (migración 106). Lo que recibe es la SECUENCIA
-// vinculada a la serie — el sistema todavía no envía las ediciones por
+// vinculada a la newsletter — el sistema todavía no envía las ediciones por
 // correo, así que el copy nunca lo promete.
+//
+// Se renderiza en dos sitios: la portada del tenant (sin `editionId`, se
+// suscribió desde el archivo general) y la página de cada edición (con
+// `editionId`, para que las estadísticas por edición sepan qué edición captó
+// al lector — ver getNewsletterStats/aggregateStats).
 
 function visitorId(): string {
   try {
@@ -31,11 +36,13 @@ function visitorId(): string {
 }
 
 export function SubscribeForm({
-  publicId, tenantName, P,
+  publicId, tenantName, P, editionId,
 }: {
   publicId: string
   tenantName: string
   P: Pal
+  /** Edición desde la que se suscribe, si el formulario vive en una edición. */
+  editionId?: string
 }) {
   const [firstName, setFirstName] = useState('')
   const [email, setEmail]         = useState('')
@@ -64,6 +71,7 @@ export function SubscribeForm({
             visitor_id:   visitorId(),
             consent_text: consentText,
             source_url:   window.location.href,
+            ...(editionId ? { edition_id: editionId } : {}),
             website,
           }),
         })
@@ -87,8 +95,8 @@ export function SubscribeForm({
       <div style={{ ...cardStyle, padding: '28px 24px', textAlign: 'center' }}>
         <p style={{ fontSize: '15px', color: P.ink, lineHeight: 1.6, margin: 0 }}>
           {already
-            ? 'Ya estabas suscrito a esta serie — sigues inscrito.'
-            : 'Listo. En breve empiezas a recibir contenido de esta serie.'}
+            ? 'Ya estabas suscrito — sigues inscrito.'
+            : 'Listo. En breve empiezas a recibir la newsletter.'}
         </p>
       </div>
     )
@@ -107,7 +115,7 @@ export function SubscribeForm({
   return (
     <div style={{ ...cardStyle, padding: '26px 24px' }}>
       <h2 style={{ fontSize: '17px', fontWeight: 700, color: P.ink, margin: '0 0 4px', letterSpacing: '-0.01em' }}>
-        Suscríbete a esta serie
+        Suscríbete a la newsletter
       </h2>
       <p style={{ fontSize: '13px', color: P.textSoft, margin: '0 0 18px', lineHeight: 1.5 }}>
         Deja tus datos para recibir el contenido de {tenantName}.

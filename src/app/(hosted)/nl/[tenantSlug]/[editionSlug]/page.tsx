@@ -3,14 +3,17 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
-import { getPublicTenant, getPublicSeries, getPublicEdition, getPublicNewsletterPaths } from '../../shared'
-import { formatDataAsOf, formatEditionDate } from '../../nl-format'
-import { pal, WRAP, DISPLAY, Masthead, Footer } from '../../nl-chrome'
+import { getPublicTenant, getPublicEdition, getPublicNewsletterPaths, getPublicNewsletterChannel } from '../shared'
+import { formatDataAsOf, formatEditionDate } from '../nl-format'
+import { pal, WRAP, DISPLAY, Masthead, Footer } from '../nl-chrome'
 import { renderNewsletterHtml } from '@/lib/newsletters/render'
+import { SubscribeForm } from '../subscribe-form'
+import { EditionViewBeacon } from './edition-view-beacon'
 
-// Lectura pública de una edición — news.itmano.com/<slug>/<serie>/<edición>.
+// Lectura pública de una edición — news.itmano.com/<tenant-slug>/<edición>.
+// La edición cuelga directamente del tenant: ya no hay serie de por medio.
 
-// ISR — mismo razonamiento que las otras dos páginas del escaparate.
+// ISR — mismo razonamiento que la portada.
 export const revalidate = 300
 
 // Obligatorio: sin esto `revalidate` no aplica a un segmento dinámico (ver
@@ -19,19 +22,17 @@ export async function generateStaticParams() {
   return getPublicNewsletterPaths()
 }
 
-type Params = Promise<{ tenantSlug: string; seriesSlug: string; editionSlug: string }>
+type Params = Promise<{ tenantSlug: string; editionSlug: string }>
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const { tenantSlug, seriesSlug, editionSlug } = await params
+  const { tenantSlug, editionSlug } = await params
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) return { title: 'Página no disponible' }
-  const series = await getPublicSeries(tenant.id, seriesSlug)
-  if (!series) return { title: 'Serie no disponible' }
-  const edition = await getPublicEdition(tenant.id, series.id, editionSlug)
+  const edition = await getPublicEdition(tenant.id, editionSlug)
   if (!edition) return { title: 'Edición no disponible' }
   return {
     title: `${edition.title} — ${tenant.name}`,
-    description: edition.dek ?? `${series.name} — ${tenant.name}`,
+    description: edition.dek ?? `La newsletter de ${tenant.name}`,
     openGraph: {
       images: [{ url: edition.cover_image_url }],
     },
@@ -39,16 +40,23 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 }
 
 export default async function PublicNewsletterEditionPage({ params }: { params: Params }) {
-  const { tenantSlug, seriesSlug, editionSlug } = await params
+  const { tenantSlug, editionSlug } = await params
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) notFound()
-  const series = await getPublicSeries(tenant.id, seriesSlug)
-  if (!series) notFound()
-  const edition = await getPublicEdition(tenant.id, series.id, editionSlug)
+  const edition = await getPublicEdition(tenant.id, editionSlug)
   // Sin contenido parseable (jsonb roto o vacío) la edición no es renderizable:
   // mejor 404 que pintarla a medias. parseNewsletterContent ya corrió dentro
   // de getPublicEdition (shared.ts) — aquí sólo se comprueba el resultado.
   if (!edition || !edition.content) notFound()
+
+  // El formulario de suscripción vive también aquí, no sólo en la portada
+  // (hallazgo de la revisión): sin esto, quien llega directo a una edición
+  // por un enlace compartido nunca ve dónde suscribirse, y edition_id nunca
+  // se escribe — el conteo de suscriptores por edición se quedaba en cero
+  // para siempre. Mismo `SubscribeForm` que la portada, con `editionId` para
+  // que la atribución (getNewsletterStats/aggregateStats) sepa qué edición
+  // captó al lector.
+  const channel = await getPublicNewsletterChannel(tenant.id)
 
   const P = pal(tenant.primary_color || '#C9A96E')
   // Único caller server-side de renderNewsletterHtml para esta página: el HTML
@@ -58,6 +66,7 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
 
   return (
     <div style={{ background: P.paper, color: P.ink, minHeight: '100vh' }}>
+      <EditionViewBeacon editionId={edition.id} />
       <style>{`
         .nl-article h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: ${P.ink}; margin: 36px 0 14px; }
         .nl-article h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: ${P.ink}; margin: 28px 0 12px; }
@@ -84,8 +93,8 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
       <Masthead tenant={tenant} P={P} />
 
       <main style={{ ...WRAP, paddingTop: '26px', paddingBottom: '72px' }}>
-        <Link href={`/nl/${tenant.slug}/${series.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: P.textFaint, textDecoration: 'none', marginBottom: '24px' }}>
-          <ArrowLeft size={14} /> {series.name}
+        <Link href={`/nl/${tenant.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: P.textFaint, textDecoration: 'none', marginBottom: '24px' }}>
+          <ArrowLeft size={14} /> La newsletter de {tenant.name}
         </Link>
 
         <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', borderRadius: '18px', overflow: 'hidden', background: P.paperAlt, marginBottom: '28px' }}>
@@ -121,6 +130,12 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
           garantía explícita antes de copiarse.
         */}
         <div className="nl-article" style={{ marginTop: '28px' }} dangerouslySetInnerHTML={{ __html: html }} />
+
+        {channel && (
+          <div style={{ marginTop: '40px' }}>
+            <SubscribeForm publicId={channel.publicId} tenantName={tenant.name} P={P} editionId={edition.id} />
+          </div>
+        )}
 
         <Footer tenant={tenant} P={P} />
       </main>

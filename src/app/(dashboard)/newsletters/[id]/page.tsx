@@ -2,18 +2,21 @@ import { notFound, redirect } from 'next/navigation'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
-import { getEditionById, getSeriesById } from '@/lib/data/newsletters'
+import { getEditionById } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
 
-// Editor de una edición. Server Component: hace todo el fetch (edición, serie,
+// Editor de una edición. Server Component: hace todo el fetch (edición,
 // biblioteca del Estudio, slug del tenant) y se lo pasa como props a
 // EditionEditor (client). Un `agent` sólo edita lo que creó — mismo patrón que
 // properties/[id]/page.tsx: la página siempre carga (lectura abierta al
 // tenant), sólo se restringe la ESCRITURA vía `canEdit`.
+//
+// Con una sola newsletter por tenant, la URL pública ya no lleva el slug de
+// la serie (ver actions.ts) — mismo esquema tenant/edición que editions-list.tsx.
 
 // El editor genera la portada con IA como Server Action de ESTA ruta
 // (generateCoverForEdition → Claude + Nano Banana + sharp) y desde aquí también
@@ -45,8 +48,7 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
 
   const canEdit = ctx.role !== 'agent' || edition.createdByUserId === ctx.user_id
 
-  const [series, studioImages, { data: tenantRow }] = await Promise.all([
-    getSeriesById(edition.channelId, tenantId),
+  const [studioImages, { data: tenantRow }] = await Promise.all([
     getStudioImages(tenantId),
     db.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).maybeSingle(),
   ])
@@ -58,14 +60,13 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
   // que el tenant comparte. La ruta interna /nl/… también responde bajo
   // app.itmano.com desde que salió del matcher del proxy, pero no es la
   // dirección canónica: el escaparate vive en el subdominio de newsletters.
-  const publicUrl = tenantSlug && series
-    ? hostedNewsletterUrl(tenantSlug, series.slug, edition.slug)
+  const publicUrl = tenantSlug
+    ? hostedNewsletterUrl(tenantSlug, edition.slug)
     : null
 
   return (
     <EditionEditor
       edition={edition}
-      seriesName={series?.name ?? null}
       canEdit={canEdit}
       studioImages={studioImages}
       publicUrl={publicUrl}
