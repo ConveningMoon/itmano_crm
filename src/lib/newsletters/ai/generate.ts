@@ -70,6 +70,12 @@ export async function generateNewsletterDraft(args: {
   const areas       = Array.isArray(tenant.primary_areas) ? (tenant.primary_areas as string[]) : []
   const secundarias = Array.isArray(tenant.secondary_areas) ? (tenant.secondary_areas as string[]) : []
 
+  // El gate de presupuesto, ANTES de gastar nada — incluida la propia
+  // inferencia de fuentes, que también llama a Anthropic (ver
+  // ensureSourceDomains más abajo).
+  const blocked = await assertAiWithinLimit(ctx, 'newsletter_research')
+  if (blocked) return blocked
+
   // Las fuentes ya no se le piden al cliente: se generan solas la primera vez
   // que genera con IA, a partir de sus zonas y su descripción. Ver
   // source-catalog.ts — el porqué está ahí.
@@ -88,10 +94,6 @@ export async function generateNewsletterDraft(args: {
       error: 'No se pudieron preparar las fuentes de tu mercado. Vuelve a intentarlo en un momento.',
     }
   }
-
-  // El gate de presupuesto, ANTES de gastar nada.
-  const blocked = await assertAiWithinLimit(ctx, 'newsletter_research')
-  if (blocked) return blocked
 
   // El "mercado" de la agencia son sus zonas declaradas: es el dato que ya
   // existe y el que de verdad acota la búsqueda.
