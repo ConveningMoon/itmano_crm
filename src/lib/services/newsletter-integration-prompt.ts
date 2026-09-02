@@ -39,6 +39,7 @@ export const PUBLIC_EDITION_COLUMNS = [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'content', 'sources',
   'data_as_of', 'status', 'published_at', 'created_at',
+  'author_name', 'author_title',
 ] as const
 
 export function buildNewsletterIntegrationPrompt(input: NewsletterIntegrationInput): string {

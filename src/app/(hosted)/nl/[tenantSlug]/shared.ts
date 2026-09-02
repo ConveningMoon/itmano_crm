@@ -14,9 +14,10 @@ import {
 // (ver src/lib/newsletters/channel.ts). Con un solo canal por tenant, filtrar
 // ediciones por canal ya no distingue nada — se acota directamente por
 // tenant_id. Las EDICIONES tienen tabla propia y sólo estas columnas están
-// concedidas a `anon` (105, paso 5): id, tenant_id, channel_id, slug, title,
-// dek, language, translation_group_id, cover_image_url, content, sources,
-// data_as_of, status, published_at, created_at. Aunque este módulo usa
+// concedidas a `anon` (105, paso 5; author_name/author_title en 111): id,
+// tenant_id, channel_id, slug, title, dek, language, translation_group_id,
+// cover_image_url, content, sources, data_as_of, status, published_at,
+// created_at, author_name, author_title. Aunque este módulo usa
 // createAdminClient() (bypasea RLS), se respeta la misma lista — igual que
 // web/[tenantSlug]/shared.ts hace con properties — para no filtrar ai_run,
 // created_by_* ni unpublished_by_billing al público. Un select('*') real (con
@@ -41,6 +42,8 @@ export type PublicEdition = {
   data_as_of: string | null
   published_at: string | null
   created_at: string
+  author_name: string | null
+  author_title: string | null
 }
 
 const PUBLIC_TENANT_COLUMNS = columns('tenants', ['id', 'name', 'slug', 'logo_url', 'primary_color'])
@@ -56,6 +59,7 @@ export const PUBLIC_EDITION_COLUMN_LIST = [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'content', 'sources',
   'data_as_of', 'status', 'published_at', 'created_at',
+  'author_name', 'author_title',
 ] as const
 
 const PUBLIC_EDITION_COLUMNS = columns('newsletter_editions', PUBLIC_EDITION_COLUMN_LIST)
@@ -114,6 +118,8 @@ function mapEdition(row: any): PublicEdition {
     data_as_of:           row.data_as_of ?? null,
     published_at:         row.published_at ?? null,
     created_at:           row.created_at,
+    author_name:          row.author_name ?? null,
+    author_title:         row.author_title ?? null,
   }
 }
 
@@ -146,6 +152,48 @@ export async function getPublicEdition(tenantId: string, editionSlug: string): P
     .maybeSingle()
   if (!data) return null
   return mapEdition(data)
+}
+
+const CANONICAL_TENANT_COLUMNS = columns('tenants', ['newsletter_canonical_template'])
+
+/**
+ * La plantilla de canonical del tenant, o null. Se lee con el cliente admin
+ * porque `newsletter_canonical_template` NO está concedida a `anon`: es
+ * configuración, no contenido.
+ */
+export async function getTenantCanonicalTemplate(tenantId: string): Promise<string | null> {
+  const db = createAdminClient()
+  const { data } = await db
+    .from('tenants').select(CANONICAL_TENANT_COLUMNS).eq('id', tenantId).maybeSingle()
+  // reason: ver mapEdition.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data as any)?.newsletter_canonical_template as string | null) ?? null
+}
+
+const SIBLING_COLUMNS = columns('newsletter_editions', ['slug', 'language'])
+
+/**
+ * Las ediciones publicadas del mismo grupo de traducción, para hreflang.
+ * Con `translationGroupId` null devuelve [] — una edición sin grupo no tiene
+ * hermanas, y agrupar por null uniría ediciones que no son traducciones.
+ */
+export async function getEditionSiblings(
+  tenantId: string,
+  translationGroupId: string | null,
+): Promise<{ slug: string; language: string }[]> {
+  if (!translationGroupId) return []
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from('newsletter_editions')
+    .select(SIBLING_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .eq('translation_group_id', translationGroupId)
+    .eq('status', 'published')
+    .eq('unpublished_by_billing', false)
+  if (error || !data) return []
+  // reason: ver mapEdition.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]).map(r => ({ slug: r.slug as string, language: r.language as string }))
 }
 
 // ── Parámetros para el prerender (ISR) ───────────────────────────────────────
