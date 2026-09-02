@@ -5,22 +5,21 @@
 -- lo que el Estudio ya genera cubre la necesidad, asi que el motor sale del
 -- producto en vez de quedarse como codigo muerto detras de un tab.
 --
--- Nada mas en el esquema depende de estas tablas: no habia funciones, vistas ni
--- claves foraneas entrantes. Se comprobo contra las dos bases antes de escribir
--- esto, no se asumio.
+-- Nada mas en el esquema depende de estas tablas: no hay funciones, vistas ni
+-- claves foraneas entrantes. Se comprobo contra la base antes de escribir esto,
+-- no se asumio.
 --
--- Los binarios del bucket se borran ANTES por la API de Storage (borrar filas de
--- storage.objects a mano deja los archivos huerfanos en S3). El delete de abajo
--- es la red: si quedara alguno, la FK impediria borrar el bucket y esta
--- migracion fallaria en vez de dejar basura invisible.
+-- EL BUCKET NO SE BORRA AQUI. La 066 lo creo con un `insert into
+-- storage.buckets`, pero el camino de vuelta no es simetrico: Supabase protege
+-- storage.objects y storage.buckets con un trigger (storage.protect_delete) que
+-- aborta cualquier delete por SQL —"Use the Storage API instead"— para no dejar
+-- archivos huerfanos en S3. Asi que `carousel-assets` y sus objetos se retiran
+-- por la API de Storage con la service_role, como paso aparte de esta migracion.
 
 drop table if exists public.carousel_logs;
 drop table if exists public.carousel_slides;
 drop table if exists public.carousel_jobs;
 drop table if exists public.carousel_brand_profiles;
-
-delete from storage.objects where bucket_id = 'carousel-assets';
-delete from storage.buckets where id = 'carousel-assets';
 
 -- El ledger de IA: las filas de 'carousel_copy' se van con la feature. Son gasto
 -- real ya facturado a ITMANO, asi que borrarlas baja el historico de consumo en

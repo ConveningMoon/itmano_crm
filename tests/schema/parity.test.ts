@@ -98,6 +98,18 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // La excepción de la 110 (newsletters sin series) se retiró el 2026-08-31:
   // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
   // dos tablas de verdad.
+
+  // chore/quitar-carruseles: la 112 (drop del motor de carruseles) está aplicada
+  // SÓLO a producción — es la excepción al revés de las de arriba, porque el MCP
+  // de esta sesión sólo llegaba a producción. Retirar al aplicarla al sandbox.
+  'tabla:carousel_brand_profiles':  'migración 112: ya no está en producción, sigue en el sandbox',
+  'tabla:carousel_jobs':            'migración 112: ya no está en producción, sigue en el sandbox',
+  'tabla:carousel_slides':          'migración 112: ya no está en producción, sigue en el sandbox',
+  'tabla:carousel_logs':            'migración 112: ya no está en producción, sigue en el sandbox',
+  'policy:carousel_brand_profiles': 'migración 112: ya no está en producción, sigue en el sandbox',
+  'policy:carousel_jobs':           'migración 112: ya no está en producción, sigue en el sandbox',
+  'policy:carousel_slides':         'migración 112: ya no está en producción, sigue en el sandbox',
+  'policy:carousel_logs':           'migración 112: ya no está en producción, sigue en el sandbox',
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
