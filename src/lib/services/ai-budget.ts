@@ -76,5 +76,14 @@ export function ceilingUsdFor(plan: SubscriptionPlan, limitUsd: number, core: bo
 export function initialAiBudgetUsd(plan: SubscriptionPlan, startTrial: boolean): number {
   // La prueba vive como plan 'growth' pero con presupuesto de cortesía propio:
   // gana sobre el del plan (ver TRIAL en plans.ts).
-  return startTrial ? TRIAL.aiBudgetUsd : PLANS[plan].limits.aiBudgetUsd
+  return startTrial ? TRIAL.aiBudgetUsd : planAiBudgetUsd(plan)
+}
+
+/**
+ * El presupuesto que un plan le asigna a un tenant. Lo usan el alta
+ * (initialAiBudgetUsd) y el cambio de plan (paddle/persist.ts) para no tener
+ * dos ideas distintas de cuánto le toca a un Growth.
+ */
+export function planAiBudgetUsd(plan: SubscriptionPlan): number {
+  return PLANS[plan].limits.aiBudgetUsd
 }

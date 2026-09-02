@@ -1,7 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { reduceSubscriptionEvent, type PaddleSubscriptionEvent, type SubscriptionSnapshot } from '@/lib/paddle/reducer'
-import type { SubscriptionStatus } from '@/lib/subscriptions'
+import type { SubscriptionStatus, SubscriptionPlan } from '@/lib/subscriptions'
+import { planAiBudgetUsd } from '@/lib/services/ai-budget'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 import { notifyDegradation } from '@/lib/subscriptions/notify-degradation'
 
@@ -47,7 +48,7 @@ export async function applySubscriptionEvent(
   const supabase = createAdminClient()
   const { data: row, error: readError } = await supabase
     .from('subscriptions')
-    .select('status, last_event_at, degraded_at')
+    .select('status, last_event_at, degraded_at, plan')
     .eq('tenant_id', tenantId)
     .maybeSingle()
   // Un fallo de lectura NO puede degradar a los defaults: con lastEventAt null
@@ -63,6 +64,9 @@ export async function applySubscriptionEvent(
     lastEventAt: (r?.last_event_at as string | null) ?? null,
     degradedAt:  (r?.degraded_at as string | null) ?? null,
   }
+  // El plan ANTERIOR no entra en el snapshot del reductor (que es puro y sólo
+  // razona sobre estado y fechas): se lee aparte para detectar el cambio.
+  const planAnterior = (r?.plan as SubscriptionPlan | undefined) ?? null
 
   // El reductor es puro y decide si el evento es viejo (null) o produce un
   // patch. Se pasa el objeto entero al update — no se desarma campo por campo,
@@ -79,6 +83,32 @@ export async function applySubscriptionEvent(
   // traza. Ocurre de verdad: el alta de tenant inserta la suscripción en
   // best-effort (admin/actions.ts), así que puede faltar.
   if (!updated?.length) throw new Error(`Sin fila de subscriptions para el tenant ${tenantId}`)
+
+  // Cambio de plan: el presupuesto mensual de IA se mueve al del plan nuevo.
+  //
+  // Sólo en la TRANSICIÓN, nunca en cada evento: un `subscription.updated` de
+  // renovación trae el mismo plan, y reescribir en cada uno pisaría el tope que
+  // el super_admin haya ajustado a mano para ese cliente. Con esta guardia el
+  // ajuste manual sobrevive a todo salvo a un cambio de plan real, que es
+  // exactamente cuando debe recalcularse.
+  //
+  // Best-effort, igual que la reactivación: lo crítico —el estado de
+  // facturación— ya quedó escrito, y un 500 aquí haría que Paddle reintente un
+  // evento que el reductor va a descartar por viejo, así que el reintento no
+  // arreglaría nada y este paso no volvería a ejecutarse jamás. El log es la
+  // única señal.
+  if (patch.plan && patch.plan !== planAnterior) {
+    const { error: budgetError } = await supabase
+      .from('tenants')
+      .update({ ai_monthly_limit_usd: planAiBudgetUsd(patch.plan) })
+      .eq('id', tenantId)
+    if (budgetError) {
+      console.error(JSON.stringify({
+        service: 'paddle-plan-budget', tenant_id: tenantId, event_id: event.eventId,
+        from: planAnterior, to: patch.plan, error: budgetError.message,
+      }))
+    }
+  }
 
   // Reactivación: detecta la TRANSICIÓN (estaba degradado y este evento lo
   // devuelve a activo), nunca solo el estado nuevo — si se mirara únicamente
