@@ -33,6 +33,15 @@ export interface BusinessProfile {
   primaryAreas:     string[]
   /** Zonas que atiende sin ser su foco. Fuera de ambas, fuera_de_zona. */
   secondaryAreas:   string[]
+  /** URL del sitio propio de la agencia. Identifica al tenant ante los buscadores. */
+  publicSiteUrl:    string | null
+  /**
+   * Plantilla de la URL de las ediciones de newsletter en la web del tenant,
+   * con `{slug}` (migración 111). `null` o `''` = sin configurar: el canonical
+   * de cada edición apunta al archivo alojado por ITMANO. Ver
+   * `src/lib/newsletters/canonical.ts`, que es quien la interpreta.
+   */
+  newsletterCanonicalTemplate: string | null
 }
 
 export const EMPTY_PROFILE: BusinessProfile = {
@@ -40,6 +49,7 @@ export const EMPTY_PROFILE: BusinessProfile = {
   commissionBuy: null, commissionSell: null,
   budgetEntryMax: null, budgetPremiumMin: null,
   primaryAreas: [], secondaryAreas: [],
+  publicSiteUrl: null, newsletterCanonicalTemplate: null,
 }
 
 export const CURRENCY_SYMBOL: Record<Currency, string> = { USD: '$', EUR: '€' }

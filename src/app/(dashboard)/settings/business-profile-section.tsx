@@ -9,6 +9,16 @@ import {
 } from '@/lib/business/profile'
 import { saveBusinessProfile } from './actions'
 
+// Copy exacto (no se arma con JSX + `{'{slug}'}` intercalado a propósito: la
+// forma en que JSX pliega espacios en blanco entre texto y expresiones es
+// fácil de descuadrar por un espacio de más o de menos, y este texto tiene que
+// ser literal).
+const CANONICAL_HELP = 'Si publicas las ediciones en tu propio sitio, escribe aquí su dirección '
+  + 'usando {slug} donde va el identificador de la edición. Ejemplo: '
+  + 'https://tusitio.com/newsletter/{slug}. Al configurarlo, los buscadores tratarán tu web '
+  + 'como el original y a la página de ITMANO como una copia, que es lo que hace que el '
+  + 'posicionamiento se acumule en tu dominio.'
+
 // El formulario ES la documentación: lo que aparece aquí es exactamente lo que
 // el CRM necesita saber del negocio del cliente, ni más ni menos. Por eso cada
 // bloque dice para qué sirve el dato en vez de limitarse a pedirlo.
@@ -42,6 +52,8 @@ type Draft = {
   budgetPremiumMin: string
   primaryAreas:     string
   secondaryAreas:   string
+  publicSiteUrl:               string
+  newsletterCanonicalTemplate: string
 }
 
 function toDraft(p: BusinessProfile): Draft {
@@ -55,6 +67,8 @@ function toDraft(p: BusinessProfile): Draft {
     budgetPremiumMin: n(p.budgetPremiumMin),
     primaryAreas:     p.primaryAreas.join(', '),
     secondaryAreas:   p.secondaryAreas.join(', '),
+    publicSiteUrl:               p.publicSiteUrl ?? '',
+    newsletterCanonicalTemplate: p.newsletterCanonicalTemplate ?? '',
   }
 }
 
@@ -74,6 +88,8 @@ function toProfile(d: Draft): BusinessProfile {
     budgetPremiumMin: n(d.budgetPremiumMin),
     primaryAreas:     parseAreas(d.primaryAreas),
     secondaryAreas:   parseAreas(d.secondaryAreas),
+    publicSiteUrl:               d.publicSiteUrl.trim() === '' ? null : d.publicSiteUrl.trim(),
+    newsletterCanonicalTemplate: d.newsletterCanonicalTemplate.trim() === '' ? null : d.newsletterCanonicalTemplate.trim(),
   }
 }
 
@@ -272,6 +288,42 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
                 </strong>.
               </>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div style={CARD}>
+        <div style={HEAD}>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Tu sitio web
+          </span>
+          <div style={HINT}>
+            Para que los buscadores identifiquen tu agencia y, si publicas tu newsletter
+            en tu propio dominio, sepan que esa versión es el original.
+          </div>
+        </div>
+        <div style={BODY}>
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label style={LABEL}>Sitio web de la agencia</label>
+              <input
+                value={draft.publicSiteUrl}
+                onChange={e => set('publicSiteUrl', e.target.value)}
+                placeholder="https://tuagencia.com"
+                style={INPUT}
+              />
+              <div style={HINT}>La dirección de tu web. Se usa para identificar a tu agencia ante los buscadores.</div>
+            </div>
+            <div>
+              <label style={LABEL}>Dirección de tus ediciones en tu web</label>
+              <input
+                value={draft.newsletterCanonicalTemplate}
+                onChange={e => set('newsletterCanonicalTemplate', e.target.value)}
+                placeholder="https://tusitio.com/newsletter/{slug}"
+                style={INPUT}
+              />
+              <div style={HINT}>{CANONICAL_HELP}</div>
+            </div>
           </div>
         </div>
       </div>
