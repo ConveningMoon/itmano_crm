@@ -114,7 +114,7 @@ export async function generateStudioImage(params: {
   // El gate va ANTES de gastar nada, y solo cuando de verdad se va a gastar:
   // con propiedad elegida —o con la foto subida a mano— no cuesta.
   if (!params.heroUpload && usesAi(form)) {
-    const blocked = await assertAiWithinLimit(ctx)
+    const blocked = await assertAiWithinLimit(ctx, 'studio_image')
     if (blocked) return blocked
   }
 

@@ -68,7 +68,7 @@ export async function generateCover(args: {
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant antes de generar' }
 
   // El gate va ANTES de gastar nada, mismo orden que studio/generate.ts.
-  const blocked = await assertAiWithinLimit(ctx)
+  const blocked = await assertAiWithinLimit(ctx, 'newsletter_cover')
   if (blocked) return blocked
 
   try {

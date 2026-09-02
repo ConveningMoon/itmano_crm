@@ -23,7 +23,12 @@ const admin = createClient(
 )
 
 const TENANT_ID = 'tenant-test-ailimit'
-const LIMIT_USD = 0.05
+// El tope del fixture. La reserva del núcleo declarada en plans.ts ($2 en
+// Esencial) es enorme comparada con esto, así que SIEMPRE la recorta el tope de
+// seguridad de ai-budget.ts: reserva = 50% del tope, discrecional = la otra
+// mitad. Con $0.10 las dos fronteras caen en números redondos ($0.05 y $0.10).
+const LIMIT_USD = 0.10
+const DISCRECIONAL_USD = LIMIT_USD / 2
 
 const ownerCtx: TenantContext = {
   user_id: '00000000-0000-4000-8000-00000000a1a1',
@@ -89,45 +94,81 @@ describe('AI monthly limit', () => {
     expect(status.limitUsd).toBeCloseTo(LIMIT_USD, 6)
     expect(status.usedUsd).toBe(0)
     expect(status.blocked).toBe(false)
+    expect(status.blockedDiscretionary).toBe(false)
 
-    expect(await assertAiWithinLimit(ownerCtx)).toBeNull()
+    expect(await assertAiWithinLimit(ownerCtx, 'email_draft')).toBeNull()
   })
 
-  it('con uso por debajo del límite: sigue permitiendo', async () => {
-    await insertUsage(0.03)
+  // El fixture no tiene fila en `subscriptions`. Que caiga a 'esencial' —la
+  // reserva más pequeña— es deliberado: ante la duda no se le quita
+  // presupuesto discrecional a un tenant del que no sabemos el plan.
+  it('un tenant sin suscripción cae al plan de reserva más pequeña', async () => {
+    const status = await getAiLimitStatus(TENANT_ID)
+    expect(status.plan).toBe('esencial')
+    expect(status.reserveUsd).toBeCloseTo(DISCRECIONAL_USD, 6)
+    expect(status.discretionaryLimitUsd).toBeCloseTo(DISCRECIONAL_USD, 6)
+  })
+
+  it('con uso por debajo del tramo discrecional: sigue permitiendo', async () => {
+    await insertUsage(0.03) // 0.03 < 0.05
 
     const status = await getAiLimitStatus(TENANT_ID)
     expect(status.usedUsd).toBeCloseTo(0.03, 6)
     expect(status.blocked).toBe(false)
-    expect(status.usedRatio).toBeCloseTo(0.03 / LIMIT_USD, 4)
+    expect(status.blockedDiscretionary).toBe(false)
+    // El ratio se mide contra el DISCRECIONAL: es el número que ve el usuario y
+    // tiene que llegar a 100% justo cuando la UI deja de dejarle generar.
+    expect(status.usedRatio).toBeCloseTo(0.03 / DISCRECIONAL_USD, 4)
 
-    expect(await assertAiWithinLimit(ownerCtx)).toBeNull()
+    expect(await assertAiWithinLimit(ownerCtx, 'email_draft')).toBeNull()
   })
 
-  it('al alcanzar el límite: bloquea al owner con mensaje sin montos', async () => {
-    await insertUsage(0.03) // total 0.06 ≥ 0.05
+  // El corazón del cambio: agotado lo que se pulsa a mano, el análisis
+  // automático de leads TODAVÍA tiene con qué correr.
+  it('agotado lo discrecional: se corta lo manual y el núcleo sigue', async () => {
+    await insertUsage(0.03) // total 0.06 ≥ 0.05, pero < 0.10
 
     const status = await getAiLimitStatus(TENANT_ID)
     expect(status.usedUsd).toBeCloseTo(0.06, 6)
-    expect(status.blocked).toBe(true)
+    expect(status.blockedDiscretionary).toBe(true)
+    expect(status.blocked).toBe(false)
     expect(status.usedRatio).toBe(1) // acotado a 1
 
-    const denial = await assertAiWithinLimit(ownerCtx)
+    const denial = await assertAiWithinLimit(ownerCtx, 'email_draft')
     expect(denial).not.toBeNull()
     expect(denial!.ok).toBe(false)
     expect(denial!.error).toContain('límite mensual')
+    // Le dice al usuario por qué la UI marca 100% pero sus leads se siguen
+    // analizando; sin esto, "alcanzaste el límite" parece un error.
+    expect(denial!.error).toContain('reservado')
     // El monto en USD es interno de ITMANO — el mensaje no debe revelarlo.
+    expect(denial!.error).not.toContain('$')
+
+    // Lo mismo que consulta ai-lead-fit.ts antes de analizar un lead.
+    expect(status.blocked).toBe(false)
+    expect(await assertAiWithinLimit(ownerCtx, 'lead_fit')).toBeNull()
+  })
+
+  it('el rol agent también queda bloqueado en lo discrecional', async () => {
+    const agentCtx: TenantContext = { ...ownerCtx, role: 'agent', agent_id: 'agent-test' }
+    expect(await assertAiWithinLimit(agentCtx, 'email_draft')).not.toBeNull()
+    expect(await assertAiWithinLimit(agentCtx, 'lead_fit')).toBeNull()
+  })
+
+  it('al agotar el tope entero se corta también el núcleo', async () => {
+    await insertUsage(0.05) // total 0.11 ≥ 0.10
+
+    const status = await getAiLimitStatus(TENANT_ID)
+    expect(status.usedUsd).toBeCloseTo(0.11, 6)
+    expect(status.blocked).toBe(true)
+
+    const denial = await assertAiWithinLimit(ownerCtx, 'lead_fit')
+    expect(denial).not.toBeNull()
     expect(denial!.error).not.toContain('$')
   })
 
-  it('el rol agent también queda bloqueado', async () => {
-    const agentCtx: TenantContext = { ...ownerCtx, role: 'agent', agent_id: 'agent-test' }
-    const denial = await assertAiWithinLimit(agentCtx)
-    expect(denial).not.toBeNull()
-  })
-
   it('super_admin pasa siempre, incluso con el tenant bloqueado', async () => {
-    expect(await assertAiWithinLimit(superCtx)).toBeNull()
+    expect(await assertAiWithinLimit(superCtx, 'email_draft')).toBeNull()
   })
 
   it('acceso ilimitado: nunca bloquea aunque exceda el monto', async () => {
@@ -136,7 +177,10 @@ describe('AI monthly limit', () => {
     const status = await getAiLimitStatus(TENANT_ID)
     expect(status.unlimited).toBe(true)
     expect(status.blocked).toBe(false)
-    expect(await assertAiWithinLimit(ownerCtx)).toBeNull()
+    expect(status.blockedDiscretionary).toBe(false)
+    // Sin escasez no hay nada que reservar: el tramo discrecional es el tope.
+    expect(status.reserveUsd).toBe(0)
+    expect(await assertAiWithinLimit(ownerCtx, 'email_draft')).toBeNull()
 
     await setTenantLimit(LIMIT_USD, false) // restaurar
   })
@@ -146,7 +190,8 @@ describe('AI monthly limit', () => {
 
     const status = await getAiLimitStatus(TENANT_ID)
     expect(status.blocked).toBe(false)
-    expect(await assertAiWithinLimit(ownerCtx)).toBeNull()
+    expect(status.blockedDiscretionary).toBe(false)
+    expect(await assertAiWithinLimit(ownerCtx, 'email_draft')).toBeNull()
 
     await setTenantLimit(LIMIT_USD, false) // restaurar → vuelve a bloquear
     const again = await getAiLimitStatus(TENANT_ID)
@@ -160,8 +205,8 @@ describe('AI monthly limit', () => {
     await insertUsage(100, lastMonth.toISOString())
 
     const status = await getAiLimitStatus(TENANT_ID)
-    // Solo los 0.06 de este mes.
-    expect(status.usedUsd).toBeCloseTo(0.06, 6)
+    // Solo los 0.11 de este mes.
+    expect(status.usedUsd).toBeCloseTo(0.11, 6)
   })
 
   it('computeCostUsd usa la tarifa correcta de claude-sonnet-5', () => {

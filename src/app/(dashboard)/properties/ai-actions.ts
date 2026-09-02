@@ -117,7 +117,7 @@ export async function generatePropertyFromPdf(
   }
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).
-  const overLimit = await assertAiWithinLimit(ctx)
+  const overLimit = await assertAiWithinLimit(ctx, 'property_intake')
   if (overLimit) return overLimit
 
   // Idiomas de contenido elegidos (máx 3); default inglés.

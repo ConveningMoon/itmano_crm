@@ -33,6 +33,23 @@ export interface PlanLimits {
    */
   aiBudgetUsd: number
   /**
+   * Parte de `aiBudgetUsd` que SOLO puede gastar el núcleo — hoy, el análisis
+   * de fit de cada lead. No es una bolsa aparte: son los últimos dólares del
+   * mismo tope, así que no hay segundo contador que desincronizar ni columna
+   * nueva en `tenants`.
+   *
+   * Por qué existe: `lead_fit` corre solo (intake de formularios, webhook de
+   * respuestas, contacto) y al quedarse sin presupuesto no falla — se salta,
+   * en silencio. Un usuario que gasta el mes en newsletters dejaría de tener
+   * scoring interpretado por IA sin un solo error a la vista. Lo discrecional
+   * sí puede fallar de cara: alguien pulsó un botón y lee el mensaje.
+   *
+   * Dimensionado a $0.0049 por análisis (costo medido, no estimado) contra el
+   * volumen de leads que admite el plan. La aritmética y el tope de seguridad
+   * viven en `src/lib/services/ai-budget.ts`.
+   */
+  aiCoreReserveUsd: number
+  /**
    * Equivalente público del presupuesto de IA en tokens, a tarifa combinada
    * (~$5 por millón de tokens con la mezcla real entrada/salida de sonnet).
    * Números redondeados hacia abajo para nunca prometer de más.
@@ -130,8 +147,13 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       leads: 2500,
       emailsPerMonth: 3000,
       webProperties: null,
-      aiBudgetUsd: 8,
-      aiTokensLabel: '1.5M tokens',
+      // $8 alcanzaban antes de que Esencial incluyera newsletters: el uso
+      // típico con una edición semanal es ~$3.7/mes, pero un usuario que
+      // regenera tres veces sin escribir el tema (sin tema no hay caché de
+      // dossier) llega a ~$7.4 y choca contra el muro a mitad de mes.
+      aiBudgetUsd: 12,
+      aiCoreReserveUsd: 2,
+      aiTokensLabel: '2.4M tokens',
     },
     features: {
       aiEmailDrafting: true,
@@ -164,6 +186,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       emailsPerMonth: 15000,
       webProperties: 50,
       aiBudgetUsd: 30,
+      aiCoreReserveUsd: 6,
       aiTokensLabel: '6M tokens',
     },
     features: {
@@ -198,6 +221,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       emailsPerMonth: 50000,
       webProperties: 'unlimited',
       aiBudgetUsd: 75,
+      aiCoreReserveUsd: 15,
       aiTokensLabel: '15M tokens',
     },
     features: {
