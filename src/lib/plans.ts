@@ -58,9 +58,24 @@ export interface PlanFeatures {
   customSendingDomain: boolean
   /**
    * Newsletters: contenido editorial publicado con captación de suscriptores.
-   * Consume presupuesto de IA de forma recurrente y publica con la marca del
-   * cliente, así que acompaña a los planes que ya incluyen dominio propio y
-   * analítica completa.
+   *
+   * La incluyen los TRES planes. El flag se queda porque es el interruptor —lo
+   * leen canUseNewsletters y las cuatro superficies de /newsletters— no porque
+   * algún plan la tenga apagada.
+   *
+   * Por qué no gradúa por plan: la edición se publica siempre en
+   * news.itmano.com/<tenant>/<edición>, nunca en el dominio del cliente, así
+   * que no consume slot de dominio de Resend ni depende de
+   * customSendingDomain. Lo único que cuesta dinero es la IA, y está medido:
+   * una edición completa sale por ~$0.46 (investigación ~$0.39 —con web_search
+   * topado en 4 búsquedas—, redacción ~$0.03 y portada ~$0.04), más ~$0.01 una
+   * sola vez por tenant al sembrar sus fuentes. Ese gasto ya lo acota
+   * ai_monthly_limit_usd (ai-limit.ts), que SÍ se aplica en código.
+   *
+   * O sea: el plan no gradúa el acceso, gradúa cuántas ediciones caben en el
+   * presupuesto. Y ese presupuesto es compartido: en Esencial una newsletter
+   * semanal se lleva ~$1.85/mes de los $8, y agotarlo deja sin correr al
+   * análisis de fit de cada lead, que falla en silencio por diseño.
    */
   newsletters: boolean
 }
@@ -126,7 +141,7 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       teamAnalytics: false,
       multiLogin: false,
       customSendingDomain: false,
-      newsletters: false,
+      newsletters: true,
     },
     onboarding: 'Guiado (autoservicio con nuestro equipo a un email)',
     support: 'Email',
