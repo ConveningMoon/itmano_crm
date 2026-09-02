@@ -25,7 +25,7 @@ comment on column newsletter_editions.author_agent_id is
 comment on column newsletter_editions.author_name is
   'Instantánea de agents.name al publicar. Público.';
 comment on column newsletter_editions.author_title is
-  'Instantánea de agents.specialty al publicar. Público.';
+  'Cargo que el propio agente escriba de sí mismo. NO sale de agents.specialty (segmento de audiencia, no cargo): hoy se escribe NULL explícito. Reservada para cuando exista ese campo. Público.';
 
 -- Config del canonical (ver D1/D2 del spec). La plantilla lleva {slug} porque
 -- no sabemos qué ruta usa la web del cliente; adivinar produce canonicals a
