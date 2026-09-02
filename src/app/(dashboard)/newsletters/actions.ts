@@ -80,7 +80,9 @@ async function guard() {
   return { ctx, tenantId, db, tenantSlug: (tenant?.slug as string) ?? '', error: null }
 }
 
-const AUTHOR_AGENT_COLUMNS = columns('agents', ['id', 'name', 'specialty'])
+// Sin 'specialty': ver el comentario de cabecera de author.ts sobre por qué
+// esa columna no participa en la firma.
+const AUTHOR_AGENT_COLUMNS = columns('agents', ['id', 'name'])
 const AUTHOR_TENANT_COLUMNS = columns('tenants', ['name'])
 
 /**
@@ -109,7 +111,7 @@ async function firmaPara(
     .eq('id', agentId).eq('tenant_id', tenantId).eq('active', true).maybeSingle()
   // reason: ver arriba.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agent = agentRow as any as { id: string; name: string; specialty: string | null } | null
+  const agent = agentRow as any as { id: string; name: string } | null
 
   // Un agentId de otro tenant o inactivo no firma: cae a la agencia en vez de
   // filtrar el nombre de alguien que no es de este equipo.
@@ -182,7 +184,10 @@ async function insertEditionRow(
     created_by_user_id:  ctx.user_id,
     author_agent_id:     fields.author.agentId,
     author_name:         fields.author.name,
-    author_title:        fields.author.title,
+    // Sin author_title: agents.specialty (lo único que podría alimentarlo) no
+    // es un cargo, es un código de segmento de audiencia — ver author.ts. La
+    // columna se queda en su default (null) hasta que exista un cargo real
+    // que un agente escriba de sí mismo.
   }).select('id').maybeSingle()
 
   if (error) {
@@ -311,6 +316,11 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
   // ninguna de las tres columnas — la instantánea sigue siendo la de la
   // última vez que alguien eligió firma, no la del último guardado.
   // `publishEdition` es quien la refresca al momento de publicar (ver abajo).
+  //
+  // `author_title` se escribe explícitamente en `null`: `EditionAuthor` ya no
+  // lo produce (ver author.ts — agents.specialty es un código de segmento de
+  // audiencia, no un cargo), así que aquí sólo queda limpiar cualquier valor
+  // viejo que la fila arrastre de antes de este arreglo.
   // reason: el cliente de Supabase no está tipado en este repo; columns() ya
   // validó cada nombre de columna que entra aquí.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,7 +339,7 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
     const firma = await firmaPara(g.db, g.tenantId, d.authorAgentId)
     patch.author_agent_id = firma.agentId
     patch.author_name     = firma.name
-    patch.author_title    = firma.title
+    patch.author_title    = null
   }
 
   const { error } = await g.db.from('newsletter_editions').update(patch)
@@ -401,8 +411,11 @@ async function publishEditionImpl(id: string): Promise<Result<null>> {
   // puede llevar semanas firmado antes de publicarse: si nunca se refresca
   // aquí, sale con el dato de cuando alguien eligió la firma, no con el de hoy.
   // Se resuelve otra vez con el `author_agent_id` YA guardado en la fila (no
-  // cambia quién firma, sólo actualiza nombre/título) — si ese agente ya no
-  // existe o quedó inactivo, `firmaPara` cae a la agencia, que es lo correcto.
+  // cambia quién firma, sólo actualiza el nombre) — si ese agente ya no existe
+  // o quedó inactivo, `firmaPara` cae a la agencia, que es lo correcto.
+  //
+  // `author_title` en `null` explícito por la misma razón que en
+  // updateEditionImpl: ya no sale de `agents.specialty` (ver author.ts).
   const firma = await firmaPara(g.db, g.tenantId, edition.authorAgentId)
 
   const { error } = await g.db.from('newsletter_editions')
@@ -411,7 +424,7 @@ async function publishEditionImpl(id: string): Promise<Result<null>> {
       published_at:    new Date().toISOString(),
       author_agent_id: firma.agentId,
       author_name:     firma.name,
-      author_title:    firma.title,
+      author_title:    null,
     })
     .eq('id', id).eq('tenant_id', g.tenantId)
 

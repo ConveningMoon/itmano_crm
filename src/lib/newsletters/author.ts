@@ -7,14 +7,22 @@
 // Lo que se devuelve se guarda DESNORMALIZADO en la edición (author_name,
 // author_title): es una instantánea del momento de escribir, no un puntero.
 // Ver la migración 111 para el porqué.
+//
+// `author_title` NO sale de `agents.specialty`. Esa columna es un código de
+// SEGMENTO DE AUDIENCIA (`hispanic | military | first_buyer | brazilian`) —
+// a qué público atiende el agente, no un cargo suyo — y no se lee en ningún
+// otro sitio del repo fuera de lo que añadió esta misma tarea. Publicarlo bajo
+// la firma de una persona ("Por María González / hispanic") es incomprensible
+// para el lector y se lee como una etiqueta sobre ella, no sobre su práctica.
+// `newsletter_editions.author_title` queda reservada para un cargo que el
+// propio agente escriba de sí mismo el día que ese campo exista — hoy no
+// existe, así que la firma es sólo el nombre.
 
 export type EditionAuthor = {
   /** Vínculo interno con el agente. null cuando firma la agencia. */
   agentId: string | null
   /** Siempre presente: nunca se publica sin firma. */
   name:    string
-  /** Segunda línea de la firma. null si el agente no declaró especialidad. */
-  title:   string | null
 }
 
 function limpiar(value: string | null | undefined): string {
@@ -22,19 +30,14 @@ function limpiar(value: string | null | undefined): string {
 }
 
 export function resolveEditionAuthor(args: {
-  agent: { id: string; name: string; specialty: string | null } | null
+  agent: { id: string; name: string } | null
   tenantName: string
 }): EditionAuthor {
   const nombre = limpiar(args.agent?.name)
   // Un agente sin nombre utilizable es lo mismo que ningún agente: firmar con
   // una cadena vacía sería peor que firmar con la agencia.
   if (!args.agent || !nombre) {
-    return { agentId: null, name: limpiar(args.tenantName), title: null }
+    return { agentId: null, name: limpiar(args.tenantName) }
   }
-  const especialidad = limpiar(args.agent.specialty)
-  return {
-    agentId: args.agent.id,
-    name:    nombre,
-    title:   especialidad || null,
-  }
+  return { agentId: args.agent.id, name: nombre }
 }
