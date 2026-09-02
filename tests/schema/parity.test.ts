@@ -98,6 +98,11 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // La excepción de la 110 (newsletters sin series) se retiró el 2026-08-31:
   // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
   // dos tablas de verdad.
+
+  // feat/newsletters-autor-y-seo: la 111 está aplicada SÓLO al sandbox, a la
+  // espera del permiso para producción. Retirar al aplicarla allí.
+  'tabla:newsletter_editions': 'migración 111 (autor y SEO): sólo en sandbox',
+  'tabla:tenants':             'migración 111 (autor y SEO): sólo en sandbox',
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
