@@ -9,27 +9,23 @@ import type { AgentOption, PropertyOption } from '@/lib/data/studio'
 import type { StudioImage } from '@/lib/studio/types'
 import type { TemplateMeta } from '@/lib/studio/templates/meta'
 
-// Envoltura del Estudio: Posts · Carruseles · Mi Imagen.
+// Envoltura del Estudio: Posts · Mi Imagen.
 //
-// Posts y Mi Imagen son dos oficios distintos y por eso son dos pestañas: un
-// post se ARMA con los datos del CRM sobre un diseño, y una imagen libre se
-// PIDE con un prompt. Mezclarlos en un formulario obligaba a esconder la mitad
-// de los campos según el caso.
-//
-// El motor de carruseles entra entero como nodo ya renderizado por el servidor
-// (patrón isla), con sus propios sub-tabs adentro.
+// Son dos oficios distintos y por eso son dos pestañas: un post se ARMA con los
+// datos del CRM sobre un diseño, y una imagen libre se PIDE con un prompt.
+// Mezclarlos en un formulario obligaba a esconder la mitad de los campos según
+// el caso.
 
 const gridStyle: React.CSSProperties = {
   display: 'grid', gap: '28px', gridTemplateColumns: 'minmax(320px, 420px) 1fr', alignItems: 'start',
 }
 
-export function StudioTabs({ images, properties, agents, templates, tenantColor, carousels }: {
+export function StudioTabs({ images, properties, agents, templates, tenantColor }: {
   images:      StudioImage[]
   properties:  PropertyOption[]
   agents:      AgentOption[]
   templates:   TemplateMeta[]
   tenantColor: string
-  carousels:   React.ReactNode
 }) {
   const [items, setItems] = useState(images)
 
@@ -46,7 +42,6 @@ export function StudioTabs({ images, properties, agents, templates, tenantColor,
     <Tabs
       items={[
         { key: 'posts',     label: 'Posts', badge: posts.length },
-        { key: 'carousels', label: 'Carruseles' },
         { key: 'mine',      label: 'Mi Imagen', badge: mine.length },
       ]}
       content={{
@@ -68,7 +63,6 @@ export function StudioTabs({ images, properties, agents, templates, tenantColor,
             />
           </div>
         ),
-        carousels,
         mine: (
           <div className="max-md:!grid-cols-1" style={gridStyle}>
             <FreeImageForm onCreated={created} />

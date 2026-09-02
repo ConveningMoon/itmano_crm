@@ -19,13 +19,12 @@ import { AiSpentError, type AiSpend } from './spend'
 // (`output_config.format`): se probó primero con salida estructurada y la API
 // la rechazó dos veces — `minItems` distinto de 0/1 primero, `oneOf` después,
 // que es justo lo que necesita el union discriminado de bloques. El
-// `input_schema` de una herramienta sí admite ambos, y es el mismo patrón que
-// ya usa `carousels/copy.ts` en este repo.
+// `input_schema` de una herramienta sí admite ambos.
 //
 // Y DESPUÉS, igual que si fuera salida estructurada, se valida con el mismo
 // zod que usa el editor. Doble red: el modelo produce la forma, zod la
-// verifica. El esquema JSON se escribe a mano, como ya hace carousels/copy.ts
-// — el repo no tiene conversor de zod a JSON Schema y no merece uno por esto.
+// verifica. El esquema JSON se escribe a mano: el repo no tiene conversor de
+// zod a JSON Schema y no merece uno por esto.
 
 const MODEL = 'claude-sonnet-5'
 
