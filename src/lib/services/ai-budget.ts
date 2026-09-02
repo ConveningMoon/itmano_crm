@@ -17,6 +17,14 @@
 // La reserva son los ÚLTIMOS dólares del mismo tope, no una bolsa aparte: un
 // solo contador (`ai_usage_events`), ninguna columna nueva, y sigue funcionando
 // para un tenant al que el super_admin le subió el límite a mano.
+//
+// El gate que reparte estos dos tramos (`assertAiWithinLimit`, ai-limit.ts) es
+// PRE-VUELO: mide antes de llamar a Anthropic y nunca corta un request a medio
+// camino. Consecuencia real, no sólo teórica: un request discrecional que pasa
+// el gate con margen puede terminar gastando dólares de la reserva del núcleo
+// por su propio costo — investigar una newsletter cuesta ~$0.39 contra una
+// reserva de $2 en Esencial. El tope absorbe un solo rebase así; no protege
+// contra una sucesión de ellos.
 
 import { PLANS, TRIAL } from '@/lib/plans'
 import type { SubscriptionPlan } from '@/lib/subscriptions'

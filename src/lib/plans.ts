@@ -44,9 +44,12 @@ export interface PlanLimits {
    * scoring interpretado por IA sin un solo error a la vista. Lo discrecional
    * sí puede fallar de cara: alguien pulsó un botón y lee el mensaje.
    *
-   * Dimensionado a $0.0049 por análisis (costo medido, no estimado) contra el
-   * volumen de leads que admite el plan. La aritmética y el tope de seguridad
-   * viven en `src/lib/services/ai-budget.ts`.
+   * Dimensionado a $0.0049 por análisis (costo medido, no estimado): es un
+   * colchón para un USO MENSUAL razonable, no una fracción de `limits.leads`
+   * (que es un tope de cartera, no un caudal mensual de leads nuevos). Cubre
+   * ~408 análisis en Esencial y ~1224 en Growth — de sobra para el flujo
+   * mensual esperado en cada plan. La aritmética y el tope de seguridad viven
+   * en `src/lib/services/ai-budget.ts`.
    */
   aiCoreReserveUsd: number
   /**
