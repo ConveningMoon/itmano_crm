@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 // can't import it here without pulling in next/server — this copy is the contract,
 // asserted below. If you change the proxy matcher, change this string too (and the
 // cases will tell you if a public route accidentally became protected).
-const MATCHER = '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|nl/|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)'
+const MATCHER = '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|nl/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)'
 
 const matcherRe = new RegExp(`^${MATCHER}$`)
 const isProtected = (path: string) => matcherRe.test(path)

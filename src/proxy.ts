@@ -117,6 +117,6 @@ export const config = {
 // matcher para que el rewrite por host lo mande a /nl en news.itmano.com; ver
 // SEO_FILES arriba para su exención del guard de auth.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|nl/|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|nl/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
   ],
 }
