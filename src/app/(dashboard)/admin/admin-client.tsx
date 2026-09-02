@@ -313,7 +313,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
       // Una prueba vence al final del día local elegido.
       const subRes = await updateTenantSubscription({
         tenantId:    tenant.id,
-        plan:        subStatus === 'trial' ? 'partner' : subPlan,
+        plan:        subStatus === 'trial' ? TRIAL.plan : subPlan,
         status:      subStatus,
         trialEndsAt: subStatus === 'trial' && trialEnd
           ? new Date(`${trialEnd}T23:59:59`).toISOString()

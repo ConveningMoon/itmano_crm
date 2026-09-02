@@ -411,10 +411,18 @@ export async function updateTenantSubscription(
   // con la reserva de Growth ($6) sobre un techo que sigue siendo el de
   // Esencial ($12) — la mitad del presupuesto discrecional que le toca.
   //
+  // NUNCA mientras `status = 'trial'`: la prueba vive como `plan = 'growth'`
+  // pero con presupuesto de CORTESÍA propio (`TRIAL.aiBudgetUsd`, $25), no el
+  // de Growth de pago ($30) — mismo criterio que `initialAiBudgetUsd` aplica
+  // al alta. El formulario manda el estado completo en cada guardado, así que
+  // sin esta guardia CUALQUIER edición de un tenant en prueba (nombre, logo,
+  // lo que sea) dispararía esta sincronización y le pisaría el presupuesto de
+  // cortesía por el de un plan de pago que todavía no está pagando.
+  //
   // Best-effort: lo crítico —plan y estado— ya quedó escrito arriba, y esto
   // es un ajuste secundario que el super_admin puede corregir a mano desde el
   // Centro de control si falla.
-  if (parsed.data.plan !== planAnterior) {
+  if (parsed.data.status !== 'trial' && parsed.data.plan !== planAnterior) {
     const { error: budgetError } = await supabase
       .from('tenants')
       .update({ ai_monthly_limit_usd: planAiBudgetUsd(parsed.data.plan) })
