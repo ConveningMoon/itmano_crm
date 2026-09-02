@@ -2,7 +2,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
-import { isCoreFeature, reserveUsdFor, discretionaryLimitUsd } from '@/lib/services/ai-budget'
+import { isCoreFeature, reserveUsdFor, discretionaryLimitUsd, ceilingUsdFor } from '@/lib/services/ai-budget'
 import type { AiFeature } from '@/lib/services/ai-feature-labels'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
@@ -96,8 +96,11 @@ export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus>
     discretionaryLimitUsd: discrecional,
     remainingUsd: unlimited ? Number.MAX_SAFE_INTEGER : remainingUsd,
     usedRatio:    unlimited || discrecional <= 0 ? 0 : Math.min(1, usedUsd / discrecional),
-    blocked:              !unlimited && usedUsd >= limitUsd,
-    blockedDiscretionary: !unlimited && usedUsd >= discrecional,
+    // Mismo techo que reparte ai-budget.ts: núcleo llega al tope entero,
+    // discrecional se para en "tope - reserva". ceilingUsdFor es la única
+    // idea de dónde está cada línea — antes se repetía a mano aquí.
+    blocked:              !unlimited && usedUsd >= ceilingUsdFor(plan, limitUsd, true),
+    blockedDiscretionary: !unlimited && usedUsd >= ceilingUsdFor(plan, limitUsd, false),
   }
 }
 
