@@ -18,6 +18,7 @@ import { updateEdition, publishEdition, unpublishEdition } from '../actions'
 import { CoverPicker } from './cover-picker'
 import { BlockList } from './block-list'
 import { SourcesPanel } from './sources-panel'
+import { AuthorPicker, type AuthorOption } from './author-picker'
 
 // Editor de una edición: cabecera fija (titular, portada, fecha de datos,
 // idioma, estado, publicar) + el grid de bloques/preview (BlockList) + el
@@ -30,6 +31,8 @@ interface Props {
   canEdit:      boolean
   studioImages: StudioImage[]
   publicUrl:    string | null
+  agents:       AuthorOption[]
+  tenantName:   string
 }
 
 const STATUS_LABEL: Record<NewsletterStatus, string> = {
@@ -39,7 +42,7 @@ const STATUS_COLOR: Record<NewsletterStatus, string> = {
   draft: 'var(--accent-gold)', published: 'var(--accent-green)', archived: 'var(--text-muted)',
 }
 
-export function EditionEditor({ edition, canEdit, studioImages, publicUrl }: Props) {
+export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agents, tenantName }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -47,6 +50,7 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl }: Pro
   const [dek, setDek]             = useState(edition.dek ?? '')
   const [category, setCategory]   = useState<NewsletterCategory>(edition.category)
   const [language, setLanguage]   = useState(edition.language)
+  const [authorAgentId, setAuthorAgentId] = useState<string | null>(edition.authorAgentId)
   const [coverImageUrl, setCoverImageUrl] = useState(edition.coverImageUrl)
   const [coverSource, setCoverSource]     = useState<NewsletterCoverSource>(edition.coverSource)
   const [dataAsOf, setDataAsOf]   = useState(edition.dataAsOf ?? '')
@@ -91,6 +95,7 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl }: Pro
       sources,
       dataAsOf:      dataAsOf || null,
       category,
+      authorAgentId,
     }
   }
 
@@ -252,6 +257,15 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl }: Pro
                 </option>
               ))}
             </select>
+          </div>
+          <div style={{ minWidth: '220px' }}>
+            <AuthorPicker
+              agents={agents}
+              value={authorAgentId}
+              tenantName={tenantName}
+              onChange={setAuthorAgentId}
+              disabled={!canEdit}
+            />
           </div>
         </div>
 

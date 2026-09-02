@@ -39,6 +39,9 @@ export interface NewsletterEdition {
   unpublishedByBilling: boolean
   createdByAgentId:     string | null
   createdByUserId:      string | null
+  authorAgentId:        string | null
+  authorName:           string | null
+  authorTitle:          string | null
   createdAt:            string
   updatedAt:            string
 }
@@ -47,7 +50,8 @@ const EDITION_COLUMNS = columns('newsletter_editions', [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'cover_source', 'content', 'sources',
   'data_as_of', 'category', 'status', 'published_at', 'ai_generated', 'unpublished_by_billing',
-  'created_by_agent_id', 'created_by_user_id', 'created_at', 'updated_at',
+  'created_by_agent_id', 'created_by_user_id', 'author_agent_id', 'author_name', 'author_title',
+  'created_at', 'updated_at',
 ])
 
 // reason: el cliente de Supabase no está tipado en este repo; `columns()` ya
@@ -75,6 +79,9 @@ function mapEdition(row: any): NewsletterEdition {
     unpublishedByBilling: row.unpublished_by_billing === true,
     createdByAgentId:     row.created_by_agent_id ?? null,
     createdByUserId:      row.created_by_user_id ?? null,
+    authorAgentId:        row.author_agent_id ?? null,
+    authorName:           row.author_name ?? null,
+    authorTitle:          row.author_title ?? null,
     createdAt:            row.created_at,
     updatedAt:            row.updated_at,
   }
