@@ -18,7 +18,7 @@
 // solo contador (`ai_usage_events`), ninguna columna nueva, y sigue funcionando
 // para un tenant al que el super_admin le subió el límite a mano.
 
-import { PLANS } from '@/lib/plans'
+import { PLANS, TRIAL } from '@/lib/plans'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import type { AiFeature } from '@/lib/services/ai-feature-labels'
 
@@ -59,4 +59,22 @@ export function discretionaryLimitUsd(plan: SubscriptionPlan, limitUsd: number):
 export function ceilingUsdFor(plan: SubscriptionPlan, limitUsd: number, core: boolean): number {
   if (!Number.isFinite(limitUsd) || limitUsd <= 0) return 0
   return core ? limitUsd : discretionaryLimitUsd(plan, limitUsd)
+}
+
+/**
+ * Con cuánto presupuesto nace un tenant. Lo escribe `createTenant`.
+ *
+ * Tiene que ser explícito porque `tenants.ai_monthly_limit_usd` tiene un
+ * DEFAULT de $10 en la base, y un default de columna no sabe de planes: un
+ * tenant Partner creado sin pasar este valor arrancaba con $10 en vez de $75 y
+ * se quedaba sin IA en los primeros días. Era el mismo hueco al revés en
+ * Esencial ($10 donde el plan dice $12).
+ *
+ * El super_admin puede ajustarlo después desde el Centro de control
+ * (`updateTenant`); esto es sólo el punto de partida.
+ */
+export function initialAiBudgetUsd(plan: SubscriptionPlan, startTrial: boolean): number {
+  // La prueba vive como plan 'growth' pero con presupuesto de cortesía propio:
+  // gana sobre el del plan (ver TRIAL en plans.ts).
+  return startTrial ? TRIAL.aiBudgetUsd : PLANS[plan].limits.aiBudgetUsd
 }

@@ -9,6 +9,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
+import { initialAiBudgetUsd } from '@/lib/services/ai-budget'
 import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
@@ -103,13 +104,16 @@ export async function createTenant(
   }
 
   // email_from_address is intentionally omitted (nullable; configured later).
-  // En trial, el presupuesto de IA arranca en el monto de cortesía (plans.ts).
+  //
+  // El presupuesto de IA se escribe SIEMPRE, nunca se deja al DEFAULT de la
+  // columna: ese default es $10 fijo y no sabe de planes, así que un Partner
+  // nacía con $10 en vez de $75. initialAiBudgetUsd resuelve el trial también.
   const { error } = await supabase.from('tenants').insert({
     id,
     name:          parsed.data.name,
     slug:          parsed.data.slug,
     primary_color: parsed.data.primaryColor ?? '#1E3A5F',
-    ...(parsed.data.startTrial ? { ai_monthly_limit_usd: TRIAL.aiBudgetUsd } : {}),
+    ai_monthly_limit_usd: initialAiBudgetUsd(parsed.data.plan, parsed.data.startTrial),
   })
   if (error) return { ok: false, error: error.message }
 

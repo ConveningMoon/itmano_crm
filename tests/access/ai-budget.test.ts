@@ -6,9 +6,10 @@ import {
   reserveUsdFor,
   discretionaryLimitUsd,
   ceilingUsdFor,
+  initialAiBudgetUsd,
 } from '@/lib/services/ai-budget'
 import { AI_FEATURE_LABELS } from '@/lib/services/ai-feature-labels'
-import { PLANS, PLAN_ORDER } from '@/lib/plans'
+import { PLANS, PLAN_ORDER, TRIAL } from '@/lib/plans'
 import type { AiFeature } from '@/lib/services/ai-feature-labels'
 
 // El presupuesto de IA se parte en dos tramos segun QUIEN pide:
@@ -86,5 +87,33 @@ describe('techo aplicable', () => {
     const gastado = discretionaryLimitUsd('growth', tope)
     expect(ceilingUsdFor('growth', tope, true) - gastado)
       .toBe(PLANS.growth.limits.aiCoreReserveUsd)
+  })
+})
+
+describe('presupuesto inicial de un tenant', () => {
+  it('cada plan nace con el presupuesto que declara plans.ts', () => {
+    for (const plan of PLAN_ORDER) {
+      expect(initialAiBudgetUsd(plan, false)).toBe(PLANS[plan].limits.aiBudgetUsd)
+    }
+  })
+
+  // El bug concreto que esto cierra: `tenants.ai_monthly_limit_usd` tiene
+  // DEFAULT 10.00 en la base y createTenant no lo escribia, asi que un Partner
+  // arrancaba con $10 de los $75 de su plan y se quedaba sin IA en dias.
+  it('ningun plan nace con el default de la columna', () => {
+    const DEFAULT_DE_COLUMNA = 10
+    expect(initialAiBudgetUsd('partner', false)).toBe(75)
+    expect(initialAiBudgetUsd('partner', false)).not.toBe(DEFAULT_DE_COLUMNA)
+    expect(initialAiBudgetUsd('esencial', false)).not.toBe(DEFAULT_DE_COLUMNA)
+  })
+
+  // La prueba vive como plan 'growth' pero con su propio monto de cortesia.
+  it('la prueba usa el presupuesto del trial, no el del plan que la aloja', () => {
+    expect(initialAiBudgetUsd(TRIAL.plan, true)).toBe(TRIAL.aiBudgetUsd)
+    expect(initialAiBudgetUsd(TRIAL.plan, true)).not.toBe(PLANS[TRIAL.plan].limits.aiBudgetUsd)
+    // El flag manda sobre el plan que venga.
+    for (const plan of PLAN_ORDER) {
+      expect(initialAiBudgetUsd(plan, true)).toBe(TRIAL.aiBudgetUsd)
+    }
   })
 })
