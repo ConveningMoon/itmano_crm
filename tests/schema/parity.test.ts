@@ -95,10 +95,9 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // La excepción de la 109 (caché del dossier) se retiró el 2026-08-26: está
   // aplicada a los DOS proyectos, así que el test vuelve a vigilarla de verdad.
 
-  // feat/newsletters-sin-series: la 110 está aplicada SÓLO al sandbox, a la
-  // espera del permiso para producción. Retirar al aplicarla allí.
-  'tabla:newsletter_editions': 'migración 110 (sin series): sólo en sandbox',
-  'tabla:channel_page_views':  'migración 110 (sin series): sólo en sandbox',
+  // La excepción de la 110 (newsletters sin series) se retiró el 2026-08-31:
+  // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
+  // dos tablas de verdad.
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
