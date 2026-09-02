@@ -11,6 +11,34 @@ import type { PublicEdition, PublicTenant } from '../shared'
 // de segmento de audiencia (hispanic | military | first_buyer | brazilian),
 // no un cargo — hoy siempre es null. La firma pública es sólo el nombre.
 
+/**
+ * Serializa un valor para incrustarlo en un `<script type="application/ld+json">`.
+ *
+ * NO es un `JSON.stringify` a secas. `edition.title` y `edition.dek` —los
+ * campos que van a `headline`/`description`— son texto que la IA redacta a
+ * partir de resultados de búsqueda web, o que escribe el propio tenant:
+ * ninguno de los dos pasa por el saneamiento de `renderNewsletterHtml` (ese
+ * sólo cubre `content`, no el título ni el dek). Son entrada de un actor NO
+ * confiable desde la perspectiva del visitante público de esta página, así
+ * que un título que contenga literalmente `</script><script>...` cerraría el
+ * tag antes de tiempo y el resto se parsearía como HTML/JS de la página —
+ * afectando a cualquier visitante, no sólo al tenant que lo escribió.
+ *
+ * Escapar `<`, `>` y `&` como secuencias `\uXXXX` rompe esa posibilidad sin
+ * tocar el valor: un string JSON con esos caracteres escapados así decodifica
+ * exactamente igual al original. Si alguien quita este escape y vuelve a un
+ * `JSON.stringify` directo, la página pública vuelve a ser un vector de XSS
+ * para cualquiera que consiga escribir (o hacer que la IA redacte) un título
+ * de edición — `tests/newsletters/edition-jsonld.test.ts` existe para que
+ * ese cambio falle en vez de llegar a producción en silencio.
+ */
+export function jsonLdScriptBody(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+}
+
 export function EditionJsonLd({
   edition, tenant, canonicalUrl,
 }: {
@@ -43,9 +71,11 @@ export function EditionJsonLd({
   return (
     <script
       type="application/ld+json"
-      // reason: JSON-LD se inyecta como texto por definición; el contenido es
-      // un objeto que construimos aquí, no entrada del visitante.
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      // reason: JSON-LD se inyecta como texto por definición, pero `data`
+      // incluye título/dek de la edición, que SÍ son entrada no confiable
+      // (ver `jsonLdScriptBody`) — por eso pasa por el escape, no por un
+      // `JSON.stringify` directo.
+      dangerouslySetInnerHTML={{ __html: jsonLdScriptBody(data) }}
     />
   )
 }
