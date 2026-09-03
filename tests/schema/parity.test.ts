@@ -73,6 +73,10 @@ const APLICADAS_SIN_ARCHIVO_PROPIO: Record<string, string> = {
   // vigilar dos migraciones de verdad.
   lead_sequence_runs: 'archivo 006 pendiente de mergear desde feat/agent-api',
   agent_api:          'archivo 096 pendiente de mergear desde feat/agent-api',
+
+  // Ídem: la 111 está aplicada a los DOS proyectos, pero su archivo vive en
+  // feat/newsletters-gestion. Retirarla al mergear esa rama.
+  newsletter_autor_y_seo: 'archivo 111 pendiente de mergear desde feat/newsletters-gestion',
 }
 
 // Diferencias que existen porque una rama todavía no se ha mergeado. Vaciar esta
