@@ -99,10 +99,9 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
   // dos tablas de verdad.
 
-  // feat/newsletters-gestion: la 111 está aplicada SÓLO al sandbox, a la
-  // espera del permiso para producción. Retirar al aplicarla allí.
-  'tabla:newsletter_editions': 'migración 111 (autor y SEO): sólo en sandbox',
-  'tabla:tenants':             'migración 111 (autor y SEO): sólo en sandbox',
+  // La excepción de la 111 (autor y SEO) se retiró el 2026-09-03: está
+  // aplicada a los DOS proyectos, así que el test vuelve a vigilar esas dos
+  // tablas de verdad.
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
