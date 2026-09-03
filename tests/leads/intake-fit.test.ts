@@ -18,6 +18,7 @@ const AJ: BusinessProfile = {
   commissionBuy: 3, commissionSell: 3,
   budgetEntryMax: 250_000, budgetPremiumMin: 600_000,
   primaryAreas: ['Virginia Beach', 'Norfolk'], secondaryAreas: ['Chesapeake'],
+  publicSiteUrl: null, newsletterCanonicalTemplate: null,
 }
 
 describe('normalizeIntent', () => {

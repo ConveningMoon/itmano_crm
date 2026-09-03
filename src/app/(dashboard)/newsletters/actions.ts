@@ -21,6 +21,7 @@ import { deleteOrphanMedia, editionMediaUrls } from '@/lib/newsletters/media'
 import { buildNewsletterIntegrationPrompt } from '@/lib/services/newsletter-integration-prompt'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { getEditionById } from '@/lib/data/newsletters'
+import { resolveEditionAuthor, type EditionAuthor } from '@/lib/newsletters/author'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { generateNewsletterDraft } from '@/lib/newsletters/ai/generate'
@@ -79,6 +80,44 @@ async function guard() {
   return { ctx, tenantId, db, tenantSlug: (tenant?.slug as string) ?? '', error: null }
 }
 
+// Sin 'specialty': ver el comentario de cabecera de author.ts sobre por qué
+// esa columna no participa en la firma.
+const AUTHOR_AGENT_COLUMNS = columns('agents', ['id', 'name'])
+const AUTHOR_TENANT_COLUMNS = columns('tenants', ['name'])
+
+/**
+ * La firma que le corresponde a una edición.
+ *
+ * `agentId` explícito (el selector del editor) gana; si no, el agente vinculado
+ * al login que está creando. Sin ninguno de los dos, firma la agencia. Nunca
+ * devuelve null: una edición sin firma no debe existir.
+ */
+async function firmaPara(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  agentId: string | null,
+): Promise<EditionAuthor> {
+  const { data: tenantRow } = await db
+    .from('tenants').select(AUTHOR_TENANT_COLUMNS).eq('id', tenantId).maybeSingle()
+  // reason: el cliente de Supabase no está tipado en este repo; columns() ya
+  // validó la lista contra el esquema.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantName = ((tenantRow as any)?.name as string | undefined) ?? ''
+
+  if (!agentId) return resolveEditionAuthor({ agent: null, tenantName })
+
+  const { data: agentRow } = await db
+    .from('agents').select(AUTHOR_AGENT_COLUMNS)
+    .eq('id', agentId).eq('tenant_id', tenantId).eq('active', true).maybeSingle()
+  // reason: ver arriba.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agent = agentRow as any as { id: string; name: string } | null
+
+  // Un agentId de otro tenant o inactivo no firma: cae a la agencia en vez de
+  // filtrar el nombre de alguien que no es de este equipo.
+  return resolveEditionAuthor({ agent, tenantName })
+}
+
 interface EditionRowFields {
   title:         string
   dek:           string | null
@@ -92,6 +131,8 @@ interface EditionRowFields {
   /** Sólo true cuando la edición nace del orquestador de IA. */
   aiGenerated?:  boolean
   aiRun?:        Record<string, unknown> | null
+  /** Quién firma. Resuelto por `firmaPara` antes de llamar — nunca null. */
+  author:        EditionAuthor
 }
 
 /**
@@ -141,6 +182,12 @@ async function insertEditionRow(
     ai_run:              fields.aiRun ?? null,
     created_by_agent_id: ctx.agent_id ?? null,
     created_by_user_id:  ctx.user_id,
+    author_agent_id:     fields.author.agentId,
+    author_name:         fields.author.name,
+    // Sin author_title: agents.specialty (lo único que podría alimentarlo) no
+    // es un cargo, es un código de segmento de audiencia — ver author.ts. La
+    // columna se queda en su default (null) hasta que exista un cargo real
+    // que un agente escriba de sí mismo.
   }).select('id').maybeSingle()
 
   if (error) {
@@ -194,6 +241,11 @@ const EditionInput = z.object({
   sources:       z.array(NewsletterSourceSchema).max(40),
   dataAsOf:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   category:      z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
+  // Sólo lo usa updateEditionImpl (el editor de una edición existente); las
+  // otras dos vías de creación firman con el agente del contexto, sin que el
+  // formulario elija. `undefined` (la clave ausente) significa "no tocar la
+  // firma"; `null` es una elección explícita: "firma la agencia".
+  authorAgentId: z.string().trim().min(1).nullable().optional(),
 })
 
 async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>> {
@@ -210,12 +262,15 @@ async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>
   // que llegue nadie. Best-effort: sin secuencia se puede escribir igual.
   await ensureNewsletterSequence(g.db, g.tenantId, canal.id)
 
+  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null)
+
   const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         d.title,
     dek:           d.dek,
     language:      d.language,
     coverImageUrl: d.coverImageUrl,
     coverSource:   d.coverSource,
+    author:        firma,
     content:       d.content,
     sources:       d.sources,
     dataAsOf:      d.dataAsOf,
@@ -241,7 +296,35 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
   })
   if (denial) return denial
 
-  const { error } = await g.db.from('newsletter_editions').update({
+  // El objeto del update NO es fijo: `authorAgentId` sólo llega cuando el
+  // editor trae un selector de firma (ver author-picker.tsx). Su ausencia
+  // (`undefined`) deja la firma actual intacta, como antes.
+  //
+  // Pero el editor SIEMPRE manda la clave (buildInput() la incluye en cada
+  // guardado), así que "está presente" no basta para decidir si hay que
+  // recalcular: el spec (D3) dice que la firma queda congelada TAL COMO ESTABA
+  // AL PUBLICAR, no en el último guardado. Si aquí se recalculara con sólo
+  // "la clave llegó", cualquier guardado ajeno a la firma —corregir una
+  // errata, tocar una fuente— volvería a golpear `agents` y sobrescribiría
+  // `author_name`/`author_title` con el valor VIGENTE del agente, aunque nadie
+  // haya tocado el selector. Eso es exactamente el problema que la
+  // instantánea existe para evitar (ver author.ts).
+  //
+  // Por eso sólo se recalcula cuando el firmante CAMBIA de verdad: se compara
+  // contra `author_agent_id` ya guardado en la fila, no contra si la clave
+  // vino en el input. Si es el mismo agente (o null contra null), no se toca
+  // ninguna de las tres columnas — la instantánea sigue siendo la de la
+  // última vez que alguien eligió firma, no la del último guardado.
+  // `publishEdition` es quien la refresca al momento de publicar (ver abajo).
+  //
+  // `author_title` se escribe explícitamente en `null`: `EditionAuthor` ya no
+  // lo produce (ver author.ts — agents.specialty es un código de segmento de
+  // audiencia, no un cargo), así que aquí sólo queda limpiar cualquier valor
+  // viejo que la fila arrastre de antes de este arreglo.
+  // reason: el cliente de Supabase no está tipado en este repo; columns() ya
+  // validó cada nombre de columna que entra aquí.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: Record<string, any> = {
     title:           d.title,
     dek:             d.dek,
     language:        d.language,
@@ -251,7 +334,16 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
     sources:         d.sources,
     data_as_of:      d.dataAsOf,
     category:        d.category,
-  }).eq('id', id).eq('tenant_id', g.tenantId)
+  }
+  if (d.authorAgentId !== undefined && d.authorAgentId !== existing.authorAgentId) {
+    const firma = await firmaPara(g.db, g.tenantId, d.authorAgentId)
+    patch.author_agent_id = firma.agentId
+    patch.author_name     = firma.name
+    patch.author_title    = null
+  }
+
+  const { error } = await g.db.from('newsletter_editions').update(patch)
+    .eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
 
@@ -313,8 +405,27 @@ async function publishEditionImpl(id: string): Promise<Result<null>> {
   })
   if (blockers.length > 0) return { ok: false, error: blockers[0].detail }
 
+  // La instantánea se congela al guardar (ver updateEditionImpl) precisamente
+  // para no arrastrar el valor vigente de `agents` en cada guardado ajeno a la
+  // firma. Pero el spec dice "tal como estaban AL PUBLICAR", y un borrador
+  // puede llevar semanas firmado antes de publicarse: si nunca se refresca
+  // aquí, sale con el dato de cuando alguien eligió la firma, no con el de hoy.
+  // Se resuelve otra vez con el `author_agent_id` YA guardado en la fila (no
+  // cambia quién firma, sólo actualiza el nombre) — si ese agente ya no existe
+  // o quedó inactivo, `firmaPara` cae a la agencia, que es lo correcto.
+  //
+  // `author_title` en `null` explícito por la misma razón que en
+  // updateEditionImpl: ya no sale de `agents.specialty` (ver author.ts).
+  const firma = await firmaPara(g.db, g.tenantId, edition.authorAgentId)
+
   const { error } = await g.db.from('newsletter_editions')
-    .update({ status: 'published', published_at: new Date().toISOString() })
+    .update({
+      status:          'published',
+      published_at:    new Date().toISOString(),
+      author_agent_id: firma.agentId,
+      author_name:     firma.name,
+      author_title:    null,
+    })
     .eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
@@ -477,6 +588,8 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
   })
   if (!generado.ok) return generado
 
+  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null)
+
   const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         generado.data.title,
     dek:           generado.data.dek || null,
@@ -489,6 +602,7 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
     category:      'informativo',
     aiGenerated:   true,
     aiRun:         generado.data.aiRun,
+    author:        firma,
   })
   if (!inserted.ok) return inserted
 
@@ -655,6 +769,8 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
     accessed_at:  hoy,
   }))
 
+  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null)
+
   const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         d.title,
     dek:           d.dek?.trim() || null,
@@ -669,6 +785,7 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
     // las cuatro), cae a la del selector del modal — el `z.enum(...)` de
     // `ImportInput` ya garantiza que sea una de las cuatro.
     category:      parseCategory(d.category, parsed.data.category as NewsletterCategory),
+    author:        firma,
   })
   if (!inserted.ok) return inserted
 

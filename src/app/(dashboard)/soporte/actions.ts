@@ -107,7 +107,7 @@ export async function requestAiCapacityIncrease(
   const statusLabel = subscription ? SUBSCRIPTION_STATUS_LABELS[subscription.status] : '—'
   const usage = status.unlimited
     ? 'Ilimitado'
-    : `$${status.usedUsd.toFixed(2)} de $${status.limitUsd.toFixed(2)} (${Math.round(status.usedRatio * 100)}%)`
+    : `$${status.usedUsd.toFixed(2)} de $${status.discretionaryLimitUsd.toFixed(2)} discrecionales (${Math.round(status.usedRatio * 100)}%) · tope $${status.limitUsd.toFixed(2)} con $${status.reserveUsd.toFixed(2)} reservados al análisis de leads`
 
   return createPlatformRequest({
     kind:            'support',

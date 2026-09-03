@@ -406,6 +406,11 @@ function EditionRow({
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             {CATEGORY_LABELS[edition.category]}
           </span>
+          {edition.authorName && (
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              {edition.authorName}
+            </span>
+          )}
           {lang && (
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lang.label}</span>
           )}

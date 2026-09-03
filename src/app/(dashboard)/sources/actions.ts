@@ -290,7 +290,7 @@ export async function generateHostedPageCopy(input: {
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'La generación con IA no está configurada.' }
   }
-  const overLimit = await assertAiWithinLimit(ctx)
+  const overLimit = await assertAiWithinLimit(ctx, 'hosted_page_copy')
   if (overLimit) return overLimit
 
   const description = input.description?.trim()

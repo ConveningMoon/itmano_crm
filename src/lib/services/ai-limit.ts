@@ -2,6 +2,9 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { isCoreFeature, reserveUsdFor, discretionaryLimitUsd, ceilingUsdFor } from '@/lib/services/ai-budget'
+import type { AiFeature } from '@/lib/services/ai-feature-labels'
+import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 // ── Límite mensual de IA por tenant ──────────────────────────────────────────
 // El tope (tenants.ai_monthly_limit_usd, default $10) aplica sobre la suma de
@@ -11,15 +14,34 @@ import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 // El gate se evalúa ANTES de llamar a la Claude API — un request ya iniciado
 // nunca se corta a la mitad, así que el gasto real puede excederse por el
 // costo de un solo request (~centavos); aceptable por diseño.
+//
+// El tope está partido en dos tramos (ver ai-budget.ts): lo discrecional se
+// corta en "tope - reserva" y el núcleo —el análisis de fit, que corre solo—
+// llega hasta el tope entero. Por eso casi todo lo de aquí abajo viene por
+// duplicado.
 
 export interface AiLimitStatus {
   unlimited:    boolean
+  plan:         SubscriptionPlan
   limitUsd:     number
   usedUsd:      number
+  /** Los últimos dólares del tope, sólo para el núcleo. 0 si unlimited. */
+  reserveUsd:   number
+  /** limitUsd - reserveUsd: el techo de todo lo que se pulsa a mano. */
+  discretionaryLimitUsd: number
   remainingUsd: number
-  // usedUsd / limitUsd acotado a [0, 1] (0 si unlimited).
+  /**
+   * Consumo contra el techo DISCRECIONAL, acotado a [0, 1] (0 si unlimited).
+   *
+   * Contra el discrecional y no contra el tope a propósito: es el número que
+   * ve el usuario, y tiene que marcar 100% justo cuando deja de poder generar.
+   * Medirlo contra el tope entero le diría "83%" mientras la UI lo bloquea.
+   */
   usedRatio:    number
+  /** Al tope completo: ni siquiera el núcleo puede gastar. */
   blocked:      boolean
+  /** En "tope - reserva": lo que se pulsa a mano se para; el núcleo sigue. */
+  blockedDiscretionary: boolean
 }
 
 function monthStartIso(): string {
@@ -28,14 +50,19 @@ function monthStartIso(): string {
 }
 
 /**
- * Estado del límite mensual de un tenant. Dos queries baratas (config del
- * tenant + suma del mes); volúmenes actuales no justifican cachear.
+ * Estado del límite mensual de un tenant. Tres queries baratas (config del
+ * tenant + plan + suma del mes); volúmenes actuales no justifican cachear.
+ *
+ * El plan hace falta porque la reserva del núcleo se declara por plan en
+ * plans.ts. Un tenant sin fila de subscriptions cae a 'esencial', que es la
+ * reserva más pequeña: ante la duda, no le quitamos presupuesto a nadie.
  */
 export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus> {
   const supabase = createAdminClient()
 
-  const [{ data: tenant }, { data: events }] = await Promise.all([
+  const [{ data: tenant }, { data: sub }, { data: events }] = await Promise.all([
     supabase.from('tenants').select('ai_monthly_limit_usd, ai_unlimited').eq('id', tenantId).maybeSingle(),
+    supabase.from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle(),
     supabase
       .from('ai_usage_events')
       .select('cost_usd')
@@ -47,20 +74,33 @@ export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus>
   const t = tenant as any
   const unlimited = (t?.ai_unlimited as boolean) ?? false
   const limitUsd  = Number(t?.ai_monthly_limit_usd ?? 10)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const plan = ((sub as any)?.plan as SubscriptionPlan | undefined) ?? 'esencial'
 
   let usedUsd = 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const e of (events ?? []) as any[]) usedUsd += Number(e.cost_usd)
   usedUsd = Math.round(usedUsd * 1_000_000) / 1_000_000
 
+  // Un tenant ilimitado no reserva nada: no hay escasez que repartir.
+  const reserveUsd   = unlimited ? 0 : reserveUsdFor(plan, limitUsd)
+  const discrecional = unlimited ? limitUsd : discretionaryLimitUsd(plan, limitUsd)
   const remainingUsd = unlimited ? Infinity : Math.max(0, limitUsd - usedUsd)
+
   return {
     unlimited,
+    plan,
     limitUsd,
     usedUsd,
+    reserveUsd,
+    discretionaryLimitUsd: discrecional,
     remainingUsd: unlimited ? Number.MAX_SAFE_INTEGER : remainingUsd,
-    usedRatio:    unlimited || limitUsd <= 0 ? 0 : Math.min(1, usedUsd / limitUsd),
-    blocked:      !unlimited && usedUsd >= limitUsd,
+    usedRatio:    unlimited || discrecional <= 0 ? 0 : Math.min(1, usedUsd / discrecional),
+    // Mismo techo que reparte ai-budget.ts: núcleo llega al tope entero,
+    // discrecional se para en "tope - reserva". ceilingUsdFor es la única
+    // idea de dónde está cada línea — antes se repetía a mano aquí.
+    blocked:              !unlimited && usedUsd >= ceilingUsdFor(plan, limitUsd, true),
+    blockedDiscretionary: !unlimited && usedUsd >= ceilingUsdFor(plan, limitUsd, false),
   }
 }
 
@@ -70,6 +110,16 @@ export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus>
 // filas de `agents` del tenant, incluido el agente vinculado al owner). Un
 // tenant con ai_unlimited = true no reparte nada. La atribución de cada request
 // vive en ai_usage_events.agent_id (migración 056).
+//
+// Lo que se reparte es el tramo DISCRECIONAL, no el tope entero: si no, el
+// equipo podría comerse entre todos la reserva del análisis de leads, que es
+// justo lo que la reserva existe para impedir.
+//
+// Que la cuenta cuadre depende de un detalle de ai-lead-fit.ts: registra su
+// gasto con `userId: null`, así que recordAiUsage nunca le pone agent_id y el
+// consumo del núcleo NO entra en la parte de nadie. Si algún día el análisis
+// pasara a atribuirse a un agente, este reparto empezaría a cobrarle al agente
+// un gasto que él no decidió.
 
 /** agents.id vinculado a un login (agents.user_id = auth uid), o null. */
 export async function getLinkedAgentId(userId: string, tenantId: string): Promise<string | null> {
@@ -94,7 +144,7 @@ export interface AgentAiShare {
 }
 
 /**
- * Parte del límite mensual que le corresponde a un agente. null cuando el
+ * Parte del tramo DISCRECIONAL que le corresponde a un agente. null cuando el
  * reparto no aplica: tenant ilimitado, plan distinto de Partner, o tenant sin
  * agentes registrados.
  */
@@ -123,7 +173,7 @@ export async function getAgentAiShare(tenantId: string, agentId: string): Promis
   if (agentCount <= 0) return null
 
   const limitUsd = Number(t?.ai_monthly_limit_usd ?? 10)
-  const shareUsd = limitUsd / agentCount
+  const shareUsd = discretionaryLimitUsd('partner', limitUsd) / agentCount
 
   let usedUsd = 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,7 +203,11 @@ export interface AiLimitIndicator {
 
 export async function getAiLimitIndicator(tenantId: string): Promise<AiLimitIndicator> {
   const s = await getAiLimitStatus(tenantId)
-  return { unlimited: s.unlimited, usedRatio: s.usedRatio, blocked: s.blocked, perAgent: false }
+  // `blockedDiscretionary` y no `blocked`: este indicador describe lo que el
+  // usuario puede pulsar. Con el tramo discrecional agotado la barra tiene que
+  // pintarse llena y en rojo aunque el tenant conserve la reserva del núcleo —
+  // si no, la UI dice "queda saldo" y el botón devuelve un error.
+  return { unlimited: s.unlimited, usedRatio: s.usedRatio, blocked: s.blockedDiscretionary, perAgent: false }
 }
 
 /**
@@ -178,9 +232,15 @@ export async function getAiLimitIndicatorFor(ctx: TenantContext): Promise<AiLimi
  *
  * Dos capas: el tope del tenant (siempre) y, en plan Partner, la parte igual
  * del agente vinculado al login que genera.
+ *
+ * `feature` no es decorativo: decide contra QUÉ techo se mide. Las del núcleo
+ * (ai-budget.ts) llegan al tope entero; el resto se para en la reserva. Es
+ * obligatorio a propósito — un llamador nuevo tiene que decidir de qué lado
+ * cae en vez de heredar el más permisivo por olvido.
  */
 export async function assertAiWithinLimit(
   ctx: TenantContext,
+  feature: AiFeature,
 ): Promise<{ ok: false; error: string } | null> {
   if (ctx.role === 'super_admin') return null
   if (!ctx.tenant_id) return { ok: false, error: 'Acceso no autorizado' }
@@ -197,14 +257,27 @@ export async function assertAiWithinLimit(
   }
 
   const status = await getAiLimitStatus(ctx.tenant_id)
+  const core = isCoreFeature(feature)
+
+  // Sin montos en los mensajes: el límite en USD es información interna de ITMANO.
   if (status.blocked) {
-    // Sin montos en el mensaje: el límite en USD es información interna de ITMANO.
     return {
       ok: false,
       error: 'Tu equipo alcanzó el límite mensual de generación con IA. El contador se reinicia el día 1 del próximo mes; si necesitas ampliarlo, contacta a ITMANO.',
     }
   }
+  // Queda presupuesto, pero es el reservado. Decirlo importa: si no, el usuario
+  // lee "alcanzaste el límite" sabiendo que sobra saldo y parece un error.
+  if (!core && status.blockedDiscretionary) {
+    return {
+      ok: false,
+      error: 'Tu equipo alcanzó el límite mensual de generación con IA. Lo que queda está reservado para el análisis automático de cada lead, que sigue funcionando. El contador se reinicia el día 1 del próximo mes; si necesitas ampliarlo, contacta a ITMANO.',
+    }
+  }
   if (status.unlimited) return null
+  // El núcleo no reparte por agente: no lo dispara un login, lo dispara un lead
+  // que entró por un formulario.
+  if (core) return null
 
   // Parte por agente (solo Partner). El owner también reparte si su login está
   // vinculado a un agente del equipo; un login sin agente vinculado solo está

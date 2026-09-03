@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { PUBLIC_EDITION_COLUMN_LIST } from '@/app/(hosted)/nl/[tenantSlug]/shared'
 import { PUBLIC_EDITION_COLUMNS } from '@/lib/services/newsletter-integration-prompt'
 
-// Las mismas 15 columnas públicas de `newsletter_editions` viven en DOS sitios
+// Las mismas 17 columnas públicas de `newsletter_editions` viven en DOS sitios
 // mantenidos a mano: `shared.ts` (lo que la página pública de verdad lee) y
 // `newsletter-integration-prompt.ts` (lo que el prompt le promete al
 // desarrollador del cliente que puede pedir). Nada las fuerza a coincidir —

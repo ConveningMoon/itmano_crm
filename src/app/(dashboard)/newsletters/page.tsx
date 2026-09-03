@@ -53,9 +53,7 @@ export default async function NewslettersPage() {
           background: 'var(--bg-surface)',
         }}>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-            Tu plan actual no incluye newsletters. Está disponible desde Growth, junto con tu
-            dominio de envío propio y el análisis completo. Contáctanos para conversar sobre tu
-            inversión.
+            Tu plan actual no incluye newsletters. Escríbenos y las activamos en tu cuenta.
           </p>
         </div>
       </div>

@@ -25,8 +25,9 @@ import { EditionEditor } from './edition-editor'
 // límite de plataforma ya se pagó, y `recordAiUsage` nunca llega a correr.
 export const maxDuration = 300
 
-const TENANT_COLUMNS       = columns('tenants', ['slug'])
+const TENANT_COLUMNS       = columns('tenants', ['slug', 'name'])
 const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
+const AGENT_OPTION_COLUMNS = columns('agents', ['id', 'name'])
 
 export default async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -48,13 +49,21 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
 
   const canEdit = ctx.role !== 'agent' || edition.createdByUserId === ctx.user_id
 
-  const [studioImages, { data: tenantRow }] = await Promise.all([
+  const [studioImages, { data: tenantRow }, { data: agentRows }] = await Promise.all([
     getStudioImages(tenantId),
     db.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).maybeSingle(),
+    db.from('agents').select(AGENT_OPTION_COLUMNS)
+      .eq('tenant_id', tenantId).eq('active', true).order('name'),
   ])
   // reason: ver arriba.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  // reason: ver arriba.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantName = ((tenantRow as any)?.name as string | undefined) ?? ''
+  // reason: ver arriba.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = ((agentRows ?? []) as any[]).map(a => ({ id: a.id as string, name: a.name as string }))
 
   // URL ABSOLUTA de news.itmano.com: es la dirección pública de la edición, la
   // que el tenant comparte. La ruta interna /nl/… también responde bajo
@@ -70,6 +79,8 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
       canEdit={canEdit}
       studioImages={studioImages}
       publicUrl={publicUrl}
+      agents={agents}
+      tenantName={tenantName}
     />
   )
 }

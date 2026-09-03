@@ -120,7 +120,10 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     const access = await getTenantAccessFor(input.tenantId)
     if (!access.canUseAi) return skip('subscription_inactive', input.leadId)
 
-    // Presupuesto de IA del mes.
+    // Presupuesto de IA del mes. `blocked` (el tope entero) y NO
+    // `blockedDiscretionary`: el análisis de fit es la feature del núcleo, la
+    // que gasta la reserva. Ese es todo el mecanismo — lo que se pulsa a mano
+    // se para antes y le deja estos dólares a esto. Ver ai-budget.ts.
     const limit = await getAiLimitStatus(input.tenantId)
     if (limit.blocked) return skip('budget_blocked', input.leadId)
 

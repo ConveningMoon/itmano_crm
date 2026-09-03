@@ -16,7 +16,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -83,172 +83,6 @@ export type Database = {
           },
           {
             foreignKeyName: "acquisition_channels_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      agent_email_drafts: {
-        Row: {
-          body: string
-          created_at: string
-          id: string
-          lead_id: string
-          subject: string
-          tenant_id: string
-        }
-        Insert: {
-          body: string
-          created_at?: string
-          id?: string
-          lead_id: string
-          subject: string
-          tenant_id: string
-        }
-        Update: {
-          body?: string
-          created_at?: string
-          id?: string
-          lead_id?: string
-          subject?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_email_drafts_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_email_drafts_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_list"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_email_drafts_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      agent_idempotency_keys: {
-        Row: {
-          created_at: string
-          key: string
-          request_hash: string
-          response_body: Json | null
-          response_status: number | null
-          state: string
-          tenant_id: string
-        }
-        Insert: {
-          created_at?: string
-          key: string
-          request_hash: string
-          response_body?: Json | null
-          response_status?: number | null
-          state?: string
-          tenant_id: string
-        }
-        Update: {
-          created_at?: string
-          key?: string
-          request_hash?: string
-          response_body?: Json | null
-          response_status?: number | null
-          state?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_idempotency_keys_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      agent_rate_limits: {
-        Row: {
-          bucket: string
-          count: number
-          token_id: string
-          window_start: string
-        }
-        Insert: {
-          bucket: string
-          count?: number
-          token_id: string
-          window_start: string
-        }
-        Update: {
-          bucket?: string
-          count?: number
-          token_id?: string
-          window_start?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_rate_limits_token_id_fkey"
-            columns: ["token_id"]
-            isOneToOne: false
-            referencedRelation: "agent_tokens"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      agent_tokens: {
-        Row: {
-          bot_user_id: string
-          created_at: string
-          expires_at: string
-          id: string
-          last_used_at: string | null
-          name: string
-          revoked_at: string | null
-          scopes: string[]
-          tenant_id: string
-          token_hash: string
-          token_prefix: string
-        }
-        Insert: {
-          bot_user_id: string
-          created_at?: string
-          expires_at: string
-          id?: string
-          last_used_at?: string | null
-          name: string
-          revoked_at?: string | null
-          scopes?: string[]
-          tenant_id: string
-          token_hash: string
-          token_prefix: string
-        }
-        Update: {
-          bot_user_id?: string
-          created_at?: string
-          expires_at?: string
-          id?: string
-          last_used_at?: string | null
-          name?: string
-          revoked_at?: string | null
-          scopes?: string[]
-          tenant_id?: string
-          token_hash?: string
-          token_prefix?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_tokens_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1280,6 +1114,9 @@ export type Database = {
         Row: {
           ai_generated: boolean
           ai_run: Json | null
+          author_agent_id: string | null
+          author_name: string | null
+          author_title: string | null
           category: string
           channel_id: string
           content: Json
@@ -1305,6 +1142,9 @@ export type Database = {
         Insert: {
           ai_generated?: boolean
           ai_run?: Json | null
+          author_agent_id?: string | null
+          author_name?: string | null
+          author_title?: string | null
           category?: string
           channel_id: string
           content?: Json
@@ -1330,6 +1170,9 @@ export type Database = {
         Update: {
           ai_generated?: boolean
           ai_run?: Json | null
+          author_agent_id?: string | null
+          author_name?: string | null
+          author_title?: string | null
           category?: string
           channel_id?: string
           content?: Json
@@ -1353,6 +1196,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "newsletter_editions_author_agent_id_fkey"
+            columns: ["author_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "newsletter_editions_channel_id_fkey"
             columns: ["channel_id"]
@@ -2082,10 +1932,12 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          newsletter_canonical_template: string | null
           newsletter_source_domains: string[] | null
           pages_managed_by_itmano: boolean
           primary_areas: string[] | null
           primary_color: string
+          public_site_url: string | null
           resend_account: string
           resend_domain_id: string | null
           secondary_areas: string[] | null
@@ -2110,10 +1962,12 @@ export type Database = {
           id: string
           logo_url?: string | null
           name: string
+          newsletter_canonical_template?: string | null
           newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
+          public_site_url?: string | null
           resend_account?: string
           resend_domain_id?: string | null
           secondary_areas?: string[] | null
@@ -2138,10 +1992,12 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          newsletter_canonical_template?: string | null
           newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
+          public_site_url?: string | null
           resend_account?: string
           resend_domain_id?: string | null
           secondary_areas?: string[] | null
@@ -2250,25 +2106,6 @@ export type Database = {
       }
     }
     Functions: {
-      agent_api_base64url: { Args: { p_data: string }; Returns: string }
-      agent_api_mint_jwt: {
-        Args: { p_ttl_seconds?: number; p_user_id: string }
-        Returns: string
-      }
-      agent_api_purge_expired: { Args: never; Returns: undefined }
-      agent_api_rate_limit: {
-        Args: {
-          p_bucket: string
-          p_limit: number
-          p_token_id: string
-          p_window_s?: number
-        }
-        Returns: {
-          allowed: boolean
-          remaining: number
-          reset_at: string
-        }[]
-      }
       channel_metrics: {
         Args: { p_channel_ids: string[]; p_window_days?: number }
         Returns: Json
@@ -2351,12 +2188,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2380,11 +2217,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2405,11 +2242,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2430,11 +2267,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2447,11 +2284,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { discretionaryLimitUsd } from '@/lib/services/ai-budget'
 
 // Agregaciones de uso de IA para los dashboards:
 //   - Configuración → "Uso de IA" (scoped a un tenant)
@@ -200,7 +201,11 @@ export async function getAgentAiBreakdown(tenantId: string): Promise<AgentAiBrea
   const limitUsd  = Number(t?.ai_monthly_limit_usd ?? 10)
 
   const splitApplies = isPartner && !unlimited && agentRows.length > 0 && limitUsd > 0
-  const shareUsd = splitApplies ? limitUsd / agentRows.length : 0
+  // Lo mismo que reparte getAgentAiShare (ai-limit.ts): el tramo DISCRECIONAL,
+  // no el tope. Este panel y el gate tienen que dar el mismo número — si el
+  // Centro de control dice que a un agente le queda parte y la generación lo
+  // rechaza, nadie sabe cuál de los dos miente.
+  const shareUsd = splitApplies ? discretionaryLimitUsd('partner', limitUsd) / agentRows.length : 0
 
   interface Acc { requests: number; input: number; output: number; cost: number }
   const byAgent = new Map<string, Acc>()

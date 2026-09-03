@@ -75,10 +75,9 @@ const APLICADAS_SIN_ARCHIVO_PROPIO: Record<string, string> = {
   // 2026-09-03: sus archivos ya están en main (006 y 103), así que la excepción
   // no llegaba a evaluarse y el comentario afirmaba lo contrario de lo que pasa.
 
-  // La 111 SÍ tiene archivo, pero en la rama feat/newsletters-gestion, que aún
-  // no está mergeada. Está aplicada a los DOS proyectos. Retirarla en cuanto
-  // entre: si sigue, el test deja de vigilar una migración de verdad.
-  newsletter_autor_y_seo: 'archivo 111 pendiente de mergear desde feat/newsletters-gestion',
+  // La de la 111 (newsletter_autor_y_seo) se retiró en este merge: su archivo
+  // entra al repo con esta misma rama, así que la excepción dejaba de evaluarse
+  // y el test vuelve a vigilar esa migración de verdad.
 }
 
 // Objetos que están en un proyecto y no en el otro. La causa puede ser una rama
@@ -99,6 +98,10 @@ const SOLO_EN_UN_PROYECTO: Record<string, string> = {
   // La excepción de la 110 (newsletters sin series) se retiró el 2026-08-31:
   // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
   // dos tablas de verdad.
+
+  // La excepción de la 111 (autor y SEO) se retiró el 2026-09-03: está
+  // aplicada a los DOS proyectos, así que el test vuelve a vigilar esas dos
+  // tablas de verdad.
 
   // Las ocho excepciones de la 112 (drop del motor de carruseles) se retiraron el
   // 2026-09-03: la migración está aplicada a los DOS proyectos, así que ya no hay
