@@ -19,13 +19,11 @@ import nextConfig from '../../next.config'
 
 const RUTAS_QUE_USAN_SHARP = [
   '/admin',                    // panel con miniaturas de marca
-  '/admin/carousels',          // compositor de diapositivas
   '/properties',               // conversión a WebP al subir
   '/properties/[id]',
   '/settings',
   '/studio',                   // normalizePhoto en cada pieza
   '/studio/plantillas',        // miniatura de la plantilla al guardar
-  '/api/cron/carousel-render',
   '/api/properties/media',
 ]
 

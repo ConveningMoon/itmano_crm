@@ -19,7 +19,7 @@ import type { TenantContext } from '@/lib/auth/tenant-context'
 
 // ── Pipeline del Estudio ─────────────────────────────────────────────────────
 // Vive fuera de actions.ts porque un archivo 'use server' convierte cada export
-// en un endpoint HTTP — misma razón por la que existe carousels/render.ts.
+// en un endpoint HTTP: el pipeline entero quedaría expuesto como ruta pública.
 //
 // Orden deliberado: validar (ya lo hizo el llamador) → gate de IA → fila →
 // dirección → escena → composición → subida. El gate va ANTES de gastar nada.
@@ -270,8 +270,8 @@ export async function generateStudioImage(params: {
 
 /**
  * Vuelve a componer el texto sobre el fondo YA generado, sin volver a pagar la
- * escena. Es el arreglo barato cuando el precio o la fecha salieron mal: mismo
- * criterio de reutilización que renderOneSlide en los carruseles.
+ * escena. Es el arreglo barato cuando el precio o la fecha salieron mal: el
+ * fondo ya pagado no se vuelve a pedir.
  */
 export async function recomposeStudioImage(
   id: string, ctx: TenantContext, form: StudioForm,

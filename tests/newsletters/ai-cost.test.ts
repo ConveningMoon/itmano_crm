@@ -37,7 +37,6 @@ const ALL_FEATURES: Record<AiFeature, true> = {
   sequence_bootstrap:   true,
   hosted_page_copy:     true,
   lead_fit:             true,
-  carousel_copy:        true,
   studio_prompt:        true,
   studio_image:         true,
   newsletter_sources:   true,

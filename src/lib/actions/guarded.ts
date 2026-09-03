@@ -20,8 +20,8 @@ import 'server-only'
  * Un catch genérico se los tragaría y la navegación se perdería en silencio,
  * así que hay que re-lanzarlos siempre.
  *
- * Estaba duplicado dentro de admin/carousels/actions.ts; vive aquí para que
- * cualquiera que envuelva una action lo herede en vez de tener que acordarse.
+ * Nació duplicado dentro de una action concreta; vive aquí para que cualquiera
+ * que envuelva una action lo herede en vez de tener que acordarse.
  */
 export function isNextControlFlow(e: unknown): boolean {
   const d = (e as { digest?: unknown } | null)?.digest

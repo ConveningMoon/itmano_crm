@@ -10,7 +10,7 @@
 //   node scripts/gen-studio-fixtures.mjs
 //
 // Habla con la REST de Gemini directamente en vez de importar
-// src/lib/carousels/gemini.ts porque este script es .mjs y aquel es TypeScript
+// src/lib/studio/gemini.ts porque este script es .mjs y aquel es TypeScript
 // con `server-only`. Son veinte líneas y se ejecuta a mano una vez.
 
 import { writeFileSync, mkdirSync } from 'node:fs'

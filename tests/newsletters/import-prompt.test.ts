@@ -3,6 +3,7 @@ import { buildImportPrompt } from '@/lib/newsletters/import-prompt'
 import {
   NewsletterContentSchema, NewsletterBlockSchema, NEWSLETTER_CONTENT_VERSION, CONTENT_LIMITS,
 } from '@/lib/newsletters/content'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // El prompt de importación ES el contrato: lo que dice aquí es lo que el
 // usuario le pide a SU IA. Si documenta algo que el servidor no acepta, el
@@ -104,6 +105,59 @@ describe('los valores de enum que el prompt nombra son los que el esquema acepta
     for (const valor of valores) {
       const res = NewsletterBlockSchema.safeParse({ type: 'callout', tone: valor, text: 'x' })
       expect(res.success, `el prompt promete "${valor}" como "tone" pero el esquema lo rechaza`).toBe(true)
+    }
+  })
+
+  // Un campo que el esquema NO declara no hace fallar nada: zod lo descarta y
+  // sigue. Por eso el prompt prometía "sourceIds" en cualquier bloque y nadie
+  // se enteraba — la cita simplemente no llegaba a la edición.
+  const MINIMOS: Record<string, Record<string, unknown>> = {
+    heading:   { type: 'heading', level: 2, text: 'x' },
+    paragraph: { type: 'paragraph', text: 'x' },
+    list:      { type: 'list', style: 'bullet', items: ['x'] },
+    quote:     { type: 'quote', text: 'x' },
+    callout:   { type: 'callout', tone: 'info', text: 'x' },
+    stat:      { type: 'stat', label: 'x', value: 'y' },
+  }
+
+  /** Los tipos que de verdad CONSERVAN "sourceIds" al pasar por el esquema. */
+  function tiposQueCitan(): string[] {
+    return Object.keys(MINIMOS).filter(tipo => {
+      const res = NewsletterBlockSchema.safeParse({ ...MINIMOS[tipo], sourceIds: ['s1'] })
+      return res.success && 'sourceIds' in (res.data as object)
+    })
+  }
+
+  it('nombra exactamente los bloques que conservan "sourceIds"', () => {
+    const citan = tiposQueCitan()
+    // Si MINIMOS deja de ser válido, todo daría vacío y el resto pasaría solo.
+    expect(citan.length).toBeGreaterThan(0)
+
+    // El '·' distingue la REGLA del JSON de ejemplo, que también escribe
+    // `"sourceIds": ["s1"]` y aparece antes: sin eso se compara contra el
+    // ejemplo del bloque paragraph y el resultado no significa nada.
+    const regla = prompt.split('\n')
+      .find(l => l.includes('sourceIds') && l.trimStart().startsWith('·'))
+    expect(regla, 'el prompt ya no explica "sourceIds"').toBeDefined()
+
+    for (const tipo of Object.keys(MINIMOS)) {
+      const nombrado = regla!.includes(`"${tipo}"`)
+      expect(nombrado, nombrado
+        ? `el prompt dice que "${tipo}" cita fuentes, pero el esquema le descarta "sourceIds"`
+        : `"${tipo}" conserva "sourceIds" y el prompt no lo nombra`,
+      ).toBe(citan.includes(tipo))
+    }
+  })
+
+  it('cada código de idioma que promete es uno que el servidor acepta', () => {
+    const linea = prompt.split('\n').find(l => l.includes('"language"') && l.includes('códigos:'))
+    expect(linea, 'el prompt ya no lista los idiomas').toBeDefined()
+
+    const codigos = linea!.split('códigos:')[1].replace(/\.\s*$/, '').split(',').map(c => c.trim()).filter(Boolean)
+    expect(codigos.length).toBeGreaterThan(0)
+    for (const codigo of codigos) {
+      expect((SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(codigo),
+        `el prompt promete el idioma "${codigo}" pero el servidor lo rechaza`).toBe(true)
     }
   })
 })
