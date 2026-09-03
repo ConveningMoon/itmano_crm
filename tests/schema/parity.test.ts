@@ -99,17 +99,9 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
   // dos tablas de verdad.
 
-  // chore/quitar-carruseles: la 112 (drop del motor de carruseles) está aplicada
-  // SÓLO a producción — es la excepción al revés de las de arriba, porque el MCP
-  // de esta sesión sólo llegaba a producción. Retirar al aplicarla al sandbox.
-  'tabla:carousel_brand_profiles':  'migración 112: ya no está en producción, sigue en el sandbox',
-  'tabla:carousel_jobs':            'migración 112: ya no está en producción, sigue en el sandbox',
-  'tabla:carousel_slides':          'migración 112: ya no está en producción, sigue en el sandbox',
-  'tabla:carousel_logs':            'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_brand_profiles': 'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_jobs':           'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_slides':         'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_logs':           'migración 112: ya no está en producción, sigue en el sandbox',
+  // Las ocho excepciones de la 112 (drop del motor de carruseles) se retiraron el
+  // 2026-09-03: la migración está aplicada a los DOS proyectos, así que ya no hay
+  // nada que excusar y el test vuelve a vigilar esas tablas de verdad.
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
