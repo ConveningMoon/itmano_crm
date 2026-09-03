@@ -23,8 +23,8 @@ import {
 } from 'lucide-react'
 
 // Un ítem está activo si su href es el prefijo MÁS específico que coincide con la
-// ruta actual. Con la lista completa de hrefs, /admin/carousels gana sobre /admin
-// (y así "Centro de control" no se ilumina cuando estás en Carruseles). Sin la
+// ruta actual: con la lista completa de hrefs un ítem anidado gana sobre el que
+// lo contiene, y así el padre no se ilumina cuando estás en el hijo. Sin la
 // lista, cae al comportamiento previo (exacto o startsWith).
 function computeActive(pathname: string, href: string, hrefs?: string[]): boolean {
   const matchesHref = (h: string) => pathname === h || pathname.startsWith(`${h}/`)
@@ -67,7 +67,7 @@ interface NavItemProps {
   // layoutId para que el indicador no salte entre ambas.
   indicatorId?: string
   // Todos los hrefs del nav — para resolver el activo por el prefijo MÁS largo.
-  // Sin esto, /admin quedaría activo también en /admin/carousels (startsWith).
+  // Sin esto, un ítem padre quedaría activo también en las rutas de su hijo.
   hrefs?: string[]
 }
 

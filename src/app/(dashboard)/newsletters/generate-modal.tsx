@@ -53,9 +53,8 @@ const HINT_STYLE: React.CSSProperties = {
 
 // No hay señal real del servidor sobre en qué paso va la generación —
 // generateEditionWithAi es UNA llamada opaca que resuelve las dos pasadas por
-// el modelo de una vez. Igual que el generador de carruseles fija su texto de
-// estado ANTES de llamar a la server action (carousels-client.tsx → generate()),
-// aquí se avisa por tiempo transcurrido: la investigación con búsqueda web es
+// el modelo de una vez. El texto de estado se fija ANTES de llamar a la server
+// action y avanza por tiempo transcurrido: la investigación con búsqueda web es
 // la parte más lenta, así que a los 14s se asume que ya terminó y se anuncia la
 // redacción. Es una estimación, no una lectura del servidor — sin eso, no hay
 // forma barata de dar dos mensajes distintos con una sola llamada.
@@ -206,8 +205,8 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
             )}
           </div>
 
-          {/* Progreso — mismo enfoque del generador de carruseles: un texto de
-              estado que cambia mientras la generación está en curso. */}
+          {/* Progreso — un texto de estado que cambia mientras la generación
+              está en curso. */}
           {busy && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
               <Loader2 size={14} className="animate-spin" color="var(--accent-gold)" />
