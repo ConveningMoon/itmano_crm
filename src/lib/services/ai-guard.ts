@@ -47,11 +47,14 @@ export function isLocalAiSpendBlocked(env: AiSpendEnv = process.env): boolean {
 
 /**
  * Mensaje del bloqueo. Va a la consola del desarrollador, no a un cliente, así
- * que dice exactamente cómo levantarlo — y por qué está puesto.
+ * que dice exactamente cómo levantarlo — y por qué está puesto. Da las dos
+ * sintaxis a propósito: el equipo desarrolla en Windows/PowerShell, donde la
+ * forma `VAR=1 comando` de bash no define nada y falla sin explicar por qué.
  */
 export const LOCAL_AI_SPEND_MESSAGE =
   'Gasto de IA bloqueado fuera de producción: las llaves son reales y esta ' +
   'generación se cobraría a la cuenta de ITMANO. Para autorizarla en esta ' +
-  `sesión, arranca con ${LOCAL_AI_SPEND_ENV}=1 (p. ej. ` +
-  `\`${LOCAL_AI_SPEND_ENV}=1 npm run dev\`). Una edición de newsletter cuesta ` +
-  '~$0.46, de los cuales ~$0.39 son la investigación con web_search.'
+  `sesión, arranca el servidor con ${LOCAL_AI_SPEND_ENV}=1 — PowerShell: ` +
+  `$env:${LOCAL_AI_SPEND_ENV}="1"; npm run dev — bash: ` +
+  `${LOCAL_AI_SPEND_ENV}=1 npm run dev. Referencia de costo: una edición de ` +
+  'newsletter ~$0.46, de los cuales ~$0.39 son la investigación con web_search.'
