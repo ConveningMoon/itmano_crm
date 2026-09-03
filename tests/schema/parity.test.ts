@@ -82,21 +82,12 @@ const APLICADAS_SIN_ARCHIVO_PROPIO: Record<string, string> = {
 }
 
 // Objetos que están en un proyecto y no en el otro. La causa puede ser una rama
-// sin mergear o —como ahora— una migración ya mergeada que sólo se aplicó a uno
-// de los dos. Vaciar la entrada al aplicarla a ambos.
+// sin mergear, o una migración ya mergeada que sólo se aplicó a uno de los dos.
+// Vaciar la entrada al aplicarla a ambos.
 const SOLO_EN_UN_PROYECTO: Record<string, string> = {
-  // El archivo es 103_agent_api.sql y lleva tiempo en main; lo que falta es
-  // aplicarlo a producción. Antes decía "migración 096", que es otra
-  // (studio_images_template). Contrastado con las dos bases el 2026-09-03.
-  'tabla:agent_tokens':            'migración 103 (agent_api): aplicada sólo al sandbox',
-  'tabla:agent_email_drafts':      'migración 103 (agent_api): aplicada sólo al sandbox',
-  'tabla:agent_idempotency_keys':  'migración 103 (agent_api): aplicada sólo al sandbox',
-  'tabla:agent_rate_limits':       'migración 103 (agent_api): aplicada sólo al sandbox',
-  'policy:agent_email_drafts':     'migración 103 (agent_api): aplicada sólo al sandbox',
-  'funcion:agent_api_base64url(p_data bytea)':                                                   'migración 103 (agent_api): aplicada sólo al sandbox',
-  'funcion:agent_api_mint_jwt(p_user_id uuid, p_ttl_seconds integer)':                           'migración 103 (agent_api): aplicada sólo al sandbox',
-  'funcion:agent_api_purge_expired()':                                                           'migración 103 (agent_api): aplicada sólo al sandbox',
-  'funcion:agent_api_rate_limit(p_token_id uuid, p_bucket text, p_limit integer, p_window_s integer)': 'migración 103 (agent_api): aplicada sólo al sandbox',
+  // Las nueve excepciones de la 103 (agent_api) se retiraron el 2026-09-03: la
+  // migración ya está aplicada a los DOS proyectos, así que el test vuelve a
+  // vigilar esas tablas, esa policy y esas funciones de verdad.
 
   // Las excepciones de feat/newsletters (105, 106 y 107) se retiraron el
   // 2026-08-25: las tres migraciones están aplicadas a los DOS proyectos, así
