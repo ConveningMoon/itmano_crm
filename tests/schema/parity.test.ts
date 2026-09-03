@@ -67,26 +67,36 @@ const APLICADAS_SIN_ARCHIVO_PROPIO: Record<string, string> = {
   response_time_excludes_manual:      'consolidada dentro de 084_response_time_stats.sql',
   status_default_for_stage_bridge:    'consolidada dentro de 082_stage_column.sql',
   add_email_replied_notification_type:'mismo SQL que 037_notification_type_email_replied.sql',
+  // Esas tres sólo están registradas en producción. Con CI apuntando al sandbox
+  // no llegan a evaluarse, pero NO son código muerto: vuelven a hacer falta en
+  // cuanto URL_A apunte a producción. Verificado contra las dos bases el 2026-09-03.
 
-  // Estas dos SÍ tienen archivo, pero en la rama feat/agent-api, que aún no está
-  // mergeada. Retirarlas de aquí en cuanto entre: si siguen, el test deja de
-  // vigilar dos migraciones de verdad.
-  lead_sequence_runs: 'archivo 006 pendiente de mergear desde feat/agent-api',
-  agent_api:          'archivo 096 pendiente de mergear desde feat/agent-api',
+  // Las de feat/agent-api (lead_sequence_runs y agent_api) se retiraron el
+  // 2026-09-03: sus archivos ya están en main (006 y 103), así que la excepción
+  // no llegaba a evaluarse y el comentario afirmaba lo contrario de lo que pasa.
+
+  // La 111 SÍ tiene archivo, pero en la rama feat/newsletters-gestion, que aún
+  // no está mergeada. Está aplicada a los DOS proyectos. Retirarla en cuanto
+  // entre: si sigue, el test deja de vigilar una migración de verdad.
+  newsletter_autor_y_seo: 'archivo 111 pendiente de mergear desde feat/newsletters-gestion',
 }
 
-// Diferencias que existen porque una rama todavía no se ha mergeado. Vaciar esta
-// lista al mergear y aplicar a los dos proyectos.
-const POR_RAMA_EN_CURSO: Record<string, string> = {
-  'tabla:agent_tokens':            'migración 096 (agent_api): sólo en sandbox',
-  'tabla:agent_email_drafts':      'migración 096 (agent_api): sólo en sandbox',
-  'tabla:agent_idempotency_keys':  'migración 096 (agent_api): sólo en sandbox',
-  'tabla:agent_rate_limits':       'migración 096 (agent_api): sólo en sandbox',
-  'policy:agent_email_drafts':     'migración 096 (agent_api): sólo en sandbox',
-  'funcion:agent_api_base64url(p_data bytea)':                                                   'migración 096 (agent_api): sólo en sandbox',
-  'funcion:agent_api_mint_jwt(p_user_id uuid, p_ttl_seconds integer)':                           'migración 096 (agent_api): sólo en sandbox',
-  'funcion:agent_api_purge_expired()':                                                           'migración 096 (agent_api): sólo en sandbox',
-  'funcion:agent_api_rate_limit(p_token_id uuid, p_bucket text, p_limit integer, p_window_s integer)': 'migración 096 (agent_api): sólo en sandbox',
+// Objetos que están en un proyecto y no en el otro. La causa puede ser una rama
+// sin mergear o —como ahora— una migración ya mergeada que sólo se aplicó a uno
+// de los dos. Vaciar la entrada al aplicarla a ambos.
+const SOLO_EN_UN_PROYECTO: Record<string, string> = {
+  // El archivo es 103_agent_api.sql y lleva tiempo en main; lo que falta es
+  // aplicarlo a producción. Antes decía "migración 096", que es otra
+  // (studio_images_template). Contrastado con las dos bases el 2026-09-03.
+  'tabla:agent_tokens':            'migración 103 (agent_api): aplicada sólo al sandbox',
+  'tabla:agent_email_drafts':      'migración 103 (agent_api): aplicada sólo al sandbox',
+  'tabla:agent_idempotency_keys':  'migración 103 (agent_api): aplicada sólo al sandbox',
+  'tabla:agent_rate_limits':       'migración 103 (agent_api): aplicada sólo al sandbox',
+  'policy:agent_email_drafts':     'migración 103 (agent_api): aplicada sólo al sandbox',
+  'funcion:agent_api_base64url(p_data bytea)':                                                   'migración 103 (agent_api): aplicada sólo al sandbox',
+  'funcion:agent_api_mint_jwt(p_user_id uuid, p_ttl_seconds integer)':                           'migración 103 (agent_api): aplicada sólo al sandbox',
+  'funcion:agent_api_purge_expired()':                                                           'migración 103 (agent_api): aplicada sólo al sandbox',
+  'funcion:agent_api_rate_limit(p_token_id uuid, p_bucket text, p_limit integer, p_window_s integer)': 'migración 103 (agent_api): aplicada sólo al sandbox',
 
   // Las excepciones de feat/newsletters (105, 106 y 107) se retiraron el
   // 2026-08-25: las tres migraciones están aplicadas a los DOS proyectos, así
@@ -99,17 +109,9 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
   // está aplicada a los DOS proyectos, así que el test vuelve a vigilar esas
   // dos tablas de verdad.
 
-  // chore/quitar-carruseles: la 112 (drop del motor de carruseles) está aplicada
-  // SÓLO a producción — es la excepción al revés de las de arriba, porque el MCP
-  // de esta sesión sólo llegaba a producción. Retirar al aplicarla al sandbox.
-  'tabla:carousel_brand_profiles':  'migración 112: ya no está en producción, sigue en el sandbox',
-  'tabla:carousel_jobs':            'migración 112: ya no está en producción, sigue en el sandbox',
-  'tabla:carousel_slides':          'migración 112: ya no está en producción, sigue en el sandbox',
-  'tabla:carousel_logs':            'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_brand_profiles': 'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_jobs':           'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_slides':         'migración 112: ya no está en producción, sigue en el sandbox',
-  'policy:carousel_logs':           'migración 112: ya no está en producción, sigue en el sandbox',
+  // Las ocho excepciones de la 112 (drop del motor de carruseles) se retiraron el
+  // 2026-09-03: la migración está aplicada a los DOS proyectos, así que ya no hay
+  // nada que excusar y el test vuelve a vigilar esas tablas de verdad.
 }
 
 // Divergencias reales pendientes de cerrar. Vacía a propósito: si algo entra
@@ -121,7 +123,7 @@ const POR_RAMA_EN_CURSO: Record<string, string> = {
 // producción en vez de declararlas.
 const DIVERGENCIAS_PENDIENTES: Record<string, string> = {}
 
-const IGNORADAS = { ...POR_RAMA_EN_CURSO, ...DIVERGENCIAS_PENDIENTES }
+const IGNORADAS = { ...SOLO_EN_UN_PROYECTO, ...DIVERGENCIAS_PENDIENTES }
 
 describe('paridad: lo aplicado en la base está en el repo', () => {
   it('ninguna migración aplicada se quedó sin archivo', async () => {
