@@ -68,14 +68,13 @@ const APLICADAS_SIN_ARCHIVO_PROPIO: Record<string, string> = {
   status_default_for_stage_bridge:    'consolidada dentro de 082_stage_column.sql',
   add_email_replied_notification_type:'mismo SQL que 037_notification_type_email_replied.sql',
 
-  // Estas dos SÍ tienen archivo, pero en la rama feat/agent-api, que aún no está
-  // mergeada. Retirarlas de aquí en cuanto entre: si siguen, el test deja de
-  // vigilar dos migraciones de verdad.
-  lead_sequence_runs: 'archivo 006 pendiente de mergear desde feat/agent-api',
-  agent_api:          'archivo 096 pendiente de mergear desde feat/agent-api',
+  // Las de feat/agent-api (lead_sequence_runs y agent_api) se retiraron el
+  // 2026-09-03: sus archivos ya están en main (006 y 103), así que la excepción
+  // no llegaba a evaluarse y el comentario afirmaba lo contrario de lo que pasa.
 
-  // Ídem: la 111 está aplicada a los DOS proyectos, pero su archivo vive en
-  // feat/newsletters-gestion. Retirarla al mergear esa rama.
+  // La 111 SÍ tiene archivo, pero en la rama feat/newsletters-gestion, que aún
+  // no está mergeada. Está aplicada a los DOS proyectos. Retirarla en cuanto
+  // entre: si sigue, el test deja de vigilar una migración de verdad.
   newsletter_autor_y_seo: 'archivo 111 pendiente de mergear desde feat/newsletters-gestion',
 }
 
