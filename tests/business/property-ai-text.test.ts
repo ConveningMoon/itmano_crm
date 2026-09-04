@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toList, stripMarkup, cleanProse } from '@/lib/properties/ai-text'
+import { toList, stripMarkup, cleanProse, splitEnumeration } from '@/lib/properties/ai-text'
 
 // La extracción de propiedades con IA declara las características como `array`
 // de strings, y el modelo ha devuelto otra cosa dos veces seguidas: primero un
@@ -68,5 +68,46 @@ describe('cleanProse', () => {
     const llana = 'Bienvenido a esta casa adosada de dos niveles.'
     expect(cleanProse(llana)).toBe(llana)
     expect(cleanProse('<p>Bienvenido a esta casa.</p>')).toBe('Bienvenido a esta casa.')
+  })
+})
+
+// El modelo junta las enumeraciones de la ficha en un solo elemento y el
+// formulario acaba mostrando una línea con comas donde deberían ir tres. Se
+// separan, pero sólo cuando todo apunta a una enumeración: partir por comas a
+// ciegas rompe cualquier característica que lleve una coma legítima, y eso se
+// publica roto.
+describe('splitEnumeration: comas que separan frente a comas que no', () => {
+  it('separa una enumeración de la ficha', () => {
+    expect(splitEnumeration('Lavavajillas, microondas, estufa eléctrica, refrigerador'))
+      .toEqual(['Lavavajillas', 'microondas', 'estufa eléctrica', 'refrigerador'])
+  })
+
+  it('NO parte una frase con un conector', () => {
+    const frase = 'Cocina renovada, incluyendo nevera nueva, estufa y lavavajillas'
+    expect(splitEnumeration(frase)).toEqual([frase])
+  })
+
+  it('NO parte una frase con fragmentos largos', () => {
+    const frase = 'Techo de tejas asfálticas reemplazado en 2024, calentador de agua nuevo instalado en 2025, patio de concreto'
+    expect(splitEnumeration(frase)).toEqual([frase])
+  })
+
+  it('NO parte con una sola coma: no hay señal suficiente', () => {
+    const frase = 'Techo nuevo, instalado en 2024'
+    expect(splitEnumeration(frase)).toEqual([frase])
+  })
+
+  it('deja intacto lo que no tiene comas', () => {
+    expect(splitEnumeration('Patio cercado')).toEqual(['Patio cercado'])
+  })
+
+  it('toList aplica la separación a cada elemento', () => {
+    expect(toList(['Cul-de-sac', 'Lavavajillas, microondas, refrigerador']))
+      .toEqual(['Cul-de-sac', 'Lavavajillas', 'microondas', 'refrigerador'])
+  })
+
+  it('toList separa también lo que venía en una etiqueta', () => {
+    expect(toList('<value>Lavavajillas, microondas, refrigerador</value>'))
+      .toEqual(['Lavavajillas', 'microondas', 'refrigerador'])
   })
 })

@@ -115,6 +115,7 @@ const FEATURES_RULES: string[] = [
   '- Example: a sheet reading "Exterior Feat: Cul-De-Sac, Patio" / "Appliances: Dishwasher, Microwave, Range-electric, Refrigerator" / "Roof: Asphalt Shingle (2024)" yields "Cul-de-sac location", "Private patio", "Full appliance package", "Roof replaced in 2024".',
   '- Between 3 and 8 items, ordered by what a buyer cares about most. No duplicates, and do not restate bedrooms, bathrooms or square footage — those already have their own fields.',
   '- Each item is PLAIN TEXT inside the array: no HTML or XML tags, no markdown, no surrounding quotes. The array itself carries the structure.',
+  '- ONE feature per array element. Never join several into one element with commas or slashes: "Dishwasher, Microwave, Refrigerator" is three elements — or one phrase like "Full appliance package" — never one element with the commas inside.',
 ]
 
 // Segunda pasada. La extracción pide dieciocho campos y redacta en hasta tres
