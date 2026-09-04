@@ -32,6 +32,35 @@ export function stripMarkup(s: string): string {
     .trim()
 }
 
+// Palabras con las que empieza un fragmento de PROSA, no un elemento de una
+// enumeración. Son la diferencia entre "lavavajillas, microondas, nevera" (tres
+// características) y "cocina renovada, incluyendo nevera nueva" (una sola).
+const CONECTOR = /^(y|e|o|u|con|sin|más|además|incluyendo|incluye|así como|junto|and|with|including|plus|as well as)\b/i
+
+/**
+ * Un elemento que en realidad son varios unidos por comas se separa; uno que
+ * lleva comas porque es una frase, no.
+ *
+ * El modelo junta las enumeraciones de la ficha ("Appliances: Dishwasher,
+ * Microwave, Refrigerator") en un solo elemento, y entonces el formulario
+ * muestra una línea con comas donde deberían ir tres.
+ *
+ * Separar por comas a ciegas es peor que no separar: parte en trozos sin
+ * sentido cualquier característica con una coma legítima. Por eso sólo se
+ * separa cuando TODO apunta a una enumeración — al menos dos separadores, y
+ * cada fragmento una frase corta que no empieza por un conector. Ante la duda,
+ * el elemento se deja como está: una línea de más se corrige en dos segundos;
+ * una característica partida por la mitad se publica rota.
+ */
+export function splitEnumeration(item: string): string[] {
+  const partes = item.split(/\s*[;,]\s*/).map(p => p.trim())
+  if (partes.length < 3) return [item]
+  if (partes.some(p => p.length < 2 || p.length > 45)) return [item]
+  if (partes.some(p => p.split(/\s+/).length > 5)) return [item]
+  if (partes.some(p => CONECTOR.test(p))) return [item]
+  return partes
+}
+
 /**
  * Convierte en lista lo que el modelo haya devuelto: array de strings, array de
  * objetos (`{text}`/`{value}`/`{label}`/`{feature}`), un string con un elemento
@@ -61,6 +90,8 @@ export function toList(v: unknown): string[] {
       return ''
     })
     .map((x) => stripMarkup(x).replace(/^\s*[-–—*•]\s*/, '').trim())
+    .flatMap(splitEnumeration)
+    .map((x) => x.trim())
     .filter((x) => x.length > 0)
 }
 
