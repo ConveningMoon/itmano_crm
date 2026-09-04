@@ -132,7 +132,8 @@ export function editionToolSchema(): Anthropic.Tool.InputSchema {
     type: 'object',
     oneOf: [
       { properties: { type: { const: 'heading' },   level: { enum: [2, 3] },
-                      text: { type: 'string', maxLength: L.heading } },
+                      text: { type: 'string', maxLength: L.heading,
+                              description: 'Microtitular con su propia tensión, no una etiqueta de sección. "Contexto", "Datos" o "Conclusión" no son encabezados: son índices.' } },
         required: ['type', 'level', 'text'] },
       { properties: { type: { const: 'paragraph' }, text: { type: 'string', maxLength: L.paragraph },
                       sourceIds: { type: 'array', items: { type: 'string' } } },
@@ -158,9 +159,9 @@ export function editionToolSchema(): Anthropic.Tool.InputSchema {
     type: 'object',
     properties: {
       title:       { type: 'string', maxLength: L.editionTitle,
-                     description: 'Titular de la edición. Concreto, sin signos de exclamación.' },
+                     description: 'Titular de la edición: lo que está en juego, no el nombre del tema. Sujeto y verbo, concreto, sin signos de exclamación y sin prometer nada que el cuerpo no pague.' },
       dek:         { type: 'string', maxLength: L.editionDek,
-                     description: 'Entradilla de una o dos frases.' },
+                     description: 'Entradilla de una o dos frases que da un motivo para seguir leyendo. No repite el titular con otras palabras.' },
       data_as_of:  { type: ['string', 'null'], description: 'Fecha YYYY-MM-DD a la que se refieren los datos, o null.' },
       blocks:      { type: 'array', items: bloque, minItems: 3, maxItems: 40 },
     },
@@ -208,8 +209,27 @@ function buildPrompt(args: {
     `\n2. NO inventes cifras, fechas ni porcentajes que no estén en esa lista.`,
     `\n3. NO cites un id que no aparezca en la lista.`,
     `\n4. Si un dato te falta, escribe la edición sin él. Un texto más corto es preferible a uno con una cifra inventada.`,
-    `\n5. Tono sobrio y profesional. Sin emojis. Sin signos de exclamación. Sin promesas de rentabilidad.`,
+    `\n5. Sin emojis, sin signos de exclamación, sin promesas de rentabilidad.`,
     `\n6. Entre 4 y 10 bloques. Empieza por un heading de nivel 2.`,
+    // Sin esto la edición sale correcta y muerta: informe de mercado, no algo
+    // que alguien elija leer. El enganche no se pide con adjetivos ni con
+    // signos de exclamación — sale de nombrar lo que el dato le hace a quien
+    // lee. Por eso estas reglas van DESPUÉS de las de veracidad y se apoyan en
+    // ellas: la tensión tiene que ser la que los hechos ya contienen.
+    `\n\nCómo se escribe. Esto es lo que separa una newsletter que se lee de una que se archiva sin abrir:`,
+    `\n- Escribes para UNA persona: alguien que está pensando en comprar o vender y no sabe si este mes le conviene. Háblale de tú a tú, en segunda persona.`,
+    `\n- Abre por la consecuencia, no por el contexto. La primera frase tiene que dejar claro qué está en juego para quien lee. "En el contexto actual del mercado inmobiliario" es exactamente la frase que hace cerrar el correo.`,
+    `\n- Frases cortas. Una idea por párrafo. Verbos concretos y sujetos con nombre.`,
+    `\n- Prohibidas las muletillas de informe: "cabe destacar", "es importante mencionar", "en un mundo cada vez más", "sin duda", "en resumen", "como sabemos", "este artículo". Si una frase se puede borrar sin perder información, bórrala.`,
+    `\n- Cada cifra viene con su consecuencia: qué significa para quien compra o vende esta semana. Un dato sin consecuencia es relleno.`,
+    `\n- Cierra cada sección con algo sin resolver que la siguiente recoge. El lector tiene que tener un motivo para seguir bajando.`,
+    `\n- Termina diciendo qué hacer con esto: una acción concreta, no un resumen de lo que ya escribiste.`,
+    `\n- Nada de hype ni de clickbait. La tensión sale de lo que los datos implican de verdad, y el cuerpo paga TODO lo que el titular promete. Exagerar un dato para que suene mejor rompe la regla 2.`,
+    `\n\nTítulo y encabezados. Un título que nombra el tema es un archivador; uno que nombra lo que está en juego es una noticia:`,
+    `\n- Mal: "El mercado inmobiliario en agosto". Bien: "Tu casa ya no compite con las que se vendieron en marzo".`,
+    `\n- Prohibidos los títulos de categoría o de una sola palabra: "Mercado", "Tendencias", "Actualidad", "Novedades del sector", "Informe mensual".`,
+    `\n- La entradilla no repite el título: promete lo que el lector se lleva si sigue, y deja la respuesta dentro.`,
+    `\n- Los encabezados de sección son parte del gancho. Escríbelos como microtitulares, no como etiquetas ("Contexto", "Datos", "Conclusión").`,
     // El tope que de verdad se rompe. Va también en el prompt y no sólo en el
     // esquema: `value` es el campo más estrecho con diferencia y el modelo
     // tiende a meterle el contexto del dato ("48 días, frente a 37 el año
