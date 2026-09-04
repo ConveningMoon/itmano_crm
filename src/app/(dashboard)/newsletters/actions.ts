@@ -81,21 +81,24 @@ async function guard() {
 }
 
 // Sin 'specialty': ver el comentario de cabecera de author.ts sobre por qué
-// esa columna no participa en la firma.
-const AUTHOR_AGENT_COLUMNS = columns('agents', ['id', 'name'])
+// esa columna no participa en la firma. `cover_photo_url` sí: es la foto que
+// acompaña a la firma de la persona (migración 113).
+const AUTHOR_AGENT_COLUMNS = columns('agents', ['id', 'name', 'cover_photo_url'])
 const AUTHOR_TENANT_COLUMNS = columns('tenants', ['name'])
 
 /**
- * La firma que le corresponde a una edición.
+ * La firma que le corresponde a una edición: la persona y la agencia, que son
+ * dos decisiones independientes (migración 113).
  *
- * `agentId` explícito (el selector del editor) gana; si no, el agente vinculado
- * al login que está creando. Sin ninguno de los dos, firma la agencia. Nunca
- * devuelve null: una edición sin firma no debe existir.
+ * `agentId` null significa "sin firma personal" — ya NO cae a la agencia, que
+ * ahora se pide aparte con `signWithOrg`. Una edición puede quedarse sin
+ * ninguna de las dos firmas si el tenant lo elige.
  */
 async function firmaPara(
   db: ReturnType<typeof createAdminClient>,
   tenantId: string,
   agentId: string | null,
+  signWithOrg: boolean,
 ): Promise<EditionAuthor> {
   const { data: tenantRow } = await db
     .from('tenants').select(AUTHOR_TENANT_COLUMNS).eq('id', tenantId).maybeSingle()
@@ -104,18 +107,22 @@ async function firmaPara(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantName = ((tenantRow as any)?.name as string | undefined) ?? ''
 
-  if (!agentId) return resolveEditionAuthor({ agent: null, tenantName })
+  if (!agentId) return resolveEditionAuthor({ agent: null, tenantName, signWithOrg })
 
   const { data: agentRow } = await db
     .from('agents').select(AUTHOR_AGENT_COLUMNS)
     .eq('id', agentId).eq('tenant_id', tenantId).eq('active', true).maybeSingle()
   // reason: ver arriba.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agent = agentRow as any as { id: string; name: string } | null
+  const row = agentRow as any as { id: string; name: string; cover_photo_url: string | null } | null
 
-  // Un agentId de otro tenant o inactivo no firma: cae a la agencia en vez de
-  // filtrar el nombre de alguien que no es de este equipo.
-  return resolveEditionAuthor({ agent, tenantName })
+  // Un agentId de otro tenant o inactivo no firma: se queda sin firma personal
+  // en vez de filtrar el nombre de alguien que no es de este equipo.
+  return resolveEditionAuthor({
+    agent: row ? { id: row.id, name: row.name, coverPhotoUrl: row.cover_photo_url } : null,
+    tenantName,
+    signWithOrg,
+  })
 }
 
 interface EditionRowFields {
@@ -184,6 +191,8 @@ async function insertEditionRow(
     created_by_user_id:  ctx.user_id,
     author_agent_id:     fields.author.agentId,
     author_name:         fields.author.name,
+    author_org_name:     fields.author.orgName,
+    author_avatar_url:   fields.author.avatarUrl,
     // Sin author_title: agents.specialty (lo único que podría alimentarlo) no
     // es un cargo, es un código de segmento de audiencia — ver author.ts. La
     // columna se queda en su default (null) hasta que exista un cargo real
@@ -241,11 +250,13 @@ const EditionInput = z.object({
   sources:       z.array(NewsletterSourceSchema).max(40),
   dataAsOf:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   category:      z.enum(NEWSLETTER_CATEGORIES as unknown as [string, ...string[]]).default('informativo'),
-  // Sólo lo usa updateEditionImpl (el editor de una edición existente); las
+  // Sólo los usa updateEditionImpl (el editor de una edición existente); las
   // otras dos vías de creación firman con el agente del contexto, sin que el
   // formulario elija. `undefined` (la clave ausente) significa "no tocar la
-  // firma"; `null` es una elección explícita: "firma la agencia".
+  // firma"; `null` es una elección explícita: "sin firma personal".
   authorAgentId: z.string().trim().min(1).nullable().optional(),
+  // La segunda firma (migración 113), independiente de la anterior.
+  authorSignWithOrg: z.boolean().optional(),
 })
 
 async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>> {
@@ -262,7 +273,12 @@ async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>
   // que llegue nadie. Best-effort: sin secuencia se puede escribir igual.
   await ensureNewsletterSequence(g.db, g.tenantId, canal.id)
 
-  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null)
+  // Firma por defecto de toda edición nueva: el agente que la crea Y la
+  // agencia. Son las dos que el negocio quiere en la mayoría de los casos —
+  // la persona posiciona, la marca respalda — y el editor deja quitar
+  // cualquiera de las dos después. Un login sin agente vinculado (el owner,
+  // un super_admin) sale sólo con la firma de la agencia.
+  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null, true)
 
   const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         d.title,
@@ -310,12 +326,15 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
   // haya tocado el selector. Eso es exactamente el problema que la
   // instantánea existe para evitar (ver author.ts).
   //
-  // Por eso sólo se recalcula cuando el firmante CAMBIA de verdad: se compara
-  // contra `author_agent_id` ya guardado en la fila, no contra si la clave
-  // vino en el input. Si es el mismo agente (o null contra null), no se toca
-  // ninguna de las tres columnas — la instantánea sigue siendo la de la
-  // última vez que alguien eligió firma, no la del último guardado.
-  // `publishEdition` es quien la refresca al momento de publicar (ver abajo).
+  // Por eso sólo se recalcula cuando la firma CAMBIA de verdad: se compara
+  // contra lo ya guardado en la fila, no contra si la clave vino en el input.
+  // Si es el mismo agente (o null contra null) y la agencia sigue firmando (o
+  // sigue sin firmar), no se toca ninguna columna de firma — la instantánea
+  // sigue siendo la de la última vez que alguien la eligió, no la del último
+  // guardado. `publishEdition` es quien la refresca al publicar (ver abajo).
+  //
+  // Desde la 113 son DOS ejes y basta con que uno cambie: quitar la firma de
+  // la agencia sin tocar el agente también tiene que rehacer la instantánea.
   //
   // `author_title` se escribe explícitamente en `null`: `EditionAuthor` ya no
   // lo produce (ver author.ts — agents.specialty es un código de segmento de
@@ -335,11 +354,21 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
     data_as_of:      d.dataAsOf,
     category:        d.category,
   }
-  if (d.authorAgentId !== undefined && d.authorAgentId !== existing.authorAgentId) {
-    const firma = await firmaPara(g.db, g.tenantId, d.authorAgentId)
-    patch.author_agent_id = firma.agentId
-    patch.author_name     = firma.name
-    patch.author_title    = null
+  // Lo que la fila dice HOY, para comparar contra lo que manda el editor.
+  // La firma de la agencia no tiene columna booleana: es "hay nombre o no".
+  const firmaAgenteActual = existing.authorAgentId
+  const firmaOrgActual    = existing.authorOrgName !== null
+
+  const agenteNuevo = d.authorAgentId     !== undefined ? d.authorAgentId     : firmaAgenteActual
+  const orgNueva    = d.authorSignWithOrg !== undefined ? d.authorSignWithOrg : firmaOrgActual
+
+  if (agenteNuevo !== firmaAgenteActual || orgNueva !== firmaOrgActual) {
+    const firma = await firmaPara(g.db, g.tenantId, agenteNuevo, orgNueva)
+    patch.author_agent_id   = firma.agentId
+    patch.author_name       = firma.name
+    patch.author_org_name   = firma.orgName
+    patch.author_avatar_url = firma.avatarUrl
+    patch.author_title      = null
   }
 
   const { error } = await g.db.from('newsletter_editions').update(patch)
@@ -416,15 +445,19 @@ async function publishEditionImpl(id: string): Promise<Result<null>> {
   //
   // `author_title` en `null` explícito por la misma razón que en
   // updateEditionImpl: ya no sale de `agents.specialty` (ver author.ts).
-  const firma = await firmaPara(g.db, g.tenantId, edition.authorAgentId)
+  const firma = await firmaPara(
+    g.db, g.tenantId, edition.authorAgentId, edition.authorOrgName !== null,
+  )
 
   const { error } = await g.db.from('newsletter_editions')
     .update({
-      status:          'published',
-      published_at:    new Date().toISOString(),
-      author_agent_id: firma.agentId,
-      author_name:     firma.name,
-      author_title:    null,
+      status:            'published',
+      published_at:      new Date().toISOString(),
+      author_agent_id:   firma.agentId,
+      author_name:       firma.name,
+      author_org_name:   firma.orgName,
+      author_avatar_url: firma.avatarUrl,
+      author_title:      null,
     })
     .eq('id', id).eq('tenant_id', g.tenantId)
 
@@ -588,7 +621,12 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
   })
   if (!generado.ok) return generado
 
-  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null)
+  // Firma por defecto de toda edición nueva: el agente que la crea Y la
+  // agencia. Son las dos que el negocio quiere en la mayoría de los casos —
+  // la persona posiciona, la marca respalda — y el editor deja quitar
+  // cualquiera de las dos después. Un login sin agente vinculado (el owner,
+  // un super_admin) sale sólo con la firma de la agencia.
+  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null, true)
 
   const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         generado.data.title,
@@ -769,7 +807,12 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
     accessed_at:  hoy,
   }))
 
-  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null)
+  // Firma por defecto de toda edición nueva: el agente que la crea Y la
+  // agencia. Son las dos que el negocio quiere en la mayoría de los casos —
+  // la persona posiciona, la marca respalda — y el editor deja quitar
+  // cualquiera de las dos después. Un login sin agente vinculado (el owner,
+  // un super_admin) sale sólo con la firma de la agencia.
+  const firma = await firmaPara(g.db, g.tenantId, g.ctx.agent_id ?? null, true)
 
   const inserted = await insertEditionRow(g.db, g.ctx, g.tenantId, canal.id, {
     title:         d.title,

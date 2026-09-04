@@ -8,6 +8,7 @@ import {
   type PublicEdition,
 } from './shared'
 import { formatEditionDate } from './nl-format'
+import { EditionByline } from './edition-byline'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from './nl-chrome'
 import { SubscribeForm } from './subscribe-form'
 
@@ -126,11 +127,7 @@ function EditionCard({ tenantSlug, edition, P }: { tenantSlug: string; edition: 
         <h2 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.01em', margin: 0, color: P.ink }}>
           {edition.title}
         </h2>
-        {edition.author_name && (
-          <p style={{ margin: '4px 0 0', fontSize: '12px', color: P.textFaint }}>
-            Por {edition.author_name}
-          </p>
-        )}
+        <EditionByline edition={edition} P={P} size={20} fontSize={12} />
         {edition.dek && (
           <p style={{ fontSize: '13.5px', color: P.textSoft, margin: '6px 0 0', lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {edition.dek}

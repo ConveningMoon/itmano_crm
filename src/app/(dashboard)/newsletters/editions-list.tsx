@@ -406,9 +406,12 @@ function EditionRow({
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             {CATEGORY_LABELS[edition.category]}
           </span>
-          {edition.authorName && (
+          {/* Las dos firmas, en el mismo orden que la página pública. Desde
+              la 113 cualquiera de las dos puede faltar, así que se filtra en
+              vez de asumir que hay una. */}
+          {[edition.authorName, edition.authorOrgName].filter(Boolean).length > 0 && (
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {edition.authorName}
+              {[edition.authorName, edition.authorOrgName].filter(Boolean).join(' · ')}
             </span>
           )}
           {lang && (
