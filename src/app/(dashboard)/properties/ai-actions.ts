@@ -41,6 +41,14 @@ export type AiExtractResult =
 
 const PROPERTY_TYPES = ['residential', 'condo', 'townhouse', 'land', 'commercial', 'multifamily'] as const
 
+// Redondeo a 2 cifras significativas. El lote convertido desde acres hereda la
+// precisión de la ficha, no la de la calculadora: "0.09 acres" son ~3.900 sqft,
+// no 3.920 — un número exacto invita a creer que el PDF lo dice.
+function round2sig(n: number): number {
+  const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1))
+  return Math.round(n / mag) * mag
+}
+
 // Regla de estilo por idioma para la copy de marketing.
 function langRule(lang: string): string {
   if (lang === 'es') return 'NEUTRAL LATIN AMERICAN SPANISH (no regional idioms). For money use "inversión", never "precio/costo/pago".'
@@ -54,10 +62,16 @@ function langRule(lang: string): string {
 // vacías). Se fuerzan como required.
 function buildExtractTool(languages: string[]): Anthropic.Tool {
   const langProps: Record<string, unknown> = {}
-  const required: string[] = ['property_type']
+  const required: string[] = ['property_type', 'lot_sqft_basis']
   for (const l of languages) {
     langProps[`description_${l}`] = { type: 'string', description: `Warm, premium, factual 2–4 sentence listing description written in ${langRule(l)} Only facts from the PDF.` }
-    langProps[`features_${l}`] = { type: 'array', items: { type: 'string' }, description: `Bullet features (each a short phrase) in ${langRule(l)} Only facts from the PDF. Return at least 3 when the PDF supports them.` }
+    langProps[`features_${l}`] = {
+      type: 'array',
+      items: { type: 'string', description: 'One selling point as a short noun phrase (2–7 words), no trailing period.' },
+      minItems: 3,
+      maxItems: 8,
+      description: `Selling points of the property, written in ${langRule(l)} Rephrase what the listing states — that is not inventing. NEVER return an empty list: any listing sheet has enough (style, rooms, kitchen/appliances, flooring, roof, heating/cooling, exterior, lot position, parking, outbuildings, schools).`,
+    }
     required.push(`description_${l}`, `features_${l}`)
   }
   return {
@@ -76,7 +90,8 @@ function buildExtractTool(languages: string[]): Anthropic.Tool {
         bathrooms_full: { type: ['integer', 'null'], description: 'Number of full bathrooms.' },
         bathrooms_half: { type: ['integer', 'null'], description: 'Number of half bathrooms.' },
         sqft:           { type: ['integer', 'null'], description: 'Interior living area in square feet.' },
-        lot_sqft:       { type: ['integer', 'null'], description: 'Lot size in square feet (convert acres if needed: 1 acre = 43560 sqft).' },
+        lot_sqft:       { type: ['integer', 'null'], description: 'Lot size in SQUARE FEET, taken ONLY from a lot measurement the document states: square feet, acres (convert: 1 acre = 43,560 sqft) or lot dimensions (front × depth). NEVER derive it from the living area, the price, the property type or the parcel/tax record. null if the document states no lot measurement.' },
+        lot_sqft_basis: { type: 'string', enum: ['stated_sqft', 'acres', 'dimensions', 'absent'], description: 'Where lot_sqft came from: "stated_sqft" the document gives square feet; "acres" you converted a stated acreage; "dimensions" you multiplied stated lot dimensions; "absent" the document states no lot measurement — then lot_sqft MUST be null.' },
         year_built:     { type: ['integer', 'null'] },
         garage_spaces:  { type: ['integer', 'null'] },
         mls_number:     { type: ['string', 'null'] },
@@ -99,8 +114,17 @@ function buildPrompt(languages: string[], agencyDescription?: string): string {
     'Rules:',
     '- Extract factual fields (address, price, beds, baths, sqft, year, MLS, etc.) ONLY if they appear in the PDF. Never invent numbers or an address. Return null for anything not present.',
     '- If the document is clearly NOT a property listing, set address, list_price, sqft and bedrooms all to null.',
+    '- lot_sqft: only from a lot measurement the sheet states (square feet, acres, or lot dimensions). MLS sheets often give it as acreage ("Appx Acres: 0.09") — converting that is correct; report how you got it in lot_sqft_basis. If the sheet gives no lot measurement at all, lot_sqft is null and lot_sqft_basis is "absent" — never fill it from the living area, the price or a guess.',
     `- Write the marketing copy in a warm, premium, trustworthy real-estate tone — calm and specific, no hype, no emojis. Base it strictly on facts in the PDF; do not fabricate amenities.`,
     `- Produce a description AND a feature list for EACH of these languages: ${langList}. Fill description_<code> and features_<code> for every one. The versions must be equivalent in meaning across languages (same items, translated), each written natively in its language.`,
+    '',
+    'Features (features_<code>) — never leave this list empty:',
+    '- A feature is a short phrase naming something concrete the property HAS. Turning a listing field into a readable phrase is REPHRASING, not inventing — it is exactly what is being asked for.',
+    '- Take them from the spec grid and the public remarks: architectural style, renovations and their year, kitchen and appliances, extra rooms (pantry, attic, primary suite), flooring, heating / cooling / water heater, roof, siding, foundation, fence, patio / porch / deck, pool, lot position (cul-de-sac, corner, waterfront), parking and garage, outbuildings (shed), HOA amenities, schools, view.',
+    '- Ignore the administrative half of the sheet — listing agent and office, phones, MLS dates, lock box, showing instructions, taxes, mortgage, HOA fees, disclosures, owner. None of that is a feature.',
+    '- Example: a sheet reading "Exterior Feat: Cul-De-Sac, Patio" / "Appliances: Dishwasher, Microwave, Range-electric, Refrigerator" / "Roof: Asphalt Shingle (2024)" yields "Cul-de-sac location", "Private patio", "Full appliance package", "Roof replaced in 2024".',
+    '- Between 3 and 8 items, ordered by what a buyer cares about most. No duplicates, and do not restate bedrooms, bathrooms or square footage — those already have their own fields.',
+    '',
     '- name: a tasteful short name; slug: its kebab-case form.',
     '',
     'Call the extract_property tool with the result.',
@@ -164,7 +188,7 @@ export async function generatePropertyFromPdf(
     const anthropic = new Anthropic()
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 8000,
+      max_tokens: 16000,
       // Thinking must be off with a forced tool call; keeps extraction deterministic.
       thinking: { type: 'disabled' },
       tools: [buildExtractTool(languages)],
@@ -207,6 +231,14 @@ export async function generatePropertyFromPdf(
   const arr = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()) : []
 
+  // Lote: sólo si la ficha declara una medida. Si salió de acres o de dimensiones
+  // es una conversión nuestra, así que se redondea para no fingir precisión.
+  const lotBasis = str(toolInput.lot_sqft_basis) ?? 'absent'
+  const lotRaw = int(toolInput.lot_sqft)
+  const lotSqft = (lotBasis === 'absent' || lotRaw === null || lotRaw <= 0)
+    ? null
+    : (lotBasis === 'stated_sqft' ? lotRaw : round2sig(lotRaw))
+
   const propertyType = (PROPERTY_TYPES as readonly string[]).includes(str(toolInput.property_type) ?? '')
     ? (str(toolInput.property_type) as AiPropertyDraft['property_type'])
     : 'residential'
@@ -232,7 +264,7 @@ export async function generatePropertyFromPdf(
     bathrooms_full: int(toolInput.bathrooms_full),
     bathrooms_half: int(toolInput.bathrooms_half),
     sqft:           int(toolInput.sqft),
-    lot_sqft:       int(toolInput.lot_sqft),
+    lot_sqft:       lotSqft,
     year_built:     int(toolInput.year_built),
     garage_spaces:  int(toolInput.garage_spaces),
     mls_number:     str(toolInput.mls_number),
@@ -262,10 +294,14 @@ export async function generatePropertyFromPdf(
   if (Object.keys(descriptions).length) fields.push('descriptions')
   if (Object.keys(featuresI18n).length) fields.push('features_i18n')
 
+  const warnings: string[] = []
+  if (uploadErr) warnings.push('El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.')
+  if (Object.keys(featuresI18n).length === 0) warnings.push('La IA no devolvió características. Revisa el PDF y agrégalas a mano antes de publicar.')
+
   return {
     ok: true,
     draft,
     fields,
-    ...(uploadErr ? { warning: 'El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.' } : {}),
+    ...(warnings.length ? { warning: warnings.join(' ') } : {}),
   }
 }
