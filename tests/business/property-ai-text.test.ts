@@ -111,3 +111,38 @@ describe('splitEnumeration: comas que separan frente a comas que no', () => {
       .toEqual(['Lavavajillas', 'microondas', 'refrigerador'])
   })
 })
+
+// Desde la quinta ronda el campo se pide como TEXTO con una característica por
+// línea, no como array: es el formato del formulario y no tiene forma que
+// romper. Estos casos cubren lo que llega por esa vía.
+describe('toList: el formato que ahora se pide — una por línea', () => {
+  it('parte un texto de varias líneas', () => {
+    const texto = [
+      'Casa adosada de dos niveles',
+      'Cocina renovada con electrodomésticos nuevos',
+      'Techo nuevo (2024)',
+    ].join('\n')
+    expect(toList(texto)).toEqual([
+      'Casa adosada de dos niveles',
+      'Cocina renovada con electrodomésticos nuevos',
+      'Techo nuevo (2024)',
+    ])
+  })
+
+  it('quita la numeración que el modelo añade de su cuenta', () => {
+    expect(toList('1. Uno\n2) Dos\n3. Tres')).toEqual(['Uno', 'Dos', 'Tres'])
+  })
+
+  it('NO se come un número que es parte de la característica', () => {
+    expect(toList('2 espacios de estacionamiento\n200 amperios de servicio eléctrico'))
+      .toEqual(['2 espacios de estacionamiento', '200 amperios de servicio eléctrico'])
+  })
+
+  it('ignora las líneas en blanco', () => {
+    expect(toList('Uno\n\n\nDos\n   \nTres')).toEqual(['Uno', 'Dos', 'Tres'])
+  })
+
+  it('una sola línea sigue siendo una lista de uno', () => {
+    expect(toList('Ubicación en cul-de-sac')).toEqual(['Ubicación en cul-de-sac'])
+  })
+})
