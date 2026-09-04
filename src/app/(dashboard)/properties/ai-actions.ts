@@ -8,6 +8,7 @@ import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import type { PropertyInput } from './actions'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { toList, cleanProse } from '@/lib/properties/ai-text'
 
 // ── "Crear con IA" — prefill the property form from a listing PDF ────────────
 // The user uploads a flyer / MLS sheet; Claude extracts the facts and drafts the
@@ -47,29 +48,6 @@ const PROPERTY_TYPES = ['residential', 'condo', 'townhouse', 'land', 'commercial
 function round2sig(n: number): number {
   const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1))
   return Math.round(n / mag) * mag
-}
-
-// Acepta las tres formas en que el modelo devuelve una lista, no sólo la del
-// esquema: array de strings, array de objetos ({text}/{value}/{label}) y un
-// único string con un item por línea. Antes, cualquiera de las dos últimas
-// caía en el `else` y salía `[]` — el formulario quedaba sin características y
-// nada en el log decía por qué.
-function toList(v: unknown): string[] {
-  const items: unknown[] = Array.isArray(v)
-    ? v
-    : (typeof v === 'string' ? v.split(/\r?\n|(?<=\S)\s*[•·]\s*/) : [])
-  return items
-    .map((x) => {
-      if (typeof x === 'string') return x
-      if (x && typeof x === 'object') {
-        const o = x as Record<string, unknown>
-        const cand = o.text ?? o.value ?? o.label ?? o.feature
-        return typeof cand === 'string' ? cand : ''
-      }
-      return ''
-    })
-    .map((x) => x.replace(/^\s*[-–—*•]\s*/, '').trim())
-    .filter((x) => x.length > 0)
 }
 
 // Regla de estilo por idioma para la copy de marketing.
@@ -136,6 +114,7 @@ const FEATURES_RULES: string[] = [
   '- Ignore the administrative half of the sheet — listing agent and office, phones, MLS dates, lock box, showing instructions, taxes, mortgage, HOA fees, disclosures, owner. None of that is a feature.',
   '- Example: a sheet reading "Exterior Feat: Cul-De-Sac, Patio" / "Appliances: Dishwasher, Microwave, Range-electric, Refrigerator" / "Roof: Asphalt Shingle (2024)" yields "Cul-de-sac location", "Private patio", "Full appliance package", "Roof replaced in 2024".',
   '- Between 3 and 8 items, ordered by what a buyer cares about most. No duplicates, and do not restate bedrooms, bathrooms or square footage — those already have their own fields.',
+  '- Each item is PLAIN TEXT inside the array: no HTML or XML tags, no markdown, no surrounding quotes. The array itself carries the structure.',
 ]
 
 // Segunda pasada. La extracción pide dieciocho campos y redacta en hasta tres
@@ -297,6 +276,12 @@ export async function generatePropertyFromPdf(
 
   // ── Coerce the tool output into the form-draft shape ─────────────────────────
   const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  // Mismo saneo que las listas: si el modelo etiqueta un campo, la descripción
+  // llega con el marcado dentro y se publicaría así.
+  const prosa = (v: unknown): string | null => {
+    const limpio = str(v)
+    return limpio ? (cleanProse(limpio) || null) : null
+  }
   const int = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null)
   const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
@@ -316,7 +301,7 @@ export async function generatePropertyFromPdf(
   const descriptions: Record<string, string> = {}
   const featuresI18n: Record<string, string[]> = {}
   for (const l of languages) {
-    const d = str(toolInput[`description_${l}`])
+    const d = prosa(toolInput[`description_${l}`])
     if (d) descriptions[l] = d
     const f = toList(toolInput[`features_${l}`])
     if (f.length) featuresI18n[l] = f
