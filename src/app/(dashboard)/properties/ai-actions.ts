@@ -246,9 +246,19 @@ export async function generatePropertyFromPdf(
   // tool_choice forzado—. Apagarlo degrada justo lo que aquí venía fallando: la
   // fidelidad al esquema en una llamada que extrae dieciocho campos y redacta en
   // varios idiomas a la vez.
-  const extraer = (pensar: boolean) => anthropic.messages.create({
+  //
+  // Y va por STREAM con margen de sobra, que es lo que de verdad rompía esto.
+  // Comprobado contra la API con el PDF de un listado real: al agotarse
+  // `max_tokens`, la respuesta vuelve con `stop_reason: 'max_tokens'` y el
+  // `tool_use.input` PARCIAL — le faltan las últimas claves, que son siempre
+  // las características, y si el corte cae a mitad de la cadena queda una sola
+  // línea. Eso explica las cinco formas en que este campo llegó mal: no eran
+  // cinco fallos distintos del modelo, era la respuesta cortada. Sin stream,
+  // subir el techo arriesga el timeout HTTP del SDK (mismo motivo que
+  // `newsletters/ai/draft.ts`).
+  const extraer = (pensar: boolean) => anthropic.messages.stream({
     model: MODEL,
-    max_tokens: 16000,
+    max_tokens: 24000,
     thinking: pensar ? { type: 'adaptive' } : { type: 'disabled' },
     tools: [buildExtractTool(languages)],
     tool_choice: { type: 'tool', name: 'extract_property' },
@@ -269,14 +279,14 @@ export async function generatePropertyFromPdf(
     // se factura, así que el reintento no cuesta la llamada perdida.
     let message: Anthropic.Message
     try {
-      message = await extraer(true)
+      message = await extraer(true).finalMessage()
     } catch (e) {
       if (!(e instanceof Anthropic.BadRequestError)) throw e
       console.error(JSON.stringify({
         service: 'ai-property-intake', path: 'thinking_rechazado',
         detail: e.message.slice(0, 300),
       }))
-      message = await extraer(false)
+      message = await extraer(false).finalMessage()
     }
 
     // Registro de uso (tokens + costo) — best-effort, nunca bloquea.
@@ -342,6 +352,16 @@ export async function generatePropertyFromPdf(
   // diagnosticar las cuatro veces que esto llegó mal al formulario. Incluye el
   // valor CRUDO recortado, que es justo lo que no se pudo ver ninguna de ellas.
   const MIN_FEATURES = 3
+  // Una respuesta cortada NO es una respuesta válida a la que le falta un campo:
+  // lo que llegó de los últimos campos puede estar a medias. Se dice en el log y
+  // se le avisa a quien revisa el borrador, en vez de darlo por bueno.
+  const truncada = stopReason === 'max_tokens'
+  if (truncada) {
+    console.error(JSON.stringify({
+      service: 'ai-property-intake', path: 'respuesta_truncada',
+      idiomas: languages, claves: Object.keys(toolInput),
+    }))
+  }
   const insuficientes = languages.filter(l => (featuresI18n[l]?.length ?? 0) < MIN_FEATURES)
   if (insuficientes.length > 0) {
     console.error(JSON.stringify({
@@ -437,6 +457,7 @@ export async function generatePropertyFromPdf(
 
   const warnings: string[] = []
   if (uploadErr) warnings.push('El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.')
+  if (truncada) warnings.push('La respuesta de la IA se cortó por longitud: revisa las descripciones antes de publicar.')
   const cortos = languages.filter(l => (featuresI18n[l]?.length ?? 0) < MIN_FEATURES)
   if (cortos.length > 0) {
     warnings.push(
