@@ -51,6 +51,10 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
   const [category, setCategory]   = useState<NewsletterCategory>(edition.category)
   const [language, setLanguage]   = useState(edition.language)
   const [authorAgentId, setAuthorAgentId] = useState<string | null>(edition.authorAgentId)
+  // La firma de la agencia no tiene columna booleana: la fila guarda su
+  // nombre o no lo guarda (ver migración 113), así que el estado del check se
+  // deriva de eso y se vuelve a mandar como booleano.
+  const [signWithOrg, setSignWithOrg] = useState<boolean>(edition.authorOrgName !== null)
   const [coverImageUrl, setCoverImageUrl] = useState(edition.coverImageUrl)
   const [coverSource, setCoverSource]     = useState<NewsletterCoverSource>(edition.coverSource)
   const [dataAsOf, setDataAsOf]   = useState(edition.dataAsOf ?? '')
@@ -96,6 +100,7 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
       dataAsOf:      dataAsOf || null,
       category,
       authorAgentId,
+      authorSignWithOrg: signWithOrg,
     }
   }
 
@@ -262,8 +267,10 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
             <AuthorPicker
               agents={agents}
               value={authorAgentId}
+              signWithOrg={signWithOrg}
               tenantName={tenantName}
               onChange={setAuthorAgentId}
+              onSignWithOrgChange={setSignWithOrg}
               disabled={!canEdit}
             />
           </div>

@@ -342,6 +342,12 @@ Lo que antes distinguía una serie lo hace ahora la **categoría** de la edició
 
 **Exposición pública, mismo patrón que `properties`:** una policy de RLS limita `anon` a ediciones `published` y no degradadas por billing; los grants por columna (migración 105) limitan además qué columnas puede leer `anon` — un `select('*')` devuelve 401, no un resultado parcial. **`category` no está en ese grant** (sólo `authenticated` y `service_role` la leen): la constante `PUBLIC_EDITION_COLUMNS` de `src/lib/services/newsletter-integration-prompt.ts` tiene que coincidir exactamente con el grant real, verificado contra la base — documentar ahí una columna vedada es el mismo bug que ya pasó una vez con un tipo de bloque que el esquema no tenía.
 
+**La firma son DOS, no una** (migración 113). `author_name` es la persona y `author_org_name` la agencia; ambas son opcionales e independientes, así que ninguna se puede deducir de la otra y una edición puede publicarse sin ninguna. Antes era una sola columna con un desplegable excluyente —o el agente o la agencia— y eso obligaba a renunciar a la mitad de lo que el producto vende: la persona posiciona, la marca respalda.
+
+Las tres columnas de firma (más `author_avatar_url`, instantánea de `agents.cover_photo_url`) se guardan **desnormalizadas** por lo que dice la 111: una edición firmada no se reescribe cuando el agente se va. Se congelan al elegir la firma y se refrescan al publicar, nunca en un guardado ajeno a ella. `author_agent_id` es interno; las otras tres son públicas.
+
+**El avatar no lleva iniciales ni color desde la base**: sin foto, cada superficie deriva las iniciales del nombre y usa su propia paleta. Traer `avatar_initials`/`accent_color` a la web de un cliente sería vestirla con colores pensados para el CRM. Y `agents.cover_photo_url` es una foto vertical de cuerpo entero, así que en un círculo va con `object-position: top` o se publica un torso.
+
 Las estadísticas por edición (vistas, suscriptores) viven en `src/lib/data/newsletter-stats.ts`: se atribuye el suscriptor a la edición desde la que se suscribió; quien se suscribe desde la portada del tenant cuenta sólo en el total.
 
 ---

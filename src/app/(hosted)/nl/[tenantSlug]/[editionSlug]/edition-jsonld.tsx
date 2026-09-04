@@ -10,6 +10,13 @@ import type { PublicEdition, PublicTenant } from '../shared'
 // Sin `jobTitle`: `author_title` sale de `agents.specialty`, que es un código
 // de segmento de audiencia (hispanic | military | first_buyer | brazilian),
 // no un cargo — hoy siempre es null. La firma pública es sólo el nombre.
+//
+// Desde la 113 el `author` ya no se adivina. Antes se comparaba `author_name`
+// contra `tenant.name` para decidir Person u Organization: una heurística que
+// fallaba en cuanto una agencia se llamara igual que su fundadora. Ahora la
+// fila lo dice — `author_name` es la persona y `author_org_name` la agencia —
+// y cuando firman las dos, `author` las lleva a ambas (schema.org acepta un
+// array), que es literalmente lo que la página muestra.
 
 /**
  * Serializa un valor para incrustarlo en un `<script type="application/ld+json">`.
@@ -46,7 +53,17 @@ export function EditionJsonLd({
   tenant: PublicTenant
   canonicalUrl: string
 }) {
-  const autor = edition.author_name?.trim()
+  const persona = edition.author_name?.trim()
+  const agencia = edition.author_org_name?.trim()
+
+  // Se listan en el mismo orden que la firma visible. Sin ninguna de las dos,
+  // la edición la atribuye la agencia que la publica: un NewsArticle sin
+  // `author` no es válido para un buscador, y el publisher es el hecho que
+  // siempre se cumple.
+  const autores = [
+    ...(persona ? [{ '@type': 'Person', name: persona }] : []),
+    ...(agencia ? [{ '@type': 'Organization', name: agencia }] : []),
+  ]
   const data = {
     '@context': 'https://schema.org',
     '@type':    'NewsArticle',
@@ -56,11 +73,9 @@ export function EditionJsonLd({
     ...(edition.published_at ? { datePublished: edition.published_at } : {}),
     inLanguage: edition.language,
     mainEntityOfPage: { '@type': 'WebPage', '@id': canonicalUrl },
-    // Firma de persona cuando la hay; de la agencia cuando la edición la firma
-    // el tenant (author_name igual al nombre del tenant) o no hay firma.
-    author: autor && autor !== tenant.name
-      ? { '@type': 'Person', name: autor }
-      : { '@type': 'Organization', name: tenant.name },
+    author: autores.length === 0
+      ? { '@type': 'Organization', name: tenant.name }
+      : autores.length === 1 ? autores[0] : autores,
     publisher: {
       '@type': 'Organization',
       name:    tenant.name,

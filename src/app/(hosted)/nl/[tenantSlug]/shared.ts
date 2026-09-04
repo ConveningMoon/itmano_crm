@@ -14,10 +14,11 @@ import {
 // (ver src/lib/newsletters/channel.ts). Con un solo canal por tenant, filtrar
 // ediciones por canal ya no distingue nada — se acota directamente por
 // tenant_id. Las EDICIONES tienen tabla propia y sólo estas columnas están
-// concedidas a `anon` (105, paso 5; author_name/author_title en 111): id,
-// tenant_id, channel_id, slug, title, dek, language, translation_group_id,
-// cover_image_url, content, sources, data_as_of, status, published_at,
-// created_at, author_name, author_title. Aunque este módulo usa
+// concedidas a `anon` (105, paso 5; author_name/author_title en 111;
+// author_org_name/author_avatar_url en 113): id, tenant_id, channel_id, slug,
+// title, dek, language, translation_group_id, cover_image_url, content,
+// sources, data_as_of, status, published_at, created_at, author_name,
+// author_title, author_org_name, author_avatar_url. Aunque este módulo usa
 // createAdminClient() (bypasea RLS), se respeta la misma lista — igual que
 // web/[tenantSlug]/shared.ts hace con properties — para no filtrar ai_run,
 // created_by_* ni unpublished_by_billing al público. Un select('*') real (con
@@ -42,8 +43,13 @@ export type PublicEdition = {
   data_as_of: string | null
   published_at: string | null
   created_at: string
+  /** La persona que firma. null = la edición no lleva firma personal. */
   author_name: string | null
   author_title: string | null
+  /** La agencia que firma. Independiente de la anterior (migración 113). */
+  author_org_name: string | null
+  /** Foto de la persona que firma. Sólo acompaña a `author_name`. */
+  author_avatar_url: string | null
 }
 
 const PUBLIC_TENANT_COLUMNS = columns('tenants', ['id', 'name', 'slug', 'logo_url', 'primary_color'])
@@ -53,13 +59,13 @@ const PUBLIC_TENANT_COLUMNS = columns('tenants', ['id', 'name', 'slug', 'logo_ur
 // campo por campo, contra la copia que vive en
 // src/lib/services/newsletter-integration-prompt.ts — el prompt que le
 // promete a un desarrollador externo qué columnas puede pedir. Son dos
-// listas mantenidas a mano de las mismas 15 columnas; nada más las fuerza a
+// listas mantenidas a mano de las mismas columnas; nada más las fuerza a
 // coincidir.
 export const PUBLIC_EDITION_COLUMN_LIST = [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'content', 'sources',
   'data_as_of', 'status', 'published_at', 'created_at',
-  'author_name', 'author_title',
+  'author_name', 'author_title', 'author_org_name', 'author_avatar_url',
 ] as const
 
 const PUBLIC_EDITION_COLUMNS = columns('newsletter_editions', PUBLIC_EDITION_COLUMN_LIST)
@@ -120,6 +126,8 @@ function mapEdition(row: any): PublicEdition {
     created_at:           row.created_at,
     author_name:          row.author_name ?? null,
     author_title:         row.author_title ?? null,
+    author_org_name:      row.author_org_name ?? null,
+    author_avatar_url:    row.author_avatar_url ?? null,
   }
 }
 

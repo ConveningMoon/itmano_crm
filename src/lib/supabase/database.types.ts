@@ -1115,7 +1115,9 @@ export type Database = {
           ai_generated: boolean
           ai_run: Json | null
           author_agent_id: string | null
+          author_avatar_url: string | null
           author_name: string | null
+          author_org_name: string | null
           author_title: string | null
           category: string
           channel_id: string
@@ -1143,7 +1145,9 @@ export type Database = {
           ai_generated?: boolean
           ai_run?: Json | null
           author_agent_id?: string | null
+          author_avatar_url?: string | null
           author_name?: string | null
+          author_org_name?: string | null
           author_title?: string | null
           category?: string
           channel_id: string
@@ -1171,7 +1175,9 @@ export type Database = {
           ai_generated?: boolean
           ai_run?: Json | null
           author_agent_id?: string | null
+          author_avatar_url?: string | null
           author_name?: string | null
+          author_org_name?: string | null
           author_title?: string | null
           category?: string
           channel_id?: string

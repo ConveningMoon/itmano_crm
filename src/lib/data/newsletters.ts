@@ -41,6 +41,8 @@ export interface NewsletterEdition {
   createdByUserId:      string | null
   authorAgentId:        string | null
   authorName:           string | null
+  authorOrgName:        string | null
+  authorAvatarUrl:      string | null
   authorTitle:          string | null
   createdAt:            string
   updatedAt:            string
@@ -50,7 +52,8 @@ const EDITION_COLUMNS = columns('newsletter_editions', [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'cover_source', 'content', 'sources',
   'data_as_of', 'category', 'status', 'published_at', 'ai_generated', 'unpublished_by_billing',
-  'created_by_agent_id', 'created_by_user_id', 'author_agent_id', 'author_name', 'author_title',
+  'created_by_agent_id', 'created_by_user_id', 'author_agent_id', 'author_name',
+  'author_org_name', 'author_avatar_url', 'author_title',
   'created_at', 'updated_at',
 ])
 
@@ -81,6 +84,8 @@ function mapEdition(row: any): NewsletterEdition {
     createdByUserId:      row.created_by_user_id ?? null,
     authorAgentId:        row.author_agent_id ?? null,
     authorName:           row.author_name ?? null,
+    authorOrgName:        row.author_org_name ?? null,
+    authorAvatarUrl:      row.author_avatar_url ?? null,
     authorTitle:          row.author_title ?? null,
     createdAt:            row.created_at,
     updatedAt:            row.updated_at,

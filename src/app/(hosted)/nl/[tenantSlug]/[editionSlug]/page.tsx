@@ -8,6 +8,7 @@ import {
   getTenantCanonicalTemplate, getEditionSiblings,
 } from '../shared'
 import { formatDataAsOf, formatEditionDate } from '../nl-format'
+import { EditionByline } from '../edition-byline'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from '../nl-chrome'
 import { renderNewsletterHtml } from '@/lib/newsletters/render'
 import { editionCanonicalUrl, editionAlternates } from '@/lib/newsletters/canonical'
@@ -78,7 +79,13 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
       url: canonical,
       images: [{ url: edition.cover_image_url }],
       ...(edition.published_at ? { publishedTime: edition.published_at } : {}),
-      ...(edition.author_name ? { authors: [edition.author_name] } : {}),
+      // Las dos firmas cuando las hay: Open Graph acepta varios autores y la
+      // edición puede llevar persona, agencia o ambas (113).
+      ...(() => {
+        const autores = [edition.author_name, edition.author_org_name]
+          .map(a => a?.trim()).filter(Boolean) as string[]
+        return autores.length > 0 ? { authors: autores } : {}
+      })(),
     },
   }
 }
@@ -171,12 +178,9 @@ export default async function PublicNewsletterEditionPage({ params }: { params: 
           )}
           {/* Sin segunda línea de author_title: sale de agents.specialty, que
               es un código de segmento de audiencia, no un cargo (ver ruling
-              de Task 5) — hoy es siempre null. La firma pública es el nombre. */}
-          {edition.author_name && (
-            <p style={{ margin: '8px 0 0', fontSize: '13px', color: P.textFaint }}>
-              Por {edition.author_name}
-            </p>
-          )}
+              de Task 5) — hoy es siempre null. La firma pública son los dos
+              nombres (persona y agencia) y la foto de la persona. */}
+          <EditionByline edition={edition} P={P} size={28} fontSize={13} />
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', fontSize: '12.5px', color: P.textFaint, marginTop: '18px', paddingBottom: '28px', borderBottom: `1px solid ${P.line}` }}>
             {edition.published_at && <span>Publicado el {formatEditionDate(edition.published_at)}</span>}

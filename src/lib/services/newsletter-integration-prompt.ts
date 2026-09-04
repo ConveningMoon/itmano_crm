@@ -29,7 +29,9 @@ export interface NewsletterIntegrationInput {
 
 /**
  * Las ÚNICAS columnas que `anon` puede leer: 15 de la migración 105 (grants por
- * columna) más `author_name` y `author_title`, que sumó la 111.
+ * columna), `author_name` y `author_title` de la 111, y `author_org_name` y
+ * `author_avatar_url` de la 113 (la firma pasó a ser doble: la persona y la
+ * agencia, cada una opcional).
  *
  * `category` (migración 110) NO está aquí a propósito: el grant real sólo se la
  * da a `authenticated` y `service_role` (comprobado contra el sandbox). Añadirla
@@ -40,7 +42,7 @@ export const PUBLIC_EDITION_COLUMNS = [
   'id', 'tenant_id', 'channel_id', 'slug', 'title', 'dek', 'language',
   'translation_group_id', 'cover_image_url', 'content', 'sources',
   'data_as_of', 'status', 'published_at', 'created_at',
-  'author_name', 'author_title',
+  'author_name', 'author_title', 'author_org_name', 'author_avatar_url',
 ] as const
 
 export function buildNewsletterIntegrationPrompt(input: NewsletterIntegrationInput): string {
@@ -170,14 +172,30 @@ export function buildNewsletterIntegrationPrompt(input: NewsletterIntegrationInp
     '`sources`: si publicas una cifra, publica también su fuente — el sistema entero',
     'existe para que cada dato sea verificable.',
     '',
-    '### La firma: `author_name` y `author_title`',
-    '`author_name` trae la firma de la edición — píntala con marcado de autor (un',
-    '`rel="author"`, un `<address>`, o el `author` de tu propio JSON-LD) en vez de',
-    'como texto suelto: es la señal que un buscador necesita para atribuir el',
-    'contenido a una persona en vez de a la página. `author_title` está en esta',
-    'misma lista y ES pública, pero HOY SIEMPRE LLEGA VACÍA — reserva el campo en tu',
-    'plantilla sin depender de que traiga nada por ahora; el día que un agente',
-    'declare su cargo, empezará a poblarse sin que cambies tu lado.',
+    '### La firma: `author_name`, `author_org_name` y `author_avatar_url`',
+    'Son DOS firmas independientes y las dos son opcionales: `author_name` es la',
+    'PERSONA que firma y `author_org_name` la AGENCIA. Puede llegar una, las dos o',
+    'ninguna — no asumas que si falta una está la otra, y no rellenes la que falte',
+    'con el nombre del tenant. Con las dos, píntalas en ese orden:',
+    '"Por <author_name> · <author_org_name>".',
+    '',
+    'Marca la PERSONA con marcado de autor (un `rel="author"`, un `<address>`, o el',
+    '`author` de tu propio JSON-LD) en vez de como texto suelto: es la señal que un',
+    'buscador necesita para atribuir el contenido a una persona en vez de a la',
+    'página. La agencia va como `publisher`, no como autor de una persona.',
+    '',
+    '`author_avatar_url` es la foto de esa persona, para un círculo pequeño junto a',
+    'su nombre. Llega vacía si el agente todavía no subió foto — ten un respaldo',
+    '(las iniciales de `author_name` sobre un color tuyo) en vez de un hueco. Es una',
+    'foto vertical de cuerpo entero, así que recórtala con `object-fit: cover` y',
+    '`object-position: center top` o publicarás un torso sin cabeza. Nunca la',
+    'muestres junto a `author_org_name` sola: una cara junto al nombre de una',
+    'empresa sugiere una persona que no firmó.',
+    '',
+    '`author_title` está en esta misma lista y ES pública, pero HOY SIEMPRE LLEGA',
+    'VACÍA — reserva el campo en tu plantilla sin depender de que traiga nada por',
+    'ahora; el día que un agente declare su cargo, empezará a poblarse sin que',
+    'cambies tu lado.',
     '',
     '### `translation_group_id`: ediciones traducidas',
     'Las traducciones de una misma edición comparten este uuid, una fila por',
