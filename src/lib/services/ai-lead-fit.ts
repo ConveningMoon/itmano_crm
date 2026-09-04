@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { getAiLimitStatus } from '@/lib/services/ai-limit'
+import { isLocalAiSpendBlocked } from '@/lib/services/ai-guard'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { getBusinessProfile } from '@/lib/data/business-profile'
 import { formatMoney, hasBudgetBands } from '@/lib/business/profile'
@@ -92,6 +93,11 @@ const TRIGGER_PHRASE: Record<string, string> = {
 export async function assessLeadFit(input: { leadId: string; tenantId: string; reason?: string }): Promise<FitAssessResult> {
   try {
     if (!process.env.ANTHROPIC_API_KEY) return skip('no_api_key', input.leadId)
+    // Mismo freno de entorno que las features discrecionales, con el patrón de
+    // este servicio. Aquí importa más que en ninguna otra: el análisis corre
+    // SOLO, disparado por cada lead que entra, sin que nadie pulse un botón.
+    // Ver ai-guard.ts.
+    if (isLocalAiSpendBlocked()) return skip('local_spend_blocked', input.leadId)
     const db = createAdminClient()
 
     // El analisis de fit ya no se activa por tenant: es parte del producto y

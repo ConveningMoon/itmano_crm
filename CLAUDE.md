@@ -59,6 +59,18 @@ Todo el texto dirigido a Dylan — explicaciones, resúmenes, análisis — va *
 
 El copy de producto (UI, emails, páginas) sigue las reglas de voz de marca más abajo.
 
+### 7. Gasto de IA: avisar SIEMPRE antes, nunca después
+
+Las llaves de Anthropic y Google AI son **reales en todos los entornos, incluido local**. `.env.development.local` sólo redirige Supabase al sandbox; el gasto de IA se cobra de verdad a la cuenta de ITMANO.
+
+**Antes de ejecutar cualquier acción que invoque un modelo de pago —generar una newsletter, una portada, un análisis de lead, sembrar fuentes, o cualquier ruta bajo `src/lib/newsletters/ai/`, `src/lib/studio/` o `src/lib/services/ai-*`— hay que DETENERSE y avisar a Dylan**, con la estimación de lo que cuesta y cuántas veces se piensa repetir. Sin excepciones, aunque parezca una sola prueba.
+
+Esto vale igual para pedirle a Dylan que lo dispare él desde el navegador: si el propósito es probar, el aviso va antes.
+
+**El límite `ai_monthly_limit_usd` no es una red de seguridad.** Sólo frena lo que llega a `ai_usage_events`, y en local esa tabla vive en el sandbox, que arranca en cero. Un gasto no contabilizado es invisible para el límite: así se fueron ~$8 el 26 de agosto de 2026 en unas 20 generaciones de newsletter durante la depuración de la feature, sin que nada avisara.
+
+La investigación con `web_search` es el paso caro: ~$0.39 de los ~$0.46 que cuesta una edición completa, y las búsquedas se facturan aparte de los tokens ($10 por millar).
+
 ---
 
 ## Cómo trabajar en este repo

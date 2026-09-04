@@ -5,6 +5,7 @@ import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { isCoreFeature, reserveUsdFor, discretionaryLimitUsd, ceilingUsdFor } from '@/lib/services/ai-budget'
 import type { AiFeature } from '@/lib/services/ai-feature-labels'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
+import { isLocalAiSpendBlocked, LOCAL_AI_SPEND_MESSAGE } from '@/lib/services/ai-guard'
 
 // ── Límite mensual de IA por tenant ──────────────────────────────────────────
 // El tope (tenants.ai_monthly_limit_usd, default $10) aplica sobre la suma de
@@ -242,6 +243,11 @@ export async function assertAiWithinLimit(
   ctx: TenantContext,
   feature: AiFeature,
 ): Promise<{ ok: false; error: string } | null> {
+  // Freno de entorno ANTES que nada, incluido el bypass de super_admin: quien
+  // prueba en local es justamente el super_admin, y allí el contador del mes
+  // vive en el sandbox, así que este tope no puede verlo. Ver ai-guard.ts.
+  if (isLocalAiSpendBlocked()) return { ok: false, error: LOCAL_AI_SPEND_MESSAGE }
+
   if (ctx.role === 'super_admin') return null
   if (!ctx.tenant_id) return { ok: false, error: 'Acceso no autorizado' }
 
