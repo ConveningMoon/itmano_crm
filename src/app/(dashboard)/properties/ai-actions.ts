@@ -66,13 +66,7 @@ function buildExtractTool(languages: string[]): Anthropic.Tool {
   const required: string[] = ['property_type', 'lot_sqft_basis']
   for (const l of languages) {
     langProps[`description_${l}`] = { type: 'string', description: `Warm, premium, factual 2–4 sentence listing description written in ${langRule(l)} Only facts from the PDF.` }
-    langProps[`features_${l}`] = {
-      type: 'array',
-      items: { type: 'string', description: 'One selling point as a short noun phrase (2–7 words), no trailing period.' },
-      minItems: 3,
-      maxItems: 8,
-      description: `Selling points of the property, written in ${langRule(l)} Rephrase what the listing states — that is not inventing. NEVER return an empty list: any listing sheet has enough (style, rooms, kitchen/appliances, flooring, roof, heating/cooling, exterior, lot position, parking, outbuildings, schools).`,
-    }
+    langProps[`features_${l}`] = { type: 'string', description: featuresFieldDescription(l) }
     required.push(`description_${l}`, `features_${l}`)
   }
   return {
@@ -105,17 +99,33 @@ function buildExtractTool(languages: string[]): Anthropic.Tool {
   }
 }
 
+// El campo NO es un array: es un texto con una característica por línea.
+//
+// Se pidió como `array` de strings durante cuatro rondas y llegó de cuatro
+// formas distintas —vacío, envuelto en `<value>`, todo unido por comas, y un
+// único elemento— cada una con su parche corriente abajo. Un texto con saltos
+// de línea no tiene forma que romper, y además es EXACTAMENTE el formato del
+// campo en el formulario ("Características — una por línea"), así que lo que
+// devuelve el modelo es ya lo que el usuario edita. `toList` sigue aceptando
+// las otras formas por si acaso: dejó de ser la defensa principal.
+function featuresFieldDescription(lang: string): string {
+  return `The property's selling points in ${langRule(lang)} ONE PER LINE, separated by newlines. 3 to 8 lines, never empty. Each line is a short noun phrase (2-7 words) with no numbering, no bullet character, no tags and no quotes.`
+}
+
 // Qué es una característica y de dónde sale. Vive aparte porque lo usan los dos
 // prompts: la extracción completa y la segunda pasada que sólo pide las listas.
+//
+// Sin ejemplos en el idioma de salida a propósito: cuando los llevaba, una
+// generación devolvió una sola característica y era, palabra por palabra, el
+// primer elemento del ejemplo.
 const FEATURES_RULES: string[] = [
-  'Features (features_<code>) — never leave this list empty:',
-  '- A feature is a short phrase naming something concrete the property HAS. Turning a listing field into a readable phrase is REPHRASING, not inventing — it is exactly what is being asked for.',
+  'Features (features_<code>): one per line, 3 to 8 lines, never empty.',
+  '- A feature is something concrete the property HAS. Rewording a field of the sheet into a readable phrase is what is being asked for, not inventing.',
   '- Take them from the spec grid and the public remarks: architectural style, renovations and their year, kitchen and appliances, extra rooms (pantry, attic, primary suite), flooring, heating / cooling / water heater, roof, siding, foundation, fence, patio / porch / deck, pool, lot position (cul-de-sac, corner, waterfront), parking and garage, outbuildings (shed), HOA amenities, schools, view.',
-  '- Ignore the administrative half of the sheet — listing agent and office, phones, MLS dates, lock box, showing instructions, taxes, mortgage, HOA fees, disclosures, owner. None of that is a feature.',
-  '- Example: a sheet reading "Exterior Feat: Cul-De-Sac, Patio" / "Appliances: Dishwasher, Microwave, Range-electric, Refrigerator" / "Roof: Asphalt Shingle (2024)" yields "Cul-de-sac location", "Private patio", "Full appliance package", "Roof replaced in 2024".',
-  '- Between 3 and 8 items, ordered by what a buyer cares about most. No duplicates, and do not restate bedrooms, bathrooms or square footage — those already have their own fields.',
-  '- Each item is PLAIN TEXT inside the array: no HTML or XML tags, no markdown, no surrounding quotes. The array itself carries the structure.',
-  '- ONE feature per array element. Never join several into one element with commas or slashes: "Dishwasher, Microwave, Refrigerator" is three elements — or one phrase like "Full appliance package" — never one element with the commas inside.',
+  '- Skip the administrative half of the sheet: listing agent and office, phones, MLS dates, lock box, showing instructions, taxes, mortgage, HOA fees, disclosures, owner.',
+  '- Cover the sheet, do not stop at the first thing you find: if it states appliances, flooring, roof and lot position, each of those earns its own line.',
+  '- One idea per line. A line that enumerates three things with commas should have been three lines.',
+  '- Do not restate bedrooms, bathrooms or square footage: they already have their own fields.',
 ]
 
 // Segunda pasada. La extracción pide dieciocho campos y redacta en hasta tres
@@ -126,13 +136,7 @@ const FEATURES_RULES: string[] = [
 function buildFeaturesTool(languages: string[]): Anthropic.Tool {
   const props: Record<string, unknown> = {}
   for (const l of languages) {
-    props[`features_${l}`] = {
-      type: 'array',
-      items: { type: 'string', description: 'One selling point as a short noun phrase (2–7 words), no trailing period.' },
-      minItems: 3,
-      maxItems: 8,
-      description: `Selling points written in ${langRule(l)}`,
-    }
+    props[`features_${l}`] = { type: 'string', description: featuresFieldDescription(l) }
   }
   return {
     name: 'list_features',
@@ -236,24 +240,44 @@ export async function generatePropertyFromPdf(
 
   let toolInput: Record<string, unknown>
   let stopReason: string | null = null
+  // Con thinking adaptativo. El comentario que había aquí decía que debía estar
+  // apagado por el forced tool use, y era falso: `newsletters/ai/draft.ts` lleva
+  // en producción esa misma combinación —claude-sonnet-5, thinking adaptativo y
+  // tool_choice forzado—. Apagarlo degrada justo lo que aquí venía fallando: la
+  // fidelidad al esquema en una llamada que extrae dieciocho campos y redacta en
+  // varios idiomas a la vez.
+  const extraer = (pensar: boolean) => anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 16000,
+    thinking: pensar ? { type: 'adaptive' } : { type: 'disabled' },
+    tools: [buildExtractTool(languages)],
+    tool_choice: { type: 'tool', name: 'extract_property' },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          pdfBlock,
+          { type: 'text', text: buildPrompt(languages, agencyDescription || undefined) },
+        ],
+      },
+    ],
+  })
+
   try {
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 16000,
-      // Thinking must be off with a forced tool call; keeps extraction deterministic.
-      thinking: { type: 'disabled' },
-      tools: [buildExtractTool(languages)],
-      tool_choice: { type: 'tool', name: 'extract_property' },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            pdfBlock,
-            { type: 'text', text: buildPrompt(languages, agencyDescription || undefined) },
-          ],
-        },
-      ],
-    })
+    // Y si alguna vez la API rechazara esa combinación, la extracción no puede
+    // morir por ello: se repite sin thinking y queda dicho en el log. Un 400 no
+    // se factura, así que el reintento no cuesta la llamada perdida.
+    let message: Anthropic.Message
+    try {
+      message = await extraer(true)
+    } catch (e) {
+      if (!(e instanceof Anthropic.BadRequestError)) throw e
+      console.error(JSON.stringify({
+        service: 'ai-property-intake', path: 'thinking_rechazado',
+        detail: e.message.slice(0, 300),
+      }))
+      message = await extraer(false)
+    }
 
     // Registro de uso (tokens + costo) — best-effort, nunca bloquea.
     await recordAiUsage({
@@ -308,20 +332,28 @@ export async function generatePropertyFromPdf(
     if (f.length) featuresI18n[l] = f
   }
 
-  // Un idioma sin lista se vuelve a pedir, y solo. El log queda igual aunque el
-  // reintento funcione: es lo que faltó para diagnosticar las dos veces que esto
-  // llegó vacío al formulario — dice si la respuesta se truncó (stop_reason),
-  // qué forma tenía el campo y qué claves trajo el modelo.
-  const sinFeatures = languages.filter(l => !featuresI18n[l]?.length)
-  if (sinFeatures.length > 0) {
+  // Un idioma que se queda corto se vuelve a pedir, y solo. El umbral es el
+  // mínimo del contrato (3 líneas): una sola característica es un fallo, no una
+  // ficha pobre — cualquier hoja de listado da para tres. Antes el reintento
+  // sólo cubría el caso vacío y por eso no rescató la generación que devolvió
+  // "Ubicación en cul-de-sac" y nada más.
+  //
+  // El log va siempre, aunque el reintento funcione: es lo que faltó para
+  // diagnosticar las cuatro veces que esto llegó mal al formulario. Incluye el
+  // valor CRUDO recortado, que es justo lo que no se pudo ver ninguna de ellas.
+  const MIN_FEATURES = 3
+  const insuficientes = languages.filter(l => (featuresI18n[l]?.length ?? 0) < MIN_FEATURES)
+  if (insuficientes.length > 0) {
     console.error(JSON.stringify({
       service: 'ai-property-intake',
-      path: 'features_vacias',
+      path: 'features_insuficientes',
       stop_reason: stopReason,
-      idiomas: sinFeatures,
-      forma: Object.fromEntries(sinFeatures.map(l => {
+      idiomas: insuficientes,
+      obtenidas: Object.fromEntries(insuficientes.map(l => [l, featuresI18n[l]?.length ?? 0])),
+      crudo: Object.fromEntries(insuficientes.map(l => {
         const v = toolInput[`features_${l}`]
-        return [l, Array.isArray(v) ? `array(${v.length})` : typeof v]
+        const forma = Array.isArray(v) ? `array(${v.length})` : typeof v
+        return [l, `${forma}: ${JSON.stringify(v ?? null).slice(0, 400)}`]
       })),
       claves: Object.keys(toolInput),
     }))
@@ -330,10 +362,10 @@ export async function generatePropertyFromPdf(
       const retry = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 4000,
-        thinking: { type: 'disabled' },
-        tools: [buildFeaturesTool(sinFeatures)],
+        thinking: { type: 'adaptive' },
+        tools: [buildFeaturesTool(insuficientes)],
         tool_choice: { type: 'tool', name: 'list_features' },
-        messages: [{ role: 'user', content: [pdfBlock, { type: 'text', text: buildFeaturesPrompt(sinFeatures) }] }],
+        messages: [{ role: 'user', content: [pdfBlock, { type: 'text', text: buildFeaturesPrompt(insuficientes) }] }],
       })
       await recordAiUsage({
         ...usageMeta,
@@ -345,9 +377,12 @@ export async function generatePropertyFromPdf(
       const rBlock = retry.content.find((b) => b.type === 'tool_use')
       if (rBlock && rBlock.type === 'tool_use') {
         const rInput = rBlock.input as Record<string, unknown>
-        for (const l of sinFeatures) {
+        for (const l of insuficientes) {
           const f = toList(rInput[`features_${l}`])
-          if (f.length) featuresI18n[l] = f
+          // Se queda la más completa: el reintento puede volver igual de corto,
+          // y perder la característica que sí trajo la primera pasada sería un
+          // retroceso pagado.
+          if (f.length > (featuresI18n[l]?.length ?? 0)) featuresI18n[l] = f
         }
       }
     } catch (e) {
@@ -402,7 +437,14 @@ export async function generatePropertyFromPdf(
 
   const warnings: string[] = []
   if (uploadErr) warnings.push('El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.')
-  if (Object.keys(featuresI18n).length === 0) warnings.push('La IA no devolvió características. Revisa el PDF y agrégalas a mano antes de publicar.')
+  const cortos = languages.filter(l => (featuresI18n[l]?.length ?? 0) < MIN_FEATURES)
+  if (cortos.length > 0) {
+    warnings.push(
+      Object.keys(featuresI18n).length === 0
+        ? 'La IA no devolvió características. Revisa el PDF y agrégalas a mano antes de publicar.'
+        : 'La IA devolvió pocas características. Complétalas antes de publicar.',
+    )
+  }
 
   return {
     ok: true,

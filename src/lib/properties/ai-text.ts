@@ -89,7 +89,9 @@ export function toList(v: unknown): string[] {
       }
       return ''
     })
-    .map((x) => stripMarkup(x).replace(/^\s*[-–—*•]\s*/, '').trim())
+    // Viñeta o numeración al principio de la línea: el modelo la añade aunque el
+    // campo pida texto llano, y "1. Cocina renovada" no es el nombre de nada.
+    .map((x) => stripMarkup(x).replace(/^\s*(?:\d{1,2}\s*[.)]|[-–—*•])\s*/, '').trim())
     .flatMap(splitEnumeration)
     .map((x) => x.trim())
     .filter((x) => x.length > 0)
