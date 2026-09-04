@@ -90,6 +90,172 @@ export type Database = {
           },
         ]
       }
+      agent_email_drafts: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          lead_id: string
+          subject: string
+          tenant_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          lead_id: string
+          subject: string
+          tenant_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          lead_id?: string
+          subject?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_email_drafts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_email_drafts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_email_drafts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_idempotency_keys: {
+        Row: {
+          created_at: string
+          key: string
+          request_hash: string
+          response_body: Json | null
+          response_status: number | null
+          state: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          request_hash: string
+          response_body?: Json | null
+          response_status?: number | null
+          state?: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          request_hash?: string
+          response_body?: Json | null
+          response_status?: number | null
+          state?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_rate_limits: {
+        Row: {
+          bucket: string
+          count: number
+          token_id: string
+          window_start: string
+        }
+        Insert: {
+          bucket: string
+          count?: number
+          token_id: string
+          window_start: string
+        }
+        Update: {
+          bucket?: string
+          count?: number
+          token_id?: string
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_rate_limits_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "agent_tokens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_tokens: {
+        Row: {
+          bot_user_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: string[]
+          tenant_id: string
+          token_hash: string
+          token_prefix: string
+        }
+        Insert: {
+          bot_user_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          scopes?: string[]
+          tenant_id: string
+          token_hash: string
+          token_prefix: string
+        }
+        Update: {
+          bot_user_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          tenant_id?: string
+          token_hash?: string
+          token_prefix?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agents: {
         Row: {
           accent_color: string
@@ -2112,6 +2278,25 @@ export type Database = {
       }
     }
     Functions: {
+      agent_api_base64url: { Args: { p_data: string }; Returns: string }
+      agent_api_mint_jwt: {
+        Args: { p_ttl_seconds?: number; p_user_id: string }
+        Returns: string
+      }
+      agent_api_purge_expired: { Args: never; Returns: undefined }
+      agent_api_rate_limit: {
+        Args: {
+          p_bucket: string
+          p_limit: number
+          p_token_id: string
+          p_window_s?: number
+        }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reset_at: string
+        }[]
+      }
       channel_metrics: {
         Args: { p_channel_ids: string[]; p_window_days?: number }
         Returns: Json
