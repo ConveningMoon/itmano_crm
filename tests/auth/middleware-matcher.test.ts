@@ -39,7 +39,6 @@ describe('middleware matcher — public/system routes are NOT protected', () => 
     '/api/cron/score-decay',
     '/api/cron/sequence-orchestrator',
     '/api/notifications/dispatch',
-    '/api/test/resend-send',
     '/api/health',
     '/api/leads/lead-1/force-next-send', // self-guarded; must not get a redirect
     '/_next/static/chunk.js',
