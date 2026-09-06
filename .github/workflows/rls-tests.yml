@@ -32,12 +32,12 @@ jobs:
   rls-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version-file: package.json
           cache: 'npm'
 
       - name: Install dependencies
@@ -69,6 +69,7 @@ jobs:
           PARITY_SUPABASE_URL: ${{ secrets.PARITY_SUPABASE_URL }}
           PARITY_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PARITY_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
+          npm run check:db-targets
           npm run test:schema
           npm run test:rls
           npm run test:scoring

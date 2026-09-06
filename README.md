@@ -6,173 +6,148 @@
 
 <p align="center">
   The live dashboard that replaces the monthly PDF report.<br />
-  A white-labeled, multi-tenant CRM built for real estate growth teams.
+  A white-label, multi-tenant CRM for real-estate growth teams.
 </p>
 
 <p align="center">
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-24.20-339933?logo=node.js&logoColor=white">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16.2-black?logo=next.js&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-19.2-149ECA?logo=react&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?logo=supabase&logoColor=white">
   <img alt="Tailwind" src="https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white">
-  <img alt="Vercel" src="https://img.shields.io/badge/Deployed%20on-Vercel-black?logo=vercel&logoColor=white">
   <img alt="License" src="https://img.shields.io/badge/license-Proprietary-lightgrey">
 </p>
 
----
-
 ## What this is
 
-Most agencies hand a real estate team a PDF once a month. **ITMANO hands them a live dashboard.**
+ITMANO CRM is the product surface of ITMANO's Growth Partner service:
+acquisition, lead qualification, nurturing and conversion behind one branded
+login at `app.itmano.com`.
 
-ITMANO CRM is the product face of ITMANO's Growth Partner service: acquisition, lead scoring, nurturing, and conversion, all wired together behind one branded login at `app.itmano.com`. Every tenant sees their own pipeline update in real time — no refresh, no waiting for a report — while the scoring engine underneath does the prioritization a human would otherwise do by hand.
+It is sold sales-led on Esencial, Growth and Partner plans. New tenants start on
+a 14-day Growth trial. [`src/lib/plans.ts`](src/lib/plans.ts) is the source of
+truth for the current feature matrix and prices.
 
-It is sold sales-led ("Contáctanos," no self-serve signup) on three plans — **Esencial**, **Growth**, and **Partner** — each new client starting on a 14-day trial at the Growth tier. See [`src/lib/plans.ts`](src/lib/plans.ts) for the current pricing and feature matrix, and [`/planes`](src/app/(marketing)/planes) for the public comparison page.
-
-## Why it's different
-
-The differentiator isn't the CRM feature list — it's that the score on a lead's card is *earned*, not guessed:
-
-- **Automatic lead scoring (0–100).** Source baseline + weighted behavioral events + time-decay, driving pipeline status without a human touching it. Apple Mail's tracking-pixel pre-fetch means email opens are logged but barely move the needle (+2) — clicks, replies, and form submissions are the real signal.
-- **Frozen-score funnel.** Once a lead enters an active deal (`en_proceso` → `cerrado`), scoring stops. A closed contact who suddenly clicks a newsletter link re-enters the funnel automatically.
-- **Postgres does the work.** Triggers score events on insert; an hourly cron applies half-life decay. The UI reads one column (`current_score`) — no joins, no aggregates, fully indexable.
-
-The full model — weights, decay formula, status bands, trigger flow — is documented in [`CLAUDE.md`](CLAUDE.md#lead-scoring-model).
-
-## Inside the dashboard
+## Product capabilities
 
 | Area | What it does |
 |---|---|
-| **Pipeline** | Leads grouped by score-driven status, KPI cards, Supabase Realtime — the board updates itself. |
-| **Leads** | List, filters, detail, manual entry, CSV/XLSX import (up to 500 rows), language-based agent auto-routing. |
-| **Email nurturing** | Per-agent Resend sequences with AI-drafted bootstrap steps, in-CRM AI composer, inbound reply capture, bounce/spam/unsubscribe guards. Click rate is the trusted engagement metric — never opens. |
-| **Properties** | Listings CRUD with Supabase Storage media, doubling as the data source for the tenant's public website via a locked-down anonymous read policy. |
-| **Acquisition channels** | Lead magnets, event forms, contact forms, and Webflow/ManyChat intake endpoints — deduplicated and scored on arrival. |
-| **Analytics** | Per-agent, per-channel, and email-engagement views; platform-wide KPIs in the super-admin hub. |
-| **Notifications** | In-app bell + Telegram, firing on a score crossing 80 or a qualified contact-form submission. |
-| **Admin** | Tenant management, platform KPIs, and an "act as tenant" switcher for support. |
+| Pipeline | Leads grouped by agent-controlled stage, with system quality and urgency signals |
+| Leads | Search, filters, detail, manual entry and CSV/XLSX import up to 500 rows |
+| Email | Resend sequences, one-off messages, inbound replies and delivery/blocking guards |
+| Properties | Listings and Supabase Storage media, also exposed to approved public sites |
+| Acquisition | Lead magnets, events, contact forms and signed Webflow intake |
+| Newsletters | One public newsletter per tenant with AI-assisted editions and analytics |
+| Analytics | Tenant, agent, channel, email and platform-level views |
+| Notifications | In-app and Telegram notifications for configured operational events |
+| Admin | Tenant management, platform KPIs and support tenant switching |
 
-**AI, on the clock.** The Anthropic SDK (`claude-sonnet-5`) drafts and rewrites emails in each agent's voice, bootstraps empty sequences, and extracts a prefillable listing from a PDF. Every call is metered per tenant in `ai_usage_events` — since ITMANO foots the AI bill, that ledger is what keeps pricing honest.
+The repository contains no active Supabase Realtime subscriptions. UI state is
+refreshed through Server Actions, route responses and controlled polling where a
+long-running process requires it.
 
-## Architecture at a glance
+## Scoring model
 
-```
+Postgres is authoritative. `recompute_lead_score(lead_id)` combines fit,
+engagement and manual signals, clamped from 0 to 100. Stage, quality and urgency
+are separate axes:
+
+- Agents control pipeline stage.
+- The system derives quality bands from each tenant's active portfolio.
+- Urgency reflects decaying positive engagement.
+- Email opens are not a scoring signal; clicks and replies are.
+- Scoring continues after a lead moves into an active or closed stage.
+- A daily cron materializes event-level decay.
+
+See [`docs/agents/scoring.md`](docs/agents/scoring.md) for the rationale. Current
+weights live in Supabase, not in documentation.
+
+## Architecture
+
+```text
 Browser
-  │
-  ▼
-Next.js 16 (App Router)         src/app/(marketing)   public landing, legal, /planes
-  │                              src/app/(auth)        Magic Link login
-  ├─ src/proxy.ts  ─────────►    src/app/(dashboard)   protected CRM, one login per tenant
-  │  (edge auth guard)           src/app/api           webhooks, cron, external intake
-  ▼
-src/lib/data/*        typed, server-only reads — pages never touch Supabase directly
-src/lib/services/*    sequence processing, email metrics, AI helpers
-  │
-  ▼
-Supabase Postgres     RLS on every table · triggers score events · pg_cron decays them hourly
-  │
-  ├─ Storage   property media, per-tenant folders
-  └─ Realtime  pipeline + notifications push straight to the browser
+  -> Next.js 16 App Router
+       -> Server Components and Server Actions
+       -> src/lib/data/* (server-only reads)
+       -> src/lib/services/* (domain workflows)
+  -> Supabase Postgres (RLS + tenant filters)
+       -> Storage
+  -> Resend / Telegram / AI providers through server-only integrations
 ```
 
-**Multi-tenancy is structural, not conventional.** Every table carries `tenant_id`; every query is scoped by Postgres Row-Level Security, not just an application-level `WHERE`. One tenant is one login (`agent_owner`) that manages a whole team of `agents` — real people tracked for lead assignment and language routing, most of whom never log in themselves. The full auth model lives in [`CLAUDE.md`](CLAUDE.md#auth-model--owner-login-per-tenant--optional-agent-logins).
+Every application table and query is tenant-scoped. `agents` represents members
+of a real-estate team; login identities are optional links through
+`agents.user_id`. Auth uses closed Magic Link registration with `super_admin`,
+`agent_owner` and `agent` roles.
 
-## Tech stack
+## Runtime and setup
 
-| Layer | Choice |
-|---|---|
-| Framework | Next.js 16.2 (App Router, Turbopack) |
-| UI | React 19.2 · Tailwind v4 · shadcn/ui · `motion` v12 |
-| Language | TypeScript, strict |
-| Database | Supabase Postgres — RLS everywhere, 55+ sequential migrations |
-| Auth | Supabase Magic Link only — no passwords, ever |
-| Email | Resend — sequences, one-offs, inbound replies, delivery webhooks |
-| AI | `@anthropic-ai/sdk` — `claude-sonnet-5`, usage metered per tenant |
-| Notifications | Telegram bot, fanned out from a single dispatch endpoint |
-| Charts | Recharts, client-only |
-| Import | PapaParse (CSV) + a patched SheetJS build (XLSX) |
-| Hosting | Vercel — preview deploy per PR, hourly crons via cron-job.org |
-
-## Getting started
+The project pins Node 24.20.0 and npm 11.19.0 through Volta. Install Volta and
+`uv`, then:
 
 ```bash
-git clone <repo-url>
-cd itmano-crm
-npm install
-cp .env.example .env.local   # fill in the keys you need — see table below
+volta install node@24.20.0 npm@11.19.0
+uv tool install "graphifyy[sql]==0.9.55"
+npm ci
+npm run setup:hooks
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The marketing site renders with zero configuration; the dashboard needs Supabase.
+Copy the variables you need from [`.env.example`](.env.example) into local,
+ignored environment files. Local development must point Supabase to the sandbox.
+Other provider keys can still spend money or send real messages; see
+[`docs/agents/environments.md`](docs/agents/environments.md).
 
-<details>
-<summary><strong>Environment variables</strong></summary>
-
-| Variable | Required for |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Any Supabase-backed page |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-side RLS bypass (data layer, admin routes) |
-| `SUPABASE_JWT_SECRET` | The RLS test suite only — mints scoped test tokens |
-| `RESEND_API_KEY` / `RESEND_WEBHOOK_SECRET` | Email sequences, inbound replies, delivery events |
-| `UNSUBSCRIBE_SECRET` | Signed unsubscribe links |
-| `TELEGRAM_BOT_TOKEN` / `NOTIFICATIONS_WEBHOOK_SECRET` | Telegram notification fan-out |
-| `CONTACT_WEBHOOK_SECRET` / `WEBFLOW_WEBHOOK_SECRET` | Acquisition-channel intake endpoints |
-| `CRON_SECRET` | Vercel Cron authentication |
-| `ANTHROPIC_API_KEY` | AI email drafting, sequence bootstrap, PDF property intake |
-
-Full context and setup links for each key are in [`.env.example`](.env.example).
-
-</details>
-
-## Testing
-
-Each suite is scoped to the layer most likely to break:
+## Verification
 
 ```bash
-npm run test:rls         # tenant isolation — hits the remote DB, never run in parallel
-npm run test:scoring     # scoring triggers and decay
-npm run test:auth        # auth flow + the proxy matcher (kept in sync by hand — see below)
-npm run test:import      # CSV/XLSX import
-npm run test:leads       # lead lifecycle
-npm run test:routing     # language-based agent routing
-npm run test:visibility  # what an `agent`-role login can and can't see
-npm run test:ai-limits   # per-tenant AI budget enforcement
+npm run lint
+npx tsc --noEmit
+npm run test:unit
+npm run build
 ```
 
-Before opening a PR: `npm run build` must succeed and `npm run lint` must be clean. If you touch `src/proxy.ts`'s matcher, update `tests/auth/middleware-matcher.test.ts` in the same commit — it mirrors that literal on purpose.
+Database-backed suites are serial and target a shared sandbox:
 
-## Project layout
-
-```
-src/
-  app/
-    (marketing)/     public landing, /planes, legal pages
-    (auth)/          Magic Link login
-    (dashboard)/     the protected CRM — pipeline, leads, emails, properties, admin…
-    api/             webhooks, cron jobs, external intake endpoints
-  components/       ui/ (shadcn) · dashboard/ · marketing/ · motion/
-  lib/
-    types.ts        domain types — the single source of truth
-    data/            typed, server-only reads
-    services/        email sending, sequence processing, AI helpers
-    auth/            tenant context + write guards
-  proxy.ts          Next 16's middleware equivalent — the edge auth guard
-supabase/migrations/ sequential SQL, RLS policies included inline
-tests/                one Vitest suite per concern
+```bash
+npm run check:db-targets
+npm run test:schema
+npm run test:rls
+npm run test:scoring
+npm run test:ai-limits
+npm run test:sources
 ```
 
-## Deployment
+## Repository map
 
-Every PR gets a Vercel preview deploy. Merges to `main` ship to production at `app.itmano.com`. Scheduled jobs (score decay, sequence orchestration) are triggered hourly by cron-job.org hitting `src/app/api/cron/*`, guarded by `CRON_SECRET`.
+```text
+src/app/                 routes, layouts and UI surfaces
+src/lib/data/            typed server-side reads
+src/lib/services/        domain workflows and integrations
+src/lib/auth/            tenant context and authorization guards
+supabase/migrations/     sequential schema and corrective migrations
+supabase/seeds/          explicit non-production seed data
+tests/                   Vitest suites by concern
+docs/agents/             durable product and engineering context for agents
+```
 
-## Status
+## Working with Claude Code and Codex
 
-Phases 1–3 are shipped and live: the static UI, the full Supabase/RLS/scoring backend, and Resend/AI/properties end-to-end. The active phase is **comercialización** — turning this from an internal tool into a subscription product: the public landing and legal pages are live, and trial/subscription plumbing (`subscriptions`, `trial_ends_at`, the AI budget gate) is in progress ahead of full billing. The complete phase history and forward roadmap live in [`CLAUDE.md`](CLAUDE.md#estado-del-proyecto--phases-13-completadas).
+[`AGENTS.md`](AGENTS.md) is the shared operating contract. [`CLAUDE.md`](CLAUDE.md)
+is a thin Claude Code adapter. Both agents use the same versioned Supabase skills,
+project-scoped sandbox MCP and Git handoff protocol.
 
-## Documentation
+Use one active agent and one computer per branch. Transfer work through commits
+and GitHub, never through OneDrive or stashes. Full setup and handoff instructions
+are in [`docs/agents/workflow.md`](docs/agents/workflow.md).
 
-This README is the front door. For the operating contract — architecture decisions, the full scoring model, the auth model's *why*, hard rules, and the file-by-file map of what to read before touching what — see [`CLAUDE.md`](CLAUDE.md). Next.js-specific breaking changes for this version are tracked in [`AGENTS.md`](AGENTS.md).
+## Deployment status
 
----
+Vercel deploys the application at `app.itmano.com`; scheduled endpoints are
+called by external cron infrastructure and authenticate with `CRON_SECRET`.
+Paddle billing is implemented in code, while the live commercial state must be
+verified before making product or financial claims. Legal copy remains pending
+professional review.
 
 <p align="center"><sub>Proprietary — © ITMANO. Not open source.</sub></p>
