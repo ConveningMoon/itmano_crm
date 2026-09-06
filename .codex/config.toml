@@ -5,3 +5,21 @@
 url = "https://mcp.supabase.com/mcp?project_ref=xpaixcowvyksgluazwzn&features=database%2Cdebugging%2Cdevelopment%2Cdocs"
 required = false
 default_tools_approval_mode = "writes"
+# El authorization server general anuncia scopes adicionales que el registro
+# dinámico del MCP rechaza. Mantén aquí el conjunto permitido por el resource
+# metadata de mcp.supabase.com hasta que ambos endpoints converjan.
+scopes = [
+  "organizations:read",
+  "projects:read",
+  "projects:write",
+  "database:write",
+  "database:read",
+  "analytics:read",
+  "secrets:read",
+  "edge_functions:read",
+  "edge_functions:write",
+  "environment:read",
+  "environment:write",
+  "storage:read",
+  "storage:write",
+]

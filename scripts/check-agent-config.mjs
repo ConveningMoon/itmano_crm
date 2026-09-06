@@ -32,16 +32,36 @@ if (!claude.includes('@AGENTS.md')) {
   errors.push('CLAUDE.md debe importar @AGENTS.md')
 }
 
-const persistentMcp = [
-  readFileSync('.mcp.json', 'utf8'),
-  readFileSync('.codex/config.toml', 'utf8'),
-].join('\n')
+const claudeMcp = readFileSync('.mcp.json', 'utf8')
+const codexMcp = readFileSync('.codex/config.toml', 'utf8')
+const persistentMcp = [claudeMcp, codexMcp].join('\n')
 
 if (persistentMcp.includes('kvmjlrvlnhiarrqxulkr')) {
   errors.push('La configuración persistente de agentes no puede incluir producción')
 }
 if (!persistentMcp.includes('xpaixcowvyksgluazwzn')) {
   errors.push('Falta el project_ref del sandbox en la configuración persistente')
+}
+
+const requiredCodexMcpScopes = [
+  'organizations:read',
+  'projects:read',
+  'projects:write',
+  'database:write',
+  'database:read',
+  'analytics:read',
+  'secrets:read',
+  'edge_functions:read',
+  'edge_functions:write',
+  'environment:read',
+  'environment:write',
+  'storage:read',
+  'storage:write',
+]
+for (const scope of requiredCodexMcpScopes) {
+  if (!codexMcp.includes(`"${scope}"`)) {
+    errors.push(`Falta el scope OAuth ${scope} del MCP sandbox de Codex`)
+  }
 }
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
