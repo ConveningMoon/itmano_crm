@@ -228,7 +228,42 @@ mismo que listar 25 leads. Si hiciera falta bajar más, ahí está el margen:
 fusionar los tres viajes en un solo RPC de Postgres. Los p95 altos son arranques
 en frío de la función, no la base.
 
-## 11. Reseña de la siembra
+## 11. Red y firewall
+
+El proyecto sandbox tiene dos reglas de WAF publicadas, en este orden:
+
+1. **Rate limit** — `Request Path starts with /api/agent/v1` → 600 req/60 s por IP,
+   al exceder: deny.
+2. **Bypass** — mismo path → bypass de reglas personalizadas y rulesets gestionados.
+
+El orden importa: `bypass` salta todo lo que venga detrás, así que el rate limit
+va primero. Y hace falta por una razón concreta: el límite de 120/min de la
+superficie es **por token**, y una petición sin token válido muere en la
+autenticación antes de llegar a contarse. Sin la regla de IP, una avalancha
+anónima no encuentra freno — sólo paga una consulta a la base por petición.
+
+**Sobre los retos de Vercel.** Durante la integración, un cliente no-navegador
+recibía `403` con `x-vercel-mitigated: challenge` en todas las rutas, incluida la
+raíz. No era configuración de este proyecto: la misma máquina recibía el mismo
+403 desde `vercel.com`, `api.vercel.com` y `nextjs.org`. Era la mitigación
+automática de plataforma contra esa IP de salida (una VPN).
+
+**La prueba que lo distingue en una sola llamada: pedir una propiedad de Vercel
+que no sea tuya.** Si `nextjs.org` también te reta, el problema es tu red y
+ninguna regla del proyecto lo va a arreglar. Conviene hacerla ANTES de tocar el
+firewall: sin ese control, un 403 desde tu máquina no dice nada sobre el
+despliegue.
+
+Verificado desde GitHub Actions (salida limpia, cliente de línea de comandos):
+`200` en `/whoami` y en `/openapi.json`, con los headers `x-ratelimit-*` y sin
+rastro de `x-vercel-mitigated`. Ese mismo runner recibía `200` de `nextjs.org`,
+que es el control que cierra el diagnóstico.
+
+**Al desplegar en producción**, replica la regla de rate limit. La de bypass es
+inofensiva y conviene tenerla por si algún día se activa Bot Protection, pero no
+está evaluada: nunca llegó a ser el problema.
+
+## 12. Reseña de la siembra
 
 ```bash
 npm run seed:agent-demo
