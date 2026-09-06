@@ -1,0 +1,16 @@
+#!/bin/sh
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+
+if ! command -v graphify >/dev/null 2>&1; then
+  exit 0
+fi
+
+mkdir -p "$repo_root/graphify-out"
+
+(
+  cd "$repo_root" || exit 0
+  graphify update .
+) >> "$repo_root/graphify-out/update.log" 2>&1 &
+
+exit 0
