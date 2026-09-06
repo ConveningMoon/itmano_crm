@@ -1,0 +1,41 @@
+<main class="pieza">
+  <!-- Envuelta en sección, a diferencia del mosaico: editorial-shell.tsx SÍ
+       condiciona la foto ({p.heroPhoto && ...}) porque el editorial puede
+       existir sin ella (lo dice su comentario de cabecera) — la sección
+       declara el slot como OPCIONAL, que es lo fiel a ese condicional. -->
+  {{#hero}}<img class="foto" src="{{hero}}" alt="">{{/hero}}
+
+  <!-- El bloque de color: TODO el texto. Un cierre publica MENOS que una
+       venta -sin cifra, sin specs, sin cuándo-, así que aquí solo hay
+       encabezado, titular y dirección; el resto de editorial-shell.tsx
+       (precio, día/hora, specs, cta) no lo alimenta la receta "sold" y no se
+       porta -sería marcado muerto. Con flex:1 y justify-content:center el
+       bloque se centra igual, aunque le quede menos que leer. -->
+  <div class="bloque">
+    <!-- El badge también va condicionado en el TSX ({p.badge && ...}, no usa
+         el componente Badge común), así que aquí también es sección. -->
+    {{#badge}}<span class="badge">{{badge}}</span>{{/badge}}
+    <h1>{{&headlineRitmo}}</h1>
+
+    {{#address}}
+    <div class="direccion">
+      <i class="icono icono-pin"></i>
+      <span>{{address}}</span>
+    </div>
+    {{/address}}
+  </div>
+
+  <!-- Pie claro: el agente y el logo. Nombre y teléfono son DOS secciones
+       independientes, no una anidada dentro de la otra -- el TSX las
+       condiciona por separado ({p.agentName && ...} y {p.phone && ...} son
+       hermanas, no madre-hija) y las secciones de este motor no anidan. -->
+  <div class="pie">
+    <div class="agente">
+      {{#agentName}}<span class="nombre-agente">{{agentName}}</span>{{/agentName}}
+      {{#phone}}<span class="telefono-agente">{{phone}}</span>{{/phone}}
+    </div>
+    {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>

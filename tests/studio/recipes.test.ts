@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { parseStudioForm, requireTemplate, referenceCount, MAX_REFERENCES } from '@/lib/studio/recipes'
+import {
+  parseStudioForm, requireTemplate, validateTemplateChoice, referenceCount, usesAi,
+  MAX_REFERENCES, BADGE_MAX, STAT_LABEL_MAX,
+} from '@/lib/studio/recipes'
 import { STYLE_KEYS, styleDirection } from '@/lib/studio/styles'
 import { DEFAULT_PALETTE, paletteRow } from '@/lib/studio/palettes'
+import { ASPECTS } from '@/lib/studio/types'
+import type { TemplateMeta } from '@/lib/studio/templates/meta'
 
 const base = { style: 'editorial', aspect: '4:5', palette: { brand: '#1B2A41', surface: '#FBF6EE', ink: '#1B2A41' } }
 
@@ -28,15 +33,46 @@ describe('parseStudioForm', () => {
     expect(r.ok).toBe(false)
   })
 
-  it('exige el precio en vendida solo si se pidió mostrarlo', () => {
-    expect(parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent', show_price: false }).ok).toBe(true)
-    expect(parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent', show_price: true }).ok).toBe(false)
+  it('vendida solo necesita la dirección: ni cifra ni nota', () => {
+    // La cifra y la nota se retiraron del formulario. Sus campos siguen en el
+    // esquema para que las piezas guardadas se recompongan, pero nada los exige.
+    expect(parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent' }).ok).toBe(true)
+    expect(parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent', show_price: true }).ok).toBe(true)
   })
 
-  it('exige la cifra de un evento que no es gratis', () => {
-    const paid = { ...base, recipe: 'event', title: 'Seminario', date: '2026-09-01', time_start: '18:00', venue: 'Centro', is_free: false }
-    expect(parseStudioForm(paid).ok).toBe(false)
-    expect(parseStudioForm({ ...paid, price: 25 }).ok).toBe(true)
+  it('la cifra de un evento es opcional', () => {
+    // Se retiró el interruptor "Entrada libre": era un control para decidir si
+    // un campo que ya es opcional se rellenaba.
+    const ev = { ...base, recipe: 'event', title: 'Seminario', date: '2026-09-01', time_start: '18:00', venue: 'Centro' }
+    expect(parseStudioForm(ev).ok).toBe(true)
+    expect(parseStudioForm({ ...ev, price: 25 }).ok).toBe(true)
+  })
+
+  it('el encabezado se puede escribir y tiene tope', () => {
+    const ok = parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent', badge: 'RECIÉN VENDIDA' })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) expect(ok.data.badge).toBe('RECIÉN VENDIDA')
+    expect(parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent', badge: 'X'.repeat(BADGE_MAX + 1) }).ok).toBe(false)
+  })
+
+  it('las etiquetas de las características son de una sola palabra', () => {
+    const listing = { ...base, recipe: 'new_listing', address: '9 Bay St', price: 450000 }
+    expect(parseStudioForm({ ...listing, bedrooms_label: 'dorm' }).ok).toBe(true)
+    // Van una detrás de otra en la misma fila: dos palabras rompen la fila.
+    expect(parseStudioForm({ ...listing, bedrooms_label: 'dos palabras' }).ok).toBe(false)
+    expect(parseStudioForm({ ...listing, sqft_label: 'X'.repeat(STAT_LABEL_MAX + 1) }).ok).toBe(false)
+  })
+
+  it('usesAi: con propiedad no hay IA; sin propiedad, solo si se describió la escena', () => {
+    const parse = (over: Record<string, unknown>) => {
+      const r = parseStudioForm({ ...base, recipe: 'sold', address: 'Ghent', ...over })
+      if (!r.ok) throw new Error(r.error)
+      return r.data
+    }
+    const conPropiedad = parse({ property_id: '3f0d3a4e-1f2b-4c1d-9a1e-8d7c6b5a4321', source_mode: 'photo', scene_notes: 'da igual' })
+    expect(usesAi(conPropiedad)).toBe(false)
+    expect(usesAi(parse({}))).toBe(false)
+    expect(usesAi(parse({ scene_notes: 'colonial de ladrillo con porche' }))).toBe(true)
   })
 
   it('el prompt abierto solo necesita el prompt', () => {
@@ -165,6 +201,24 @@ describe('parseStudioForm', () => {
   })
 })
 
+describe('aspecto — el schema deriva de ASPECTS, no de literales repetidos', () => {
+  // Si algún día alguien vuelve a escribir el enum a mano en recipes.ts, este
+  // test es el que se rompe: comprueba que el esquema real (el que valida el
+  // formulario de cualquier receta) acepta EXACTAMENTE lo que declara ASPECTS,
+  // ni más ni menos.
+  it('acepta todos los valores de ASPECTS', () => {
+    for (const aspect of ASPECTS) {
+      const r = parseStudioForm({ ...base, aspect, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
+      expect(r.ok).toBe(true)
+    }
+  })
+
+  it('rechaza un aspecto que no está en ASPECTS', () => {
+    const r = parseStudioForm({ ...base, aspect: '21:9', recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
+    expect(r.ok).toBe(false)
+  })
+})
+
 describe('styles', () => {
   it('los seis estilos tienen dirección de arte no vacía', () => {
     expect(STYLE_KEYS).toHaveLength(6)
@@ -174,6 +228,21 @@ describe('styles', () => {
 
 describe('template y headline', () => {
   const listing = { ...base, recipe: 'new_listing', address: '9 Bay St', price: 450000 }
+
+  // Catálogo mínimo para probar validateTemplateChoice/requireTemplate sin BD:
+  // ambas funciones son puras y reciben el catálogo ya cargado.
+  const metas: TemplateMeta[] = [
+    {
+      key: 'mosaico-listing', label: 'Mosaico', hint: '',
+      recipes: ['new_listing'], aspects: ['4:5'],
+      slots: { required: [], optional: [] }, idealPhotos: 0, thumbUrl: null,
+    },
+    {
+      key: 'mosaico-open-house', label: 'Mosaico casa abierta', hint: '',
+      recipes: ['open_house'], aspects: ['4:5'],
+      slots: { required: [], optional: [] }, idealPhotos: 0, thumbUrl: null,
+    },
+  ]
 
   it('el esquema acepta una receta de casa sin diseño: las piezas viejas se recomponen', () => {
     // Exigir el template en el esquema dejaría sin recomponer las piezas hechas
@@ -185,7 +254,7 @@ describe('template y headline', () => {
     const r = parseStudioForm(listing)
     expect(r.ok).toBe(true)
     if (r.ok) {
-      const denied = requireTemplate(r.data)
+      const denied = requireTemplate(r.data, metas)
       expect(denied).not.toBeNull()
       expect(denied!.error).toContain('diseño')
     }
@@ -194,13 +263,17 @@ describe('template y headline', () => {
   it('event y open_prompt nunca exigen diseño', () => {
     const r = parseStudioForm({ ...base, recipe: 'open_prompt', prompt: 'un atardecer sobre el muelle' })
     expect(r.ok).toBe(true)
-    if (r.ok) expect(requireTemplate(r.data)).toBeNull()
+    if (r.ok) expect(requireTemplate(r.data, metas)).toBeNull()
   })
 
   it('rechaza una clave de diseño inventada', () => {
-    const r = parseStudioForm({ ...listing, template: 'no-existe' })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toContain('diseño')
+    const r = parseStudioForm(listing)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      const denied = validateTemplateChoice({ ...r.data, template: 'no-existe' }, [])
+      expect(denied).not.toBeNull()
+      expect(denied!.error).toContain('diseño')
+    }
   })
 
   it('event y open_prompt no piden diseño', () => {
@@ -208,8 +281,12 @@ describe('template y headline', () => {
   })
 
   it('acepta un diseño que declara esa receta y rechaza uno que no', () => {
-    expect(parseStudioForm({ ...listing, template: 'mosaico-listing' }).ok).toBe(true)
-    expect(parseStudioForm({ ...listing, template: 'mosaico-open-house' }).ok).toBe(false)
+    const r = parseStudioForm(listing)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(validateTemplateChoice({ ...r.data, template: 'mosaico-listing' }, metas)).toBeNull()
+      expect(validateTemplateChoice({ ...r.data, template: 'mosaico-open-house' }, metas)).not.toBeNull()
+    }
   })
 
   it('headline es opcional y se limita a 60 caracteres', () => {

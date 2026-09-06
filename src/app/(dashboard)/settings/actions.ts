@@ -1050,6 +1050,12 @@ export async function saveBusinessProfile(
   return { ok: true }
 }
 
+// ─── Fuentes de newsletters con IA (allowlist de dominios) ────────────────────
+//
+// Esta lista se pasa tal cual a `allowed_domains` de la herramienta de búsqueda
+// web: lo que no esté aquí no se encuentra, así que no se puede citar. Es lo
+// que hace verificable a la newsletter por construcción, no por instrucción.
+//
 // ─── Portada del agente (bucket tenant-assets) ────────────────────────────────
 // Ruta: <tenant_id>/agents/<agent_id>/cover-<uuid>.<ext>. La sube el propio
 // agente (requireSelfOrManager), igual que su descripción: es su foto.

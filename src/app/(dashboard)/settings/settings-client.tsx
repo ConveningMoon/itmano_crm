@@ -1454,6 +1454,8 @@ interface Props {
   agentAccess: Record<string, boolean>
   accessCount: number
   businessProfile: BusinessProfile
+  // Sólo super_admin edita la allowlist de newsletters — el resto del equipo
+  // la ve en solo lectura. Mismo criterio que canEditScoring.
   scoringRules: ScoreRule[]
   // Valores recomendados por ITMANO (reglas globales) por id de regla — para el
   // botón "Restablecer a recomendados" del scoring.

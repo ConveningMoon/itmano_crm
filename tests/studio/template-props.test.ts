@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { badgeFor, defaultHeadline, statsFor, priceFor, whenFor } from '@/lib/studio/template-props'
+import { badgeFor, badgeOf, defaultHeadline, statsFor, priceFor, whenFor } from '@/lib/studio/template-props'
 import { formatMoney, formatDate } from '@/lib/studio/format'
 import { parseStudioForm, type StudioForm } from '@/lib/studio/recipes'
 
@@ -39,16 +39,37 @@ describe('props del template', () => {
     expect(formatDate('2026-08-15')).toBe('15 de agosto de 2026')
   })
 
-  it('vendida sin mostrar precio no expone la cifra', () => {
-    const oculto = form({ recipe: 'sold', address: 'Ghent', show_price: false, price: 389000 })
-    expect(priceFor(oculto)).toBeNull()
-    const visible = form({ recipe: 'sold', address: 'Ghent', show_price: true, price: 389000 })
-    expect(priceFor(visible)).toBe('$389,000')
+  it('vendida NUNCA expone la cifra, ni aunque su form_json la traiga', () => {
+    // Un cierre publica el hecho, no el número. Las piezas guardadas cuando sí
+    // se pedía la cifra siguen recomponiéndose: el dato se ignora, no falla.
+    const conCifra = form({ recipe: 'sold', address: 'Ghent', show_price: true, price: 389000 })
+    expect(priceFor(conCifra)).toBeNull()
   })
 
-  it('solo casa abierta tiene fecha y horario', () => {
+  it('el encabezado escrito gana al de la receta', () => {
+    const propio = form({ recipe: 'sold', address: 'Ghent', badge: 'RECIÉN VENDIDA' })
+    expect(badgeOf(propio)).toBe('RECIÉN VENDIDA')
+    expect(badgeOf(form({ recipe: 'sold', address: 'Ghent' }))).toBe('VENDIDA')
+  })
+
+  it('las etiquetas de las specs se pueden reescribir', () => {
+    const propias = form({
+      recipe: 'new_listing', address: '9 Bay St', price: 450000,
+      bedrooms: 3, sqft: 1548, bedrooms_label: 'dorm', sqft_label: 'm2',
+    })
+    expect(statsFor(propias).map(s => s.value)).toEqual(['1,548 m2', '3 dorm'])
+  })
+
+  it('casa abierta y evento tienen fecha; una venta no', () => {
     const abierta = form({ recipe: 'open_house', address: '1 Main St', date: '2026-08-15', time_start: '11:00', time_end: '14:00' })
     expect(whenFor(abierta)).toBe('15 de agosto de 2026 · 11:00–14:00')
+    const evento = form({ recipe: 'event', title: 'Seminario', date: '2026-09-01', time_start: '18:00', venue: 'Centro' })
+    expect(whenFor(evento)).toBe('1 de septiembre de 2026 · 18:00')
     expect(whenFor(form({ recipe: 'new_listing', address: '9 Bay St', price: 1 }))).toBeNull()
+  })
+
+  it('el título de un evento es su titular', () => {
+    const evento = form({ recipe: 'event', title: 'Seminario para compradores', date: '2026-09-01', time_start: '18:00', venue: 'Centro' })
+    expect(defaultHeadline(evento)).toBe('Seminario para compradores')
   })
 })

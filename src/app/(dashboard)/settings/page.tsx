@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getEffectiveScoreRules, getGlobalScoreRules } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
@@ -39,8 +40,12 @@ export default async function SettingsPage() {
   // que no existe para él.
   const canSeeBusiness = ctx.role !== 'agent'
 
+  const TENANT_COLUMNS = columns('tenants', [
+    'id', 'name', 'slug', 'primary_color', 'logo_url', 'description',
+  ])
+
   const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color, logo_url, description').eq('id', tenantId).single(),
+    supabase.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
     getEffectiveScoreRules(tenantId),
@@ -55,8 +60,10 @@ export default async function SettingsPage() {
     wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
   ])
 
-  const tenant = tenantRow
-    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRow.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRow.description as string | null) ?? null) : null }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
+  const tenantRowAny = tenantRow as any
+  const tenant = tenantRowAny
+    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))

@@ -246,9 +246,12 @@ export default async function AnalyticsPage() {
       // "captados aquí" no le decía a nadie de dónde salía el denominador: el
       // número visible era 4 mientras la cartera mostraba 117, sin pista de que
       // los importados quedaban fuera. Se nombran las dos cifras y el motivo.
+      // Desde la 107 los suscriptores de newsletter también quedan fuera (un
+      // lector nunca cierra siendo lector: diluía el denominador y nunca el
+      // numerador), así que el copy lo dice en vez de callárselo.
       sub: stats.imported > 0
-        ? `${stats.attributedClosed} de ${stats.attributedTotal} cerrados · ${stats.imported} importados fuera del cálculo`
-        : `${stats.attributedClosed} de ${stats.attributedTotal} leads cerrados`,
+        ? `${stats.attributedClosed} de ${stats.attributedTotal} cerrados · ${stats.imported} importados y los suscriptores quedan fuera`
+        : `${stats.attributedClosed} de ${stats.attributedTotal} cerrados · los suscriptores quedan fuera`,
       tone: 'neutral',
       icon: <TrendingUp size={18} />,
       color: 'var(--accent-green)',

@@ -9,6 +9,8 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
+import { initialAiBudgetUsd, planAiBudgetUsd } from '@/lib/services/ai-budget'
+import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
@@ -103,13 +105,16 @@ export async function createTenant(
   }
 
   // email_from_address is intentionally omitted (nullable; configured later).
-  // En trial, el presupuesto de IA arranca en el monto de cortesía (plans.ts).
+  //
+  // El presupuesto de IA se escribe SIEMPRE, nunca se deja al DEFAULT de la
+  // columna: ese default es $10 fijo y no sabe de planes, así que un Partner
+  // nacía con $10 en vez de $75. initialAiBudgetUsd resuelve el trial también.
   const { error } = await supabase.from('tenants').insert({
     id,
     name:          parsed.data.name,
     slug:          parsed.data.slug,
     primary_color: parsed.data.primaryColor ?? '#1E3A5F',
-    ...(parsed.data.startTrial ? { ai_monthly_limit_usd: TRIAL.aiBudgetUsd } : {}),
+    ai_monthly_limit_usd: initialAiBudgetUsd(parsed.data.plan, parsed.data.startTrial),
   })
   if (error) return { ok: false, error: error.message }
 
@@ -371,6 +376,19 @@ export async function updateTenantSubscription(
   }
 
   const supabase = createAdminClient()
+
+  // Plan ANTERIOR, para detectar la TRANSICIÓN — mismo criterio que
+  // paddle/persist.ts. Un upsert con el mismo plan (ajustar sólo el estado o
+  // extender la prueba) no debe pisar un tope que el super_admin haya subido
+  // a mano para ese tenant.
+  const { data: existing } = await supabase
+    .from('subscriptions')
+    .select('plan')
+    .eq('tenant_id', parsed.data.tenantId)
+    .maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sin tipos generados de Supabase, la fila llega untyped
+  const planAnterior = ((existing as any)?.plan as SubscriptionPlan | undefined) ?? null
+
   // Upsert: tenants creados antes de la migración 054 podrían no tener fila.
   const { error } = await supabase
     .from('subscriptions')
@@ -385,6 +403,37 @@ export async function updateTenantSubscription(
       updated_at:      new Date().toISOString(),
     }, { onConflict: 'tenant_id' })
   if (error) return { ok: false, error: error.message }
+
+  // Cambio de plan a mano: el presupuesto mensual de IA se mueve al del plan
+  // nuevo, igual que la vía de Paddle (ver paddle/persist.ts). Sin esto la
+  // RESERVA (que sale del plan) y el TECHO (que sale de esta columna) se
+  // desincronizan: un tenant subido de Esencial a Growth a mano se quedaría
+  // con la reserva de Growth ($6) sobre un techo que sigue siendo el de
+  // Esencial ($12) — la mitad del presupuesto discrecional que le toca.
+  //
+  // NUNCA mientras `status = 'trial'`: la prueba vive como `plan = 'growth'`
+  // pero con presupuesto de CORTESÍA propio (`TRIAL.aiBudgetUsd`, $25), no el
+  // de Growth de pago ($30) — mismo criterio que `initialAiBudgetUsd` aplica
+  // al alta. El formulario manda el estado completo en cada guardado, así que
+  // sin esta guardia CUALQUIER edición de un tenant en prueba (nombre, logo,
+  // lo que sea) dispararía esta sincronización y le pisaría el presupuesto de
+  // cortesía por el de un plan de pago que todavía no está pagando.
+  //
+  // Best-effort: lo crítico —plan y estado— ya quedó escrito arriba, y esto
+  // es un ajuste secundario que el super_admin puede corregir a mano desde el
+  // Centro de control si falla.
+  if (parsed.data.status !== 'trial' && parsed.data.plan !== planAnterior) {
+    const { error: budgetError } = await supabase
+      .from('tenants')
+      .update({ ai_monthly_limit_usd: planAiBudgetUsd(parsed.data.plan) })
+      .eq('id', parsed.data.tenantId)
+    if (budgetError) {
+      console.error(JSON.stringify({
+        service: 'admin-plan-budget', tenant_id: parsed.data.tenantId,
+        from: planAnterior, to: parsed.data.plan, error: budgetError.message,
+      }))
+    }
+  }
 
   revalidatePath('/admin')
   revalidatePath('/settings')

@@ -175,7 +175,7 @@ export async function generateEmailDraft(input: EmailAiInput): Promise<EmailAiRe
   }
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).
-  const overLimit = await assertAiWithinLimit(ctx)
+  const overLimit = await assertAiWithinLimit(ctx, 'email_draft')
   if (overLimit) return overLimit
 
   const objective = input.objective?.trim()
@@ -376,7 +376,7 @@ export async function generateSequenceSteps(formData: FormData): Promise<Sequenc
   }
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).
-  const overLimit = await assertAiWithinLimit(ctx)
+  const overLimit = await assertAiWithinLimit(ctx, 'sequence_bootstrap')
   if (overLimit) return overLimit
 
   const sequenceId  = (formData.get('sequenceId') as string) || ''

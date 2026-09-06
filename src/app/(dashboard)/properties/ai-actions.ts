@@ -8,6 +8,7 @@ import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
 import type { PropertyInput } from './actions'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { toList, cleanProse } from '@/lib/properties/ai-text'
 
 // ── "Crear con IA" — prefill the property form from a listing PDF ────────────
 // The user uploads a flyer / MLS sheet; Claude extracts the facts and drafts the
@@ -41,6 +42,14 @@ export type AiExtractResult =
 
 const PROPERTY_TYPES = ['residential', 'condo', 'townhouse', 'land', 'commercial', 'multifamily'] as const
 
+// Redondeo a 2 cifras significativas. El lote convertido desde acres hereda la
+// precisión de la ficha, no la de la calculadora: "0.09 acres" son ~3.900 sqft,
+// no 3.920 — un número exacto invita a creer que el PDF lo dice.
+function round2sig(n: number): number {
+  const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1))
+  return Math.round(n / mag) * mag
+}
+
 // Regla de estilo por idioma para la copy de marketing.
 function langRule(lang: string): string {
   if (lang === 'es') return 'NEUTRAL LATIN AMERICAN SPANISH (no regional idioms). For money use "inversión", never "precio/costo/pago".'
@@ -54,10 +63,10 @@ function langRule(lang: string): string {
 // vacías). Se fuerzan como required.
 function buildExtractTool(languages: string[]): Anthropic.Tool {
   const langProps: Record<string, unknown> = {}
-  const required: string[] = ['property_type']
+  const required: string[] = ['property_type', 'lot_sqft_basis']
   for (const l of languages) {
     langProps[`description_${l}`] = { type: 'string', description: `Warm, premium, factual 2–4 sentence listing description written in ${langRule(l)} Only facts from the PDF.` }
-    langProps[`features_${l}`] = { type: 'array', items: { type: 'string' }, description: `Bullet features (each a short phrase) in ${langRule(l)} Only facts from the PDF. Return at least 3 when the PDF supports them.` }
+    langProps[`features_${l}`] = { type: 'string', description: featuresFieldDescription(l) }
     required.push(`description_${l}`, `features_${l}`)
   }
   return {
@@ -76,7 +85,8 @@ function buildExtractTool(languages: string[]): Anthropic.Tool {
         bathrooms_full: { type: ['integer', 'null'], description: 'Number of full bathrooms.' },
         bathrooms_half: { type: ['integer', 'null'], description: 'Number of half bathrooms.' },
         sqft:           { type: ['integer', 'null'], description: 'Interior living area in square feet.' },
-        lot_sqft:       { type: ['integer', 'null'], description: 'Lot size in square feet (convert acres if needed: 1 acre = 43560 sqft).' },
+        lot_sqft:       { type: ['integer', 'null'], description: 'Lot size in SQUARE FEET, taken ONLY from a lot measurement the document states: square feet, acres (convert: 1 acre = 43,560 sqft) or lot dimensions (front × depth). NEVER derive it from the living area, the price, the property type or the parcel/tax record. null if the document states no lot measurement.' },
+        lot_sqft_basis: { type: 'string', enum: ['stated_sqft', 'acres', 'dimensions', 'absent'], description: 'Where lot_sqft came from: "stated_sqft" the document gives square feet; "acres" you converted a stated acreage; "dimensions" you multiplied stated lot dimensions; "absent" the document states no lot measurement — then lot_sqft MUST be null.' },
         year_built:     { type: ['integer', 'null'] },
         garage_spaces:  { type: ['integer', 'null'] },
         mls_number:     { type: ['string', 'null'] },
@@ -89,6 +99,64 @@ function buildExtractTool(languages: string[]): Anthropic.Tool {
   }
 }
 
+// El campo NO es un array: es un texto con una característica por línea.
+//
+// Se pidió como `array` de strings durante cuatro rondas y llegó de cuatro
+// formas distintas —vacío, envuelto en `<value>`, todo unido por comas, y un
+// único elemento— cada una con su parche corriente abajo. Un texto con saltos
+// de línea no tiene forma que romper, y además es EXACTAMENTE el formato del
+// campo en el formulario ("Características — una por línea"), así que lo que
+// devuelve el modelo es ya lo que el usuario edita. `toList` sigue aceptando
+// las otras formas por si acaso: dejó de ser la defensa principal.
+function featuresFieldDescription(lang: string): string {
+  return `The property's selling points in ${langRule(lang)} ONE PER LINE, separated by newlines. 3 to 8 lines, never empty. Each line is a short noun phrase (2-7 words) with no numbering, no bullet character, no tags and no quotes.`
+}
+
+// Qué es una característica y de dónde sale. Vive aparte porque lo usan los dos
+// prompts: la extracción completa y la segunda pasada que sólo pide las listas.
+//
+// Sin ejemplos en el idioma de salida a propósito: cuando los llevaba, una
+// generación devolvió una sola característica y era, palabra por palabra, el
+// primer elemento del ejemplo.
+const FEATURES_RULES: string[] = [
+  'Features (features_<code>): one per line, 3 to 8 lines, never empty.',
+  '- A feature is something concrete the property HAS. Rewording a field of the sheet into a readable phrase is what is being asked for, not inventing.',
+  '- Take them from the spec grid and the public remarks: architectural style, renovations and their year, kitchen and appliances, extra rooms (pantry, attic, primary suite), flooring, heating / cooling / water heater, roof, siding, foundation, fence, patio / porch / deck, pool, lot position (cul-de-sac, corner, waterfront), parking and garage, outbuildings (shed), HOA amenities, schools, view.',
+  '- Skip the administrative half of the sheet: listing agent and office, phones, MLS dates, lock box, showing instructions, taxes, mortgage, HOA fees, disclosures, owner.',
+  '- Cover the sheet, do not stop at the first thing you find: if it states appliances, flooring, roof and lot position, each of those earns its own line.',
+  '- One idea per line. A line that enumerates three things with commas should have been three lines.',
+  '- Do not restate bedrooms, bathrooms or square footage: they already have their own fields.',
+]
+
+// Segunda pasada. La extracción pide dieciocho campos y redacta en hasta tres
+// idiomas de una vez; cuando algo se cae de esa respuesta son siempre las
+// listas de características, y el formulario llega sin ellas sin que nada
+// falle. Esta llamada tiene un único objetivo, va sin el resto del esquema y
+// sólo se paga cuando la primera no las trajo.
+function buildFeaturesTool(languages: string[]): Anthropic.Tool {
+  const props: Record<string, unknown> = {}
+  for (const l of languages) {
+    props[`features_${l}`] = { type: 'string', description: featuresFieldDescription(l) }
+  }
+  return {
+    name: 'list_features',
+    description: 'Return the bullet list of selling points for this listing, in each requested language.',
+    input_schema: { type: 'object', properties: props, required: languages.map(l => `features_${l}`) },
+  }
+}
+
+function buildFeaturesPrompt(languages: string[]): string {
+  const langList = languages.map(l => `${LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l} (${l})`).join(', ')
+  return [
+    'Read the attached real-estate listing PDF and list its selling points.',
+    `Produce one list per language: ${langList}. The lists must say the same things, each written natively in its language.`,
+    '',
+    ...FEATURES_RULES,
+    '',
+    'Call the list_features tool with the result.',
+  ].join('\n')
+}
+
 function buildPrompt(languages: string[], agencyDescription?: string): string {
   const langList = languages.map(l => `${LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l} (${l})`).join(', ')
   return [
@@ -99,8 +167,12 @@ function buildPrompt(languages: string[], agencyDescription?: string): string {
     'Rules:',
     '- Extract factual fields (address, price, beds, baths, sqft, year, MLS, etc.) ONLY if they appear in the PDF. Never invent numbers or an address. Return null for anything not present.',
     '- If the document is clearly NOT a property listing, set address, list_price, sqft and bedrooms all to null.',
+    '- lot_sqft: only from a lot measurement the sheet states (square feet, acres, or lot dimensions). MLS sheets often give it as acreage ("Appx Acres: 0.09") — converting that is correct; report how you got it in lot_sqft_basis. If the sheet gives no lot measurement at all, lot_sqft is null and lot_sqft_basis is "absent" — never fill it from the living area, the price or a guess.',
     `- Write the marketing copy in a warm, premium, trustworthy real-estate tone — calm and specific, no hype, no emojis. Base it strictly on facts in the PDF; do not fabricate amenities.`,
     `- Produce a description AND a feature list for EACH of these languages: ${langList}. Fill description_<code> and features_<code> for every one. The versions must be equivalent in meaning across languages (same items, translated), each written natively in its language.`,
+    '',
+    ...FEATURES_RULES,
+    '',
     '- name: a tasteful short name; slug: its kebab-case form.',
     '',
     'Call the extract_property tool with the result.',
@@ -117,7 +189,7 @@ export async function generatePropertyFromPdf(
   }
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).
-  const overLimit = await assertAiWithinLimit(ctx)
+  const overLimit = await assertAiWithinLimit(ctx, 'property_intake')
   if (overLimit) return overLimit
 
   // Idiomas de contenido elegidos (máx 3); default inglés.
@@ -159,37 +231,74 @@ export async function generatePropertyFromPdf(
   }
 
   // ── Ask Claude to extract structured data from the PDF ───────────────────────
+  const anthropic = new Anthropic()
+  const pdfBlock: Anthropic.DocumentBlockParam = {
+    type: 'document',
+    source: { type: 'base64', media_type: 'application/pdf', data: bytes.toString('base64') },
+  }
+  const usageMeta = { tenantId: typeof resolved === 'string' ? resolved : ctx.tenant_id, userId: ctx.user_id }
+
   let toolInput: Record<string, unknown>
+  let stopReason: string | null = null
+  // Con thinking adaptativo. El comentario que había aquí decía que debía estar
+  // apagado por el forced tool use, y era falso: `newsletters/ai/draft.ts` lleva
+  // en producción esa misma combinación —claude-sonnet-5, thinking adaptativo y
+  // tool_choice forzado—. Apagarlo degrada justo lo que aquí venía fallando: la
+  // fidelidad al esquema en una llamada que extrae dieciocho campos y redacta en
+  // varios idiomas a la vez.
+  //
+  // Y va por STREAM con margen de sobra, que es lo que de verdad rompía esto.
+  // Comprobado contra la API con el PDF de un listado real: al agotarse
+  // `max_tokens`, la respuesta vuelve con `stop_reason: 'max_tokens'` y el
+  // `tool_use.input` PARCIAL — le faltan las últimas claves, que son siempre
+  // las características, y si el corte cae a mitad de la cadena queda una sola
+  // línea. Eso explica las cinco formas en que este campo llegó mal: no eran
+  // cinco fallos distintos del modelo, era la respuesta cortada. Sin stream,
+  // subir el techo arriesga el timeout HTTP del SDK (mismo motivo que
+  // `newsletters/ai/draft.ts`).
+  const extraer = (pensar: boolean) => anthropic.messages.stream({
+    model: MODEL,
+    max_tokens: 24000,
+    thinking: pensar ? { type: 'adaptive' } : { type: 'disabled' },
+    tools: [buildExtractTool(languages)],
+    tool_choice: { type: 'tool', name: 'extract_property' },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          pdfBlock,
+          { type: 'text', text: buildPrompt(languages, agencyDescription || undefined) },
+        ],
+      },
+    ],
+  })
+
   try {
-    const anthropic = new Anthropic()
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      // Thinking must be off with a forced tool call; keeps extraction deterministic.
-      thinking: { type: 'disabled' },
-      tools: [buildExtractTool(languages)],
-      tool_choice: { type: 'tool', name: 'extract_property' },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: bytes.toString('base64') } },
-            { type: 'text', text: buildPrompt(languages, agencyDescription || undefined) },
-          ],
-        },
-      ],
-    })
+    // Y si alguna vez la API rechazara esa combinación, la extracción no puede
+    // morir por ello: se repite sin thinking y queda dicho en el log. Un 400 no
+    // se factura, así que el reintento no cuesta la llamada perdida.
+    let message: Anthropic.Message
+    try {
+      message = await extraer(true).finalMessage()
+    } catch (e) {
+      if (!(e instanceof Anthropic.BadRequestError)) throw e
+      console.error(JSON.stringify({
+        service: 'ai-property-intake', path: 'thinking_rechazado',
+        detail: e.message.slice(0, 300),
+      }))
+      message = await extraer(false).finalMessage()
+    }
 
     // Registro de uso (tokens + costo) — best-effort, nunca bloquea.
     await recordAiUsage({
-      tenantId: typeof resolved === 'string' ? resolved : ctx.tenant_id,
-      userId:   ctx.user_id,
+      ...usageMeta,
       feature:  'property_intake',
       model:    MODEL,
       usage:    message.usage,
       metadata: { pdf_bytes: file.size },
     })
 
+    stopReason = message.stop_reason
     const block = message.content.find((b) => b.type === 'tool_use')
     if (!block || block.type !== 'tool_use') {
       return { ok: false, error: 'La IA no devolvió datos estructurados. Intenta de nuevo o carga la propiedad manualmente.' }
@@ -202,10 +311,22 @@ export async function generatePropertyFromPdf(
 
   // ── Coerce the tool output into the form-draft shape ─────────────────────────
   const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  // Mismo saneo que las listas: si el modelo etiqueta un campo, la descripción
+  // llega con el marcado dentro y se publicaría así.
+  const prosa = (v: unknown): string | null => {
+    const limpio = str(v)
+    return limpio ? (cleanProse(limpio) || null) : null
+  }
   const int = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null)
   const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-  const arr = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim()) : []
+
+  // Lote: sólo si la ficha declara una medida. Si salió de acres o de dimensiones
+  // es una conversión nuestra, así que se redondea para no fingir precisión.
+  const lotBasis = str(toolInput.lot_sqft_basis) ?? 'absent'
+  const lotRaw = int(toolInput.lot_sqft)
+  const lotSqft = (lotBasis === 'absent' || lotRaw === null || lotRaw <= 0)
+    ? null
+    : (lotBasis === 'stated_sqft' ? lotRaw : round2sig(lotRaw))
 
   const propertyType = (PROPERTY_TYPES as readonly string[]).includes(str(toolInput.property_type) ?? '')
     ? (str(toolInput.property_type) as AiPropertyDraft['property_type'])
@@ -215,10 +336,82 @@ export async function generatePropertyFromPdf(
   const descriptions: Record<string, string> = {}
   const featuresI18n: Record<string, string[]> = {}
   for (const l of languages) {
-    const d = str(toolInput[`description_${l}`])
+    const d = prosa(toolInput[`description_${l}`])
     if (d) descriptions[l] = d
-    const f = arr(toolInput[`features_${l}`])
+    const f = toList(toolInput[`features_${l}`])
     if (f.length) featuresI18n[l] = f
+  }
+
+  // Un idioma que se queda corto se vuelve a pedir, y solo. El umbral es el
+  // mínimo del contrato (3 líneas): una sola característica es un fallo, no una
+  // ficha pobre — cualquier hoja de listado da para tres. Antes el reintento
+  // sólo cubría el caso vacío y por eso no rescató la generación que devolvió
+  // "Ubicación en cul-de-sac" y nada más.
+  //
+  // El log va siempre, aunque el reintento funcione: es lo que faltó para
+  // diagnosticar las cuatro veces que esto llegó mal al formulario. Incluye el
+  // valor CRUDO recortado, que es justo lo que no se pudo ver ninguna de ellas.
+  const MIN_FEATURES = 3
+  // Una respuesta cortada NO es una respuesta válida a la que le falta un campo:
+  // lo que llegó de los últimos campos puede estar a medias. Se dice en el log y
+  // se le avisa a quien revisa el borrador, en vez de darlo por bueno.
+  const truncada = stopReason === 'max_tokens'
+  if (truncada) {
+    console.error(JSON.stringify({
+      service: 'ai-property-intake', path: 'respuesta_truncada',
+      idiomas: languages, claves: Object.keys(toolInput),
+    }))
+  }
+  const insuficientes = languages.filter(l => (featuresI18n[l]?.length ?? 0) < MIN_FEATURES)
+  if (insuficientes.length > 0) {
+    console.error(JSON.stringify({
+      service: 'ai-property-intake',
+      path: 'features_insuficientes',
+      stop_reason: stopReason,
+      idiomas: insuficientes,
+      obtenidas: Object.fromEntries(insuficientes.map(l => [l, featuresI18n[l]?.length ?? 0])),
+      crudo: Object.fromEntries(insuficientes.map(l => {
+        const v = toolInput[`features_${l}`]
+        const forma = Array.isArray(v) ? `array(${v.length})` : typeof v
+        return [l, `${forma}: ${JSON.stringify(v ?? null).slice(0, 400)}`]
+      })),
+      claves: Object.keys(toolInput),
+    }))
+
+    try {
+      const retry = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 4000,
+        thinking: { type: 'adaptive' },
+        tools: [buildFeaturesTool(insuficientes)],
+        tool_choice: { type: 'tool', name: 'list_features' },
+        messages: [{ role: 'user', content: [pdfBlock, { type: 'text', text: buildFeaturesPrompt(insuficientes) }] }],
+      })
+      await recordAiUsage({
+        ...usageMeta,
+        feature:  'property_intake',
+        model:    MODEL,
+        usage:    retry.usage,
+        metadata: { pdf_bytes: file.size, pasada: 'features_retry' },
+      })
+      const rBlock = retry.content.find((b) => b.type === 'tool_use')
+      if (rBlock && rBlock.type === 'tool_use') {
+        const rInput = rBlock.input as Record<string, unknown>
+        for (const l of insuficientes) {
+          const f = toList(rInput[`features_${l}`])
+          // Se queda la más completa: el reintento puede volver igual de corto,
+          // y perder la característica que sí trajo la primera pasada sería un
+          // retroceso pagado.
+          if (f.length > (featuresI18n[l]?.length ?? 0)) featuresI18n[l] = f
+        }
+      }
+    } catch (e) {
+      // Best-effort: el borrador sigue siendo útil sin las características.
+      console.error(JSON.stringify({
+        service: 'ai-property-intake', path: 'features_retry_failed',
+        detail: e instanceof Error ? e.message : 'unknown',
+      }))
+    }
   }
 
   const draft: AiPropertyDraft = {
@@ -232,7 +425,7 @@ export async function generatePropertyFromPdf(
     bathrooms_full: int(toolInput.bathrooms_full),
     bathrooms_half: int(toolInput.bathrooms_half),
     sqft:           int(toolInput.sqft),
-    lot_sqft:       int(toolInput.lot_sqft),
+    lot_sqft:       lotSqft,
     year_built:     int(toolInput.year_built),
     garage_spaces:  int(toolInput.garage_spaces),
     mls_number:     str(toolInput.mls_number),
@@ -262,10 +455,22 @@ export async function generatePropertyFromPdf(
   if (Object.keys(descriptions).length) fields.push('descriptions')
   if (Object.keys(featuresI18n).length) fields.push('features_i18n')
 
+  const warnings: string[] = []
+  if (uploadErr) warnings.push('El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.')
+  if (truncada) warnings.push('La respuesta de la IA se cortó por longitud: revisa las descripciones antes de publicar.')
+  const cortos = languages.filter(l => (featuresI18n[l]?.length ?? 0) < MIN_FEATURES)
+  if (cortos.length > 0) {
+    warnings.push(
+      Object.keys(featuresI18n).length === 0
+        ? 'La IA no devolvió características. Revisa el PDF y agrégalas a mano antes de publicar.'
+        : 'La IA devolvió pocas características. Complétalas antes de publicar.',
+    )
+  }
+
   return {
     ok: true,
     draft,
     fields,
-    ...(uploadErr ? { warning: 'El PDF no se guardó en Storage, pero el formulario fue pre-llenado correctamente.' } : {}),
+    ...(warnings.length ? { warning: warnings.join(' ') } : {}),
   }
 }

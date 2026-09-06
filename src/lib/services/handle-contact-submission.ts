@@ -7,6 +7,7 @@ import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 import { extractFitDimensions, extractBudgetAmount, DERIVED_KEYS } from '@/lib/services/intake-fit'
 import { getBusinessProfile } from '@/lib/data/business-profile'
+import { graduateSubscriber, hasSubscriberMark } from '@/lib/newsletters/subscriber'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -76,9 +77,11 @@ export async function handleContactSubmission(
   }
 
   // ── Dedup by (tenant_id, email) ───────────────────────────────────────────────
+  // `metadata` viaja en este mismo SELECT (coste cero) para poder decidir la
+  // graduación sin una segunda lectura — ver justo debajo.
   const { data: existingLead } = await db
     .from('leads')
-    .select('id, first_name, last_name, phone, language')
+    .select('id, first_name, last_name, phone, language, metadata')
     .eq('tenant_id', tenantId)
     .eq('email', email)
     .maybeSingle()
@@ -91,6 +94,18 @@ export async function handleContactSubmission(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = existingLead as any
     leadId = existing.id as string
+
+    // Graduación: rellenar el formulario de contacto es la señal de intención
+    // más alta del repo (contact_us_question, +20). Un suscriptor que llega
+    // hasta aquí ya no es sólo un lector, así que pierde la marca y vuelve a
+    // contar para los quintiles de calidad (migración 106).
+    //
+    // Va ANTES del bloque de fit de más abajo, que relee `metadata` y lo
+    // reescribe: graduar después resucitaría la marca en la misma request.
+    // El guard sobre el metadata ya leído ahorra el SELECT de graduateSubscriber.
+    if (hasSubscriberMark((existing.metadata ?? null) as Record<string, unknown> | null)) {
+      await graduateSubscriber(db, leadId)
+    }
 
     // Merge non-empty changed fields
     const updates: Record<string, string> = {}

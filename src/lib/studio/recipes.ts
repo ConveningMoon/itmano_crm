@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { STYLE_KEYS } from './styles'
 import { DEFAULT_PALETTE } from './palettes'
-import { findTemplate } from './templates/registry'
-import type { ActionResult } from './types'
+import { ASPECTS, type ActionResult } from './types'
+import type { TemplateMeta } from './templates/meta'
 
 // Validación por receta, PURA y sin dependencias de servidor: corre antes de
 // gastar un token. Es el contrato que impide que una generación empiece con
@@ -16,6 +16,16 @@ export const HEADLINE_MAX = 60
 /** Cuántas imágenes de referencia admite una pieza. Tres son suficientes para
  *  decir "esto, con esto y con este ambiente" y acotan el tamaño del request. */
 export const MAX_REFERENCES = 3
+
+/** Tope del encabezado. Va en versalitas con mucho espaciado: pasado de aquí
+ *  deja de caber en una línea y el diseño se rompe donde nadie lo revisa. */
+export const BADGE_MAX = 24
+
+/** Tope de cada etiqueta de característica ("sqft", "hab", "baños"). Una sola
+ *  palabra y corta: van una detrás de otra en la misma fila. */
+export const STAT_LABEL_MAX = 12
+
+const ONE_WORD = /^\S+$/
 
 const HEX  = /^#[0-9a-fA-F]{6}$/
 
@@ -42,9 +52,13 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 // Campos comunes a las cinco recetas.
 const common = {
   source_mode:    z.enum(['generate', 'photo']).default('generate'),
-  // El texto libre del bloque "Adicional". Conserva el nombre `scene_notes`
-  // porque es la clave que ya tienen guardada las piezas existentes en su
-  // form_json: renombrarla las dejaría sin ese dato al recomponerlas.
+  // El PROMPT DE PROPIEDAD: cómo tiene que verse la casa (o el evento) cuando
+  // no se eligió una propiedad del CRM. Es lo único que dispara la IA en las
+  // recetas de post — con propiedad elegida se usan sus fotos y no cuesta nada.
+  //
+  // Conserva el nombre `scene_notes` porque es la clave que ya tienen guardada
+  // las piezas existentes en su form_json: renombrarla las dejaría sin ese dato
+  // al recomponerlas.
   scene_notes:    z.string().trim().max(500).optional(),
   // El estilo dejó de pedirse: los diseños componen la pieza y el prompt libre
   // dice él mismo qué quiere. Sigue en el esquema con default porque es columna
@@ -55,7 +69,10 @@ const common = {
   // servía para nada. Se acepta también el formato viejo para que las piezas ya
   // guardadas se sigan recomponiendo.
   palette:        paletteSchema,
-  aspect:         z.enum(['1:1', '4:5', '9:16']),
+  // Deriva de ASPECTS (types.ts): un enum de literales sueltos aquí no lo
+  // vería `tsc` si se desincroniza del tipo `Aspect`, que es justo lo que pasó
+  // hasta que se cerró este hueco.
+  aspect:         z.enum(ASPECTS),
   // Cuántas referencias adjuntó. `has_reference` es el campo viejo —una sola
   // imagen, booleano— y se sigue leyendo para que las piezas guardadas antes
   // conserven su referencia al generar una variante. Ver `referenceCount`.
@@ -76,7 +93,17 @@ const common = {
   // Titular de marketing. La etiqueta fija ("NUEVA DISPONIBLE") describe el
   // hecho; el titular vende. Sin él, los nueve diseños dirían siempre lo mismo.
   headline:       z.string().trim().max(HEADLINE_MAX, `El titular no puede pasar de ${HEADLINE_MAX} caracteres`).optional(),
+  // El encabezado de la pieza. Vacío significa el de la receta ("VENDIDA"), que
+  // sigue siendo el default; escribirlo permite decir "RECIÉN VENDIDA" o el
+  // vocabulario que use esa agencia.
+  badge:          z.string().trim().max(BADGE_MAX, `El encabezado no puede pasar de ${BADGE_MAX} caracteres`).optional(),
 }
+
+/** Etiqueta de una característica: una palabra, corta. */
+const statLabel = z.string().trim()
+  .max(STAT_LABEL_MAX, `Cada etiqueta se limita a ${STAT_LABEL_MAX} caracteres`)
+  .regex(ONE_WORD, 'Cada etiqueta debe ser una sola palabra')
+  .optional()
 
 const money = z.number({ error: 'La cifra es obligatoria' }).positive('La cifra debe ser mayor que cero')
 
@@ -92,6 +119,8 @@ const openHouse = z.object({
   date:         required('La fecha es obligatoria').regex(DATE, 'La fecha es obligatoria'),
   time_start:   required('La hora de inicio es obligatoria').regex(TIME, 'La hora de inicio es obligatoria'),
   time_end:     required('La hora de cierre es obligatoria').regex(TIME, 'La hora de cierre es obligatoria'),
+  // Retirado del formulario: cabía en el compositor de bandas, no en un diseño.
+  // Sigue en el esquema para que las piezas que lo guardaron se recompongan.
   refreshments: z.boolean().default(false),
 })
 
@@ -103,8 +132,18 @@ const newListing = z.object({
   bedrooms:   z.number().int().nonnegative().optional(),
   bathrooms:  z.number().nonnegative().optional(),
   sqft:       z.number().int().positive().optional(),
+  // Cómo se llama cada característica en la pieza. Vacío = el default. Existen
+  // porque "sqft" no significa nada fuera de Estados Unidos y "hab" no es lo
+  // que escribiría una agencia de Barcelona.
+  sqft_label:      statLabel,
+  bedrooms_label:  statLabel,
+  bathrooms_label: statLabel,
 })
 
+// Un cierre publica MENOS de lo que se creía: titular, dirección, encabezado y
+// el agente. La cifra y la nota se retiraron del formulario —los diseños se
+// llenaban de huecos alrededor de datos que casi nadie publica— y siguen en el
+// esquema solo para que las piezas guardadas se recompongan sin fallar.
 const sold = z.object({
   ...common,
   recipe:     z.literal('sold'),
@@ -118,13 +157,15 @@ const event = z.object({
   ...common,
   recipe:     z.literal('event'),
   title:      required('El título es obligatorio').trim().min(3, 'El título es obligatorio'),
-  event_type: z.enum(['seminario', 'webinar', 'casa_abierta_comunitaria', 'otro']).default('otro'),
   date:       required('La fecha es obligatoria').regex(DATE, 'La fecha es obligatoria'),
   time_start: required('La hora es obligatoria').regex(TIME, 'La hora es obligatoria'),
   venue:      required('El lugar es obligatorio').trim().min(2, 'El lugar es obligatorio'),
-  is_free:    z.boolean().default(true),
   price:      money.optional(),
   signup:     z.string().trim().max(120).optional(),
+  // Retirados del formulario. `event_type` no cambiaba nada de la pieza y
+  // `is_free` era un interruptor para un campo que ya es opcional.
+  event_type: z.enum(['seminario', 'webinar', 'casa_abierta_comunitaria', 'otro']).default('otro'),
+  is_free:    z.boolean().default(true),
 })
 
 const openPrompt = z.object({
@@ -139,16 +180,6 @@ const PHOTO_RECIPES = ['open_house', 'new_listing', 'sold']
 const schema = z
   .discriminatedUnion('recipe', [openHouse, newListing, sold, event, openPrompt])
   .superRefine((v, ctx) => {
-    // El template, SI viene, tiene que existir y servir para esta receta. Que
-    // sea obligatorio o no NO se decide aquí: ver `requireTemplate` abajo.
-    if (v.template) {
-      const t = findTemplate(v.template)
-      if (!t) {
-        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no existe' })
-      } else if (!t.recipes.includes(v.recipe)) {
-        ctx.addIssue({ code: 'custom', path: ['template'], message: 'Ese diseño no sirve para esta receta' })
-      }
-    }
     if (v.source_mode === 'photo') {
       if (!PHOTO_RECIPES.includes(v.recipe)) {
         ctx.addIssue({ code: 'custom', path: ['source_mode'], message: 'Usar la foto solo aplica a las recetas de casa' })
@@ -156,12 +187,6 @@ const schema = z
       if (!v.property_id) {
         ctx.addIssue({ code: 'custom', path: ['property_id'], message: 'Elige la propiedad de la que sale la foto' })
       }
-    }
-    if (v.recipe === 'sold' && v.show_price && v.price === undefined) {
-      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Indica la cifra o desactiva mostrarla' })
-    }
-    if (v.recipe === 'event' && !v.is_free && v.price === undefined) {
-      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Indica la cifra o marca el evento como gratuito' })
     }
   })
 
@@ -180,6 +205,23 @@ export function referenceCount(form: StudioForm): number {
 }
 
 /**
+ * Si la pieza gasta presupuesto de IA.
+ *
+ * La regla es una sola y se lee en el formulario: **con propiedad elegida no
+ * hay IA**. Las fotos son las suyas, el texto sale de sus datos y el diseño lo
+ * compone sharp. Sin propiedad no hay imagen que poner, así que la escena se
+ * genera — pero solo si el agente la describió; sin descripción el diseño se
+ * dibuja sin foto, que es un resultado legítimo y gratis.
+ *
+ * "Mi Imagen" siempre genera: es su único trabajo.
+ */
+export function usesAi(form: StudioForm): boolean {
+  if (form.recipe === 'open_prompt') return true
+  if (form.property_id) return false
+  return !!form.scene_notes
+}
+
+/**
  * Valida el formulario. Devuelve el primer mensaje legible en vez de un árbol
  * de errores: la UI marca un campo a la vez y el mensaje va tal cual al usuario.
  */
@@ -191,17 +233,53 @@ export function parseStudioForm(input: unknown): ActionResult<StudioForm> {
 }
 
 /**
- * Las piezas NUEVAS de casa se dibujan con un template. Esto es política de
- * producto y va aparte del esquema a propósito:
+ * El diseño elegido tiene que existir y servir para esta receta.
  *
- * las piezas creadas ANTES de los templates se hicieron con el compositor de
- * bandas y tienen `template` nulo. Recomponerlas o generar una variante vuelve a
- * pasar su `form_json` por `parseStudioForm` — si el esquema exigiera template,
- * esas piezas dejarían de poder recomponerse. Exigirlo solo al crear mantiene
- * el pasado utilizable sin abrir la puerta a piezas nuevas sin diseño.
+ * Salió del esquema zod cuando las plantillas pasaron a ser filas: el esquema
+ * es síncrono y lo usa también el cliente, así que no puede consultar la base.
+ * El llamador ya tiene el catálogo cargado y se lo pasa.
  */
-export function requireTemplate(form: StudioForm): { ok: false; error: string } | null {
-  if (!PHOTO_RECIPES.includes(form.recipe)) return null
+export function validateTemplateChoice(
+  form: StudioForm, metas: TemplateMeta[],
+): { ok: false; error: string } | null {
+  if (!form.template) return null
+  const t = metas.find(m => m.key === form.template)
+  if (!t) return { ok: false, error: 'Ese diseño no existe' }
+  if (!t.recipes.includes(form.recipe)) return { ok: false, error: 'Ese diseño no sirve para esta receta' }
+  return null
+}
+
+// Recetas que hoy tienen diseños sembrados y SIEMPRE deben exigirlo, tenga o
+// no filas el catálogo en este momento. Fija a propósito y no derivada de
+// `metas`: derivarla del catálogo es justo el bug que se arregla aquí — con
+// la tabla vacía (migración aplicada, seed olvidado) `metas` está vacío para
+// TODAS las recetas, y de ahí no se puede distinguir "esta receta no tiene
+// diseños todavía, por diseño" (Evento, Task 16 pendiente) de "el despliegue
+// se quedó a medias". Evento entró en la lista aunque todavía no tenga diseños:
+// sin ellos generaba una foto recortada sin texto ni marca, que no sirve para
+// publicar, así que negarse es más honesto que devolver eso.
+const RECIPES_WITH_TEMPLATES = ['open_house', 'new_listing', 'sold', 'event']
+
+/**
+ * Las piezas NUEVAS de casa se dibujan con un diseño. Es política de producto y
+ * va aparte del esquema a propósito: las piezas creadas antes de los diseños
+ * tienen `template` nulo, y recomponerlas vuelve a pasar su form_json por
+ * parseStudioForm — si el esquema lo exigiera, dejarían de poder recomponerse.
+ *
+ * Falla ruidosamente si el catálogo está vacío para una receta que debería
+ * tenerlo: sin esto, `generateStudioImage` seguía por el camino libre y
+ * devolvía una foto recortada sin texto ni marca, marcada "ready" y habiendo
+ * gastado presupuesto de IA — el único fallo silencioso de un despliegue con
+ * el seed olvidado.
+ */
+export function requireTemplate(
+  form: StudioForm, metas: TemplateMeta[],
+): { ok: false; error: string } | null {
+  if (!RECIPES_WITH_TEMPLATES.includes(form.recipe)) return null
   if (form.template) return null
+  const hayDisenosParaLaReceta = metas.some(m => m.recipes.includes(form.recipe))
+  if (!hayDisenosParaLaReceta) {
+    return { ok: false, error: 'No hay ningún diseño cargado para esta receta todavía. Avisa antes de generar.' }
+  }
   return { ok: false, error: 'Elige un diseño' }
 }

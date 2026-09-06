@@ -5,10 +5,12 @@ import { columns } from '@/lib/supabase/columns'
 import {
   CURRENCIES, COMMISSION_MODELS, EMPTY_PROFILE, type BusinessProfile,
 } from '@/lib/business/profile'
+import { parseCanonicalTemplate } from '@/lib/newsletters/canonical'
 
 const PROFILE_COLUMNS = columns('tenants', [
   'currency', 'commission_model', 'commission_buy', 'commission_sell',
   'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
+  'public_site_url', 'newsletter_canonical_template',
 ])
 
 // Los números llegan del formulario como string. `''` es "lo dejé vacío", que
@@ -30,6 +32,27 @@ export const BusinessProfileSchema = z.object({
   budgetPremiumMin: numeroOpcional,
   primaryAreas:     z.array(z.string().trim().min(1).max(80)).max(30),
   secondaryAreas:   z.array(z.string().trim().min(1).max(80)).max(30),
+  publicSiteUrl: z.string().trim().max(300).nullable().superRefine((v, ctx) => {
+    if (v === null || v === '') return
+    if (!/^https?:\/\//i.test(v)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'La dirección debe ser una URL absoluta que empiece por http:// o https://' })
+      return
+    }
+    try {
+      new URL(v)
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'La dirección no es una URL válida.' })
+    }
+  }),
+  // `.nullable()` en vez del `.optional()` del borrador original: BusinessProfile
+  // declara este campo `string | null` (así llega de la base cuando no está
+  // configurado), y ese tipo tiene que poder pasarse tal cual a este schema sin
+  // que tsc se queje de que `null` no encaja en `string | undefined`.
+  newsletterCanonicalTemplate: z.string().trim().max(500).nullable().superRefine((v, ctx) => {
+    if (v === null) return
+    const r = parseCanonicalTemplate(v)
+    if (!r.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: r.error })
+  }),
 })
   // Espeja el CHECK de la 086: sin esto se puede guardar un perfil donde el
   // rango medio no existe, y el bucket `mid` desaparece sin ningún aviso.
@@ -69,6 +92,8 @@ export async function getBusinessProfile(tenantId: string): Promise<BusinessProf
     budgetPremiumMin: num(r.budget_premium_min),
     primaryAreas:     (r.primary_areas   ?? []) as string[],
     secondaryAreas:   (r.secondary_areas ?? []) as string[],
+    publicSiteUrl:               (r.public_site_url ?? null) as string | null,
+    newsletterCanonicalTemplate: (r.newsletter_canonical_template ?? null) as string | null,
   }
 }
 
@@ -94,6 +119,10 @@ export async function saveBusinessProfile(
       budget_premium_min: p.budgetPremiumMin,
       primary_areas:      p.primaryAreas,
       secondary_areas:    p.secondaryAreas,
+      // Cadena vacía se normaliza a null: mismo significado ("sin configurar"),
+      // una sola forma de guardarlo.
+      public_site_url:               p.publicSiteUrl?.trim() || null,
+      newsletter_canonical_template: p.newsletterCanonicalTemplate?.trim() || null,
     })
     .eq('id', tenantId)
 

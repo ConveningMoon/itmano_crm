@@ -1,0 +1,82 @@
+/* Foto completa — la foto manda y el texto vive sobre un degradado en la mitad
+   inferior. Para el agente que tiene UNA foto excelente: no hay mosaico que
+   llenar ni espacio que justificar.
+   La foto va A SANGRE. Hubo un marco del color secundario y se retiró: este
+   diseño existe para que una foto ocupe el lienzo entero. */
+.pieza { position: relative; width: var(--w); height: var(--h);
+         background: var(--surface); overflow: hidden; }
+
+.hero { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Los tramos están calculados contra dónde EMPIEZA el texto (~56% del alto), no
+   repartidos a ojo: con una rampa suave desde el 42% el titular caía sobre la
+   parte clara de la fachada y se perdía. El color es el primario del tenant, no
+   negro — es el trabajo concreto que ese rol tiene en este diseño. */
+.velo { position: absolute; inset: 0; background: linear-gradient(
+  to bottom,
+  transparent 28%,
+  color-mix(in srgb, var(--brand) 55%, transparent) 52%,
+  color-mix(in srgb, var(--brand) 85%, transparent) 70%,
+  color-mix(in srgb, var(--brand) 97%, transparent) 100%); }
+
+.logo { position: absolute; top: 50px; right: 50px; width: 120px; height: 120px;
+        object-fit: contain; }
+
+/* Con retrato el bloque se estrecha: el círculo ocupa la derecha y una dirección
+   larga acabaría cortada por debajo de él. */
+.texto { position: absolute; bottom: 100px; left: 70px; width: 860px;
+         display: flex; flex-direction: column; color: var(--on-photo); }
+html:not(.sin-foto-agente) .texto { width: 700px; }
+
+.badge { font-family: Marcellus; font-size: 26px; letter-spacing: 6px; }
+
+/* El titular parte de línea dentro del ancho del bloque, igual que en
+   mosaico-listing: font-size:0 en el h1 colapsa el espacio literal que deja
+   values.ts entre palabras (join(' ')), y cada .palabra/.palabra-fuerte pone
+   su propio tamaño más el margen de 14px que usaba Headline entre palabras.
+   Sin esto cada hueco medía el ancho de un carácter normal en vez de 14px y
+   cabían más palabras por línea de las debidas. */
+.texto h1 { font-family: Spectral; font-size: 0; line-height: 1.08; margin-top: 16px; }
+.palabra, .palabra-fuerte { font-size: 66px; margin-right: 14px; }
+.palabra { font-weight: 400; }
+.palabra-fuerte { font-weight: 800; }
+
+.precio { font-family: Spectral; font-weight: 800; font-size: 76px; margin-top: 20px; }
+.direccion { font-family: Spectral; font-size: 28px; margin-top: 12px; }
+
+.specs { display: flex; gap: 44px; margin-top: 22px; font-family: Spectral; font-size: 31px; }
+.specs:empty { display: none; }
+.stat { display: flex; align-items: center; gap: 12px; }
+
+.agente { font-family: Marcellus; font-size: 24px; letter-spacing: 3px; margin-top: 24px; }
+/* Sin teléfono no queda el punto colgando: la clase de estado apaga el
+   separador, {{phone}} suelto ya se queda vacío por su cuenta. */
+html.sin-telefono .separador { display: none; }
+
+/* Cada cifra va con su ícono, igual que StatRow: sin él la banda se lee como
+   una lista de texto y pierde el vistazo rápido que busca un feed. Los tres
+   íconos son fijos por posición dentro de SU sección (regla, cama, baño):
+   nunca se separan de su dato porque no hay indirección por posición. */
+.icono {
+  display: block; width: 40px; height: 40px; flex-shrink: 0; background-color: currentColor;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+}
+.icono-regla {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h18M6 9v6M12 9v6M18 9v6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h18M6 9v6M12 9v6M18 9v6'/%3E%3C/svg%3E");
+}
+.icono-cama {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 18v-6h18v6M3 12V8h8v4M14 12V8h7v4'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 18v-6h18v6M3 12V8h8v4M14 12V8h7v4'/%3E%3C/svg%3E");
+}
+.icono-bano {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12h16v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z M7 12V5a2 2 0 0 1 4 0'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12h16v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z M7 12V5a2 2 0 0 1 4 0'/%3E%3C/svg%3E");
+}
+
+/* El anillo es el único borde del diseño: separa la cara del agente del fondo.
+   No hace falta recortar nada — la foto ya llega circular desde sharp. */
+.retrato { position: absolute; right: 70px; bottom: 120px; width: 209px; height: 209px;
+           border-radius: 50%; object-fit: cover; border: 8px solid var(--surface); }

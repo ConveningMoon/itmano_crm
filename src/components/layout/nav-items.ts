@@ -17,6 +17,7 @@ export const navItems: NavItemDef[] = [
   { label: 'Dashboard',     href: '/dashboard', icon: 'LayoutDashboard' },
   { label: 'Leads',         href: '/leads',       icon: 'Users'      },
   { label: 'Propiedades',   href: '/properties', icon: 'Building2'  },
+  { label: 'Newsletters',   href: '/newsletters', icon: 'Newspaper' },
   { label: 'Fuentes',       href: '/sources',    icon: 'GitBranch'  },
   { label: 'Emails',        href: '/emails',    icon: 'Mail' },
   { label: 'Analytics',     href: '/analytics', icon: 'BarChart2' },
@@ -25,8 +26,7 @@ export const navItems: NavItemDef[] = [
   { label: 'Soporte',       href: '/soporte',   icon: 'LifeBuoy' },
 ]
 
-// El Estudio sin el badge "Pronto": para super_admin la página es real. El
-// motor de carruseles vive dentro de /studio, por eso ya no es un ítem propio.
+// El Estudio sin el badge "Pronto": para super_admin la página es real.
 const STUDIO_OPEN: NavItemDef = { label: 'Estudio', href: '/studio', icon: 'Sparkles' }
 
 // super_admin gets the control-center link appended. In hub mode (super_admin

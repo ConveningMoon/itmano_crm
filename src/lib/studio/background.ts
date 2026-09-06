@@ -1,5 +1,5 @@
 import 'server-only'
-import { generateImage } from '@/lib/carousels/gemini'
+import { generateImage } from './gemini'
 import type { SourceMode } from './types'
 
 // ── De dónde sale el fondo ───────────────────────────────────────────────────
@@ -9,7 +9,7 @@ import type { SourceMode } from './types'
 //   procedural → degradación: null, y el compositor pinta el fondo de marca
 //
 // NUNCA lanza: un fondo que falla degrada, no rompe. El texto es el dato que
-// importa y se compone igual — mismo criterio que renderOneSlide.
+// importa y se compone igual.
 
 export interface BackgroundResult {
   buffer:  Buffer | null

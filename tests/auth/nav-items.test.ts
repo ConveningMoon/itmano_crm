@@ -23,8 +23,6 @@ describe('navItemsForRole', () => {
       { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
       { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
     ])
-    // Carruseles ya no es un ítem propio: vive dentro de /studio
-    expect(items.some(i => i.href === '/admin/carousels')).toBe(false)
   })
 
   it('super_admin en modo hub colapsa a las rutas que existen sin tenant', () => {

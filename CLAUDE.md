@@ -59,6 +59,18 @@ Todo el texto dirigido a Dylan — explicaciones, resúmenes, análisis — va *
 
 El copy de producto (UI, emails, páginas) sigue las reglas de voz de marca más abajo.
 
+### 7. Gasto de IA: avisar SIEMPRE antes, nunca después
+
+Las llaves de Anthropic y Google AI son **reales en todos los entornos, incluido local**. `.env.development.local` sólo redirige Supabase al sandbox; el gasto de IA se cobra de verdad a la cuenta de ITMANO.
+
+**Antes de ejecutar cualquier acción que invoque un modelo de pago —generar una newsletter, una portada, un análisis de lead, sembrar fuentes, o cualquier ruta bajo `src/lib/newsletters/ai/`, `src/lib/studio/` o `src/lib/services/ai-*`— hay que DETENERSE y avisar a Dylan**, con la estimación de lo que cuesta y cuántas veces se piensa repetir. Sin excepciones, aunque parezca una sola prueba.
+
+Esto vale igual para pedirle a Dylan que lo dispare él desde el navegador: si el propósito es probar, el aviso va antes.
+
+**El límite `ai_monthly_limit_usd` no es una red de seguridad.** Sólo frena lo que llega a `ai_usage_events`, y en local esa tabla vive en el sandbox, que arranca en cero. Un gasto no contabilizado es invisible para el límite: así se fueron ~$8 el 26 de agosto de 2026 en unas 20 generaciones de newsletter durante la depuración de la feature, sin que nada avisara.
+
+La investigación con `web_search` es el paso caro: ~$0.39 de los ~$0.46 que cuesta una edición completa, y las búsquedas se facturan aparte de los tokens ($10 por millar).
+
 ---
 
 ## Cómo trabajar en este repo
@@ -334,6 +346,22 @@ Los emails de auth (Supabase Auth SMTP) siempre salen por `mail.itmano.com`.
 
 Los medios viven en el bucket público `property-media`; las subidas pasan solo por el cliente service-role. **Cuando un host nuevo sirva esas imágenes, hay que agregarlo a `images.remotePatterns` del `next.config.ts` del proyecto web** — `next/image` bloquea hosts no listados, y esto ya causó una falla silenciosa de imágenes.
 
+### Newsletters — una por tenant, sin series
+
+Cada tenant tiene **UNA newsletter implícita**, no varias series a elegir: una fila de `acquisition_channels` con `channel_type = 'newsletter'`, creada por el sistema la primera vez que se escribe una edición (`ensureNewsletterChannel`, `src/lib/newsletters/channel.ts`). El usuario no la crea ni la nombra. Un índice único parcial (migración 110) impide un segundo canal de newsletter por tenant. Las URLs públicas son `news.itmano.com/<tenant>/<edicion>`, sin segmento de serie.
+
+Lo que antes distinguía una serie lo hace ahora la **categoría** de la edición (`informativo` · `educativo` · `análisis` · `anuncio`, columna `category` de `newsletter_editions`, migración 110): es una etiqueta para el lector, no un canal ni una secuencia propia — si algún día hiciera falta un público o una secuencia por categoría, eso son series otra vez.
+
+**Exposición pública, mismo patrón que `properties`:** una policy de RLS limita `anon` a ediciones `published` y no degradadas por billing; los grants por columna (migración 105) limitan además qué columnas puede leer `anon` — un `select('*')` devuelve 401, no un resultado parcial. **`category` no está en ese grant** (sólo `authenticated` y `service_role` la leen): la constante `PUBLIC_EDITION_COLUMNS` de `src/lib/services/newsletter-integration-prompt.ts` tiene que coincidir exactamente con el grant real, verificado contra la base — documentar ahí una columna vedada es el mismo bug que ya pasó una vez con un tipo de bloque que el esquema no tenía.
+
+**La firma son DOS, no una** (migración 113). `author_name` es la persona y `author_org_name` la agencia; ambas son opcionales e independientes, así que ninguna se puede deducir de la otra y una edición puede publicarse sin ninguna. Antes era una sola columna con un desplegable excluyente —o el agente o la agencia— y eso obligaba a renunciar a la mitad de lo que el producto vende: la persona posiciona, la marca respalda.
+
+Las tres columnas de firma (más `author_avatar_url`, instantánea de `agents.cover_photo_url`) se guardan **desnormalizadas** por lo que dice la 111: una edición firmada no se reescribe cuando el agente se va. Se congelan al elegir la firma y se refrescan al publicar, nunca en un guardado ajeno a ella. `author_agent_id` es interno; las otras tres son públicas.
+
+**El avatar no lleva iniciales ni color desde la base**: sin foto, cada superficie deriva las iniciales del nombre y usa su propia paleta. Traer `avatar_initials`/`accent_color` a la web de un cliente sería vestirla con colores pensados para el CRM. Y `agents.cover_photo_url` es una foto vertical de cuerpo entero, así que en un círculo va con `object-position: top` o se publica un torso.
+
+Las estadísticas por edición (vistas, suscriptores) viven en `src/lib/data/newsletter-stats.ts`: se atribuye el suscriptor a la edición desde la que se suscribió; quien se suscribe desde la portada del tenant cuenta sólo en el total.
+
 ---
 
 ## Convenciones de código
@@ -505,6 +533,7 @@ Esto existe porque la migración 082 quitó `attention_when` de `leads_list`, el
 | Perfil de negocio del tenant | `src/lib/business/profile.ts` (puro) + `src/lib/data/business-profile.ts` |
 | Scoring, transiciones de estado, notificaciones | La tabla `lead_score_rules` vía MCP + `src/lib/scoring/` |
 | Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
+| Newsletters | `src/lib/newsletters/*`, `src/lib/data/newsletters.ts`, `src/lib/data/newsletter-stats.ts` |
 | Auth o el proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs de Supabase SSR |
 | Migraciones o RLS | La migración más reciente en `supabase/migrations/` |
 | Un `.select()` con lista de columnas | `columns()` de `src/lib/supabase/columns.ts` |

@@ -16,7 +16,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -464,269 +464,11 @@ export type Database = {
           },
         ]
       }
-      carousel_brand_profiles: {
-        Row: {
-          active: boolean
-          agency_name: string | null
-          agent_id: string
-          brand_voice: string | null
-          created_at: string
-          display_name: string
-          instagram_handle: string
-          language: string
-          market: string | null
-          style_prompt: string | null
-          tenant_id: string
-          updated_at: string
-        }
-        Insert: {
-          active?: boolean
-          agency_name?: string | null
-          agent_id: string
-          brand_voice?: string | null
-          created_at?: string
-          display_name: string
-          instagram_handle: string
-          language?: string
-          market?: string | null
-          style_prompt?: string | null
-          tenant_id: string
-          updated_at?: string
-        }
-        Update: {
-          active?: boolean
-          agency_name?: string | null
-          agent_id?: string
-          brand_voice?: string | null
-          created_at?: string
-          display_name?: string
-          instagram_handle?: string
-          language?: string
-          market?: string | null
-          style_prompt?: string | null
-          tenant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "carousel_brand_profiles_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: true
-            referencedRelation: "agents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "carousel_brand_profiles_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      carousel_jobs: {
-        Row: {
-          agent_id: string
-          audience: string | null
-          caption: string | null
-          copy_json: Json | null
-          created_at: string
-          created_by: string | null
-          error_message: string | null
-          hashtags: string[] | null
-          id: string
-          pillar: string | null
-          research_json: Json | null
-          status: string
-          tenant_id: string
-          topic: string | null
-          topic_source: string
-          updated_at: string
-        }
-        Insert: {
-          agent_id: string
-          audience?: string | null
-          caption?: string | null
-          copy_json?: Json | null
-          created_at?: string
-          created_by?: string | null
-          error_message?: string | null
-          hashtags?: string[] | null
-          id?: string
-          pillar?: string | null
-          research_json?: Json | null
-          status?: string
-          tenant_id: string
-          topic?: string | null
-          topic_source?: string
-          updated_at?: string
-        }
-        Update: {
-          agent_id?: string
-          audience?: string | null
-          caption?: string | null
-          copy_json?: Json | null
-          created_at?: string
-          created_by?: string | null
-          error_message?: string | null
-          hashtags?: string[] | null
-          id?: string
-          pillar?: string | null
-          research_json?: Json | null
-          status?: string
-          tenant_id?: string
-          topic?: string | null
-          topic_source?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "carousel_jobs_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: false
-            referencedRelation: "agents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "carousel_jobs_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      carousel_logs: {
-        Row: {
-          billing: string | null
-          cost_usd: number | null
-          created_at: string
-          detail: Json | null
-          id: string
-          input_tokens: number | null
-          job_id: string
-          level: string
-          message: string
-          model: string | null
-          output_tokens: number | null
-          provider: string | null
-          slide_number: number | null
-          step: string
-        }
-        Insert: {
-          billing?: string | null
-          cost_usd?: number | null
-          created_at?: string
-          detail?: Json | null
-          id?: string
-          input_tokens?: number | null
-          job_id: string
-          level?: string
-          message: string
-          model?: string | null
-          output_tokens?: number | null
-          provider?: string | null
-          slide_number?: number | null
-          step: string
-        }
-        Update: {
-          billing?: string | null
-          cost_usd?: number | null
-          created_at?: string
-          detail?: Json | null
-          id?: string
-          input_tokens?: number | null
-          job_id?: string
-          level?: string
-          message?: string
-          model?: string | null
-          output_tokens?: number | null
-          provider?: string | null
-          slide_number?: number | null
-          step?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "carousel_logs_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "carousel_jobs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      carousel_slides: {
-        Row: {
-          copy_label: string | null
-          copy_lines: string[] | null
-          copy_subtitle: string | null
-          copy_title: string | null
-          created_at: string
-          error_message: string | null
-          icon: string | null
-          id: string
-          image_prompt: string | null
-          image_source: string | null
-          image_storage_path: string | null
-          job_id: string
-          rendered_storage_path: string | null
-          slide_number: number
-          slide_type: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          copy_label?: string | null
-          copy_lines?: string[] | null
-          copy_subtitle?: string | null
-          copy_title?: string | null
-          created_at?: string
-          error_message?: string | null
-          icon?: string | null
-          id?: string
-          image_prompt?: string | null
-          image_source?: string | null
-          image_storage_path?: string | null
-          job_id: string
-          rendered_storage_path?: string | null
-          slide_number: number
-          slide_type?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          copy_label?: string | null
-          copy_lines?: string[] | null
-          copy_subtitle?: string | null
-          copy_title?: string | null
-          created_at?: string
-          error_message?: string | null
-          icon?: string | null
-          id?: string
-          image_prompt?: string | null
-          image_source?: string | null
-          image_storage_path?: string | null
-          job_id?: string
-          rendered_storage_path?: string | null
-          slide_number?: number
-          slide_type?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "carousel_slides_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "carousel_jobs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       channel_page_views: {
         Row: {
           channel_id: string
           created_at: string
+          edition_id: string | null
           id: string
           tenant_id: string
           traffic_source: string | null
@@ -736,6 +478,7 @@ export type Database = {
         Insert: {
           channel_id: string
           created_at?: string
+          edition_id?: string | null
           id?: string
           tenant_id: string
           traffic_source?: string | null
@@ -745,6 +488,7 @@ export type Database = {
         Update: {
           channel_id?: string
           created_at?: string
+          edition_id?: string | null
           id?: string
           tenant_id?: string
           traffic_source?: string | null
@@ -757,6 +501,13 @@ export type Database = {
             columns: ["channel_id"]
             isOneToOne: false
             referencedRelation: "acquisition_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_page_views_edition_id_fkey"
+            columns: ["edition_id"]
+            isOneToOne: false
+            referencedRelation: "newsletter_editions"
             referencedColumns: ["id"]
           },
           {
@@ -1475,6 +1226,178 @@ export type Database = {
           },
         ]
       }
+      newsletter_dossiers: {
+        Row: {
+          created_at: string
+          domains: string[]
+          findings: Json
+          id: string
+          language: string
+          period: string
+          searches: number
+          summary: string
+          tenant_id: string
+          topic: string
+          topic_key: string
+        }
+        Insert: {
+          created_at?: string
+          domains?: string[]
+          findings?: Json
+          id?: string
+          language: string
+          period: string
+          searches?: number
+          summary: string
+          tenant_id: string
+          topic: string
+          topic_key: string
+        }
+        Update: {
+          created_at?: string
+          domains?: string[]
+          findings?: Json
+          id?: string
+          language?: string
+          period?: string
+          searches?: number
+          summary?: string
+          tenant_id?: string
+          topic?: string
+          topic_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_dossiers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsletter_editions: {
+        Row: {
+          ai_generated: boolean
+          ai_run: Json | null
+          author_agent_id: string | null
+          author_avatar_url: string | null
+          author_name: string | null
+          author_org_name: string | null
+          author_title: string | null
+          category: string
+          channel_id: string
+          content: Json
+          cover_image_url: string
+          cover_source: string
+          created_at: string
+          created_by_agent_id: string | null
+          created_by_user_id: string | null
+          data_as_of: string | null
+          dek: string | null
+          id: string
+          language: string
+          published_at: string | null
+          slug: string
+          sources: Json
+          status: string
+          tenant_id: string
+          title: string
+          translation_group_id: string | null
+          unpublished_by_billing: boolean
+          updated_at: string
+        }
+        Insert: {
+          ai_generated?: boolean
+          ai_run?: Json | null
+          author_agent_id?: string | null
+          author_avatar_url?: string | null
+          author_name?: string | null
+          author_org_name?: string | null
+          author_title?: string | null
+          category?: string
+          channel_id: string
+          content?: Json
+          cover_image_url: string
+          cover_source?: string
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          data_as_of?: string | null
+          dek?: string | null
+          id?: string
+          language?: string
+          published_at?: string | null
+          slug: string
+          sources?: Json
+          status?: string
+          tenant_id: string
+          title: string
+          translation_group_id?: string | null
+          unpublished_by_billing?: boolean
+          updated_at?: string
+        }
+        Update: {
+          ai_generated?: boolean
+          ai_run?: Json | null
+          author_agent_id?: string | null
+          author_avatar_url?: string | null
+          author_name?: string | null
+          author_org_name?: string | null
+          author_title?: string | null
+          category?: string
+          channel_id?: string
+          content?: Json
+          cover_image_url?: string
+          cover_source?: string
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          data_as_of?: string | null
+          dek?: string | null
+          id?: string
+          language?: string
+          published_at?: string | null
+          slug?: string
+          sources?: Json
+          status?: string
+          tenant_id?: string
+          title?: string
+          translation_group_id?: string | null
+          unpublished_by_billing?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsletter_editions_author_agent_id_fkey"
+            columns: ["author_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_editions_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "acquisition_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_editions_created_by_agent_id_fkey"
+            columns: ["created_by_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "newsletter_editions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           agent_id: string | null
@@ -1925,6 +1848,7 @@ export type Database = {
           status: string
           style: string
           template: string | null
+          template_snapshot: Json | null
           tenant_id: string
           text_zone: string | null
           updated_at: string
@@ -1951,6 +1875,7 @@ export type Database = {
           status?: string
           style: string
           template?: string | null
+          template_snapshot?: Json | null
           tenant_id: string
           text_zone?: string | null
           updated_at?: string
@@ -1977,6 +1902,7 @@ export type Database = {
           status?: string
           style?: string
           template?: string | null
+          template_snapshot?: Json | null
           tenant_id?: string
           text_zone?: string | null
           updated_at?: string
@@ -2004,6 +1930,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      studio_templates: {
+        Row: {
+          aspects: string[]
+          created_at: string
+          css: string
+          hint: string
+          html: string
+          ideal_photos: number
+          key: string
+          label: string
+          recipes: string[]
+          slots: Json
+          thumb_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          aspects?: string[]
+          created_at?: string
+          css?: string
+          hint?: string
+          html?: string
+          ideal_photos?: number
+          key: string
+          label: string
+          recipes?: string[]
+          slots?: Json
+          thumb_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aspects?: string[]
+          created_at?: string
+          css?: string
+          hint?: string
+          html?: string
+          ideal_photos?: number
+          key?: string
+          label?: string
+          recipes?: string[]
+          slots?: Json
+          thumb_path?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       subscriptions: {
         Row: {
@@ -2133,9 +2104,12 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          newsletter_canonical_template: string | null
+          newsletter_source_domains: string[] | null
           pages_managed_by_itmano: boolean
           primary_areas: string[] | null
           primary_color: string
+          public_site_url: string | null
           resend_account: string
           resend_domain_id: string | null
           secondary_areas: string[] | null
@@ -2160,9 +2134,12 @@ export type Database = {
           id: string
           logo_url?: string | null
           name: string
+          newsletter_canonical_template?: string | null
+          newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
+          public_site_url?: string | null
           resend_account?: string
           resend_domain_id?: string | null
           secondary_areas?: string[] | null
@@ -2187,9 +2164,12 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          newsletter_canonical_template?: string | null
+          newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
           primary_areas?: string[] | null
           primary_color?: string
+          public_site_url?: string | null
           resend_account?: string
           resend_domain_id?: string | null
           secondary_areas?: string[] | null
@@ -2248,6 +2228,7 @@ export type Database = {
           fit_score: number | null
           id: string | null
           is_imported: boolean | null
+          is_subscriber: boolean | null
           language: string | null
           last_event_at: string | null
           last_name: string | null
@@ -2398,12 +2379,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2427,11 +2408,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2452,11 +2433,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2477,11 +2458,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2494,11 +2475,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

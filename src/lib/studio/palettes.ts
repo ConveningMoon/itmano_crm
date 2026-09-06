@@ -173,3 +173,25 @@ export function paletteLabel(p: StudioPalette, tenantColor: string): string {
 export function samePalette(a: StudioPalette, b: StudioPalette): boolean {
   return a.brand === b.brand && a.surface === b.surface && a.ink === b.ink && a.logo === b.logo
 }
+
+/**
+ * Qué color lleva el texto según SOBRE QUÉ cae. Es la única fuente de esa
+ * decisión para los nueve diseños.
+ *
+ * Vive aquí y no en cada template porque es una regla de producto, no de
+ * maquetación, y ya se corrigió tres veces: repetida nueve veces, la próxima
+ * corrección se aplicaría a ocho.
+ */
+export function textColors(palette: StudioPalette) {
+  return {
+    // Sobre el primario y sobre el primario oscurecido: SIEMPRE el secundario.
+    // El color de texto no entra como alternativa — ese rol es para el fondo
+    // claro—, así que la única salida es un neutro y solo si el secundario no
+    // se lee. Ver readableOn.
+    onBrand: readableOn(palette.brand, palette.surface),
+    onDark:  readableOn(darken(palette.brand), palette.surface),
+    // Sobre una foto velada por el degradado del primario: ahí sí manda el
+    // color de texto, con el secundario detrás por si coinciden los hex.
+    onPhoto: readableOn(palette.brand, palette.ink, palette.surface),
+  }
+}

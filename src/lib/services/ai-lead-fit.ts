@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { getAiLimitStatus } from '@/lib/services/ai-limit'
+import { isLocalAiSpendBlocked } from '@/lib/services/ai-guard'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { getBusinessProfile } from '@/lib/data/business-profile'
 import { formatMoney, hasBudgetBands } from '@/lib/business/profile'
@@ -92,6 +93,11 @@ const TRIGGER_PHRASE: Record<string, string> = {
 export async function assessLeadFit(input: { leadId: string; tenantId: string; reason?: string }): Promise<FitAssessResult> {
   try {
     if (!process.env.ANTHROPIC_API_KEY) return skip('no_api_key', input.leadId)
+    // Mismo freno de entorno que las features discrecionales, con el patrón de
+    // este servicio. Aquí importa más que en ninguna otra: el análisis corre
+    // SOLO, disparado por cada lead que entra, sin que nadie pulse un botón.
+    // Ver ai-guard.ts.
+    if (isLocalAiSpendBlocked()) return skip('local_spend_blocked', input.leadId)
     const db = createAdminClient()
 
     // El analisis de fit ya no se activa por tenant: es parte del producto y
@@ -120,7 +126,10 @@ export async function assessLeadFit(input: { leadId: string; tenantId: string; r
     const access = await getTenantAccessFor(input.tenantId)
     if (!access.canUseAi) return skip('subscription_inactive', input.leadId)
 
-    // Presupuesto de IA del mes.
+    // Presupuesto de IA del mes. `blocked` (el tope entero) y NO
+    // `blockedDiscretionary`: el análisis de fit es la feature del núcleo, la
+    // que gasta la reserva. Ese es todo el mecanismo — lo que se pulsa a mano
+    // se para antes y le deja estos dólares a esto. Ver ai-budget.ts.
     const limit = await getAiLimitStatus(input.tenantId)
     if (limit.blocked) return skip('budget_blocked', input.leadId)
 

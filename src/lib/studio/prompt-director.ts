@@ -8,8 +8,7 @@ import type { StudioBrand, TextZone } from './types'
 
 // ── Director de prompt ───────────────────────────────────────────────────────
 // Traduce el formulario a un prompt fotográfico y declara en qué zona dejó el
-// espacio limpio. Mismo patrón que carousels/copy.ts: forced tool use → JSON
-// determinista.
+// espacio limpio. Forced tool use → JSON determinista.
 //
 // El modelo de imagen NO sabe qué receta es ni que existe un layout, y no debe
 // saberlo: recibe tres cosas — qué escena, en qué estilo y dónde dejar limpio.

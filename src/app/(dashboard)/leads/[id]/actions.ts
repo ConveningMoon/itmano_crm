@@ -8,6 +8,7 @@ import { assertCanWriteLead } from '@/lib/auth/guards'
 import { EmailContentSchema } from '@/lib/email-content'
 import { assessLeadFit, type LeadBriefing } from '@/lib/services/ai-lead-fit'
 import { ACTIVE_STAGES, type Stage } from '@/lib/scoring/priority'
+import { graduateSubscriber, hasSubscriberMark } from '@/lib/newsletters/subscriber'
 
 // FROZEN_STATUSES desapareció con la migración 082: el congelado existía sólo
 // para que el trigger de scoring no pisara la etapa que ponía el agente, y con
@@ -479,7 +480,9 @@ export async function analyzeLeadFit(
   const ctx = await getCurrentTenantContext()
   const supabase = createAdminClient()
 
-  let q = supabase.from('leads').select('id, tenant_id, agent_id').eq('id', leadId)
+  // `metadata` viaja en el mismo SELECT (coste cero) para decidir la graduación
+  // sin una segunda lectura.
+  let q = supabase.from('leads').select('id, tenant_id, agent_id, metadata').eq('id', leadId)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
   const { data: lead } = await q.maybeSingle()
   if (!lead) return { ok: false, error: 'Lead no encontrado.' }
@@ -487,6 +490,14 @@ export async function analyzeLeadFit(
   const l = lead as any
   const denied = assertCanWriteLead(ctx, { tenant_id: l.tenant_id, agent_id: l.agent_id })
   if (denied) return denied
+
+  // Que un agente pida el análisis a mano es una decisión humana de tratar a
+  // este lead como prospecto: deja de ser sólo un lector de la newsletter y
+  // vuelve a contar para los quintiles de calidad (migración 106). Va antes de
+  // assessLeadFit, que reescribe fit_profile y nunca toca metadata.
+  if (hasSubscriberMark((l.metadata ?? null) as Record<string, unknown> | null)) {
+    await graduateSubscriber(supabase, leadId)
+  }
 
   const res = await assessLeadFit({ leadId, tenantId: l.tenant_id as string, reason: 'manual' })
   if (res.ok) {
