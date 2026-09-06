@@ -2,7 +2,7 @@ import { Webhook } from 'svix'
 import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resend } from '@/lib/resend'
+import { resendInboundForAccount } from '@/lib/resend'
 import { stripQuotedReply } from '@/lib/email/strip-quoted-reply'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 import { graduateSubscriber } from '@/lib/newsletters/subscriber'
@@ -323,14 +323,27 @@ async function handleInboundEvent(
   const inboundEmailId = event.data.email_id
   if (inboundEmailId) {
     try {
-      const { data: received, error: fetchErr } = await resend.emails.receiving.get(inboundEmailId)
+      const { data: tenant, error: tenantLookupError } = await db
+        .from('tenants')
+        .select('resend_account')
+        .eq('id', match.tenant_id)
+        .maybeSingle()
+
+      if (tenantLookupError) throw tenantLookupError
+
+      const inboundClient = resendInboundForAccount(tenant?.resend_account)
+      const { data: received, error: fetchErr } = await inboundClient.emails.receiving.get(inboundEmailId)
       if (fetchErr) {
+        // Log full error object (not String() which gives [object Object])
         console.error(JSON.stringify({
-          service:  'resend-webhook',
-          event_id: svixId,
-          lead_id:  match.id,
-          error:    'receiving_get_failed',
-          detail:   String(fetchErr),
+          service:       'resend-webhook',
+          event_id:      svixId,
+          lead_id:       match.id,
+          inbound_id:    inboundEmailId,
+          error:         'receiving_get_failed',
+          status_code:   fetchErr.statusCode,
+          error_name:    fetchErr.name,
+          detail:        fetchErr.message,
         }))
       } else if (received) {
         const raw = received.text
@@ -338,18 +351,39 @@ async function handleInboundEvent(
           : received.html
             ? htmlToText(received.html)
             : null
-        // Strip the quoted/forwarded block — store only what the lead wrote.
-        bodyText = raw ? (stripQuotedReply(raw) || null) : null
+
+        if (raw) {
+          // Strip the quoted/forwarded block — store only what the lead wrote.
+          bodyText = stripQuotedReply(raw) || null
+        } else {
+          // API succeeded but returned neither text nor html — log for visibility
+          console.log(JSON.stringify({
+            service:    'resend-webhook',
+            event_id:   svixId,
+            lead_id:    match.id,
+            inbound_id: inboundEmailId,
+            result:     'receiving_get_no_body',
+          }))
+        }
       }
     } catch (fetchEx) {
       console.error(JSON.stringify({
-        service:  'resend-webhook',
-        event_id: svixId,
-        lead_id:  match.id,
-        error:    'receiving_get_exception',
-        detail:   String(fetchEx),
+        service:    'resend-webhook',
+        event_id:   svixId,
+        lead_id:    match.id,
+        inbound_id: inboundEmailId,
+        error:      'receiving_get_exception',
+        detail:     fetchEx instanceof Error ? fetchEx.message : String(fetchEx),
       }))
     }
+  } else {
+    // email_id absent from webhook payload — body cannot be fetched
+    console.log(JSON.stringify({
+      service:  'resend-webhook',
+      event_id: svixId,
+      lead_id:  match.id,
+      result:   'receiving_no_email_id',
+    }))
   }
 
   // ── Persist full reply in lead_email_replies ──────────────────────────────
