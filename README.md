@@ -88,7 +88,7 @@ The project pins Node 24.20.0 and npm 11.19.0 through Volta. Install Volta and
 
 ```bash
 volta install node@24.20.0 npm@11.19.0
-uv tool install "graphifyy[sql]==0.9.55"
+uv tool install --python 3.12 "graphifyy[sql]==0.9.55"
 npm ci
 npm run setup:hooks
 npm run dev

@@ -8,7 +8,7 @@
 winget install Volta.Volta
 winget install astral-sh.uv
 volta install node@24.20.0 npm@11.19.0
-uv tool install "graphifyy[sql]==0.9.55"
+uv tool install --python 3.12 "graphifyy[sql]==0.9.55"
 npm ci
 npm run setup:hooks
 graphify install --platform claude
@@ -25,7 +25,7 @@ necesario para `next build` y el segundo para desarrollo y suites de Vitest.
 curl https://get.volta.sh | bash
 brew install uv
 volta install node@24.20.0 npm@11.19.0
-uv tool install "graphifyy[sql]==0.9.55"
+uv tool install --python 3.12 "graphifyy[sql]==0.9.55"
 npm ci
 npm run setup:hooks
 graphify install --platform claude
@@ -37,8 +37,11 @@ después de instalar gestores que cambien `PATH`.
 Configura `.env.local` y `.env.development.local` para sandbox; no copies
 credenciales de producción al clon normal.
 
-Las versiones autoritativas están en `package.json`; si se actualizan, el mismo
-commit cambia Volta, engines, devEngines y CI.
+Las versiones autoritativas están en `package.json`. Volta fija el patch exacto
+para los clones de desarrollo; `engines` y `devEngines` aceptan cualquier patch
+compatible de Node 24 y npm 11 porque Vercel y otros runtimes gestionados los
+actualizan en su propio calendario. Un cambio de versión mayor debe actualizar
+Volta, engines, devEngines y CI en el mismo commit.
 
 ## Graphify
 
