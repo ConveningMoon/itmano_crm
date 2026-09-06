@@ -1,0 +1,131 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { VisibilityScope } from '@/lib/auth/visibility'
+
+// /analytics agrega en Postgres (RPC lead_analytics_stats). Estas pruebas fijan
+// que el scope de visibilidad viaja EN LA LLAMADA — no como un filtro en JS sobre
+// leads ya traídos, que es justo lo que esta refactorización eliminó — y que el
+// mapeo de la respuesta no pierde ni inventa conteos.
+
+interface RpcCall { fn: string; args: Record<string, unknown> }
+
+let calls: RpcCall[] = []
+let mockData: unknown = null
+let mockError: unknown = null
+
+vi.mock('@/lib/supabase/admin', () => ({
+  createAdminClient: () => ({
+    rpc(fn: string, args: Record<string, unknown>) {
+      calls.push({ fn, args })
+      return Promise.resolve({ data: mockData, error: mockError })
+    },
+  }),
+}))
+
+const { getLeadAnalyticsStats, ANALYTICS_MONTHS } = await import('@/lib/data/leads')
+
+const SUPER: VisibilityScope = { tenantId: null,        agentId: null }
+const OWNER: VisibilityScope = { tenantId: 'tenant-aj', agentId: null }
+const AGENT: VisibilityScope = { tenantId: 'tenant-aj', agentId: 'agent-dylan' }
+
+beforeEach(() => {
+  calls = []
+  mockData = null
+  mockError = null
+})
+
+describe('getLeadAnalyticsStats — scope de visibilidad', () => {
+  it('agent_owner: acota por tenant y no por agente', async () => {
+    await getLeadAnalyticsStats(OWNER)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].fn).toBe('lead_analytics_stats')
+    expect(calls[0].args.p_tenant_id).toBe('tenant-aj')
+    expect(calls[0].args.p_agent_id).toBeNull()
+  })
+
+  it("rol 'agent': acota por tenant Y por agente", async () => {
+    await getLeadAnalyticsStats(AGENT)
+
+    expect(calls[0].args.p_tenant_id).toBe('tenant-aj')
+    expect(calls[0].args.p_agent_id).toBe('agent-dylan')
+  })
+
+  it('super_admin: sin filtro de tenant', async () => {
+    await getLeadAnalyticsStats(SUPER)
+
+    expect(calls[0].args.p_tenant_id).toBeNull()
+    expect(calls[0].args.p_agent_id).toBeNull()
+  })
+
+  it('la ventana mensual por defecto son los meses que pinta la gráfica', async () => {
+    await getLeadAnalyticsStats(OWNER)
+    expect(calls[0].args.p_months).toBe(ANALYTICS_MONTHS)
+
+    await getLeadAnalyticsStats(OWNER, 12)
+    expect(calls[1].args.p_months).toBe(12)
+  })
+})
+
+describe('getLeadAnalyticsStats — mapeo de la respuesta', () => {
+  it('traduce el jsonb del RPC a la forma que consume la página', async () => {
+    mockData = {
+      total: 120,
+      hot: 14,               // el RPC lo sigue devolviendo; el mapeo lo ignora
+      closed: 9,
+      active: 40,
+      attributed_total: 90,
+      attributed_closed: 3,
+      imported: 30,
+      live_avg_score: 41,    // idem
+      this_month: { leads: 7, hot: 2, high_quality: 3 },
+      by_source: [
+        { channel_type: 'lead_magnet', traffic_source: null,        total: 60 },
+        { channel_type: null,          traffic_source: 'instagram', total: 60 },
+      ],
+      by_agent: [
+        { agent_id: 'agent-dylan', total: 100, hot: 12, closed: 8, avg_score: 44, statuses: { new: 90, hot: 10 } },
+      ],
+      monthly: [{ month: '2026-07', leads: 7, nuevo: 4, nutricion: 2, en_proceso: 1, cerrado: 0, perdido: 0 }],
+    }
+
+    const stats = await getLeadAnalyticsStats(OWNER)
+
+    expect(stats.total).toBe(120)
+    expect(stats.closed).toBe(9)
+    expect(stats.active).toBe(40)
+    // El par de la conversión llega aparte: 3/90, no 9/120.
+    expect(stats.attributedTotal).toBe(90)
+    expect(stats.attributedClosed).toBe(3)
+    expect(stats.imported).toBe(30)
+    expect(stats.thisMonth).toEqual({ leads: 7, highQuality: 3 })
+    // avg_quality llega null en este fixture: el RPC lo omite cuando no hay
+    // leads con calidad, y el mapeo debe respetarlo sin inventar un 0.
+    expect(stats.bySource).toEqual([
+      { channelType: 'lead_magnet', trafficSource: null,        total: 60, avgQuality: null },
+      { channelType: null,          trafficSource: 'instagram', total: 60, avgQuality: null },
+    ])
+    // Las claves de temperatura del RPC (hot, avg_score, statuses) NO se mapean:
+    // ninguna pantalla las lee y dejarlas invitaba a darlas por vivas.
+    expect(stats.byAgent[0]).toEqual({
+      agentId: 'agent-dylan', total: 100, closed: 8,
+      highQuality: 0, avgQuality: 0, stages: {},
+    })
+    expect(stats.monthly).toEqual([
+      { month: '2026-07', leads: 7, nuevo: 4, nutricion: 2, enProceso: 1, cerrado: 0, perdido: 0 },
+    ])
+  })
+
+  it('un error del RPC devuelve ceros, no revienta la página', async () => {
+    mockError = { message: 'boom' }
+
+    const stats = await getLeadAnalyticsStats(OWNER)
+
+    expect(stats).toEqual({
+      total: 0, closed: 0, active: 0,
+      attributedTotal: 0, attributedClosed: 0, imported: 0,
+      thisMonth: { leads: 0, highQuality: 0 },
+      qualityDistribution: {}, byStage: {},
+      bySource: [], byAgent: [], monthly: [],
+    })
+  })
+})

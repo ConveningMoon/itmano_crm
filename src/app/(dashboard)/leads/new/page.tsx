@@ -1,37 +1,80 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewLeadClient } from './new-lead-client'
 
-const TENANT_ID = 'tenant-aj'
-
 export interface ChannelOption {
-  id: string
+  id:          string
+  tenantId:    string
   channelType: string
+  name:        string
+  slug:        string
+  agentId:     string | null
+  // /leads carga también los canales inactivos (para resolver el nombre y el
+  // filtro de fuente de leads viejos) y sólo ofrece los activos en el desplegable.
+  active:      boolean
+}
+
+export interface TenantOption {
+  id: string
   name: string
-  slug: string
 }
 
 export default async function NewLeadPage() {
+  const ctx      = await requireTenantContext()
+  // El picker de tenant solo aplica a un super_admin SIN selección — estado hoy
+  // inalcanzable aquí (requireTenantContext lo manda al hub), pero la expresión
+  // se mantiene explícita por si la guarda cambia.
+  const needsTenantPicker = ctx.role === 'super_admin' && !ctx.tenant_id
   const supabase = createAdminClient()
 
-  const [{ data: rawAgents }, { data: rawChannels }] = await Promise.all([
-    supabase.from('agents').select('*').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
-    supabase
-      .from('acquisition_channels')
-      .select('id, channel_type, name, slug')
-      .eq('tenant_id', TENANT_ID)
-      .eq('active', true)
-      .order('name'),
+  // Scope agents/channels por tenant del contexto (incluye al super_admin
+  // actuando como tenant — su ctx.tenant_id viene de la selección).
+  let agentsQ   = supabase.from('agents').select('*').eq('active', true).order('name')
+  let channelsQ = supabase
+    .from('acquisition_channels')
+    .select('id, tenant_id, channel_type, name, slug, agent_id')
+    .eq('active', true)
+    .order('name')
+  if (ctx.tenant_id) {
+    agentsQ   = agentsQ.eq('tenant_id', ctx.tenant_id)
+    channelsQ = channelsQ.eq('tenant_id', ctx.tenant_id)
+  }
+
+  const [{ data: rawAgents }, { data: rawChannels }, { data: rawTenants }] = await Promise.all([
+    agentsQ,
+    channelsQ,
+    needsTenantPicker
+      ? supabase.from('tenants').select('id, name').order('name')
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
 
-  const agents   = (rawAgents   ?? []).map(r => mapAgent(r as AgentRow))
+  const agents   = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channels = (rawChannels ?? []).map((r: any) => ({
     id:          r.id as string,
+    tenantId:    r.tenant_id as string,
     channelType: r.channel_type as string,
     name:        r.name as string,
     slug:        r.slug as string,
+    agentId:     (r.agent_id ?? null) as string | null,
+    active:      true,  // la query ya filtra active = true
   })) as ChannelOption[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenants = (rawTenants ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string })) as TenantOption[]
 
-  return <NewLeadClient agents={agents} channels={channels} />
+  // The agent record linked to this login (if any) — used to auto-attribute imports.
+  const { data: myAgentRow } = await supabase
+    .from('agents').select('id').eq('user_id', ctx.user_id).maybeSingle()
+  const myAgentId = (myAgentRow as { id: string } | null)?.id ?? null
+
+  return (
+    <NewLeadClient
+      agents={agents}
+      channels={channels}
+      isSuperAdmin={needsTenantPicker}
+      tenants={tenants}
+      myAgentId={myAgentId}
+    />
+  )
 }

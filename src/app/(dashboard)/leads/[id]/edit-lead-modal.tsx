@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
+import { ModalShell } from '@/components/motion/modal-shell'
 import { LANGUAGE_CONFIG } from '@/lib/config'
 import type { Lead, Agent } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
@@ -65,8 +66,6 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
   const [error, setError]            = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  if (!isOpen) return null
-
   const set = (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm(prev => ({ ...prev, [k]: e.target.value }))
@@ -99,30 +98,12 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
   }
 
   return (
-    <>
+    <ModalShell open={isOpen} onClose={onClose} maxWidth={480}>
       <style>{`
         .edit-modal-input:focus { border-color: var(--border-accent) !important; outline: none; }
       `}</style>
 
-      {/* Backdrop */}
-      <div
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
-          zIndex: 50,
-        }}
-        onClick={onClose}
-      />
-
-      {/* Modal box */}
-      <div style={{
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border-accent)',
-        borderRadius: '16px', padding: '24px',
-        width: '480px', maxWidth: '90vw',
-        zIndex: 51,
-      }}>
+      <div style={{ padding: '24px' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
@@ -271,7 +252,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
 
           {/* Inline error */}
           {error && (
-            <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '12px' }}>
+            <p style={{ fontSize: '12px', color: 'var(--accent-coral)', marginBottom: '12px' }}>
               {error}
             </p>
           )}
@@ -302,6 +283,6 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
           </div>
         </form>
       </div>
-    </>
+    </ModalShell>
   )
 }

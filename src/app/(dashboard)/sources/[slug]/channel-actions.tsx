@@ -2,13 +2,33 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, Trash2, X } from 'lucide-react'
-import { updateChannel, archiveChannel } from '../actions'
+import { Pencil, Trash2, X, Puzzle } from 'lucide-react'
+import Link from 'next/link'
+import { updateChannel, updateChannelSequence, archiveChannel, getIntegrationInfo, regenerateContactSecret } from '../actions'
+import { IntegrationPromptModal } from '../integration-prompt-modal'
 
 interface ChannelActionsProps {
-  channelId: string
-  channelName: string
-  channelActive: boolean
+  channelId:       string
+  channelName:     string
+  channelActive:   boolean
+  channelType:     string
+  emailSequenceId: string | null
+  agentId:         string | null
+  agents:          Array<{ id: string; name: string }>
+  sequences:       Array<{ id: string; name: string }>
+  /**
+   * Tenant administrado por ITMANO (migración 091): no ve el constructor, así
+   * que el link de su página se escribe a mano aquí — es el único sitio donde
+   * puede quedar registrado.
+   */
+  managedByItmano: boolean
+  pageUrl:         string | null
+  /**
+   * agents.id del que mira, sólo para el rol 'agent'. Si llega, la fuente ya es
+   * suya (sólo ve las suyas) y no puede regalarla ni volverla de toda la
+   * agencia: el selector queda fijo. El servidor lo fuerza igual.
+   */
+  myAgentId:       string | null
 }
 
 const INPUT: React.CSSProperties = {
@@ -33,19 +53,33 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences, managedByItmano, pageUrl, myAgentId }: ChannelActionsProps) {
   const router = useRouter()
-  const [mode,    setMode]    = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
-  const [name,    setName]    = useState(channelName)
-  const [active,  setActive]  = useState(channelActive)
-  const [error,   setError]   = useState<string | null>(null)
-  const [pending, start]      = useTransition()
+  const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
+  const [name,       setName]       = useState(channelName)
+  const [active,     setActive]     = useState(channelActive)
+  const [sequenceId, setSequenceId] = useState<string>(emailSequenceId ?? '')
+  const [agId,       setAgId]       = useState<string>(agentId ?? '') // '' = Toda la agencia
+  const [page,       setPage]       = useState<string>(pageUrl ?? '')
+  const [error,      setError]      = useState<string | null>(null)
+  const [pending,    start]         = useTransition()
+  const [integrationPrompt, setIntegrationPrompt] = useState<string | null>(null)
+  const [integrationError,  setIntegrationError]  = useState<string | null>(null)
 
   function handleSave() {
     setError(null)
     start(async () => {
-      const res = await updateChannel(channelId, { name, active })
-      if (!res.ok) { setError(res.error); return }
+      const [nameRes, seqRes] = await Promise.all([
+        updateChannel(channelId, {
+          name, active, agentId: agId || null,
+          // Sólo se manda cuando el campo existe: si no, `undefined` deja el
+          // metadata como está en vez de borrar el link.
+          ...(managedByItmano ? { pageUrl: page.trim() || null } : {}),
+        }),
+        updateChannelSequence(channelId, sequenceId || null),
+      ])
+      if (!nameRes.ok) { setError(nameRes.error); return }
+      if (!seqRes.ok)  { setError(seqRes.error);  return }
       setMode('idle')
       router.refresh()
     })
@@ -59,6 +93,15 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
     })
   }
 
+  function openIntegrationInfo() {
+    setIntegrationError(null)
+    start(async () => {
+      const res = await getIntegrationInfo(channelId)
+      if (!res.ok) { setIntegrationError(res.error); return }
+      setIntegrationPrompt(res.prompt)
+    })
+  }
+
   return (
     <>
       <style>{`
@@ -67,8 +110,24 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
 
       {/* Action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {['lead_magnet', 'event', 'contact_form'].includes(channelType) && (
+          <button
+            onClick={openIntegrationInfo}
+            disabled={pending}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', fontSize: '12px', fontWeight: 500,
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px', cursor: pending ? 'default' : 'pointer',
+            }}
+          >
+            <Puzzle size={12} /> Ver Opciones de integración
+          </button>
+        )}
         <button
-          onClick={() => { setName(channelName); setActive(channelActive); setMode('edit') }}
+          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setPage(pageUrl ?? ''); setError(null); setMode('edit') }}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
@@ -94,6 +153,12 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
           <Trash2 size={12} /> Archivar
         </button>
       </div>
+
+      {integrationError && (
+        <div style={{ fontSize: '12px', color: '#E04040', marginTop: '8px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+          {integrationError}
+        </div>
+      )}
 
       {/* Edit modal */}
       {mode === 'edit' && (
@@ -124,6 +189,27 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
                   autoFocus
                 />
               </div>
+
+              {/* Sólo para tenants administrados por ITMANO: su página vive
+                  fuera del CRM, así que el link se registra a mano. */}
+              {managedByItmano && (
+                <div>
+                  <label style={LABEL}>Link de la página</label>
+                  <input
+                    value={page}
+                    onChange={e => setPage(e.target.value)}
+                    className="ch-act-input"
+                    style={INPUT}
+                    type="url"
+                    placeholder="https://tudominio.com/mi-pagina"
+                  />
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                    La página de esta fuente la conecta ITMANO. Pega aquí su link y quedará disponible
+                    con un clic desde la tarjeta de la fuente. Déjalo vacío para quitarlo.
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label style={{ ...LABEL, marginBottom: '10px' }}>Estado</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -150,6 +236,46 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>Agente</label>
+                <select
+                  value={agId}
+                  onChange={e => setAgId(e.target.value)}
+                  disabled={myAgentId !== null}
+                  className="ch-act-input"
+                  style={{ ...INPUT, appearance: 'none', cursor: myAgentId ? 'not-allowed' : 'pointer', opacity: myAgentId ? 0.65 : 1 }}
+                >
+                  {myAgentId === null && <option value="">Toda la agencia</option>}
+                  {(myAgentId ? agents.filter(a => a.id === myAgentId) : agents).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                  {myAgentId
+                    ? 'Los leads de esta fuente se atribuyen a ti. Reasignarla es cosa del propietario del equipo.'
+                    : 'Atribución de leads de esta fuente. "Toda la agencia" los atribuye al propietario del equipo.'}
+                </div>
+              </div>
+
+              <div>
+                <label style={LABEL}>Secuencia de Email</label>
+                <select
+                  value={sequenceId}
+                  onChange={e => setSequenceId(e.target.value)}
+                  className="ch-act-input"
+                  style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}
+                >
+                  <option value="">Ninguna</option>
+                  {sequences.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                {sequences.length === 0 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                    No hay secuencias disponibles. Crea una en{' '}
+                    <Link href="/emails/new" style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>Secuencias de Email →</Link>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -229,6 +355,19 @@ export function ChannelActions({ channelId, channelName, channelActive }: Channe
             </div>
           </div>
         </>
+      )}
+
+      {integrationPrompt !== null && (
+        <IntegrationPromptModal
+          title="Opciones de integración"
+          prompt={integrationPrompt}
+          onClose={() => setIntegrationPrompt(null)}
+          onRegenerateSecret={
+            channelType === 'contact_form'
+              ? () => regenerateContactSecret(channelId)
+              : undefined
+          }
+        />
       )}
     </>
   )

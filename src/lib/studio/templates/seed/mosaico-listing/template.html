@@ -1,0 +1,38 @@
+<main class="pieza">
+  <!-- Sin envolver en sección: el mosaico no existe sin foto de portada, así
+       que la clave suelta es lo que declara el slot como requerido. -->
+  <img class="hero" src="{{hero}}" alt="">
+  {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+
+  <div class="thumbs">
+    {{#thumb1}}<img src="{{thumb1}}" alt="">{{/thumb1}}
+    {{#thumb2}}<img src="{{thumb2}}" alt="">{{/thumb2}}
+    {{#thumb3}}<img src="{{thumb3}}" alt="">{{/thumb3}}
+  </div>
+
+  <div class="titular">
+    <span class="badge">{{badge}}</span>
+    <h1>{{&headlineRitmo}}</h1>
+    {{#address}}<p class="direccion">{{address}}</p>{{/address}}
+  </div>
+
+  <!-- Nombradas, no ordinales: sqft, bedrooms y bathrooms son cada uno
+       opcional por su cuenta (statsFor en template-props.ts), así que
+       stat1/2/3 corrían el icono de posición cuando faltaba uno del medio.
+       Con la clave nombrada el icono va SIEMPRE con su dato. -->
+  <div class="banda specs">
+    {{#statSqft}}<span class="stat"><i class="icono icono-regla"></i>{{statSqft}}</span>{{/statSqft}}
+    {{#statBedrooms}}<span class="stat"><i class="icono icono-cama"></i>{{statBedrooms}}</span>{{/statBedrooms}}
+    {{#statBathrooms}}<span class="stat"><i class="icono icono-bano"></i>{{statBathrooms}}</span>{{/statBathrooms}}
+  </div>
+
+  <div class="banda cierre">
+    {{#price}}<span class="precio">{{price}}</span>{{/price}}
+    <!-- Una sección de teléfono anidada dentro de la del agente no funciona:
+         las secciones no anidan (ver document.ts). El separador se oculta
+         con la clase de estado sin-telefono en vez de una segunda sección. -->
+    {{#agentName}}<span class="agente">{{agentName}}<span class="separador"> · </span>{{phone}}</span>{{/agentName}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>

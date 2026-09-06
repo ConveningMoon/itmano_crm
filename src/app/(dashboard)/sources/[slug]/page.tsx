@@ -1,12 +1,17 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
-import { getChannelBySlug, getChannelLeads } from '@/lib/data/channels'
-import { STATUS_CONFIG } from '@/lib/config'
-import type { LeadStatus } from '@/lib/types'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getChannelBySlug } from '@/lib/data/channels'
+import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
+import { listSequences } from '@/lib/data/email-sequences'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
 import { ChannelActions } from './channel-actions'
-
-const TENANT_ID = 'tenant-aj'
+import { SubmissionsList } from './submissions-list'
+import { SourceTabs } from './source-tabs'
+import { PageOptions } from './page-options'
+import { parseHostedPage } from '@/lib/hosted-page'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -16,32 +21,40 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
   manual:        'Manual',
 }
 
-const TRAFFIC_SOURCE_LABELS: Record<string, string> = {
-  ads_meta:        'Meta Ads',
-  ads_google:      'Google Ads',
-  organic_social:  'Social Orgánico',
-  direct:          'Directo',
-  manychat_inbound:'ManyChat',
-  referral:        'Referido',
-  unknown:         'Desconocido',
-}
-
 export default async function ChannelDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const [channel, leads] = await Promise.all([
-    getChannelBySlug(TENANT_ID, slug),
-    (async () => {
-      const ch = await getChannelBySlug(TENANT_ID, slug)
-      if (!ch) return []
-      return getChannelLeads(TENANT_ID, ch.id)
-    })(),
-  ])
+  const ctx = await requireTenantContext()
+  const { tenant_id } = ctx
+  const scope = scopeFor(ctx)
 
+  // Agent: only their own channel resolves; a non-owned/null channel → 404.
+  const channel = await getChannelBySlug(tenant_id, slug, 30, scope.agentId)
   if (!channel) notFound()
+
+  const supabase = createAdminClient()
+  const [submissions, sequences, { data: agentRows }, { data: hostedRow }, { data: tenantRow }] = await Promise.all([
+    getSubmissionsForChannel(channel.id, tenant_id),
+    listSequences(tenant_id, scope.agentId),
+    supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
+    supabase.from('acquisition_channels').select('hosted_page').eq('id', channel.id).maybeSingle(),
+    supabase.from('tenants').select('slug, name, pages_managed_by_itmano').eq('id', channel.tenantId).maybeSingle(),
+  ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hostedConfig = parseHostedPage((hostedRow as any)?.hosted_page)
+  // La marca es del tenant (migración 091): aplica a todas sus fuentes, también
+  // a las que cree después.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pageManaged = (tenantRow as any)?.pages_managed_by_itmano === true
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tenantName = ((tenantRow as any)?.name as string | undefined) ?? undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))
 
   const typeLabel  = CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType
   const typeColor  = {
@@ -51,20 +64,6 @@ export default async function ChannelDetailPage({
     manychat_flow: 'var(--accent-green)',
     manual:        'var(--text-muted)',
   }[channel.channelType] ?? 'var(--text-muted)'
-
-  // Status funnel breakdown
-  const statusCounts: Record<string, number> = {}
-  for (const l of leads) {
-    statusCounts[l.status] = (statusCounts[l.status] ?? 0) + 1
-  }
-
-  // Traffic source breakdown
-  const sourceCounts: Record<string, number> = {}
-  for (const l of leads) {
-    const src = l.trafficSource ?? 'unknown'
-    sourceCounts[src] = (sourceCounts[src] ?? 0) + 1
-  }
-  const sortedSources = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])
 
   return (
     <>
@@ -111,19 +110,56 @@ export default async function ChannelDetailPage({
               {channel.active ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '8px' }}>
             {channel.publicId} · slug: {channel.slug}
           </div>
+          <span style={{
+            fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
+            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+          }}>
+            Agente: {channel.agentName ?? 'Toda la agencia'}
+          </span>
         </div>
         <ChannelActions
           channelId={channel.id}
           channelName={channel.name}
           channelActive={channel.active}
+          channelType={channel.channelType}
+          emailSequenceId={channel.emailSequenceId}
+          agentId={channel.agentId}
+          agents={agents}
+          sequences={sequences.filter(s => s.activationType === 'form').map(s => ({ id: s.id, name: s.name }))}
+          managedByItmano={pageManaged}
+          pageUrl={channel.pageUrl}
+          myAgentId={scope.agentId}
         />
       </div>
 
+      <SourceTabs
+        general={<>
       {/* Metrics row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4" style={{ marginBottom: '24px' }}>
+        {/* Leads totales — links to /leads pre-filtered by this channel */}
+        <Link
+          href={`/leads?source=${channel.channelType}&channelId=${channel.id}`}
+          style={{
+            background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+            borderRadius: '12px', padding: '16px', textDecoration: 'none',
+            display: 'block', transition: 'border-color 150ms',
+          }}
+          className="metric-link"
+        >
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>
+            Leads totales
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            {channel.metrics.leadsTotal}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            Ver leads <ArrowRight size={10} />
+          </div>
+        </Link>
+
         {[
           { label: 'Leads (30d)',     value: String(channel.metrics.leadsInWindow) },
           { label: 'Vistas (30d)',    value: String(channel.metrics.pageViewsInWindow) },
@@ -139,117 +175,34 @@ export default async function ChannelDetailPage({
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-        {/* Status funnel */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Estado de leads</span>
-          </div>
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {Object.entries(statusCounts).sort((a, b) => b[1] - a[1]).map(([status, count]) => {
-              const cfg = STATUS_CONFIG[status as LeadStatus] ?? { label: status, color: 'var(--text-muted)', bgColor: 'var(--bg-overlay)' }
-              return (
-                <div key={status} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{
-                    fontSize: '11px',
-                    color: cfg.color,
-                    background: cfg.bgColor,
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontWeight: 500,
-                  }}>
-                    {cfg.label}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{count}</span>
-                </div>
-              )
-            })}
-            {Object.keys(statusCounts).length === 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sin leads atribuidos</span>
-            )}
-          </div>
-        </div>
+      <style>{`.metric-link:hover { border-color: var(--accent-gold) !important; }`}</style>
 
-        {/* Traffic sources */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Fuente de tráfico</span>
-          </div>
-          <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {sortedSources.map(([src, count]) => (
-              <div key={src} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {TRAFFIC_SOURCE_LABELS[src] ?? src}
-                </span>
-                <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{count}</span>
-              </div>
-            ))}
-            {sortedSources.length === 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Sin datos de tráfico</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Leads table */}
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Leads atribuidos · {leads.length} en total
-          </span>
-          <Link href={`/leads?channel=${channel.id}`} style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
-            Ver todos →
-          </Link>
-        </div>
-        {leads.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No hay leads atribuidos a este canal.
-          </div>
-        ) : (
-          <div>
-            {/* Table header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px 120px 100px 90px', gap: '0', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
-              {['Nombre', 'Email', 'Estado', 'Score', 'Fuente'].map(h => (
-                <span key={h} style={{ fontSize: '10px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                  {h}
-                </span>
-              ))}
+      {/* Submissions — expandable Q&A list */}
+      <SubmissionsList submissions={submissions} channelType={channel.channelType} />
+        </>}
+        pagina={
+          ['lead_magnet', 'event', 'contact_form'].includes(channel.channelType) && tenantSlug ? (
+            <PageOptions
+              channelId={channel.id}
+              channelType={channel.channelType}
+              channelName={channel.name}
+              tenantSlug={tenantSlug}
+              channelSlug={channel.slug}
+              initial={hostedConfig}
+              managedByItmano={pageManaged}
+              // Si esta página resolvió, la fuente es suya: getChannelBySlug
+              // filtra por scope.agentId y un canal ajeno cae en notFound().
+              canEdit
+              tenantName={tenantName}
+              agentName={channel.agentName}
+            />
+          ) : (
+            <div style={{ background: 'var(--bg-surface)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', padding: '40px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+              Este tipo de canal no usa una página propia.
             </div>
-            {leads.slice(0, 20).map(lead => {
-              const cfg = STATUS_CONFIG[lead.status as LeadStatus] ?? { label: lead.status, color: 'var(--text-muted)', bgColor: 'var(--bg-overlay)' }
-              return (
-                <div
-                  key={lead.id}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 180px 120px 100px 90px', gap: '0', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', alignItems: 'center' }}
-                >
-                  <Link href={`/leads/${lead.id}`} style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}>
-                    {lead.firstName} {lead.lastName}
-                  </Link>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {lead.email}
-                  </span>
-                  <span style={{ fontSize: '11px', color: cfg.color, background: cfg.bgColor, padding: '2px 8px', borderRadius: '4px', fontWeight: 500, width: 'fit-content' }}>
-                    {cfg.label}
-                  </span>
-                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                    {lead.temperatureScore !== null ? lead.temperatureScore : '—'}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {TRAFFIC_SOURCE_LABELS[lead.trafficSource ?? ''] ?? lead.trafficSource ?? '—'}
-                  </span>
-                </div>
-              )
-            })}
-            {leads.length > 20 && (
-              <div style={{ padding: '12px 16px', textAlign: 'center' }}>
-                <Link href={`/leads?channel=${channel.id}`} style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
-                  Ver {leads.length - 20} más →
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          )
+        }
+      />
     </>
   )
 }

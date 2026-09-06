@@ -12,6 +12,9 @@ node_modules/
 
 # Testing
 coverage/
+graphify-out/
+.graphifyignore
+.claudignore
 
 # Next.js
 .next/
@@ -56,6 +59,15 @@ yarn-error.log*
 # ESLint cache
 .eslintcache
 
-# AI
+# AI / local planning (not shipped)
 CLAUDE.md
 AGENTS.md
+.cursor/
+docs/superpowers/
+
+# db — local Supabase CLI state only (migrations and seeds are tracked)
+supabase/.branches/
+supabase/.temp/
+
+# Estudio — salida del humo manual de /api/studio/render (npm run studio:smoke)
+studio-smoke.png

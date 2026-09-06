@@ -1,23 +1,8 @@
-function Skeleton({ w, h, r = 8 }: { w: string; h: number; r?: number }) {
-  return (
-    <div style={{
-      width: w, height: `${h}px`, borderRadius: `${r}px`,
-      background: 'var(--bg-elevated)',
-      animation: 'pulse 1.5s ease-in-out infinite',
-    }} />
-  )
-}
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function LeadsLoading() {
   return (
     <div style={{ padding: '24px' }}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.4; }
-        }
-      `}</style>
-
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

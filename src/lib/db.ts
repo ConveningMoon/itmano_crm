@@ -1,4 +1,4 @@
-import type { Agent, Lead, LeadEvent, LeadMagnet, PurchaseProcess } from './types'
+import type { Agent, Lead, LeadEvent, PurchaseProcess } from './types'
 
 // ─── DB row shapes ────────────────────────────────────────────────────────────
 
@@ -9,11 +9,15 @@ export interface AgentRow {
   email: string
   phone: string | null
   language: string
-  specialty: string
+  languages?: string[] | null
   avatar_initials: string
   accent_color: string
   active: boolean
   created_at: string
+  email_signature: string | null
+  description?: string | null
+  cover_photo_url?: string | null
+  cover_photo_cutout?: boolean | null
 }
 
 export interface LeadRow {
@@ -21,35 +25,25 @@ export interface LeadRow {
   tenant_id: string
   agent_id: string
   acquisition_channel_id: string | null
+  traffic_source: string | null
   first_name: string
   last_name: string
   email: string
   phone: string | null
   language: string
-  status: string
-  temperature_score: number | null
+  stage: string
   peak_score: number | null
   current_score: number | null
+  quality_score: number | null
+  fit_score: number | null
+  engagement_score: number | null
+  manual_score: number | null
   last_event_at: string | null
   lender: string | null
   notes: string | null
+  metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string
-}
-
-export interface LeadMagnetRow {
-  id: string
-  tenant_id: string
-  agent_id: string
-  title: string
-  subtitle: string
-  language: string
-  month_year: string
-  cover_emoji: string
-  page_url: string
-  active: boolean
-  created_at: string
-  agents?: AgentRow | null
 }
 
 export interface LeadEventRow {
@@ -60,6 +54,7 @@ export interface LeadEventRow {
   description: string
   points: number | null
   created_at: string
+  actor_user_id?: string | null
 }
 
 export interface PurchaseProcessRow {
@@ -70,6 +65,7 @@ export interface PurchaseProcessRow {
   loan_type: string
   closing_date: string | null
   notes: string | null
+  completed_at: string | null
   created_at: string
 }
 
@@ -83,10 +79,14 @@ export function mapAgent(r: AgentRow): Agent {
     email: r.email,
     phone: r.phone ?? undefined,
     language: r.language as Agent['language'],
-    specialty: r.specialty as Agent['specialty'],
+    languages: (r.languages && r.languages.length > 0 ? r.languages : [r.language]) as Agent['languages'],
     avatarInitials: r.avatar_initials,
     accentColor: r.accent_color,
     active: r.active,
+    emailSignature: r.email_signature ?? null,
+    description: r.description ?? null,
+    coverPhotoUrl: r.cover_photo_url ?? null,
+    coverPhotoCutout: r.cover_photo_cutout === true,
   }
 }
 
@@ -96,15 +96,18 @@ export function mapLead(r: LeadRow): Lead {
     tenantId: r.tenant_id,
     agentId: r.agent_id,
     acquisitionChannelId: r.acquisition_channel_id,
+    trafficSource: r.traffic_source ?? null,
     firstName: r.first_name,
     lastName: r.last_name,
     email: r.email,
     phone: r.phone ?? undefined,
     language: r.language as Lead['language'],
-    status: r.status as Lead['status'],
-    temperatureScore: r.temperature_score,
-    peakScore: r.peak_score ?? null,
+    stage: r.stage as Lead['stage'],
     currentScore: r.current_score ?? null,
+    qualityScore: r.quality_score ?? null,
+    fitScore: r.fit_score ?? null,
+    engagementScore: r.engagement_score ?? null,
+    manualScore: r.manual_score ?? null,
     lastEventAt: r.last_event_at ?? null,
     lender: r.lender ?? undefined,
     notes: r.notes ?? undefined,
@@ -122,22 +125,8 @@ export function mapPurchaseProcess(r: PurchaseProcessRow): PurchaseProcess {
     loanType: r.loan_type,
     closingDate: r.closing_date ?? undefined,
     notes: r.notes ?? undefined,
+    completedAt: r.completed_at ?? null,
     createdAt: r.created_at,
-  }
-}
-
-export function mapLeadMagnet(r: LeadMagnetRow): LeadMagnet {
-  return {
-    id: r.id,
-    tenantId: r.tenant_id,
-    agentId: r.agent_id,
-    title: r.title,
-    subtitle: r.subtitle,
-    language: r.language as LeadMagnet['language'],
-    monthYear: r.month_year,
-    pageUrl: r.page_url,
-    coverEmoji: r.cover_emoji,
-    active: r.active,
   }
 }
 
@@ -150,5 +139,6 @@ export function mapLeadEvent(r: LeadEventRow): LeadEvent {
     description: r.description,
     points:      r.points,
     createdAt:   r.created_at,
+    actorUserId: r.actor_user_id ?? null,
   }
 }

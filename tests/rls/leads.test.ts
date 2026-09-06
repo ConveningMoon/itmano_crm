@@ -50,10 +50,13 @@ describe('RLS: leads', () => {
       last_name: 'Lead',
       email: 'hacker-lead@test.invalid',
       language: 'es',
-      status: 'new',
-      temperature_score: 0,
+      stage: 'nuevo',
     })
+    // Tiene que fallar por la POLITICA, no por el esquema: mientras aqui decia
+    // `status` —columna que la 083 borro— el insert reventaba antes de llegar a
+    // RLS y el test pasaba en verde sin probar el aislamiento entre tenants.
     expect(error).not.toBeNull()
+    expect(error!.message).not.toMatch(/column|schema cache/i)
     await adminClient.from('leads').delete().eq('id', 'lead-rls-attempt')
   })
 

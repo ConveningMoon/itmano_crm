@@ -1,19 +1,71 @@
-import { getChannelsWithMetrics } from '@/lib/data/channels'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/data/channels'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
+import { getSourcesHealth } from '@/lib/data/source-health'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
-
-const TENANT_ID = 'tenant-aj'
 
 export default async function SourcesPage({
   searchParams,
 }: {
   searchParams: Promise<{ window?: string }>
 }) {
+  const ctx = await requireTenantContext()
+  const { tenant_id, role } = ctx
+  const isSuperAdmin = role === 'super_admin'
+  const scope = scopeFor(ctx)
   const { window: windowParam } = await searchParams
   const windowDays = Number(windowParam ?? 30)
   const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
-  const channels = await getChannelsWithMetrics(TENANT_ID, validWindow)
+  // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
+  const channels         = await getChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
+  const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
+  // Cómo está entrando cada fuente, según lo que realmente llega.
+  const health = tenant_id ? await getSourcesHealth(tenant_id) : {}
+
+  const supabase = createAdminClient()
+
+  // Picker de tenant en los modales: solo super_admin SIN selección (hoy
+  // inalcanzable aquí por requireTenantContext; actuando como tenant, las
+  // actions resuelven el tenant desde el contexto).
+  const needsTenantPicker = isSuperAdmin && !tenant_id
+  let tenants: Array<{ id: string; name: string }> = []
+  if (needsTenantPicker) {
+    const { data } = await supabase.from('tenants').select('id, name').order('name')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
+  }
+
+  // Slug y modo de gestión de cada tenant presente en las tarjetas: el botón de
+  // "abrir página" arma la URL alojada con el slug, y el mensaje cuando no hay
+  // página depende de si ITMANO administra a ese tenant. Se resuelve por tenant
+  // porque el super_admin sin selección ve canales de varios a la vez.
+  const tenantIds = [...new Set([...channels, ...archivedChannels].map(c => c.tenantId))]
+  let tenantPages: Record<string, { slug: string; managedByItmano: boolean }> = {}
+  if (tenantIds.length > 0) {
+    const { data } = await supabase
+      .from('tenants').select('id, slug, pages_managed_by_itmano').in('id', tenantIds)
+    tenantPages = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data ?? []).map((t: any) => [
+        t.id as string,
+        { slug: (t.slug as string) ?? '', managedByItmano: t.pages_managed_by_itmano === true },
+      ]),
+    )
+  }
+
+  // Active agents for the owner selector, scoped al tenant del contexto
+  // (incluye al super_admin actuando como tenant).
+  let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
+  if (tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  // Un agente sólo crea fuentes suyas, así que el resto del equipo no tiene por
+  // qué viajar en el payload de una lista que él no puede elegir.
+  if (scope.agentId) agentsQ = agentsQ.eq('id', scope.agentId)
+  const { data: agentRows } = await agentsQ
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
 
   const totalLeads     = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
   const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
@@ -43,7 +95,7 @@ export default async function SourcesPage({
       </div>
 
       {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {kpis.map((kpi, i) => (
           <div
             key={i}
@@ -79,7 +131,17 @@ export default async function SourcesPage({
       </div>
 
       {/* Client: tabs + window selector + cards */}
-      <SourcesClient channels={channels} windowDays={validWindow} />
+      <SourcesClient
+        health={health}
+        channels={channels}
+        archivedChannels={archivedChannels}
+        windowDays={validWindow}
+        isSuperAdmin={needsTenantPicker}
+        tenants={tenants}
+        agents={agents}
+        myAgentId={scope.agentId}
+        tenantPages={tenantPages}
+      />
     </>
   )
 }

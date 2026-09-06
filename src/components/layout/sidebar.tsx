@@ -1,25 +1,33 @@
-import Image from 'next/image'
+import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { BrandLogo } from './brand-logo'
+import { signOut } from '@/lib/auth/sign-out'
+import type { TenantRole } from '@/lib/auth/tenant-context'
+import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-const navItems = [
-  { label: 'Dashboard',      href: '/dashboard',     icon: 'LayoutDashboard' },
-  { label: 'Leads',          href: '/leads',         icon: 'Users' },
-  { label: 'Fuentes',        href: '/sources',       icon: 'GitBranch' },
-  { label: 'Emails',         href: '/emails',        icon: 'Mail' },
-  { label: 'Analytics',      href: '/analytics',     icon: 'BarChart2' },
-  { label: 'Configuración',  href: '/settings',      icon: 'Settings' },
-]
+export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
+  role: TenantRole
+  userEmail: string
+  hubMode?: boolean
+  logoUrl?: string | null
+  tenantName?: string | null
+  // Nombre de la suscripción del tenant (p. ej. "Plan Growth"); null en hub.
+  planLabel?: string | null
+}) {
+  // Admin console is super_admin-only — hidden from the nav for everyone else.
+  const items = navItemsForRole(role, { hubMode })
 
-export function Sidebar() {
   return (
+    // Hidden on phones (drawer takes over <md); restored to the fixed flex column
+    // at md: — the desktop (≥768px) render is byte-identical to before.
     <aside
+      className="hidden md:flex"
       style={{
         width: '220px',
         minWidth: '220px',
         height: '100vh',
         backgroundColor: 'var(--bg-surface)',
         borderRight: '1px solid var(--border-subtle)',
-        display: 'flex',
         flexDirection: 'column',
         position: 'fixed',
         top: 0,
@@ -37,14 +45,7 @@ export function Sidebar() {
           alignItems: 'flex-start',
         }}
       >
-        <Image
-          src="/Logo.PNG"
-          alt="ITMANO"
-          width={120}
-          height={44}
-          priority
-          style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }}
-        />
+        <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
         <div
           style={{
             fontSize: '10px',
@@ -69,63 +70,94 @@ export function Sidebar() {
           overflowY: 'auto',
         }}
       >
-        {navItems.map(item => (
-          <NavItem key={item.href} {...item} />
+        {items.map(item => (
+          <NavItem key={item.href} {...item} hrefs={items.map(i => i.href)} />
         ))}
       </nav>
 
-      {/* Active user */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderTop: '1px solid var(--border-subtle)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-        }}
-      >
+      {/* Active user + sign out */}
+      <style>{`.signout-btn:hover { background: var(--bg-elevated) !important; color: var(--text-secondary) !important; }`}</style>
+      <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
         <div
           style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(91,142,201,0.15)',
-            border: '1px solid rgba(91,142,201,0.25)',
+            padding: '12px 16px 8px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: '600',
-            color: 'var(--accent-blue)',
-            flexShrink: 0,
+            gap: '10px',
           }}
         >
-          AM
-        </div>
-        <div style={{ minWidth: 0 }}>
           <div
             style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(91,142,201,0.15)',
+              border: '1px solid rgba(91,142,201,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '11px',
+              fontWeight: '600',
+              color: 'var(--accent-blue)',
+              flexShrink: 0,
+            }}
+          >
+            {initialsFromEmail(userEmail)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: '500',
+                color: 'var(--text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {userEmail}
+            </div>
+            <div
+              style={{
+                fontSize: '10px',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {ROLE_LABELS[role]}
+            </div>
+            {planLabel && (
+              <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
+                {planLabel}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <form action={signOut} style={{ padding: '0 12px 12px' }}>
+          <button
+            type="submit"
+            className="signout-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '7px 10px',
               fontSize: '12px',
-              fontWeight: '500',
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Adriana Melendez
-          </div>
-          <div
-            style={{
-              fontSize: '10px',
               color: 'var(--text-muted)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'background-color var(--dur-fast), color var(--dur-fast)',
             }}
           >
-            agent_owner
-          </div>
-        </div>
+            <LogOut size={14} strokeWidth={1.6} />
+            <span>Cerrar sesión</span>
+          </button>
+        </form>
       </div>
     </aside>
   )

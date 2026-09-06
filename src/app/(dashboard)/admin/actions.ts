@@ -1,0 +1,591 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { z } from 'zod'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
+import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
+import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
+import { initialAiBudgetUsd, planAiBudgetUsd } from '@/lib/services/ai-budget'
+import type { SubscriptionPlan } from '@/lib/subscriptions'
+import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
+
+// All actions here are super_admin-only (ITMANO internal onboarding), gated the
+// same way as updateScoreRules. The admin client (service_role) is the correct
+// path: tenants/user_profiles have SELECT-only RLS, and auth.users is only
+// reachable via the admin API.
+
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: 'Administrador ITMANO',
+  agent_owner: 'Propietario',
+  agent:       'Agente',
+}
+
+// ─── Selección de tenant (super_admin) ────────────────────────────────────────
+
+// Entra al CRM de un tenant: setea la cookie de selección y aterriza en su
+// dashboard. La cookie solo la honra tenant-context cuando el rol del request
+// es super_admin.
+export async function enterTenant(tenantId: string): Promise<void> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('id', tenantId)
+    .maybeSingle()
+  if (!tenant) return
+
+  const store = await cookies()
+  store.set(ADMIN_TENANT_COOKIE, tenantId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 3600,
+    secure: process.env.NODE_ENV === 'production',
+  })
+  redirect('/dashboard')
+}
+
+// Sale del CRM del tenant y vuelve al centro de control.
+export async function exitToHub(): Promise<void> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return
+
+  const store = await cookies()
+  store.delete(ADMIN_TENANT_COOKIE)
+  redirect('/admin')
+}
+
+// ─── Create tenant ──────────────────────────────────────────────────────────
+
+const CreateTenantSchema = z.object({
+  name:         z.string().trim().min(1, 'El nombre es obligatorio').max(100),
+  slug:         z.string().trim().min(1).max(60)
+                  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'El slug debe ser kebab-case (minúsculas, números y guiones)'),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)').optional(),
+  plan:         z.enum(['esencial', 'growth', 'partner']).default('esencial'),
+  // Período de prueba (gancho de adquisición): arranca como plan Partner en
+  // status 'trial' con vencimiento a TRIAL.days y presupuesto de IA de cortesía.
+  startTrial:   z.boolean().default(false),
+})
+
+export async function createTenant(
+  input: { name: string; slug: string; primaryColor?: string; plan?: string; startTrial?: boolean },
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede crear tenants.' }
+  }
+
+  const parsed = CreateTenantSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  // id is derived from the slug, consistent with 'tenant-aj'.
+  const id       = `tenant-${parsed.data.slug}`
+  const supabase = createAdminClient()
+
+  // Reject a duplicate id OR slug up front for a clean message (the unique slug
+  // constraint is the DB-level backstop).
+  const { data: existing } = await supabase
+    .from('tenants')
+    .select('id')
+    .or(`id.eq.${id},slug.eq.${parsed.data.slug}`)
+    .limit(1)
+    .maybeSingle()
+  if (existing) {
+    return { ok: false, error: `Ya existe un tenant con el slug "${parsed.data.slug}".` }
+  }
+
+  // email_from_address is intentionally omitted (nullable; configured later).
+  //
+  // El presupuesto de IA se escribe SIEMPRE, nunca se deja al DEFAULT de la
+  // columna: ese default es $10 fijo y no sabe de planes, así que un Partner
+  // nacía con $10 en vez de $75. initialAiBudgetUsd resuelve el trial también.
+  const { error } = await supabase.from('tenants').insert({
+    id,
+    name:          parsed.data.name,
+    slug:          parsed.data.slug,
+    primary_color: parsed.data.primaryColor ?? '#1E3A5F',
+    ai_monthly_limit_usd: initialAiBudgetUsd(parsed.data.plan, parsed.data.startTrial),
+  })
+  if (error) return { ok: false, error: error.message }
+
+  // Suscripción inicial (sales-led). Best-effort: si falla, el tenant existe y
+  // el plan se puede fijar luego desde la gestión (upsert).
+  const { error: subErr } = await supabase.from('subscriptions').insert(
+    parsed.data.startTrial
+      ? {
+          tenant_id:     id,
+          plan:          TRIAL.plan,
+          status:        'trial',
+          trial_ends_at: trialEndsAtFromNow().toISOString(),
+        }
+      : { tenant_id: id, plan: parsed.data.plan },
+  )
+  if (subErr) {
+    console.error(JSON.stringify({ service: 'create-tenant-subscription', tenant_id: id, error: subErr.message }))
+  }
+
+  revalidatePath('/admin')
+  return { ok: true, id }
+}
+
+// ─── Update tenant ────────────────────────────────────────────────────────────
+
+const UpdateTenantSchema = z.object({
+  tenantId:     z.string().trim().min(1),
+  name:         z.string().trim().min(1, 'El nombre es obligatorio').max(100),
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)'),
+  // Límite mensual de IA (USD). aiUnlimited = true ignora el monto.
+  aiMonthlyLimitUsd: z.number().min(0, 'El límite no puede ser negativo').max(9999.99, 'Límite demasiado alto'),
+  aiUnlimited:       z.boolean(),
+  // Migración 091: ITMANO gestiona las páginas del tenant (fuentes y propiedades)
+  // y su dominio de envío.
+  pagesManagedByItmano: z.boolean(),
+})
+
+export async function updateTenant(
+  input: {
+    tenantId: string; name: string; primaryColor: string
+    aiMonthlyLimitUsd: number; aiUnlimited: boolean
+    pagesManagedByItmano: boolean
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede editar tenants.' }
+  }
+
+  const parsed = UpdateTenantSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('tenants')
+    .update({
+      name:                 parsed.data.name,
+      primary_color:        parsed.data.primaryColor,
+      ai_monthly_limit_usd: Math.round(parsed.data.aiMonthlyLimitUsd * 100) / 100,
+      ai_unlimited:         parsed.data.aiUnlimited,
+      pages_managed_by_itmano: parsed.data.pagesManagedByItmano,
+    })
+    .eq('id', parsed.data.tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  // El nombre/branding se lee en el layout (sidebar, switcher) — revalidar todo.
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
+
+// ─── Verificación de dominio de envío (super_admin, API de Resend) ────────────
+// El super_admin agrega el dominio de envío de un tenant; el CRM lo crea en la
+// cuenta de Resend del tenant (resend_account), guarda los registros DNS y
+// consulta el estado real. Growth/Partner envían desde su dominio cuando queda
+// verificado; mientras tanto salen del dominio compartido de ITMANO.
+
+const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/
+
+// Extrae los campos útiles de los registros DNS que devuelve Resend.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeRecords(records: any): unknown[] {
+  if (!Array.isArray(records)) return []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return records.map((r: any) => ({
+    record:   r.record ?? r.type ?? '',
+    type:     r.type ?? '',
+    name:     r.name ?? '',
+    value:    r.value ?? '',
+    ttl:      r.ttl ?? 'Auto',
+    priority: r.priority ?? null,
+    status:   r.status ?? '',
+  }))
+}
+
+async function resendClientForTenant(
+  tenantId: string,
+): Promise<{ ok: true; client: ReturnType<typeof resendForAccount>; account: 'aj' | 'itmano' } | { ok: false; error: string }> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('tenants').select('resend_account').eq('id', tenantId).maybeSingle()
+  const account = resolveResendAccount((data as { resend_account?: string } | null)?.resend_account)
+  // Evita registrar el dominio en la cuenta equivocada por un fallback silencioso.
+  if (account === 'itmano' && !itmanoResendConfigured()) {
+    return { ok: false, error: 'Configura RESEND_API_KEY_ITMANO antes de gestionar dominios de este tenant.' }
+  }
+  return { ok: true, client: resendForAccount(account), account }
+}
+
+const AddDomainSchema = z.object({
+  tenantId: z.string().trim().min(1),
+  domain:   z.string().trim().toLowerCase().min(4).max(253),
+})
+
+export async function addTenantDomain(
+  input: { tenantId: string; domain: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const parsed = AddDomainSchema.safeParse(input)
+  if (!parsed.success || !DOMAIN_RE.test(parsed.data.domain)) {
+    return { ok: false, error: 'Dominio inválido. Usa algo como mail.tudominio.com.' }
+  }
+
+  // Un tenant administrado por ITMANO sale por el dominio compartido: el panel
+  // está bloqueado en la UI y el camino de escritura también (migración 091).
+  const { data: managedRow } = await createAdminClient()
+    .from('tenants').select('pages_managed_by_itmano').eq('id', parsed.data.tenantId).maybeSingle()
+  if ((managedRow as { pages_managed_by_itmano?: boolean } | null)?.pages_managed_by_itmano) {
+    return { ok: false, error: 'Este tenant está administrado por ITMANO: desmárcalo antes de agregarle un dominio.' }
+  }
+
+  const clientRes = await resendClientForTenant(parsed.data.tenantId)
+  if (!clientRes.ok) return clientRes
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (clientRes.client as any).domains.create({ name: parsed.data.domain })
+    if (error || !data?.id) {
+      return { ok: false, error: `Resend no pudo crear el dominio: ${error?.message ?? 'sin id'}` }
+    }
+    const supabase = createAdminClient()
+    const { error: updErr } = await supabase.from('tenants').update({
+      sending_domain:   parsed.data.domain,
+      resend_domain_id: data.id,
+      domain_status:    data.status ?? 'pending',
+      domain_records:   normalizeRecords(data.records),
+    }).eq('id', parsed.data.tenantId)
+    if (updErr) return { ok: false, error: updErr.message }
+  } catch (e) {
+    return { ok: false, error: `No se pudo agregar el dominio: ${e instanceof Error ? e.message : 'error'}` }
+  }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+export async function refreshTenantDomain(
+  tenantId: string,
+): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase.from('tenants').select('resend_domain_id').eq('id', tenantId).maybeSingle()
+  const domainId = (tenant as { resend_domain_id?: string } | null)?.resend_domain_id
+  if (!domainId) return { ok: false, error: 'Este tenant no tiene un dominio agregado.' }
+
+  const clientRes = await resendClientForTenant(tenantId)
+  if (!clientRes.ok) return clientRes
+
+  try {
+    // Dispara la verificación y consulta el estado real.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (clientRes.client as any).domains.verify(domainId).catch(() => {})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (clientRes.client as any).domains.get(domainId)
+    if (error || !data) return { ok: false, error: `No se pudo consultar el dominio: ${error?.message ?? 'sin datos'}` }
+
+    const status = (data.status as string) ?? 'pending'
+    const { error: updErr } = await supabase.from('tenants').update({
+      domain_status:  status,
+      domain_records: normalizeRecords(data.records),
+    }).eq('id', tenantId)
+    if (updErr) return { ok: false, error: updErr.message }
+
+    revalidatePath('/admin')
+    return { ok: true, status }
+  } catch (e) {
+    return { ok: false, error: `No se pudo verificar: ${e instanceof Error ? e.message : 'error'}` }
+  }
+}
+
+export async function removeTenantDomain(
+  tenantId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase.from('tenants').select('resend_domain_id').eq('id', tenantId).maybeSingle()
+  const domainId = (tenant as { resend_domain_id?: string } | null)?.resend_domain_id
+
+  if (domainId) {
+    const clientRes = await resendClientForTenant(tenantId)
+    if (clientRes.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (clientRes.client as any).domains.remove(domainId).catch(() => {})
+    }
+  }
+
+  const { error } = await supabase.from('tenants').update({
+    sending_domain: null, resend_domain_id: null, domain_status: 'not_configured', domain_records: null,
+  }).eq('id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+// ─── Subscription management (super_admin) ───────────────────────────────────
+// Aplica el plan/estado definitivo de un tenant y limpia cualquier solicitud
+// pendiente (el flujo del owner solo SOLICITA; aquí se resuelve).
+
+const UpdateSubscriptionSchema = z.object({
+  tenantId: z.string().trim().min(1),
+  plan:     z.enum(['esencial', 'growth', 'partner']),
+  status:   z.enum(['trial', 'active', 'cancelled']),
+  // Requerido cuando status = 'trial' (constraint de coherencia en la 055).
+  // Permite fijar o EXTENDER el vencimiento de la prueba.
+  trialEndsAt: z.string().datetime({ offset: true }).nullish(),
+  // Paddle (migración 070). paddlePriceId es el precio negociado de Partner —
+  // sin él, /settings mantiene el flujo de solicitud en vez del botón de pago.
+  // Cadena vacía se normaliza a null (campo "sin asignar").
+  paddlePriceId: z.string().trim().max(80).nullish(),
+  // A&J (piloto): true — nunca toca Paddle, aunque tenga plan/estado asignado.
+  billingExempt: z.boolean().default(false),
+})
+
+export async function updateTenantSubscription(
+  input: {
+    tenantId: string; plan: string; status: string; trialEndsAt?: string | null
+    paddlePriceId?: string | null; billingExempt?: boolean
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede gestionar suscripciones.' }
+  }
+
+  const parsed = UpdateSubscriptionSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+  if (parsed.data.status === 'trial' && !parsed.data.trialEndsAt) {
+    return { ok: false, error: 'Una prueba necesita fecha de vencimiento.' }
+  }
+
+  const supabase = createAdminClient()
+
+  // Plan ANTERIOR, para detectar la TRANSICIÓN — mismo criterio que
+  // paddle/persist.ts. Un upsert con el mismo plan (ajustar sólo el estado o
+  // extender la prueba) no debe pisar un tope que el super_admin haya subido
+  // a mano para ese tenant.
+  const { data: existing } = await supabase
+    .from('subscriptions')
+    .select('plan')
+    .eq('tenant_id', parsed.data.tenantId)
+    .maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sin tipos generados de Supabase, la fila llega untyped
+  const planAnterior = ((existing as any)?.plan as SubscriptionPlan | undefined) ?? null
+
+  // Upsert: tenants creados antes de la migración 054 podrían no tener fila.
+  const { error } = await supabase
+    .from('subscriptions')
+    .upsert({
+      tenant_id:      parsed.data.tenantId,
+      plan:           parsed.data.plan,
+      status:         parsed.data.status,
+      requested_plan: null,
+      trial_ends_at:  parsed.data.status === 'trial' ? parsed.data.trialEndsAt : null,
+      paddle_price_id: parsed.data.paddlePriceId?.trim() || null,
+      billing_exempt:  parsed.data.billingExempt,
+      updated_at:      new Date().toISOString(),
+    }, { onConflict: 'tenant_id' })
+  if (error) return { ok: false, error: error.message }
+
+  // Cambio de plan a mano: el presupuesto mensual de IA se mueve al del plan
+  // nuevo, igual que la vía de Paddle (ver paddle/persist.ts). Sin esto la
+  // RESERVA (que sale del plan) y el TECHO (que sale de esta columna) se
+  // desincronizan: un tenant subido de Esencial a Growth a mano se quedaría
+  // con la reserva de Growth ($6) sobre un techo que sigue siendo el de
+  // Esencial ($12) — la mitad del presupuesto discrecional que le toca.
+  //
+  // NUNCA mientras `status = 'trial'`: la prueba vive como `plan = 'growth'`
+  // pero con presupuesto de CORTESÍA propio (`TRIAL.aiBudgetUsd`, $25), no el
+  // de Growth de pago ($30) — mismo criterio que `initialAiBudgetUsd` aplica
+  // al alta. El formulario manda el estado completo en cada guardado, así que
+  // sin esta guardia CUALQUIER edición de un tenant en prueba (nombre, logo,
+  // lo que sea) dispararía esta sincronización y le pisaría el presupuesto de
+  // cortesía por el de un plan de pago que todavía no está pagando.
+  //
+  // Best-effort: lo crítico —plan y estado— ya quedó escrito arriba, y esto
+  // es un ajuste secundario que el super_admin puede corregir a mano desde el
+  // Centro de control si falla.
+  if (parsed.data.status !== 'trial' && parsed.data.plan !== planAnterior) {
+    const { error: budgetError } = await supabase
+      .from('tenants')
+      .update({ ai_monthly_limit_usd: planAiBudgetUsd(parsed.data.plan) })
+      .eq('id', parsed.data.tenantId)
+    if (budgetError) {
+      console.error(JSON.stringify({
+        service: 'admin-plan-budget', tenant_id: parsed.data.tenantId,
+        from: planAnterior, to: parsed.data.plan, error: budgetError.message,
+      }))
+    }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
+// ─── Delete tenant ────────────────────────────────────────────────────────────
+
+// Eliminación real de la fila. La mayoría de las FKs a tenants NO son cascade
+// (leads, agents, canales, emails…), así que un tenant con datos operativos es
+// rechazado por Postgres — eso es intencional: borrar un tenant productivo
+// requiere limpieza deliberada, no un botón. `confirmSlug` obliga a teclear el
+// slug exacto como confirmación.
+export async function deleteTenant(
+  tenantId: string,
+  confirmSlug: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede eliminar tenants.' }
+  }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id, slug, logo_url')
+    .eq('id', tenantId)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'El tenant no existe.' }
+
+  const t = tenant as { id: string; slug: string; logo_url: string | null }
+  if (confirmSlug.trim() !== t.slug) {
+    return { ok: false, error: `Escribe el slug exacto (“${t.slug}”) para confirmar.` }
+  }
+
+  const { error } = await supabase.from('tenants').delete().eq('id', tenantId)
+  if (error) {
+    if (/foreign key|violates/i.test(error.message)) {
+      return {
+        ok: false,
+        error: 'El tenant tiene datos asociados (leads, agentes, canales…). Elimina o migra esos datos antes de borrarlo.',
+      }
+    }
+    return { ok: false, error: error.message }
+  }
+
+  // Limpieza best-effort del branding en Storage (la fila ya no existe).
+  const { data: assets } = await supabase.storage.from('tenant-assets').list(tenantId, { limit: 100 })
+  const paths = (assets ?? []).map(o => `${tenantId}/${o.name}`)
+  if (paths.length > 0) {
+    const { error: rmErr } = await supabase.storage.from('tenant-assets').remove(paths)
+    if (rmErr) console.error(JSON.stringify({ service: 'delete-tenant-assets', tenant_id: tenantId, error: rmErr.message }))
+  }
+
+  // Si el super_admin estaba actuando como este tenant, soltar la selección.
+  const store = await cookies()
+  if (store.get(ADMIN_TENANT_COOKIE)?.value === tenantId) {
+    store.delete(ADMIN_TENANT_COOKIE)
+  }
+
+  revalidatePath('/', 'layout')
+  return { ok: true }
+}
+
+// ─── Provision owner ──────────────────────────────────────────────────────────
+
+const ProvisionOwnerSchema = z.object({
+  tenantId:       z.string().trim().min(1),
+  email:          z.string().trim().email('Email inválido'),
+  telegramChatId: z.string().trim().max(50).optional(),
+})
+
+export async function provisionOwner(
+  input: { tenantId: string; email: string; telegramChatId?: string },
+): Promise<{ ok: true; email: string; created: boolean } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') {
+    return { ok: false, error: 'Solo un administrador de ITMANO puede provisionar owners.' }
+  }
+
+  const parsed = ProvisionOwnerSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const email          = normalizeEmail(parsed.data.email)
+  const telegramChatId = parsed.data.telegramChatId?.trim() || null
+  const supabase       = createAdminClient()
+
+  // Tenant must exist.
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('id, name')
+    .eq('id', parsed.data.tenantId)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'El tenant no existe.' }
+
+  // One owner per tenant (current rule). Check BEFORE creating any auth user so a
+  // rejected provisioning never leaves a stray account behind.
+  const { data: existingOwner } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('tenant_id', parsed.data.tenantId)
+    .eq('role', 'agent_owner')
+    .limit(1)
+    .maybeSingle()
+  if (existingOwner) {
+    return { ok: false, error: `${(tenant as { name: string }).name} ya tiene un owner asignado.` }
+  }
+
+  // Find an existing auth user with this email, else create one (no password —
+  // login is Magic Link; email_confirm so the first link works immediately).
+  const found = await findAuthUserByEmail(email)
+  let userId: string
+  let created = false
+  if (found) {
+    userId = found.id
+  } else {
+    const { data: createdUser, error: createErr } = await supabase.auth.admin.createUser({
+      email,
+      email_confirm: true,
+    })
+    if (createErr || !createdUser?.user) {
+      return { ok: false, error: `No se pudo crear el usuario: ${createErr?.message ?? 'desconocido'}` }
+    }
+    userId  = createdUser.user.id
+    created = true
+  }
+
+  // The user must not already have a profile (reused auth user from another
+  // tenant/role). A freshly created user never does.
+  const { data: existingProfile } = await supabase
+    .from('user_profiles')
+    .select('tenant_id, role')
+    .eq('id', userId)
+    .maybeSingle()
+  if (existingProfile) {
+    const p = existingProfile as { tenant_id: string | null; role: string }
+    const where = p.tenant_id ?? 'sin tenant'
+    return { ok: false, error: `Este email ya tiene un perfil (${ROLE_LABELS[p.role] ?? p.role} en ${where}).` }
+  }
+
+  // RLS on user_profiles is SELECT-only; the admin client (service_role) is the
+  // correct path for this insert.
+  const { error: insertErr } = await supabase.from('user_profiles').insert({
+    id:               userId,
+    tenant_id:        parsed.data.tenantId,
+    role:             'agent_owner',
+    telegram_chat_id: telegramChatId,
+  })
+  if (insertErr) return { ok: false, error: insertErr.message }
+
+  revalidatePath('/admin')
+  return { ok: true, email, created }
+}

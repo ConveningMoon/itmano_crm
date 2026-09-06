@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+/* Inter NO se importa desde fonts.googleapis.com: un @import de CSS obliga al
+   navegador a descargar y parsear globals.css ANTES de descubrir la fuente, y
+   recién ahí abre DNS+TLS contra googleapis y después contra gstatic — dos
+   conexiones a terceros encadenadas en el camino crítico de render. La fuente se
+   autohospeda con next/font en src/app/layout.tsx, que la sirve desde nuestro
+   propio dominio y expone la familia en --font-inter (ver --font-sans abajo). */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -42,7 +47,9 @@
   --status-lost: #C97B6B;
 
   --radius: 8px;
-  --font-sans: 'Inter', system-ui, sans-serif;
+  /* --font-inter lo inyecta next/font desde el layout raíz. El fallback cubre
+     el render de cualquier superficie que no cuelgue de ese layout. */
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
 
   /* shadcn base overrides */
   --background: #0B0C0E;
@@ -63,6 +70,21 @@
   --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.06);
   --ring: #C9A96E;
+
+  /* Motion */
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 350ms;
+  --ease-out-premium: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Elevation — on #0B0C0E a shadow alone doesn't read; pair it with
+     --highlight-top (inner top edge) and a lighter border on hover */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.35);
+  --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-gold-hover: rgba(201, 169, 110, 0.3);
 }
 
 @theme inline {
@@ -114,6 +136,28 @@
   box-sizing: border-box;
 }
 
+/* ── App-shell layout — single, authoritative source of truth ──────────────────
+   The sidebar offset and content/topbar gutters MUST live as real rules here, not
+   as Tailwind utility classes. Tailwind utilities live in `@layer utilities`, and
+   the unlayered `* { margin:0; padding:0 }` reset above beats ANY layered rule
+   (cascade-layer precedence), so utility-based margin/padding silently lost — which
+   is exactly what made the responsive refactor overlap the sidebar (margin killed)
+   and stick content to the edges (padding killed). These rules are unlayered too,
+   with class specificity (0,1,0) > `*` (0,0,0), so they win cleanly — the same
+   immunity the previous inline styles had.
+
+   Mobile-first: comfortable 16px gutter, no offset. At ≥768px (the `md` breakpoint,
+   where the sidebar becomes visible) the desktop is restored byte-for-byte to the
+   pre-responsive values: 220px sidebar offset + 24px gutters. */
+.app-shell-content { margin-left: 0; }
+.app-shell-main    { padding: 16px; }
+.app-shell-topbar  { padding-left: 16px; padding-right: 16px; }
+@media (min-width: 768px) {
+  .app-shell-content { margin-left: 220px; }
+  .app-shell-main    { padding: 24px; }
+  .app-shell-topbar  { padding-left: 24px; padding-right: 24px; }
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -132,3 +176,118 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Motion & interaction layer ────────────────────────────────────────────
+   Contract lives in src/components/motion/README.md. These classes replace
+   the inline onMouseEnter/onMouseLeave hover pattern: components add a class
+   and keep their base styles inline. Unlayered on purpose — same cascade
+   immunity as the app-shell rules above. */
+
+/* Focus ring — keyboard navigation only */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Skeleton shimmer — shared by every loading.tsx */
+.skeleton {
+  background-color: var(--bg-elevated);
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  background-size: 200% 100%;
+  background-position-x: 180%;
+  animation: shimmer 1.8s linear infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer {
+  to { background-position-x: -20%; }
+}
+
+/* Interactive surfaces */
+.card-interactive {
+  transition:
+    border-color var(--dur-fast),
+    box-shadow var(--dur-fast),
+    background-color var(--dur-fast);
+}
+.card-interactive:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--highlight-top), var(--shadow-md);
+}
+
+.row-hover { transition: background-color var(--dur-fast); }
+.row-hover:hover { background-color: var(--bg-elevated); }
+
+.btn-cta {
+  transition:
+    filter var(--dur-fast),
+    box-shadow var(--dur-fast),
+    transform var(--dur-fast);
+}
+.btn-cta:hover { filter: brightness(1.08); box-shadow: var(--shadow-sm); }
+.btn-cta:active { transform: scale(0.98); }
+
+/* Nav items: base colors live here (not inline) so :hover can win the cascade */
+.nav-item {
+  color: var(--text-secondary);
+  background-color: transparent;
+  font-weight: 400;
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.nav-item:hover:not(.nav-item-active) {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.nav-item-active {
+  color: var(--accent-gold);
+  background-color: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  font-weight: 500;
+}
+
+/* Icon buttons (topbar bell y afines) */
+.btn-icon {
+  background-color: transparent;
+  color: var(--text-secondary);
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.btn-icon:hover {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* ─── Tinte monocromo para assets raster ──────────────────────────────────
+   brightness(0) saturate(100%) aplana la imagen a negro preservando el alpha;
+   la cadena posterior la lleva al color objetivo. Valores aproximados,
+   afinados visualmente contra el token correspondiente. */
+
+/* → var(--accent-gold) #C9A96E (medido en canvas: ~#D1A766) */
+.img-tint-gold {
+  filter: brightness(0) saturate(100%) invert(75%) sepia(28%) saturate(620%)
+          hue-rotate(357deg) brightness(88%) contrast(88%);
+}
+/* Igual que .img-tint-gold + halo dorado; el drop-shadow va al final de la
+   cadena para tomar el color ya teñido. */
+.img-tint-gold-glow {
+  filter: brightness(0) saturate(100%) invert(75%) sepia(28%) saturate(620%)
+          hue-rotate(357deg) brightness(88%) contrast(88%)
+          drop-shadow(0 0 18px rgba(201, 169, 110, 0.25));
+}
+/* → var(--text-primary) #E8E6E1 */
+.img-tint-light {
+  filter: brightness(0) saturate(100%) invert(97%) sepia(4%) saturate(120%)
+          hue-rotate(20deg) brightness(101%) contrast(90%);
+}
+
+/* Reduced motion — CSS side; motion/react is covered by MotionConfig */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

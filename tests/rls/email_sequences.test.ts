@@ -42,11 +42,9 @@ describe('RLS: email_sequences', () => {
   })
 
   it('tenant A user cannot insert sequence for tenant B', async () => {
-    // email_sequences.acquisition_channel_id is UNIQUE — use a non-existent channel
     const client = await asUser(USER_A_EMAIL, TEST_PASSWORD)
     const { error } = await client.from('email_sequences').insert({
       tenant_id: TENANT_B_ID,
-      acquisition_channel_id: '00000000-0000-0000-0000-000000000000',
       name: 'Attempt Seq',
     })
     expect(error).not.toBeNull()

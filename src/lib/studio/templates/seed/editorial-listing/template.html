@@ -1,0 +1,54 @@
+<main class="pieza">
+  <!-- Envuelta en sección, a diferencia del mosaico: editorial-shell.tsx SÍ
+       condiciona la foto ({p.heroPhoto && ...}) porque el editorial puede
+       existir sin ella (lo dice su comentario de cabecera) — la sección
+       declara el slot como OPCIONAL, que es lo fiel a ese condicional. -->
+  {{#hero}}<img class="foto" src="{{hero}}" alt="">{{/hero}}
+
+  <!-- El bloque de color: TODO el texto. En el TSX se centra con
+       justify-content y crece con flex:1 -- aquí igual, así que un hueco es
+       imposible aunque falte casi todo (ver escenario Mínimo). -->
+  <div class="bloque">
+    <!-- El badge también va condicionado en el TSX ({p.badge && ...}, no usa
+         el componente Badge común), así que aquí también es sección. -->
+    {{#badge}}<span class="badge">{{badge}}</span>{{/badge}}
+    <h1>{{&headlineRitmo}}</h1>
+
+    <!-- El dato por el que se publica una venta: la cifra. editorial-shell
+         también sabe pintar día/hora cuando no hay precio, pero esa rama solo
+         la alimenta casa abierta o evento -- ninguna de las dos recetas de
+         esta plantilla (new_listing) -- así que no se porta: nunca recibiría
+         dato y solo sería marcado muerto. -->
+    {{#price}}<span class="precio">{{price}}</span>{{/price}}
+
+    {{#address}}
+    <div class="direccion">
+      <i class="icono icono-pin"></i>
+      <span>{{address}}</span>
+    </div>
+    {{/address}}
+
+    <!-- Nombradas, no ordinales: sqft, bedrooms y bathrooms son cada uno
+         opcional por su cuenta (statsFor en template-props.ts), así que el
+         icono va SIEMPRE con SU dato, nunca por posición. Las tres secciones
+         son HERMANAS, no una anidada en otra (las secciones no anidan) —
+         ".specs:empty" oculta el contenedor cuando ninguna tiene dato, y por
+         eso van pegadas sin espacio entre sí: un hueco de texto entre ellas
+         dejaría el div con un nodo de texto y nunca estaría "vacío". -->
+    <div class="specs">{{#statSqft}}<span class="stat"><i class="icono icono-regla"></i>{{statSqft}}</span>{{/statSqft}}{{#statBedrooms}}<span class="stat"><i class="icono icono-cama"></i>{{statBedrooms}}</span>{{/statBedrooms}}{{#statBathrooms}}<span class="stat"><i class="icono icono-bano"></i>{{statBathrooms}}</span>{{/statBathrooms}}</div>
+  </div>
+
+  <!-- Pie claro: el agente y el logo. Nombre y teléfono son DOS secciones
+       independientes, no una anidada dentro de la otra -- el TSX las
+       condiciona por separado ({p.agentName && ...} y {p.phone && ...} son
+       hermanas, no madre-hija) y las secciones de este motor no anidan. -->
+  <div class="pie">
+    <div class="agente">
+      {{#agentName}}<span class="nombre-agente">{{agentName}}</span>{{/agentName}}
+      {{#phone}}<span class="telefono-agente">{{phone}}</span>{{/phone}}
+    </div>
+    {{#logo}}<img class="logo" src="{{logo}}" alt="">{{/logo}}
+  </div>
+
+  {{#agentPhoto}}<img class="retrato" src="{{agentPhoto}}" alt="">{{/agentPhoto}}
+</main>

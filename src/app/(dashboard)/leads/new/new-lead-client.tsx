@@ -2,22 +2,28 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
 import type { Agent, Language } from '@/lib/types'
-import type { ChannelOption } from './page'
-import { createLead, createLeadsBulk } from './actions'
+import type { ChannelOption, TenantOption } from './page'
+import { createLead, createLeadsBulk, getExistingLeadEmails } from './actions'
+import { parseLeadRows, type ParseLeadsResult, type NormalizedLead } from '@/lib/import/parse-leads'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { Tabs } from '@/components/ui/tabs'
 import {
   ArrowLeft,
   CheckCircle2,
   Mail,
   Phone,
   Building2,
-  Upload,
   PenLine,
   FileUp,
   Download,
   AlertTriangle,
+  Camera,
+  ThumbsUp,
+  MessageCircle,
+  FileDown,
+  Calendar,
+  Globe,
 } from 'lucide-react'
 
 interface FormData {
@@ -38,24 +44,12 @@ interface FormErrors {
   email?:                string
   agentId?:             string
   acquisitionChannelId?: string
+  tenantId?:             string
 }
 
 type ImportStatus = 'idle' | 'parsing' | 'preview' | 'success' | 'error'
 
-interface ImportedLead {
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  language: string
-  agentId: string
-  sourceType: string
-  lender: string
-  notes: string
-  _rowIndex: number
-  _hasError: boolean
-  _errorMessage?: string
-}
+type FileFormat = 'csv' | 'xlsx'
 
 const INITIAL_FORM: FormData = {
   firstName:            '',
@@ -70,15 +64,35 @@ const INITIAL_FORM: FormData = {
   notes:                '',
 }
 
-const CHANNEL_TYPE_LABELS: Record<string, string> = {
-  manual:        'Registro manual',
-  lead_magnet:   'Lead Magnet',
-  event:         'Evento',
-  contact_form:  'Formulario Web',
-  manychat_flow: 'ManyChat',
-}
+// Lead-registration sources. The first four are DIRECT-ENTRY: the source IS the
+// origin (no specific acquisition channel), so traffic_source is set from the
+// source and the "origen" picker is hidden. The last three are channel-based:
+// they require picking a specific acquisition channel (current behavior).
+const SOURCE_OPTIONS: { value: string; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
+  { value: 'manual',       label: 'Registro manual', icon: PenLine },
+  // lucide-react v1 dropped brand icons (Instagram/Facebook); use representative
+  // generics: camera (IG photos), thumbs-up (FB), message circle (WhatsApp DM).
+  { value: 'instagram',    label: 'Instagram',       icon: Camera },
+  { value: 'facebook',     label: 'Facebook',        icon: ThumbsUp },
+  { value: 'whatsapp',     label: 'WhatsApp',        icon: MessageCircle },
+  { value: 'lead_magnet',  label: 'Lead Magnet',     icon: FileDown },
+  { value: 'event',        label: 'Evento',          icon: Calendar },
+  { value: 'contact_form', label: 'Formulario Web',  icon: Globe },
+]
 
-const CHANNEL_TYPE_ORDER = ['manual', 'lead_magnet', 'event', 'contact_form', 'manychat_flow']
+const CHANNEL_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  SOURCE_OPTIONS.map(o => [o.value, o.label])
+)
+
+// Direct-entry sources → their traffic_source value. The lead's channel_type is
+// forced to 'manual' and acquisition_channel_id to null for these.
+const DIRECT_ENTRY_SOURCES = new Set(['manual', 'instagram', 'facebook', 'whatsapp'])
+const TRAFFIC_SOURCE_BY_SOURCE: Record<string, string> = {
+  manual:    'direct',
+  instagram: 'instagram',
+  facebook:  'facebook',
+  whatsapp:  'whatsapp',
+}
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -139,15 +153,12 @@ const sectionBodyStyle: React.CSSProperties = {
   borderBottom: '1px solid var(--border-subtle)',
 }
 
-const SPECIALTY_LABEL: Record<string, string> = {
-  hispanic: 'Familias Hispanas',
-  military: 'Familias Militares',
-  first_buyer: 'Compradores Primerizos',
-  brazilian: 'Comunidad Brasileña',
-}
-
-const LANG_FLAG: Record<string, string> = { es: '🇪🇸', en: '🇺🇸', pt: '🇧🇷' }
-const LANG_LABEL: Record<string, string> = { es: 'ES', en: 'EN', pt: 'PT' }
+const LANG_FLAG: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map(c => [c, LANGUAGE_CONFIG[c].flag])
+)
+const LANG_LABEL: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map(c => [c, c.toUpperCase()])
+)
 
 interface SuccessScreenProps {
   form: FormData
@@ -223,150 +234,188 @@ function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
   )
 }
 
-export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels: ChannelOption[] }) {
+export function NewLeadClient({
+  agents,
+  channels,
+  isSuperAdmin = false,
+  tenants = [],
+  myAgentId = null,
+}: {
+  agents: Agent[]
+  channels: ChannelOption[]
+  isSuperAdmin?: boolean
+  tenants?: TenantOption[]
+  myAgentId?: string | null
+}) {
   const router = useRouter()
 
   const [form, setForm] = useState<FormData>(INITIAL_FORM)
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [autoAssigned, setAutoAssigned] = useState(false)
   const [mode, setMode] = useState<'manual' | 'import'>('manual')
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
-  const [importedLeads, setImportedLeads] = useState<ImportedLead[]>([])
+  const [parseResult, setParseResult] = useState<ParseLeadsResult | null>(null)
+  const [existingEmails, setExistingEmails] = useState<Set<string>>(new Set())
+  const [importAgentId, setImportAgentId] = useState('')   // attribution agent (when no linked agent)
+  const [confirming, setConfirming] = useState(false)       // double-confirmation gate
+  const [importedCount, setImportedCount] = useState(0)
+  const [fileFormat, setFileFormat] = useState<FileFormat>('csv')
   const [importError, setImportError] = useState<string>('')
   const [isDragging, setIsDragging] = useState(false)
+  const [selectedTenantId, setSelectedTenantId] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // For super_admin, agents/channels are filtered to the chosen tenant (none until
+  // one is picked). owner/agent always see their own tenant's data.
+  const visibleAgents   = isSuperAdmin ? (selectedTenantId ? agents.filter(a => a.tenantId === selectedTenantId) : []) : agents
+  const visibleChannels = isSuperAdmin ? (selectedTenantId ? channels.filter(c => c.tenantId === selectedTenantId) : []) : channels
+
+  function handleTenantChange(tenantId: string) {
+    setSelectedTenantId(tenantId)
+    // Agent + channel belong to the previous tenant — clear them.
+    setForm(prev => ({ ...prev, agentId: '', acquisitionChannelId: '', channelType: '' }))
+    setErrors(prev => ({ ...prev, tenantId: undefined, agentId: undefined, acquisitionChannelId: undefined }))
+  }
 
   const AGENT_DISPLAY_NAMES: Record<string, string> = Object.fromEntries(
     agents.map(a => [a.id, a.name])
   )
 
+  // Headers use Spanish labels the tolerant matcher recognizes; status is Nuevo/Cerrado.
+  const TEMPLATE_HEADERS = ['nombre', 'apellido', 'email', 'telefono', 'idioma', 'estatus', 'prestamista', 'notas']
+
+  function leadToRow(l: NormalizedLead): string[] {
+    return [
+      l.firstName, l.lastName, l.email, l.phone, l.language,
+      l.stage === 'nuevo' ? 'Nuevo' : 'Cerrado', l.lender, l.notes,
+    ]
+  }
+
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   function downloadTemplate() {
-    const headers = [
-      'firstName', 'lastName', 'email', 'phone',
-      'language', 'agentId', 'sourceType', 'lender', 'notes',
-    ]
-    const exampleRow = [
-      'María', 'González', 'maria@email.com', '(757) 555-0100',
-      'es', 'agent-adriana', 'manual', 'Navy Federal', 'Cliente interesada en Virginia Beach',
-    ]
+    const example = ['María', 'González', 'maria@email.com', '(757) 555-0100', 'es', 'Nuevo', 'Navy Federal', 'Cliente interesada en Virginia Beach']
     const notes = [
       '# INSTRUCCIONES:',
-      '# language: es | en | pt',
-      '# agentId: agent-adriana | agent-john | agent-melanie | agent-viviane',
-      '# sourceType: lead_magnet | web_form | open_house | manual | ads | referral',
-      '# lender: texto libre (opcional)',
+      '# idioma: es | en | pt (vacío → es)',
+      '# estatus: Nuevo | Cerrado (vacío o inválido → Cerrado)',
+      '# email es obligatorio; filas sin email se omiten',
       '# Elimina estas líneas de comentario antes de importar',
       '',
     ]
-    const csv = [...notes, headers.join(','), exampleRow.join(',')].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'plantilla_leads_itmano.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+    const csv = [...notes, TEMPLATE_HEADERS.join(','), example.join(',')].join('\n')
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'plantilla_leads_itmano.csv')
+  }
+
+  // Exports the normalized, insert-ready dataset (already-existing rows excluded) in
+  // the same format as the uploaded file.
+  async function downloadFinal(rows: NormalizedLead[]) {
+    if (fileFormat === 'xlsx') {
+      const XLSX = await import('xlsx')
+      const aoa = [TEMPLATE_HEADERS, ...rows.map(leadToRow)]
+      const ws  = XLSX.utils.aoa_to_sheet(aoa)
+      const wb  = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Leads')
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'leads_a_importar.xlsx')
+    } else {
+      const esc = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+      const csv = [TEMPLATE_HEADERS.join(','), ...rows.map(r => leadToRow(r).map(esc).join(','))].join('\n')
+      triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'leads_a_importar.csv')
+    }
+  }
+
+  function resetImport() {
+    setImportStatus('idle'); setParseResult(null); setExistingEmails(new Set())
+    setConfirming(false); setImportError('')
   }
 
   async function handleFileUpload(file: File) {
     setImportStatus('parsing')
-    setImportError('')
+    setImportError(''); setConfirming(false)
+
+    if (isSuperAdmin && !selectedTenantId) {
+      setImportError('Selecciona un tenant antes de subir el archivo')
+      setImportStatus('error'); return
+    }
 
     const extension = file.name.split('.').pop()?.toLowerCase()
 
     try {
-      let rows: Record<string, string>[] = []
+      let rawRows: Record<string, string>[] = []
+      let headers: string[] = []
 
       if (extension === 'csv') {
+        setFileFormat('csv')
+        const { default: Papa } = await import('papaparse')
         await new Promise<void>((resolve, reject) => {
-          Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            comments: '#',
+          Papa.parse<Record<string, string>>(file, {
+            header: true, skipEmptyLines: true, comments: '#',
             complete: (results) => {
-              rows = results.data as Record<string, string>[]
+              rawRows = results.data
+              headers = results.meta.fields ?? []
               resolve()
             },
             error: (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))),
           })
         })
       } else if (extension === 'xlsx') {
+        setFileFormat('xlsx')
+        const XLSX = await import('xlsx')
         const buffer = await file.arrayBuffer()
         const workbook = XLSX.read(buffer, { type: 'array' })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
-        rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false })
+        rawRows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { raw: false, defval: '' })
+        headers = [...new Set(rawRows.flatMap(r => Object.keys(r)))]
       } else {
         throw new Error('Formato no soportado. Usa .csv o .xlsx')
       }
 
-      if (rows.length === 0) {
-        throw new Error('El archivo está vacío o no tiene filas de datos')
-      }
+      if (rawRows.length === 0) throw new Error('El archivo está vacío o no tiene filas de datos')
+      if (rawRows.length > 500) throw new Error(`El archivo tiene ${rawRows.length} filas. El máximo permitido es 500`)
 
-      if (rows.length > 500) {
-        throw new Error(`El archivo tiene ${rows.length} filas. El máximo permitido es 500`)
-      }
+      const result = parseLeadRows(rawRows, headers)
 
-      const validLanguages = ['es', 'en', 'pt']
-      const validAgentIds = agents.map(a => a.id)
-      const validSourceTypes = ['lead_magnet', 'web_form', 'open_house', 'manual', 'ads', 'referral']
+      // Flag rows whose email already exists in the tenant.
+      const emails = result.rows.map(r => r.email)
+      const existing = await getExistingLeadEmails(emails, isSuperAdmin ? selectedTenantId : undefined)
+      setExistingEmails(existing.ok ? new Set(existing.existing.map(e => e.toLowerCase())) : new Set())
 
-      const mapped: ImportedLead[] = rows.map((row, i) => {
-        const rowErrors: string[] = []
-
-        if (!row.firstName?.trim()) rowErrors.push('firstName requerido')
-        if (!row.email?.trim()) rowErrors.push('email requerido')
-        if (row.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email.trim())) rowErrors.push('email inválido')
-        if (row.language?.trim() && !validLanguages.includes(row.language.trim())) rowErrors.push(`language debe ser: ${validLanguages.join(' | ')}`)
-        if (row.agentId?.trim() && !validAgentIds.includes(row.agentId.trim())) rowErrors.push('agentId inválido')
-        if (row.sourceType?.trim() && !validSourceTypes.includes(row.sourceType.trim())) rowErrors.push('sourceType inválido')
-
-        return {
-          firstName:     row.firstName?.trim()  || '',
-          lastName:      row.lastName?.trim()   || '',
-          email:         row.email?.trim()      || '',
-          phone:         row.phone?.trim()      || '',
-          language:      row.language?.trim()   || 'es',
-          agentId:       row.agentId?.trim()    || 'agent-adriana',
-          sourceType:    row.sourceType?.trim() || 'manual',
-          lender:        row.lender?.trim()     || '',
-          notes:         row.notes?.trim()      || '',
-          _rowIndex:     i + 1,
-          _hasError:     rowErrors.length > 0,
-          _errorMessage: rowErrors.join(', '),
-        }
-      })
-
-      setImportedLeads(mapped)
+      setParseResult(result)
       setImportStatus('preview')
-
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Error al procesar el archivo')
       setImportStatus('error')
     }
   }
 
-  async function handleImport() {
-    const validRows = importedLeads.filter(l => !l._hasError)
-    if (validRows.length === 0) return
+  async function handleImport(rowsToInsert: NormalizedLead[], agentId: string) {
+    if (rowsToInsert.length === 0 || !agentId) return
     setImportStatus('parsing')
-    const result = await createLeadsBulk(validRows.map(row => ({
-      firstName:  row.firstName,
-      lastName:   row.lastName,
-      email:      row.email,
-      phone:      row.phone || null,
-      language:   row.language as Language,
-      agentId:    row.agentId,
-      sourceType: row.sourceType,
-      lender:     row.lender || null,
-      notes:      row.notes || null,
-    })))
-    if (result.error) {
-      setImportStatus('error')
-      setImportError(result.error)
+    const result = await createLeadsBulk(
+      rowsToInsert.map(r => ({
+        firstName: r.firstName,
+        lastName:  r.lastName,
+        email:     r.email,
+        phone:     r.phone || null,
+        language:  r.language as Language,
+        stage:     r.stage,
+        lender:    r.lender || null,
+        notes:     r.notes || null,
+      })),
+      agentId,
+      isSuperAdmin ? selectedTenantId : undefined,
+    )
+    if (!result.ok) {
+      setImportStatus('error'); setImportError(result.error)
     } else {
+      setImportedCount(result.result.inserted)
       setImportStatus('success')
     }
   }
@@ -378,27 +427,19 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
     }
   }
 
+  // El ruteo automático por idioma se retiró: el owner elige el agente.
   const handleLanguageChange = (lang: Language) => {
     updateField('language', lang)
-    if (!form.agentId) {
-      const agentMap: Record<Language, string> = {
-        es: 'agent-adriana',
-        en: 'agent-john',
-        pt: 'agent-viviane',
-      }
-      updateField('agentId', agentMap[lang])
-      setAutoAssigned(true)
-    }
   }
 
   const handleAgentChange = (agentId: string) => {
     updateField('agentId', agentId)
-    setAutoAssigned(false)
     if (errors.agentId) setErrors(prev => ({ ...prev, agentId: undefined }))
   }
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {}
+    if (isSuperAdmin && !selectedTenantId) newErrors.tenantId = 'Selecciona un tenant'
     if (!form.firstName.trim()) newErrors.firstName = 'El nombre es obligatorio'
     if (!form.email.trim()) {
       newErrors.email = 'El email es obligatorio'
@@ -406,7 +447,12 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
       newErrors.email = 'Email no válido'
     }
     if (!form.agentId) newErrors.agentId = 'Selecciona un agente'
-    if (!form.acquisitionChannelId) newErrors.acquisitionChannelId = 'Selecciona el origen'
+    if (!form.channelType) {
+      newErrors.acquisitionChannelId = 'Selecciona la fuente'
+    } else if (!DIRECT_ENTRY_SOURCES.has(form.channelType) && !form.acquisitionChannelId) {
+      // Origin is only required for channel-based sources (LM / event / contact form).
+      newErrors.acquisitionChannelId = 'Selecciona el origen'
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -414,6 +460,10 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
   async function handleManualSubmit() {
     if (!validate()) return
     setIsSubmitting(true)
+    // Direct-entry sources: traffic_source = the source, channel forced to manual /
+    // null. Channel-based sources keep traffic_source 'direct' and their channel.
+    const directEntry  = DIRECT_ENTRY_SOURCES.has(form.channelType)
+    const trafficSource = TRAFFIC_SOURCE_BY_SOURCE[form.channelType] ?? 'direct'
     const result = await createLead({
       firstName:            form.firstName,
       lastName:             form.lastName,
@@ -421,10 +471,12 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
       phone:                form.phone || null,
       language:             form.language as Language,
       agentId:              form.agentId,
-      acquisitionChannelId: form.acquisitionChannelId,
-      channelType:          form.channelType,
+      acquisitionChannelId: directEntry ? '' : form.acquisitionChannelId,
+      channelType:          directEntry ? 'manual' : form.channelType,
+      trafficSource,
       lender:               form.lender || null,
       notes:                form.notes || null,
+      tenantId:             isSuperAdmin ? selectedTenantId : undefined,
     })
     setIsSubmitting(false)
     if (result.error) {
@@ -437,29 +489,41 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
   const handleReset = () => {
     setForm(INITIAL_FORM)
     setErrors({})
-    setAutoAssigned(false)
     setSubmitSuccess(false)
-    setImportStatus('idle')
-    setImportedLeads([])
+    resetImport()
   }
 
   const selectedAgent = agents.find(a => a.id === form.agentId)
   const isSubmitDisabled = !form.firstName.trim() || !form.email.trim() || isSubmitting
 
-  // Channels filtered by type for cascade picker
-  const channelsForType = (type: string) => channels.filter(c => c.channelType === type)
+  // Channels filtered by type for cascade picker (scoped to the visible tenant)
+  const channelsForType = (type: string) => visibleChannels.filter(c => c.channelType === type)
 
-  // When channel type changes: auto-select if only one option, or clear
+  // When source changes: direct-entry → no channel; channel-based → auto-select if
+  // only one option, else clear for explicit pick.
   function handleChannelTypeChange(type: string) {
-    const options = channelsForType(type)
-    const autoId  = options.length === 1 ? options[0].id : ''
-    updateField('channelType', type)
-    updateField('acquisitionChannelId', autoId)
+    if (DIRECT_ENTRY_SOURCES.has(type)) {
+      updateField('channelType', type)
+      updateField('acquisitionChannelId', '')
+    } else {
+      const options = channelsForType(type)
+      const autoId  = options.length === 1 ? options[0].id : ''
+      updateField('channelType', type)
+      updateField('acquisitionChannelId', autoId)
+    }
     if (errors.acquisitionChannelId) setErrors(prev => ({ ...prev, acquisitionChannelId: undefined }))
   }
 
-  const validCount = importedLeads.filter(l => !l._hasError).length
-  const errorCount = importedLeads.filter(l => l._hasError).length
+  // ─── Import preview computeds ─────────────────────────────────────────────
+  const importRows  = parseResult?.rows ?? []
+  const finalRows   = importRows.filter(r => !existingEmails.has(r.email.toLowerCase()))
+  const existingCount = importRows.length - finalRows.length
+  const newCount    = finalRows.filter(r => r.stage === 'nuevo').length
+  const closedCount = finalRows.filter(r => r.stage === 'cerrado').length
+  // Attribution: the linked agent if any, else the (mandatory) selector value.
+  const attributionAgentId   = myAgentId ?? importAgentId
+  const attributionAgentName = AGENT_DISPLAY_NAMES[attributionAgentId] || '—'
+  const needsAgentSelector   = !myAgentId
 
   if (submitSuccess) return <SuccessScreen form={form} agents={agents} onReset={handleReset} />
 
@@ -501,47 +565,17 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
           </p>
         </div>
 
-        {/* Mode tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '24px',
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '10px',
-          padding: '4px',
-          maxWidth: '400px',
-        }}>
-          {(['manual', 'import'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              style={{
-                flex: 1,
-                padding: '8px 16px',
-                borderRadius: '7px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: mode === m ? 500 : 400,
-                background: mode === m ? 'var(--bg-elevated)' : 'transparent',
-                color: mode === m ? 'var(--text-primary)' : 'var(--text-muted)',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              {m === 'manual'
-                ? <><PenLine size={14} /> Registro Manual</>
-                : <><Upload size={14} /> Importar CSV/XLSX</>
-              }
-            </button>
-          ))}
-        </div>
-
-        {mode === 'manual' && (
+        {/* Modo: registro manual o importación — el estado vive aquí (padre),
+            así que alternar tabs no pierde datos del formulario ni del import. */}
+        <Tabs
+          items={[
+            { key: 'manual', label: 'Registro manual' },
+            { key: 'import', label: 'Importar CSV/XLSX' },
+          ]}
+          value={mode}
+          onChange={m => setMode(m as 'manual' | 'import')}
+          content={{
+            manual: (
           <>
         {/* Form card */}
         <div style={{
@@ -555,7 +589,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
           <div style={sectionHeaderStyle}>Datos del lead</div>
           <div style={{ ...sectionBodyStyle }}>
             {/* Nombre / Apellido */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ marginBottom: '12px' }}>
               <div>
                 <label style={labelStyle}>Nombre *</label>
                 <input
@@ -678,22 +712,40 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
             </div>
           </div>
 
+          {/* SECCIÓN 0 — Tenant (super_admin only) */}
+          {isSuperAdmin && (
+            <>
+              <div style={sectionHeaderStyle}>Tenant</div>
+              <div style={{ ...sectionBodyStyle }}>
+                <label style={labelStyle}>Tenant destino *</label>
+                <div style={{ position: 'relative' }}>
+                  <select
+                    className="new-lead-input"
+                    value={selectedTenantId}
+                    onChange={e => handleTenantChange(e.target.value)}
+                    style={{
+                      ...(errors.tenantId ? inputErrorStyle : inputStyle),
+                      appearance: 'none',
+                      cursor: 'pointer',
+                      paddingRight: '32px',
+                    }}
+                  >
+                    <option value="">-- Seleccionar tenant --</option>
+                    {tenants.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+                </div>
+                {errors.tenantId && <p style={errorStyle}>{errors.tenantId}</p>}
+              </div>
+            </>
+          )}
+
           {/* SECCIÓN 2 — Asignación */}
           <div style={sectionHeaderStyle}>Asignación</div>
           <div style={{ ...sectionBodyStyle }}>
             <label style={labelStyle}>Agente asignado *</label>
-
-            {autoAssigned && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--accent-gold)' }}>✓ Autoasignado por idioma</span>
-                <button
-                  onClick={() => { updateField('agentId', ''); setAutoAssigned(false) }}
-                  style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  Cambiar
-                </button>
-              </div>
-            )}
 
             <div style={{ position: 'relative' }}>
               <select
@@ -707,10 +759,10 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
                   paddingRight: '32px',
                 }}
               >
-                <option value="">-- Seleccionar agente --</option>
-                {agents.map(agent => (
+                <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
+                {visibleAgents.map(agent => (
                   <option key={agent.id} value={agent.id}>
-                    {agent.avatarInitials} · {agent.name} · {SPECIALTY_LABEL[agent.specialty]} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
+                    {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
                   </option>
                 ))}
               </select>
@@ -749,7 +801,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{selectedAgent.name}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {SPECIALTY_LABEL[selectedAgent.specialty]} · {LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}
+                    {LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -759,30 +811,41 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
           {/* SECCIÓN 3 — Origen */}
           <div style={sectionHeaderStyle}>Origen</div>
           <div style={{ ...sectionBodyStyle }}>
-            {/* Step 1: Channel type */}
+            {/* Step 1: Source picker (icon chips) */}
             <label style={labelStyle}>¿Cómo llegó este lead? *</label>
-            <div style={{ position: 'relative', marginBottom: '10px' }}>
-              <select
-                className="new-lead-input"
-                value={form.channelType}
-                onChange={e => handleChannelTypeChange(e.target.value)}
-                style={{
-                  ...(errors.acquisitionChannelId && !form.channelType ? inputErrorStyle : inputStyle),
-                  appearance: 'none',
-                  cursor: 'pointer',
-                  paddingRight: '32px',
-                }}
-              >
-                <option value="">-- Tipo de origen --</option>
-                {CHANNEL_TYPE_ORDER.map(t => (
-                  <option key={t} value={t}>{CHANNEL_TYPE_LABELS[t]}</option>
-                ))}
-              </select>
-              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              {SOURCE_OPTIONS.map(opt => {
+                const Icon   = opt.icon
+                const active = form.channelType === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleChannelTypeChange(opt.value)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                      background: active ? 'rgba(201,169,110,0.10)' : 'var(--bg-elevated)',
+                      color: active ? 'var(--accent-gold)' : 'var(--text-secondary)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <Icon size={14} strokeWidth={1.7} />
+                    {opt.label}
+                  </button>
+                )
+              })}
             </div>
 
-            {/* Step 2: Specific channel (only for types with multiple options) */}
-            {form.channelType && channelsForType(form.channelType).length > 1 && (
+            {/* Step 2: Specific channel — only for channel-based sources with >1 option */}
+            {!DIRECT_ENTRY_SOURCES.has(form.channelType) && form.channelType && channelsForType(form.channelType).length > 1 && (
               <div style={{ position: 'relative' }}>
                 <select
                   className="new-lead-input"
@@ -887,9 +950,8 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
           </button>
         </div>
           </>
-        )}
-
-        {mode === 'import' && (
+            ),
+            import: (
           <div style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-subtle)',
@@ -922,7 +984,7 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
               Descargar plantilla CSV
             </button>
             <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              Columnas: firstName · lastName · email · phone · language · agentId · sourceType · lender · notes
+              Columnas (reconocimiento automático, es/en): nombre · apellido · email · teléfono · idioma · estatus (Nuevo/Cerrado) · prestamista · notas
             </div>
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
@@ -1004,124 +1066,147 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
               </>
             )}
 
-            {/* PASO 3: Preview table */}
-            {importStatus === 'preview' && (
+            {/* PASO 3: Preview + double confirmation */}
+            {importStatus === 'preview' && parseResult && (
               <>
                 <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
-                <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-                  Paso 3 — Revisa y confirma
-                </p>
-
-                {/* Preview header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <div>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                      {importedLeads.length} leads detectados
-                    </span>
-                    {errorCount > 0 && (
-                      <span style={{
-                        marginLeft: '10px',
-                        fontSize: '12px',
-                        color: 'var(--accent-coral)',
-                        background: 'rgba(201,123,107,0.1)',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                      }}>
-                        ⚠ {errorCount} con errores
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => { setImportStatus('idle'); setImportedLeads([]) }}
-                    style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
+                  <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                    Paso 3 — Revisa y confirma
+                  </p>
+                  <button onClick={resetImport} style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
                     ✕ Cancelar
                   </button>
                 </div>
 
-                {/* Preview table */}
-                <div style={{ overflowY: 'auto', maxHeight: '320px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--bg-elevated)' }}>
-                        {['#', 'Nombre', 'Email', 'Teléfono', 'Agente', 'Idioma', 'Prestamista', 'Estado'].map(col => (
-                          <th key={col} style={{
-                            position: 'sticky',
-                            top: 0,
-                            zIndex: 1,
-                            background: 'var(--bg-elevated)',
-                            padding: '8px 10px',
-                            textAlign: 'left',
-                            fontSize: '11px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            color: 'var(--text-muted)',
-                            fontWeight: 500,
-                            borderBottom: '1px solid var(--border-subtle)',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importedLeads.map((lead) => (
-                        <tr
-                          key={lead._rowIndex}
-                          style={{
-                            background: lead._hasError ? 'rgba(201,123,107,0.06)' : 'transparent',
-                            borderLeft: lead._hasError ? '2px solid var(--accent-coral)' : '2px solid transparent',
-                          }}
-                        >
-                          <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{lead._rowIndex}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ')}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.email}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.phone || '—'}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{AGENT_DISPLAY_NAMES[lead.agentId] || lead.agentId}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.language.toUpperCase()}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{lead.lender || '—'}</td>
-                          <td style={{ padding: '8px 10px' }}>
-                            {lead._hasError
-                              ? <span style={{ color: 'var(--accent-coral)', fontSize: '11px' }}>{lead._errorMessage}</span>
-                              : <span style={{ color: 'var(--accent-green)' }}>✓</span>
-                            }
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                  {finalRows.length} se importarán ({newCount} Nuevos · {closedCount} Cerrados) · {parseResult.totalRows} filas en el archivo
                 </div>
 
-                {/* Preview footer */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {validCount} leads válidos serán importados
-                    {errorCount > 0 &&
-                      ` · ${errorCount} con errores serán omitidos`}
-                  </p>
-                  <button
-                    onClick={handleImport}
-                    disabled={validCount === 0}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 20px',
-                      background: 'var(--accent-gold)',
-                      color: 'var(--bg-base)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: validCount === 0 ? 'not-allowed' : 'pointer',
-                      opacity: validCount === 0 ? 0.5 : 1,
-                    }}
-                  >
-                    <CheckCircle2 size={14} />
-                    Importar {validCount} leads
-                  </button>
+                {/* Warnings */}
+                {(() => {
+                  const warns: string[] = []
+                  if (parseResult.excludedNoEmail > 0)         warns.push(`${parseResult.excludedNoEmail} fila(s) sin email válido — omitidas`)
+                  if (parseResult.excludedDuplicateInFile > 0) warns.push(`${parseResult.excludedDuplicateInFile} email(s) duplicado(s) en el archivo — se conserva la primera`)
+                  if (existingCount > 0)                       warns.push(`${existingCount} ya existen en este tenant — omitidas`)
+                  if (parseResult.stageDefaulted > 0)          warns.push(`${parseResult.stageDefaulted} fila(s) sin etapa válida — asignadas a "Cerrado"`)
+                  if (parseResult.ignoredColumns.length > 0)   warns.push(`Columnas ignoradas: ${parseResult.ignoredColumns.join(', ')}`)
+                  if (warns.length === 0) return null
+                  return (
+                    <div style={{ background: 'rgba(201,169,110,0.07)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '12px 14px', marginBottom: '14px' }}>
+                      {warns.map((w, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '12px', color: 'var(--text-secondary)', marginTop: i === 0 ? 0 : '6px' }}>
+                          <AlertTriangle size={13} style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: '1px' }} />
+                          <span>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* Attribution agent */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={labelStyle}>Agente al que se atribuirán los leads *</label>
+                  {needsAgentSelector ? (
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        className="new-lead-input"
+                        value={importAgentId}
+                        onChange={e => setImportAgentId(e.target.value)}
+                        style={{ ...inputStyle, appearance: 'none', cursor: 'pointer', paddingRight: '32px' }}
+                      >
+                        <option value="">-- Seleccionar agente --</option>
+                        {visibleAgents.map(a => (
+                          <option key={a.id} value={a.id}>{a.avatarInitials} · {a.name}</option>
+                        ))}
+                      </select>
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', padding: '4px 0' }}>{attributionAgentName}</div>
+                  )}
                 </div>
+
+                {/* Preview table (insert-ready rows) — dense table, out of redesign
+                    scope; horizontally scrollable on phones (overflow-x). */}
+                {finalRows.length > 0 && (
+                  <div className="overflow-x-auto" style={{ overflowY: 'auto', maxHeight: '300px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--bg-elevated)' }}>
+                          {['#', 'Nombre', 'Email', 'Teléfono', 'Idioma', 'Prestamista', 'Estatus'].map(col => (
+                            <th key={col} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--bg-elevated)', padding: '8px 10px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border-subtle)', whiteSpace: 'nowrap' }}>
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {finalRows.slice(0, 50).map((r, i) => (
+                          <tr key={`${r.email}-${i}`}>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{i + 1}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.email}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.phone || '—'}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.language.toUpperCase()}</td>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.lender || '—'}</td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <span style={{ fontSize: '11px', color: r.stage === 'nuevo' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+                                {r.stage === 'nuevo' ? 'Nuevo' : 'Cerrado'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {finalRows.length > 50 && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>Mostrando 50 de {finalRows.length}.</div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', gap: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => downloadFinal(finalRows)}
+                    disabled={finalRows.length === 0}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 16px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500, cursor: finalRows.length === 0 ? 'not-allowed' : 'pointer', opacity: finalRows.length === 0 ? 0.5 : 1 }}
+                  >
+                    <Download size={14} />
+                    Descargar archivo final ({fileFormat.toUpperCase()})
+                  </button>
+
+                  {!confirming ? (
+                    <button
+                      onClick={() => setConfirming(true)}
+                      disabled={finalRows.length === 0 || !attributionAgentId}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: (finalRows.length === 0 || !attributionAgentId) ? 'not-allowed' : 'pointer', opacity: (finalRows.length === 0 || !attributionAgentId) ? 0.5 : 1 }}
+                    >
+                      Continuar
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* Double confirmation */}
+                {confirming && (
+                  <div style={{ marginTop: '16px', background: 'var(--bg-elevated)', border: '1px solid var(--accent-gold)', borderRadius: '10px', padding: '16px' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: '0 0 12px' }}>
+                      Se registrarán <strong>{finalRows.length}</strong> leads ({newCount} Nuevos, {closedCount} Cerrados) asignados a <strong>{attributionAgentName}</strong>. Esta acción no se puede deshacer.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => handleImport(finalRows, attributionAgentId)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        <CheckCircle2 size={14} />
+                        Confirmar e importar {finalRows.length}
+                      </button>
+                      <button onClick={() => setConfirming(false)} style={{ padding: '10px 18px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '13px', cursor: 'pointer' }}>
+                        Volver
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -1133,36 +1218,18 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
                   Importación completada
                 </h3>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
-                  {validCount} leads han sido añadidos al sistema.
+                  {importedCount} lead(s) añadidos al sistema.
                 </p>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                   <button
                     onClick={() => router.push('/leads')}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'transparent',
-                      color: 'var(--text-secondary)',
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                    }}
+                    style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
                   >
                     ← Ver todos los leads
                   </button>
                   <button
-                    onClick={() => { setImportStatus('idle'); setImportedLeads([]) }}
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'var(--accent-gold)',
-                      color: 'var(--bg-base)',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
+                    onClick={resetImport}
+                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'var(--accent-gold)', color: 'var(--bg-base)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
                   >
                     + Importar otro archivo
                   </button>
@@ -1171,7 +1238,9 @@ export function NewLeadClient({ agents, channels }: { agents: Agent[]; channels:
             )}
 
           </div>
-        )}
+            ),
+          }}
+        />
       </div>
     </>
   )

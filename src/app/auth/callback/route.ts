@@ -1,13 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { normalizeEmail } from '@/lib/auth/admin-users'
+import type { EmailOtpType } from '@supabase/auth-js'
+
+// Best-effort: mark any pending invitation for this email as accepted. A failure
+// here must NEVER break the login — log and continue.
+async function markInvitationAccepted(email: string | undefined | null) {
+  if (!email) return
+  try {
+    const admin = createAdminClient()
+    const { error } = await admin
+      .from('invitations')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .eq('email', normalizeEmail(email))
+      .eq('status', 'pending')
+    if (error) {
+      console.error(JSON.stringify({ service: 'auth-callback', path: 'mark_invitation_failed', error: error.message }))
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ service: 'auth-callback', path: 'mark_invitation_threw', error: err instanceof Error ? err.message : String(err) }))
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const token_hash = searchParams.get('token_hash')
+  const type       = (searchParams.get('type') ?? 'email') as EmailOtpType
+  // rawNext distingue "deep-link explícito" (se honra) de "aterrizaje por
+  // defecto" (bifurca por rol: el super_admin va al centro de control).
+  const rawNext    = searchParams.get('next')
+  const next       = rawNext ?? '/dashboard'
 
-  if (code) {
+  if (token_hash) {
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,11 +52,25 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    // verifyOtp is server-side: it needs no code_verifier cookie from the
+    // originating browser. Works cross-device and cross-browser.
+    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash })
 
     if (!error) {
-      // Validate `next` to prevent open redirect — only allow relative paths
-      const redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
+      await markInvitationAccepted(data.user?.email)
+      // Validate `next` to prevent open redirect — only allow relative paths.
+      let redirectTo = /^\/[^\/\\]/.test(next) || next === '/' ? next : '/dashboard'
+      // Sin deep-link explícito: el super_admin aterriza en el centro de control
+      // (elige ahí a qué tenant entrar). Los demás roles siguen a /dashboard.
+      if (!rawNext && data.user) {
+        const admin = createAdminClient()
+        const { data: profile } = await admin
+          .from('user_profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .maybeSingle()
+        if (profile?.role === 'super_admin') redirectTo = '/admin'
+      }
       return NextResponse.redirect(`${origin}${redirectTo}`)
     }
   }

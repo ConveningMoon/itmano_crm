@@ -1,22 +1,124 @@
+import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { mapAgent, type AgentRow } from '@/lib/db'
+import { getEffectiveScoreRules, getGlobalScoreRules } from '@/lib/data/score-rules'
+import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
+import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
+import { getSubscription } from '@/lib/data/subscriptions'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { PLANS } from '@/lib/plans'
+import { getBusinessProfile } from '@/lib/data/business-profile'
+import { EMPTY_PROFILE } from '@/lib/business/profile'
+import { getFitEvidence } from '@/lib/data/fit-evidence'
+import type { FitEvidence } from '@/lib/scoring/calibration'
 import { SettingsClient } from './settings-client'
 
-const TENANT_ID = 'tenant-aj'
-
 export default async function SettingsPage() {
+  const ctx      = await requireTenantContext()
   const supabase = createAdminClient()
 
-  const [{ data: tenantRow }, { data: rawAgents }] = await Promise.all([
-    supabase.from('tenants').select('id, name, slug, primary_color').eq('id', TENANT_ID).single(),
-    supabase.from('agents').select('*').eq('tenant_id', TENANT_ID).eq('active', true).order('name'),
+  // Settings es "la configuración de este tenant": owner/agent → su tenant;
+  // super_admin → el tenant seleccionado (requireTenantContext garantiza que
+  // hay selección — sin ella, redirige al centro de control).
+  const tenantId = ctx.tenant_id
+  if (!tenantId) redirect('/admin')
+
+  // Uso de IA según el rol: un 'agent' ve SOLO su propia actividad (requests
+  // suyos + el porcentaje de SU parte del límite en Partner); owner/super ven
+  // el resumen del equipo con desglose por agente.
+  const isAgentViewer = ctx.role === 'agent'
+
+  // Identidad (id + email) sale del contexto: ya validó el JWT, así que pedirle
+  // el usuario otra vez al servidor de auth solo sumaba una ida y vuelta.
+  // La evidencia del fit sólo la mira el panel de calibración, que es de
+  // super_admin: para el resto no se paga la consulta.
+  const wantsCalibration = ctx.role === 'super_admin'
+
+  // "Tu negocio" es del equipo, no del agente: sólo owner/super la ven. Para el
+  // rol 'agent' ni se consulta — así no viaja en el payload RSC de una pestaña
+  // que no existe para él.
+  const canSeeBusiness = ctx.role !== 'agent'
+
+  const TENANT_COLUMNS = columns('tenants', [
+    'id', 'name', 'slug', 'primary_color', 'logo_url', 'description',
   ])
 
-  const tenant = tenantRow
-    ? { id: tenantRow.id as string, name: tenantRow.name as string, slug: tenantRow.slug as string, primaryColor: (tenantRow.primary_color as string) ?? '#C9A96E' }
-    : { id: TENANT_ID, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E' }
+  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
+    supabase.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).single(),
+    supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
+    canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
+    getEffectiveScoreRules(tenantId),
+    getGlobalScoreRules(),
+    // Honest "active accesses" = every login profile in this tenant (owner + any
+    // login-capable agents). Replaces the hardcoded "1 acceso de sesión activo".
+    supabase.from('user_profiles').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+    getAiUsageSummary(tenantId, isAgentViewer && ctx.agent_id ? { agentId: ctx.agent_id } : undefined),
+    getAiLimitIndicatorFor(ctx),
+    getSubscription(tenantId),
+    isAgentViewer ? Promise.resolve(null) : getAgentAiBreakdown(tenantId),
+    wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
+  ])
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
+  const tenantRowAny = tenantRow as any
+  const tenant = tenantRowAny
+    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
+    : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+
+  // Valores recomendados por ITMANO (reglas globales) por id — los efectivos del
+  // tenant conservan el id global, así el botón "Restablecer a recomendados"
+  // matchea por id. Para super_admin, efectivo == global (reset es no-op).
+  const recommendedRules: Record<string, { points: number; isActive: boolean }> =
+    Object.fromEntries(globalRules.map(r => [r.id, { points: r.points, isActive: r.isActive }]))
+
+  // Access status per agent (user_id present) — kept off the global Agent type.
+  const agentAccess: Record<string, boolean> = {}
+  let ownerLinked = false
+  const myUserId = ctx.user_id
+  for (const r of rawAgents ?? []) {
+    const row = r as AgentRow & { user_id: string | null }
+    agentAccess[row.id] = !!row.user_id
+    if (myUserId && row.user_id === myUserId) ownerLinked = true
+  }
+
+  // Qué agente es el owner del tenant (agents.user_id ↔ user_profiles agent_owner).
+  const { data: ownerProfiles } = await supabase
+    .from('user_profiles').select('id').eq('tenant_id', tenantId).eq('role', 'agent_owner')
+  const ownerUserIds = new Set(((ownerProfiles ?? []) as { id: string }[]).map(p => p.id))
+  let ownerAgentId: string | null = null
+  for (const r of rawAgents ?? []) {
+    const row = r as AgentRow & { user_id: string | null }
+    if (row.user_id && ownerUserIds.has(row.user_id)) { ownerAgentId = row.id; break }
+  }
+  // Plan con multi-agente (logins de equipo): solo Partner. Esencial/Growth son
+  // de un solo agente → se deshabilita crear/gestionar otros agentes y se ofrece
+  // el upsell a Partner. super_admin siempre puede (opera cualquier tenant).
+  const multiAgent = ctx.role === 'super_admin' || (subscription ? PLANS[subscription.plan].features.multiLogin : false)
+  // Eliminar agentes: plan Partner (multiLogin) o super_admin.
+  const canDeleteAgents =
+    ctx.role === 'super_admin' ||
+    (ctx.role === 'agent_owner' && subscription?.plan === 'partner')
+  // The owner may link their own login to one unlinked agent (once).
+  const canLinkSelf = ctx.role === 'agent_owner' && !ownerLinked
+
+  // Los montos en USD del uso de IA son información interna de ITMANO. Para
+  // usuarios del tenant se ceroan ANTES de cruzar al cliente (no basta con
+  // ocultarlos en la UI — no deben viajar en el payload RSC).
+  const showAiCosts = ctx.role === 'super_admin'
+  const zeroCost = <T extends { costUsd: number }>(x: T): T => ({ ...x, costUsd: 0 })
+  const aiUsage: AiUsageSummary = showAiCosts ? aiUsageRaw : {
+    allTime:   zeroCost(aiUsageRaw.allTime),
+    last30d:   zeroCost(aiUsageRaw.last30d),
+    byFeature: aiUsageRaw.byFeature.map(zeroCost),
+    byTenant:  null,
+    recent:    aiUsageRaw.recent.map(zeroCost),
+  }
+  const aiByAgent: AgentAiBreakdown | null = aiByAgentRaw
+    ? (showAiCosts ? aiByAgentRaw : { ...aiByAgentRaw, agents: aiByAgentRaw.agents.map(zeroCost) })
+    : null
 
   return (
     <>
@@ -29,7 +131,32 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <SettingsClient tenant={tenant} agents={agents} />
+      <SettingsClient
+        tenant={tenant}
+        agents={agents}
+        agentAccess={agentAccess}
+        accessCount={accessCountRes.count ?? 0}
+        businessProfile={businessProfile}
+        scoringRules={scoringRules}
+        recommendedRules={recommendedRules}
+        // El modelo de scoring lo administra ITMANO — ver updateScoreRules.
+        canEditScoring={ctx.role === 'super_admin'}
+        fitEvidence={fitEvidence}
+        canManageAgents={ctx.role !== 'agent'}
+        multiAgent={multiAgent}
+        canLinkSelf={canLinkSelf}
+        myAgentId={ctx.agent_id}
+        ownerAgentId={ownerAgentId}
+        canDeleteAgents={canDeleteAgents}
+        userEmail={ctx.email}
+        userRole={ctx.role}
+        aiUsage={aiUsage}
+        aiShowCosts={showAiCosts}
+        aiLimit={aiLimit}
+        aiLimitSubtitle={aiLimit?.perAgent ? 'de tu parte del límite del equipo' : undefined}
+        aiByAgent={aiByAgent}
+        subscription={subscription}
+      />
     </>
   )
 }
