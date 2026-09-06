@@ -49,6 +49,15 @@ if (packageJson.volta?.node !== '24.20.0' || packageJson.volta?.npm !== '11.19.0
   errors.push('Las versiones Volta no coinciden con el contrato del repositorio')
 }
 
+const expectedInstallScripts = ['esbuild@0.21.5', 'msw@2.14.6', 'unrs-resolver@1.11.1']
+const allowedInstallScripts = Object.entries(packageJson.allowScripts ?? {})
+  .filter(([, allowed]) => allowed === true)
+  .map(([name]) => name)
+  .sort()
+if (allowedInstallScripts.join('\n') !== expectedInstallScripts.sort().join('\n')) {
+  errors.push('La allowlist de scripts npm cambió; revisa cada paquete antes de aprobarlo')
+}
+
 const markdownFiles = ['README.md', 'AGENTS.md', 'CLAUDE.md', ...requiredFiles.filter((path) => path.endsWith('.md'))]
 const linkPattern = /\[[^\]]*\]\(([^)]+)\)/g
 
