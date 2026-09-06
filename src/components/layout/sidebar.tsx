@@ -1,13 +1,21 @@
-import Image from 'next/image'
 import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { BrandLogo } from './brand-logo'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: string }) {
+export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
+  role: TenantRole
+  userEmail: string
+  hubMode?: boolean
+  logoUrl?: string | null
+  tenantName?: string | null
+  // Nombre de la suscripción del tenant (p. ej. "Plan Growth"); null en hub.
+  planLabel?: string | null
+}) {
   // Admin console is super_admin-only — hidden from the nav for everyone else.
-  const items = navItemsForRole(role)
+  const items = navItemsForRole(role, { hubMode })
 
   return (
     // Hidden on phones (drawer takes over <md); restored to the fixed flex column
@@ -37,14 +45,7 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
           alignItems: 'flex-start',
         }}
       >
-        <Image
-          src="/A&J_Logo_White.png"
-          alt="ITMANO"
-          width={120}
-          height={44}
-          priority
-          style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }}
-        />
+        <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
         <div
           style={{
             fontSize: '10px',
@@ -70,7 +71,7 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
         }}
       >
         {items.map(item => (
-          <NavItem key={item.href} {...item} />
+          <NavItem key={item.href} {...item} hrefs={items.map(i => i.href)} />
         ))}
       </nav>
 
@@ -126,6 +127,11 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
             >
               {ROLE_LABELS[role]}
             </div>
+            {planLabel && (
+              <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
+                {planLabel}
+              </div>
+            )}
           </div>
         </div>
 
@@ -145,7 +151,7 @@ export function Sidebar({ role, userEmail }: { role: TenantRole; userEmail: stri
               border: '1px solid var(--border-subtle)',
               borderRadius: '6px',
               cursor: 'pointer',
-              transition: 'all 0.15s',
+              transition: 'background-color var(--dur-fast), color var(--dur-fast)',
             }}
           >
             <LogOut size={14} strokeWidth={1.6} />

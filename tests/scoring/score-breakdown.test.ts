@@ -27,7 +27,7 @@ describe('buildScoreBreakdown', () => {
     const b = buildScoreBreakdown({
       fitProfile: { timeline: 'under_3_months', budget_tier: 'mid' },
       fitScore: 42, engagementScore: 10, manualScore: 5, currentScore: 57,
-      frozen: false, rules: RULES,
+      rules: RULES,
     })
     expect(b.fit.lines).toEqual([
       { dimension: 'timeline',    value: 'under_3_months', label: 'Compra en <3 meses', points: 30 },
@@ -44,7 +44,7 @@ describe('buildScoreBreakdown', () => {
     const b = buildScoreBreakdown({
       fitProfile: { financing: 'cash', timeline: 'unknown_value' },
       fitScore: 0, engagementScore: 0, manualScore: 0, currentScore: 0,
-      frozen: false, rules: RULES,
+      rules: RULES,
     })
     // financing:cash rule is inactive; timeline:unknown_value has no rule → both omitted
     expect(b.fit.lines).toEqual([])
@@ -52,13 +52,8 @@ describe('buildScoreBreakdown', () => {
   })
 
   it('empty / null fit_profile → hasFitProfile false', () => {
-    expect(buildScoreBreakdown({ fitProfile: null, fitScore: 0, engagementScore: 0, manualScore: 0, currentScore: 0, frozen: false, rules: RULES }).hasFitProfile).toBe(false)
-    expect(buildScoreBreakdown({ fitProfile: {}, fitScore: 0, engagementScore: 0, manualScore: 0, currentScore: 0, frozen: false, rules: RULES }).hasFitProfile).toBe(false)
+    expect(buildScoreBreakdown({ fitProfile: null, fitScore: 0, engagementScore: 0, manualScore: 0, currentScore: 0, rules: RULES }).hasFitProfile).toBe(false)
+    expect(buildScoreBreakdown({ fitProfile: {}, fitScore: 0, engagementScore: 0, manualScore: 0, currentScore: 0, rules: RULES }).hasFitProfile).toBe(false)
   })
 
-  it('passes through the frozen flag', () => {
-    const b = buildScoreBreakdown({ fitProfile: null, fitScore: 0, engagementScore: 0, manualScore: 0, currentScore: 80, frozen: true, rules: RULES })
-    expect(b.frozen).toBe(true)
-    expect(b.total).toBe(80)
-  })
 })

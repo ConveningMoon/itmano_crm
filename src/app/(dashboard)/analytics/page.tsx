@@ -1,17 +1,30 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapAgent, mapLead, type AgentRow, type LeadRow } from '@/lib/db'
+import { mapAgent, type AgentRow } from '@/lib/db'
 import { getChannelsWithMetrics } from '@/lib/data/channels'
 import { listSequences } from '@/lib/data/email-sequences'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
-import { bandForScore, averageLiveTemperature } from '@/lib/scoring/temperature-band'
+import { getLeadAnalyticsStats, getResponseTimeStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
+import { formatResponseTime, responseTimeTone } from '@/lib/leads/response-time'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
+import { QUALITY_BANDS, QUALITY_CONFIG } from '@/lib/scoring/priority'
 import { getLeadSource } from '@/lib/leads/source'
 import { LeadsDonutChart } from './charts/leads-donut-chart'
 import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
 import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
-import { StatusDistributionChart } from './charts/status-distribution-chart'
-import { Users, Flame, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
+import { StageDistributionChart } from './charts/stage-distribution-chart'
+import { Users, Inbox, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
 import Link from 'next/link'
+import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { Tabs } from '@/components/ui/tabs'
+
+// Colorea el tiempo, no lo puntua: responder en la primera hora es el estandar
+// que cita todo el sector, pero no entra en ningun score.
+const RESPONSE_TONE_COLOR: Record<string, string> = {
+  bueno:  'var(--accent-green)',
+  medio:  'var(--accent-gold)',
+  malo:   'var(--accent-coral)',
+  neutro: 'var(--text-muted)',
+}
 
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -34,50 +47,54 @@ const CARD_SUBTITLE: React.CSSProperties = {
 }
 
 export default async function AnalyticsPage() {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const scope = scopeFor(ctx)
   const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
-  // Leads scoped to the viewer (tenant + agent_id for role 'agent'). Agents are
-  // tenant-scoped reference data (per-agent blocks are hidden for the agent role).
-  const leadsQ  = applyVisibilityScope(
-    supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)'),
-    scope,
-  )
+  // Todos los agregados de leads salen ya calculados de Postgres (RPC
+  // lead_analytics_stats, migración 073) con el scope de visibilidad aplicado en
+  // el servidor: la página ya no trae la tabla de leads del tenant para contarla
+  // en JS. Los agentes son datos de referencia del tenant (los bloques por agente
+  // se ocultan para el rol 'agent').
   const agentsQ = supabase.from('agents').select('*')
 
-  const [{ data: rawLeads }, { data: rawAgents }, channels, sequences] = await Promise.all([
-    leadsQ,
+  const [stats, responseTime, { data: rawAgents }, channels, sequences] = await Promise.all([
+    getLeadAnalyticsStats(scope),
+    getResponseTimeStats(scope),
     tenant_id ? agentsQ.eq('tenant_id', tenant_id) : agentsQ,
     getChannelsWithMetrics(tenant_id, 30, scope.agentId),
     listSequences(tenant_id, scope.agentId),
   ])
 
-  const leads  = (rawLeads  ?? []).map(r => mapLead(r as LeadRow))
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 
   // ─── KPIs ───────────────────────────────────────────────────
-  const totalLeads = leads.length
-  const hotLeads = leads.filter(l => (l.temperatureScore ?? 0) >= 70).length
-  const closedLeads = leads.filter(l =>
-    l.status === 'closed' || l.status === 'process_completed'
-  ).length
-  const conversionRate = totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0
+  const totalLeads  = stats.total
+  const activeLeads = stats.active
+  // La conversión se mide SÓLO sobre lo que captó ITMANO. Con los importados
+  // dentro, A&J mostraba un 98% que describía el trabajo hecho en otro CRM.
+  const conversionRate = stats.attributedTotal > 0
+    ? Math.round((stats.attributedClosed / stats.attributedTotal) * 100)
+    : 0
 
-  // Temperatura promedio (KPI): mean current_score over LIVE leads (frozen excluded),
-  // shown as its band + the mean number as backup.
-  const avgLiveTemp = averageLiveTemperature(leads)
-  const tempBand = avgLiveTemp !== null ? bandForScore(avgLiveTemp) : null
+  // Distribución de las 5 bandas sobre TODA la cartera, cerrados incluidos: sin
+  // ellos no se puede ver si los buenos leads terminan cerrando.
+  const qualityDist = stats.qualityDistribution
+  const qualityRows = QUALITY_BANDS.map(b => ({
+    band:  b,
+    label: QUALITY_CONFIG[b].label,
+    color: QUALITY_CONFIG[b].color,
+    count: qualityDist[b] ?? 0,
+    pct:   stats.total > 0 ? Math.round(((qualityDist[b] ?? 0) / stats.total) * 100) : 0,
+  }))
 
-  // Real current-calendar-month counts (created_at within this month) — replaces the
-  // previously hardcoded "+12 este mes" / "+3 esta semana" trend strings.
+  // Altas del mes calendario en curso — cortadas en UTC igual que en la base, para
+  // que el bucket no dependa de la zona horaria del servidor de Node.
   const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const inThisMonth = (iso: string) => new Date(iso) >= monthStart
-  const leadsThisMonth = leads.filter(l => inThisMonth(l.createdAt)).length
-  const hotThisMonth   = leads.filter(l => inThisMonth(l.createdAt) && (l.temperatureScore ?? 0) >= 70).length
+  const leadsThisMonth       = stats.thisMonth.leads
+  const highQualityThisMonth = stats.thisMonth.highQuality
 
   // ─── Composite-source donut ──────────────────────────────────
   // Same composite-source logic as the /leads column & filter (getLeadSource):
@@ -86,6 +103,7 @@ export default async function AnalyticsPage() {
   // channel-less as "Manual". Categories with 0 leads are omitted.
   const SOURCE_EMOJI: Record<string, string> = {
     manual:       '✍️',
+    import:       '📥',
     instagram:    '📸',
     facebook:     '👍',
     whatsapp:     '💬',
@@ -95,29 +113,42 @@ export default async function AnalyticsPage() {
     manychat:     '💬',
     other:        '📌',
   }
-  const sourceCounts = new Map<string, { label: string; count: number }>()
-  leads.forEach(lead => {
-    // reason: Supabase returns untyped join data without generated schema
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-    const channelType = (raw?.acquisition_channels?.channel_type ?? null) as string | null
-    const src = getLeadSource(channelType, lead.trafficSource ?? null)
+  const sourceCounts = new Map<string, { label: string; count: number; top: number; qualitySum: number }>()
+  stats.bySource.forEach(row => {
+    const src = getLeadSource(row.channelType, row.trafficSource)
     const prev = sourceCounts.get(src.kind)
-    sourceCounts.set(src.kind, { label: src.label, count: (prev?.count ?? 0) + 1 })
+    sourceCounts.set(src.kind, {
+      // El kind 'other' agrupa varios traffic_source con etiquetas distintas:
+      // nombra el grupo la mayoritaria.
+      label: !prev || row.total > prev.top ? src.label : prev.label,
+      count: (prev?.count ?? 0) + row.total,
+      top:   Math.max(prev?.top ?? 0, row.total),
+      // La media por kind se pondera por volumen: dos filas del mismo kind con
+      // 100 y 2 leads no pueden pesar igual al promediarse.
+      qualitySum: (prev?.qualitySum ?? 0) + (row.avgQuality ?? 0) * row.total,
+    })
   })
   const sourceData = [...sourceCounts.entries()]
-    .map(([kind, { label, count }]) => ({ name: label, value: count, emoji: SOURCE_EMOJI[kind] ?? '📌' }))
+    .map(([kind, { label, count, qualitySum }]) => ({
+      name: label,
+      value: count,
+      emoji: SOURCE_EMOJI[kind] ?? '📌',
+      avgQuality: count > 0 ? Math.round(qualitySum / count) : null,
+    }))
     .sort((a, b) => b.value - a.value)
 
   // ─── Agents bar ──────────────────────────────────────────────
+  // Un agente sin leads no aparece en el agregado: se muestra en cero.
+  const byAgent = new Map(stats.byAgent.map(a => [a.agentId, a]))
+
   const agentData = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
+    const row = byAgent.get(agent.id)
     return {
       name: agent.name.split(' ')[0],
       fullName: agent.name,
-      total: agentLeads.length,
-      hot: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
-      closed: agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      total: row?.total ?? 0,
+      highQuality: row?.highQuality ?? 0,
+      closed: row?.closed ?? 0,
       color: agent.accentColor,
     }
   })
@@ -127,57 +158,62 @@ export default async function AnalyticsPage() {
     0: 'Ene', 1: 'Feb', 2: 'Mar', 3: 'Abr', 4: 'May', 5: 'Jun',
     6: 'Jul', 7: 'Ago', 8: 'Sep', 9: 'Oct', 10: 'Nov', 11: 'Dic',
   }
-  const months: { month: string; leads: number; nurturing: number; hot: number; closed: number }[] = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const y = d.getFullYear()
-    const m = d.getMonth()
-    const monthLeads = leads.filter(l => {
-      const ld = new Date(l.createdAt)
-      return ld.getFullYear() === y && ld.getMonth() === m
-    })
+  // La base devuelve sólo los meses con leads; aquí se arma el eje completo (los
+  // meses vacíos van en cero). Las claves se construyen en UTC para casar con el
+  // corte de la migración 073.
+  const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  const monthlyByKey = new Map(stats.monthly.map(m => [m.month, m]))
+
+  const months: {
+    month: string; nuevo: number; nutricion: number
+    enProceso: number; cerrado: number; perdido: number
+  }[] = []
+  for (let i = ANALYTICS_MONTHS - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    const row = monthlyByKey.get(monthKey(d))
     months.push({
-      month:     MONTH_LABELS[m],
-      leads:     monthLeads.length,
-      nurturing: monthLeads.filter(l => l.status === 'nurturing').length,
-      hot:       monthLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
-      closed:    monthLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      month:     MONTH_LABELS[d.getUTCMonth()],
+      nuevo:     row?.nuevo     ?? 0,
+      nutricion: row?.nutricion ?? 0,
+      enProceso: row?.enProceso ?? 0,
+      cerrado:   row?.cerrado   ?? 0,
+      perdido:   row?.perdido   ?? 0,
     })
   }
   const enrichedMonthlyData = months
 
   // Dynamic range label for the monthly area chart (was a hardcoded "Oct 2025 – Abr 2026").
-  const rangeStart = new Date(now.getFullYear(), now.getMonth() - 6, 1)
+  const rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (ANALYTICS_MONTHS - 1), 1))
   const monthlyRangeLabel =
-    `${MONTH_LABELS[rangeStart.getMonth()]} ${rangeStart.getFullYear()} – ${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`
+    `${MONTH_LABELS[rangeStart.getUTCMonth()]} ${rangeStart.getUTCFullYear()} – ${MONTH_LABELS[now.getUTCMonth()]} ${now.getUTCFullYear()}`
 
-  // ─── Status distribution by agent ────────────────────────────
-  const statusData = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
+  // ─── Etapas por agente ───────────────────────────────────────
+  const stageData = agents.map(agent => {
+    const stages = byAgent.get(agent.id)?.stages ?? {}
+    const countOf = (stage: string) => stages[stage] ?? 0
     return {
-      agent: agent.name.split(' ')[0],
-      new:       agentLeads.filter(l => l.status === 'new').length,
-      nurturing: agentLeads.filter(l => l.status === 'nurturing').length,
-      warm:      agentLeads.filter(l => l.status === 'warm').length,
-      hot:       agentLeads.filter(l => l.status === 'hot').length,
-      process:   agentLeads.filter(l => l.status === 'process_started').length,
-      closed:    agentLeads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+      agent:     agent.name.split(' ')[0],
+      nuevo:     countOf('nuevo'),
+      nutricion: countOf('nutricion'),
+      enProceso: countOf('en_proceso'),
+      cerrado:   countOf('cerrado'),
+      perdido:   countOf('perdido'),
     }
   })
 
   // ─── Avg temp by agent ───────────────────────────────────────
-  const tempByAgent = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
-    const avgTemp = agentLeads.length > 0
-      ? Math.round(agentLeads.reduce((s, l) => s + (l.temperatureScore ?? 0), 0) / agentLeads.length)
-      : 0
+  // Calidad media por agente en vez de temperatura: la temperatura mezclaba el
+  // decaimiento, así que un agente con leads antiguos parecía peor aunque sus
+  // leads fueran igual de buenos.
+  const qualityByAgent = agents.map(agent => {
+    const row = byAgent.get(agent.id)
     return {
       agent,
-      avgTemp,
-      totalLeads: agentLeads.length,
-      hotLeads: agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length,
+      avgQuality:  row?.avgQuality  ?? 0,
+      totalLeads:  row?.total       ?? 0,
+      highQuality: row?.highQuality ?? 0,
     }
-  }).sort((a, b) => b.avgTemp - a.avgTemp)
+  }).sort((a, b) => b.avgQuality - a.avgQuality)
 
   // tone: 'pos' → green up-arrow + green text (real positive delta); 'neutral' →
   // muted descriptor, no arrow (no fabricated delta).
@@ -194,40 +230,57 @@ export default async function AnalyticsPage() {
       color: 'var(--accent-gold)',
     },
     {
-      label: 'Leads Calientes',
-      value: String(hotLeads),
-      sub: `+${hotThisMonth} este mes`,
-      tone: 'pos',
-      icon: <Flame size={18} />,
-      color: '#E04040',
+      // Sustituye a "Leads Calientes". "Caliente" era una banda de temperatura
+      // que ya no se usa en ninguna otra pantalla; lo que el equipo puede
+      // trabajar hoy es la cartera viva (nuevos + en nutrición).
+      label: 'Cartera Activa',
+      value: String(activeLeads),
+      sub: 'nuevos y en nutrición',
+      tone: 'neutral',
+      icon: <Inbox size={18} />,
+      color: 'var(--accent-blue)',
     },
     {
       label: 'Tasa de Conversión',
       value: `${conversionRate}%`,
-      sub: 'sobre el total de leads',
+      // "captados aquí" no le decía a nadie de dónde salía el denominador: el
+      // número visible era 4 mientras la cartera mostraba 117, sin pista de que
+      // los importados quedaban fuera. Se nombran las dos cifras y el motivo.
+      // Desde la 107 los suscriptores de newsletter también quedan fuera (un
+      // lector nunca cierra siendo lector: diluía el denominador y nunca el
+      // numerador), así que el copy lo dice en vez de callárselo.
+      sub: stats.imported > 0
+        ? `${stats.attributedClosed} de ${stats.attributedTotal} cerrados · ${stats.imported} importados y los suscriptores quedan fuera`
+        : `${stats.attributedClosed} de ${stats.attributedTotal} cerrados · los suscriptores quedan fuera`,
       tone: 'neutral',
       icon: <TrendingUp size={18} />,
       color: 'var(--accent-green)',
     },
     {
-      // Temperatura promedio: banda del score medio de los leads vivos (congelados
-      // excluidos), con el número medio como respaldo.
-      label: 'Temperatura Promedio',
-      value: tempBand ? tempBand.label : '—',
-      sub: avgLiveTemp !== null ? `${avgLiveTemp} pts · pipeline vivo` : 'sin pipeline vivo',
-      tone: 'neutral',
+      // Sustituye a "Temperatura promedio": promediar una escala arbitraria no
+      // significa nada. Cuántos leads son de calidad alta sí — y la distribución
+      // completa está debajo.
+      label: 'Calidad Alta',
+      value: String(qualityDist.alta ?? 0),
+      sub: highQualityThisMonth > 0
+        ? `+${highQualityThisMonth} este mes`
+        : stats.total > 0
+          ? `${Math.round(((qualityDist.alta ?? 0) / stats.total) * 100)}% de la cartera`
+          : 'sin leads',
+      tone: highQualityThisMonth > 0 ? 'pos' : 'neutral',
       icon: <Activity size={18} />,
-      color: tempBand ? tempBand.color : 'var(--text-muted)',
+      color: QUALITY_CONFIG.alta.color,
     },
   ]
 
   return (
     <div>
       {/* FILA 1 — KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {kpis.map((kpi, i) => (
-          <div
+          <StaggerItem
             key={i}
+            className="card-interactive"
             style={{
               background: 'var(--bg-surface)',
               border: '1px solid var(--border-subtle)',
@@ -243,7 +296,7 @@ export default async function AnalyticsPage() {
                 width: '34px',
                 height: '34px',
                 borderRadius: '8px',
-                background: `${kpi.color}1F`,
+                background: `color-mix(in srgb, ${kpi.color} 12%, transparent)`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -261,53 +314,156 @@ export default async function AnalyticsPage() {
                 {kpi.sub}
               </span>
             </div>
-          </div>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGroup>
 
-      {/* FILA 2 — Donut + Bar horizontal. "Leads por Agente" is a per-agent block →
-          hidden for role 'agent' (the donut then spans full width). */}
-      <div className={isAgent ? 'grid grid-cols-1 gap-6' : 'grid grid-cols-1 md:grid-cols-2 gap-6'} style={{ marginBottom: '24px' }}>
+      {/* Contenido organizado en tabs — los KPIs permanecen siempre visibles.
+          El tab "Por agente" se omite para rol 'agent' (sus bloques ya estaban
+          ocultos con isAgent). Página server: los tabs reciben JSX server-rendered. */}
+      <Tabs
+        items={[
+          { key: 'resumen', label: 'Resumen' },
+          ...(!isAgent ? [{ key: 'agentes', label: 'Por agente' }] : []),
+          { key: 'canales', label: 'Canales y Email' },
+        ]}
+        content={{
+          resumen: (
+            <>
+              {/* Distribución de calidad — reemplaza la "temperatura promedio".
+                  Promediar una escala arbitraria no dice nada; ver cómo se reparte
+                  la cartera entre las cinco bandas sí. Incluye los cerrados: sin
+                  ellos no se puede ver si los buenos leads terminan cerrando. */}
+              <FadeIn delay={0.03} style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={CARD_HEADER}>Distribución de Calidad</div>
+                <div style={CARD_SUBTITLE}>Cómo se reparte tu cartera entre las cinco bandas</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                  {qualityRows.map(r => (
+                    <div key={r.band} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '78px' }}>{r.label}</span>
+                      <div style={{ flex: 1, height: '8px', borderRadius: '4px', background: 'var(--bg-overlay)' }}>
+                        <div style={{ width: `${r.pct}%`, height: '100%', borderRadius: '4px', background: r.color }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', minWidth: '58px', textAlign: 'right' }}>
+                        {r.count} · {r.pct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </FadeIn>
+
+              <FadeIn delay={0.05} style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={CARD_HEADER}>Leads por Fuente</div>
+                <div style={CARD_SUBTITLE}>Volumen y calidad media de cada canal</div>
+                <LeadsDonutChart data={sourceData} total={totalLeads} />
+                {/* Calidad media por canal: responde "¿qué fuente trae MEJORES
+                    leads?", que hasta ahora no se podía saber — sólo cuál traía más. */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px' }}>
+                  {sourceData.filter(d => d.avgQuality !== null).map(d => (
+                    <div key={d.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{d.emoji} {d.name}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        {d.value} leads · calidad media <strong style={{ color: 'var(--text-secondary)' }}>{d.avgQuality}</strong>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </FadeIn>
+              <FadeIn delay={0.1} style={CARD}>
+                <div style={CARD_HEADER}>Evolución de Leads</div>
+                <div style={CARD_SUBTITLE}>
+                  Leads por mes de alta y la etapa en la que están hoy · {monthlyRangeLabel}
+                </div>
+                <LeadsOverTimeChart data={enrichedMonthlyData} />
+              </FadeIn>
+            </>
+          ),
+          ...(!isAgent
+            ? {
+                agentes: (
+            <>
+              {/* Tiempo de respuesta — la métrica operativa que faltaba. Mediana,
+                  no promedio: un solo lead contestado tres semanas tarde arrastra
+                  la media a un número que no describe a nadie. */}
+              <div style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={CARD_HEADER}>Tiempo de Respuesta</div>
+                    <div style={CARD_SUBTITLE}>
+                      Cuánto se tarda en tocar un lead que llegó solo. Los registrados a mano no cuentan: no hay nada que responder.
+                    </div>
+                  </div>
+                  {responseTime.respondidos > 0 && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '26px', fontWeight: 600, lineHeight: 1,
+                        color: RESPONSE_TONE_COLOR[responseTimeTone(responseTime.medianHours)],
+                      }}>
+                        {formatResponseTime(responseTime.medianHours)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        mediana de {responseTime.respondidos} respondidos
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {responseTime.total === 0 ? (
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '10px' }}>
+                    Todavía no han entrado leads por formulario en la ventana. La métrica empieza a contar en cuanto llegue el primero.
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {agents.map(agent => {
+                      const row = responseTime.byAgent.find(a => a.agentId === agent.id)
+                      if (!row || row.total === 0) return null
+                      return (
+                        <div key={agent.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{agent.name}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>
+                              {row.respondidos}/{row.total} respondidos
+                            </span>
+                            <strong style={{ color: RESPONSE_TONE_COLOR[responseTimeTone(row.medianHours)], minWidth: '52px', textAlign: 'right' }}>
+                              {formatResponseTime(row.medianHours)}
+                            </strong>
+                          </span>
+                        </div>
+                      )
+                    })}
+                    {responseTime.sinResponder > 0 && (
+                      <div style={{ fontSize: '11.5px', color: 'var(--accent-coral)', marginTop: '4px' }}>
+                        {responseTime.sinResponder === 1
+                          ? 'Un lead sin una sola respuesta todavía.'
+                          : `${responseTime.sinResponder} leads sin una sola respuesta todavía.`}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ ...CARD, marginBottom: '24px' }}>
+                <div style={CARD_HEADER}>Leads por Agente</div>
+                <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
+                <LeadsByAgentChart data={agentData} />
+              </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div style={CARD}>
-          <div style={CARD_HEADER}>Leads por Fuente</div>
-          <div style={CARD_SUBTITLE}>Distribución por fuente de captación</div>
-          <LeadsDonutChart data={sourceData} total={totalLeads} />
-        </div>
-        {!isAgent && (
-          <div style={CARD}>
-            <div style={CARD_HEADER}>Leads por Agente</div>
-            <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
-            <LeadsByAgentChart data={agentData} />
-          </div>
-        )}
-      </div>
-
-      {/* FILA 3 — Area chart */}
-      <div style={{ ...CARD, marginBottom: '24px' }}>
-        <div style={CARD_HEADER}>Evolución de Leads</div>
-        <div style={CARD_SUBTITLE}>Flujo mensual por temperatura · {monthlyRangeLabel}</div>
-        <LeadsOverTimeChart data={enrichedMonthlyData} />
-      </div>
-
-      {/* FILA 4 — Stacked bar + Temp-by-agent table. Both are per-agent blocks →
-          the whole row is hidden for role 'agent'. */}
-      {!isAgent && (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" style={{ marginBottom: '24px' }}>
-        <div style={CARD}>
-          <div style={CARD_HEADER}>Estados por Agente</div>
-          <div style={CARD_SUBTITLE}>Distribución de pipeline por agente</div>
-          <StatusDistributionChart data={statusData} />
+          <div style={CARD_HEADER}>Etapas por Agente</div>
+          <div style={CARD_SUBTITLE}>En qué punto del embudo tiene su cartera cada agente</div>
+          <StageDistributionChart data={stageData} />
         </div>
 
         {/* Dense table — out of redesign scope; defensive horizontal scroll on phones only. */}
         <div className="max-md:overflow-x-auto" style={CARD}>
-          <div style={CARD_HEADER}>Temperatura por Agente</div>
-          <div style={CARD_SUBTITLE}>Score promedio y leads calientes por agente</div>
+          <div style={CARD_HEADER}>Calidad por Agente</div>
+          <div style={CARD_SUBTITLE}>Calidad media y leads de calidad alta por agente</div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '4px' }}>
             <thead>
               <tr>
-                {['#', 'Agente', 'Leads', '🔥', 'Score'].map(col => (
+                {['#', 'Agente', 'Leads', 'Alta', 'Calidad'].map(col => (
                   <th key={col} style={{
                     fontSize: '10px',
                     fontWeight: 500,
@@ -315,7 +471,7 @@ export default async function AnalyticsPage() {
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',
                     padding: '0 0 10px',
-                    textAlign: col === 'Leads' || col === '🔥' ? 'center' : 'left',
+                    textAlign: col === 'Leads' || col === 'Alta' ? 'center' : 'left',
                   }}>
                     {col}
                   </th>
@@ -323,9 +479,11 @@ export default async function AnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {tempByAgent.map((row, i) => {
-                const barColor = row.avgTemp >= 70 ? '#E04040' : row.avgTemp >= 40 ? '#E07B3A' : '#C9A96E'
-                const barWidth = Math.round((row.avgTemp / 100) * 80)
+              {qualityByAgent.map((row, i) => {
+                const barColor = QUALITY_CONFIG[
+                  row.avgQuality >= 60 ? 'alta' : row.avgQuality >= 35 ? 'media' : 'baja'
+                ].color
+                const barWidth = Math.round((row.avgQuality / 100) * 80)
                 return (
                   <tr
                     key={row.agent.id}
@@ -360,8 +518,8 @@ export default async function AnalyticsPage() {
                     <td style={{ padding: '10px 8px', fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center' }}>
                       {row.totalLeads}
                     </td>
-                    <td style={{ padding: '10px 8px', fontSize: '13px', color: '#E04040', textAlign: 'center' }}>
-                      {row.hotLeads}
+                    <td style={{ padding: '10px 8px', fontSize: '13px', color: 'var(--status-hot)', textAlign: 'center' }}>
+                      {row.highQuality}
                     </td>
                     <td style={{ padding: '10px 0 10px 8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -369,7 +527,7 @@ export default async function AnalyticsPage() {
                           <div style={{ width: `${barWidth}px`, height: '100%', borderRadius: '2px', background: barColor }} />
                         </div>
                         <span style={{ fontSize: '13px', color: 'var(--text-secondary)', minWidth: '28px' }}>
-                          {row.avgTemp}
+                          {row.avgQuality}
                         </span>
                       </div>
                     </td>
@@ -380,8 +538,13 @@ export default async function AnalyticsPage() {
           </table>
         </div>
       </div>
-      )}
-      {/* FILA 5 — Secuencias de email */}
+            </>
+                ),
+              }
+            : {}),
+          canales: (
+            <>
+      {/* Secuencias de email */}
       {(() => {
         const totalActive    = sequences.reduce((s, q) => s + q.activeRunCount,    0)
         const totalCompleted = sequences.reduce((s, q) => s + q.completedRunCount, 0)
@@ -548,7 +711,7 @@ export default async function AnalyticsPage() {
                       fontSize: '10px',
                       fontWeight: 500,
                       color: typeColor,
-                      background: `${typeColor}18`,
+                      background: `color-mix(in srgb, ${typeColor} 10%, transparent)`,
                       padding: '2px 8px',
                       borderRadius: '10px',
                       letterSpacing: '0.05em',
@@ -568,9 +731,10 @@ export default async function AnalyticsPage() {
                     <span style={{
                       fontSize: '13px',
                       fontWeight: 500,
-                      color: ch.metrics.conversionRate >= 15 ? 'var(--accent-green)' : ch.metrics.conversionRate >= 8 ? 'var(--accent-gold)' : 'var(--text-muted)',
+                      // Sin vistas no hay conversion que juzgar (falta el beacon).
+                      color: (ch.metrics.conversionRate ?? 0) >= 15 ? 'var(--accent-green)' : (ch.metrics.conversionRate ?? 0) >= 8 ? 'var(--accent-gold)' : 'var(--text-muted)',
                     }}>
-                      {ch.metrics.conversionRate}%
+                      {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
                     </span>
                   </td>
                   <td style={{ padding: '10px 0 10px 8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -583,6 +747,10 @@ export default async function AnalyticsPage() {
         </table>
         </div>
       </div>
+            </>
+          ),
+        }}
+      />
     </div>
   )
 }

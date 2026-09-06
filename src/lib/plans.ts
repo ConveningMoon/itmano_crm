@@ -1,0 +1,285 @@
+// Fuente única de verdad de los planes de suscripción de ITMANO CRM.
+// Client-safe (sin server-only): la consumen la landing, /planes, el CRM
+// (settings/sidebar vía subscriptions.ts) y el Centro de control.
+//
+// Posicionamiento (análisis de mercado 2026-07): Esencial compite por volumen
+// entre agentes independientes (mercado solo: $30–150/mes EE.UU., €29–79
+// España); Growth concentra el margen y la IA generativa completa; Partner
+// captura equipos 2+ agentes con multi-login (los suites de equipo del
+// mercado — Lofty/BoldTrail — parten de $449–499/asiento).
+//
+// Enforcement real HOY: solo el presupuesto de IA (ai_monthly_limit_usd,
+// migración 053, aplicado en src/lib/services/ai-limit.ts). Los demás límites
+// son contractuales: los administra el super_admin desde el Centro de control
+// hasta que llegue la fase de billing con enforcement en código.
+
+import type { SubscriptionPlan } from '@/lib/subscriptions'
+
+export interface PlanLimits {
+  /** Usuarios con acceso de login. Partner: base incluida, ampliable. */
+  logins: number | 'multiple'
+  /** Miembros del equipo rastreados (routing, métricas, colores). */
+  trackedAgents: number | 'unlimited'
+  /** Leads / contactos activos. */
+  leads: number | 'unlimited'
+  /** Emails salientes por mes calendario (secuencias + one-offs). */
+  emailsPerMonth: number
+  /** Propiedades publicadas a la web del cliente. null = feature no incluida. */
+  webProperties: number | 'unlimited' | null
+  /**
+   * Presupuesto de IA por mes calendario (USD) — default de ai_monthly_limit_usd.
+   * SOLO referencia interna de ITMANO: las superficies públicas y del tenant
+   * muestran `aiTokensLabel`, nunca dólares.
+   */
+  aiBudgetUsd: number
+  /**
+   * Parte de `aiBudgetUsd` que SOLO puede gastar el núcleo — hoy, el análisis
+   * de fit de cada lead. No es una bolsa aparte: son los últimos dólares del
+   * mismo tope, así que no hay segundo contador que desincronizar ni columna
+   * nueva en `tenants`.
+   *
+   * Por qué existe: `lead_fit` corre solo (intake de formularios, webhook de
+   * respuestas, contacto) y al quedarse sin presupuesto no falla — se salta,
+   * en silencio. Un usuario que gasta el mes en newsletters dejaría de tener
+   * scoring interpretado por IA sin un solo error a la vista. Lo discrecional
+   * sí puede fallar de cara: alguien pulsó un botón y lee el mensaje.
+   *
+   * Dimensionado a $0.0049 por análisis (costo medido, no estimado): es un
+   * colchón para un USO MENSUAL razonable, no una fracción de `limits.leads`
+   * (que es un tope de cartera, no un caudal mensual de leads nuevos). Cubre
+   * ~408 análisis en Esencial y ~1224 en Growth — de sobra para el flujo
+   * mensual esperado en cada plan. La aritmética y el tope de seguridad viven
+   * en `src/lib/services/ai-budget.ts`.
+   */
+  aiCoreReserveUsd: number
+  /**
+   * Equivalente público del presupuesto de IA en tokens, a tarifa combinada
+   * (~$5 por millón de tokens con la mezcla real entrada/salida de sonnet).
+   * Números redondeados hacia abajo para nunca prometer de más.
+   */
+  aiTokensLabel: string
+}
+
+export interface PlanFeatures {
+  aiEmailDrafting: boolean      // composer + bootstrap de secuencias
+  aiPropertyIntake: boolean     // "Crear con IA" desde PDF
+  webPropertySync: boolean      // propiedades → sitio web del cliente
+  fullAnalytics: boolean        // analytics completo (agente/canal/email)
+  teamAnalytics: boolean        // vista consolidada de equipo
+  multiLogin: boolean           // logins de agente con visibilidad propia
+  /**
+   * Dominio de envío propio verificado (mail.tudominio.com) en la cuenta
+   * Resend de ITMANO. false = envío desde el dominio compartido de ITMANO
+   * con la marca del tenant en el nombre visible ("Nombre · Agencia
+   * <slug@mail.itmano.com>") — cero configuración DNS, onboarding inmediato.
+   * Esto también acota el consumo de slots de dominio del plan de Resend a
+   * los tenants Growth/Partner (ver CLAUDE.md — arquitectura de email).
+   */
+  customSendingDomain: boolean
+  /**
+   * Newsletters: contenido editorial publicado con captación de suscriptores.
+   *
+   * La incluyen los TRES planes. El flag se queda porque es el interruptor —lo
+   * leen canUseNewsletters y las cuatro superficies de /newsletters— no porque
+   * algún plan la tenga apagada.
+   *
+   * Por qué no gradúa por plan: la edición se publica siempre en
+   * news.itmano.com/<tenant>/<edición>, nunca en el dominio del cliente, así
+   * que no consume slot de dominio de Resend ni depende de
+   * customSendingDomain. Lo único que cuesta dinero es la IA, y está medido:
+   * una edición completa sale por ~$0.46 (investigación ~$0.39 —con web_search
+   * topado en 4 búsquedas—, redacción ~$0.03 y portada ~$0.04), más ~$0.01 una
+   * sola vez por tenant al sembrar sus fuentes. Ese gasto ya lo acota
+   * ai_monthly_limit_usd (ai-limit.ts), que SÍ se aplica en código.
+   *
+   * O sea: el plan no gradúa el acceso, gradúa cuántas ediciones caben en el
+   * presupuesto. Y ese presupuesto es compartido: en Esencial una newsletter
+   * semanal se lleva ~$1.85/mes de los $8, y agotarlo deja sin correr al
+   * análisis de fit de cada lead, que falla en silencio por diseño.
+   */
+  newsletters: boolean
+}
+
+export interface PlanDefinition {
+  key: SubscriptionPlan
+  label: string
+  /** Precio mensual en USD. null = personalizado (desde basePrice). */
+  priceUsd: number | null
+  /** Para Partner: precio base "desde". */
+  basePriceUsd?: number
+  /** Inversión anual en USD. Se cobran 10 meses y se usan 12. */
+  priceAnnualUsd: number
+  /** String de inversión anual ("$590 / año"). */
+  inversionAnual: string
+  /** Ahorro frente a 12 mensualidades, en USD. */
+  annualSavingsUsd: number
+  /** String de inversión para UI ("$59 / mes", "desde $249 / mes"). */
+  inversion: string
+  audience: string
+  blurb: string
+  limits: PlanLimits
+  features: PlanFeatures
+  onboarding: string
+  support: string
+  highlighted: boolean
+}
+
+// ─── Ciclo anual ──────────────────────────────────────────────────────────────
+// "2 meses gratis" (16.7%). Se descarta un descuento mayor: en Growth el
+// presupuesto de IA es $30/mes = $360/año contra $1,290 de ingreso — 28% del
+// revenue como COGS — y en posicionamiento premium un 25% off lee como
+// liquidación. DELIBERADAMENTE no se publica un equivalente mensual del anual:
+// $590/12 = $49.17, y redondear a "$49/mes" prometería menos de lo que se cobra
+// (misma convención que aiTokensLabel: nunca prometer de más).
+export const ANNUAL_MONTHS_CHARGED = 10
+
+export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
+  esencial: {
+    key: 'esencial',
+    label: 'Esencial',
+    priceUsd: 59,
+    inversion: '$59 / mes',
+    priceAnnualUsd:   590,
+    inversionAnual:   '$590 / año',
+    annualSavingsUsd: 118,
+    audience: 'Agentes independientes que empiezan a ordenar su operación.',
+    blurb: 'CRM completo con scoring automático, secuencias de email y IA para arrancar.',
+    limits: {
+      logins: 1,
+      trackedAgents: 1,
+      leads: 2500,
+      emailsPerMonth: 3000,
+      webProperties: null,
+      // $8 alcanzaban antes de que Esencial incluyera newsletters: el uso
+      // típico con una edición semanal es ~$3.7/mes, pero un usuario que
+      // regenera tres veces sin escribir el tema (sin tema no hay caché de
+      // dossier) llega a ~$7.4 y choca contra el muro a mitad de mes.
+      aiBudgetUsd: 12,
+      aiCoreReserveUsd: 2,
+      aiTokensLabel: '2.4M tokens',
+    },
+    features: {
+      aiEmailDrafting: true,
+      aiPropertyIntake: false,
+      webPropertySync: false,
+      fullAnalytics: false,
+      teamAnalytics: false,
+      multiLogin: false,
+      customSendingDomain: false,
+      newsletters: true,
+    },
+    onboarding: 'Guiado (autoservicio con nuestro equipo a un email)',
+    support: 'Email',
+    highlighted: false,
+  },
+  growth: {
+    key: 'growth',
+    label: 'Growth',
+    priceUsd: 129,
+    inversion: '$129 / mes',
+    priceAnnualUsd:   1290,
+    inversionAnual:   '$1,290 / año',
+    annualSavingsUsd: 258,
+    audience: 'Independientes pro que quieren la IA completa y su web alimentada por el CRM.',
+    blurb: 'Toda la IA generativa, propiedades sincronizadas con tu web y analytics completo.',
+    limits: {
+      logins: 1,
+      trackedAgents: 3,
+      leads: 10000,
+      emailsPerMonth: 15000,
+      webProperties: 50,
+      aiBudgetUsd: 30,
+      aiCoreReserveUsd: 6,
+      aiTokensLabel: '6M tokens',
+    },
+    features: {
+      aiEmailDrafting: true,
+      aiPropertyIntake: true,
+      webPropertySync: true,
+      fullAnalytics: true,
+      teamAnalytics: false,
+      multiLogin: false,
+      customSendingDomain: true,
+      newsletters: true,
+    },
+    onboarding: 'Asistido (configuramos canales y secuencias contigo)',
+    support: 'Email prioritario',
+    highlighted: true,
+  },
+  partner: {
+    key: 'partner',
+    label: 'Partner',
+    priceUsd: null,
+    basePriceUsd: 249,
+    inversion: 'desde $249 / mes',
+    priceAnnualUsd:   2490,
+    inversionAnual:   'desde $2,490 / año',
+    annualSavingsUsd: 498,
+    audience: 'Equipos y grupos inmobiliarios: 2 o más agentes con acceso propio.',
+    blurb: 'Multi-login por agente, todo ilimitado y onboarding dedicado con migración de datos.',
+    limits: {
+      logins: 'multiple', // base: owner + 2 agentes; +$49/mes por login adicional
+      trackedAgents: 'unlimited',
+      leads: 'unlimited',
+      emailsPerMonth: 50000,
+      webProperties: 'unlimited',
+      aiBudgetUsd: 75,
+      aiCoreReserveUsd: 15,
+      aiTokensLabel: '15M tokens',
+    },
+    features: {
+      aiEmailDrafting: true,
+      aiPropertyIntake: true,
+      webPropertySync: true,
+      fullAnalytics: true,
+      teamAnalytics: true,
+      multiLogin: true,
+      customSendingDomain: true,
+      newsletters: true,
+    },
+    onboarding: 'Dedicado + migración de datos (HubSpot y otros)',
+    support: 'Prioritario + contacto directo',
+    highlighted: false,
+  },
+}
+
+export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
+
+/** Logins incluidos en la base de Partner y costo de cada login adicional. */
+export const PARTNER_SEAT = { includedLogins: 3, extraLoginUsd: 49 }
+
+// ─── Período de prueba ────────────────────────────────────────────────────────
+// Gancho de adquisición sales-led: 14 días con la experiencia Growth completa,
+// sin tarjeta (no hay procesador de pagos — es literalmente cierto). Growth y
+// no Partner: el trial no debe requerir registrar/verificar un dominio de
+// envío propio (tiempo + slot de Resend desperdiciados si no convierte) — en
+// prueba se envía desde el dominio compartido de ITMANO con la marca del
+// tenant en el nombre visible; el dominio propio se configura al convertir a
+// Growth/Partner de pago. La IA lleva un presupuesto de cortesía (no
+// ilimitado: el costo lo paga ITMANO y un trial sin tope es abusable; $25 en
+// 14 días se siente ilimitado en la práctica). El super_admin puede extender
+// el vencimiento desde el Centro de control. Sin lockout automático al
+// vencer: el Centro de control lo marca y el equipo gestiona la conversión
+// (modelo sales-led).
+
+export const TRIAL = {
+  days: 14,
+  /** El trial vive como plan='growth' + status='trial'. */
+  plan: 'growth' as SubscriptionPlan,
+  /** Presupuesto de IA de cortesía durante la prueba (USD). */
+  aiBudgetUsd: 25,
+  label: 'Prueba Growth',
+} as const
+
+export function trialEndsAtFromNow(): Date {
+  const d = new Date()
+  d.setDate(d.getDate() + TRIAL.days)
+  return d
+}
+
+/** Días restantes de prueba (0 si ya venció). */
+export function trialDaysLeft(trialEndsAt: string | Date): number {
+  const end = typeof trialEndsAt === 'string' ? new Date(trialEndsAt) : trialEndsAt
+  const ms = end.getTime() - Date.now()
+  return Math.max(0, Math.ceil(ms / 86_400_000))
+}

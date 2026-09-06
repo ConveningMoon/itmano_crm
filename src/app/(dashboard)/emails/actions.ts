@@ -5,15 +5,24 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
+import { scopeFor } from '@/lib/auth/visibility'
+import { getEligibleLeadsForSequence, type EligibleLeadsResult } from '@/lib/data/leads'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { EmailContentSchema } from '@/lib/email-content'
+import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
+import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function getTenantId(overrideTenantId?: string): Promise<string | { error: string }> {
   const ctx = await getCurrentTenantContext()
   if (ctx.role === 'super_admin') {
-    if (!overrideTenantId) return { error: 'Tenant requerido para super_admin' }
-    return overrideTenantId
+    // Con un tenant seleccionado (actuando como tenant), el destino cae al
+    // tenant del contexto — no se pide picker. Solo sin selección se exige uno.
+    const target = overrideTenantId ?? ctx.tenant_id
+    if (!target) return { error: 'Selecciona un tenant desde el centro de control.' }
+    return target
   }
   if (!ctx.tenant_id) return { error: 'Acceso no autorizado' }
   return ctx.tenant_id
@@ -63,6 +72,14 @@ export async function createSequence(
 
   const tenantId = await getTenantId(parsed.data.tenantId)
   if (typeof tenantId === 'object') return { ok: false, error: tenantId.error }
+
+  // Crear secuencias nuevas requiere suscripción activa; las existentes no se
+  // tocan (siguen enviando o en pausa según sequencesRunnable, ver process-
+  // sequence-run.ts).
+  const access = await getTenantAccessFor(tenantId)
+  if (!access.canCreateSequences) {
+    return { ok: false, error: 'Crear secuencias requiere una suscripción activa. Tus secuencias existentes se conservan intactas.' }
+  }
 
   const supabase = createAdminClient()
   const agent = await resolveSequenceAgent(supabase, tenantId, parsed.data.agentId)
@@ -191,17 +208,49 @@ export async function deleteSequence(
 
 // ─── Step CRUD ────────────────────────────────────────────────────────────────
 
-const StepSchema = z.object({
-  delayHours:        z.number().int().min(0),
-  resendTemplateId:  z.string().min(1).max(200),
-})
+// Un paso guarda su contenido de UNA de dos formas (mutuamente excluyentes):
+//   - 'crm':      subject + content del composer (body_json) — el CRM compila
+//                 el HTML al enviar. resend_template_id queda null.
+//   - 'template': UUID de un template de Resend (modo legacy/avanzado) —
+//                 body_json queda null.
+const StepSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode:       z.literal('crm'),
+    delayHours: z.number().int().min(0),
+    subject:    z.string().trim().min(1, 'El asunto es obligatorio').max(200),
+    content:    EmailContentSchema,
+  }),
+  z.object({
+    mode:             z.literal('template'),
+    delayHours:       z.number().int().min(0),
+    resendTemplateId: z.string().trim().min(1).max(200),
+  }),
+])
+
+export type StepInput = z.infer<typeof StepSchema>
+
+function stepColumns(data: StepInput) {
+  return data.mode === 'crm'
+    ? {
+        delay_hours:        data.delayHours,
+        subject:            data.subject,
+        body_json:          data.content,
+        resend_template_id: null,
+      }
+    : {
+        delay_hours:        data.delayHours,
+        subject:            null,
+        body_json:          null,
+        resend_template_id: data.resendTemplateId.trim(),
+      }
+}
 
 export async function addStep(
   sequenceId: string,
-  fields: z.infer<typeof StepSchema>,
+  fields: StepInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = StepSchema.safeParse(fields)
-  if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const ctx = await getCurrentTenantContext()
   const denied = requireWriteAccess(ctx)
@@ -229,12 +278,11 @@ export async function addStep(
   const stepOrder = maxOrder + 1
 
   const { error } = await supabase.from('email_sequence_steps').insert({
-    sequence_id:       sequenceId,
-    tenant_id:         tenantId,
-    step_order:        stepOrder,
-    delay_hours:       parsed.data.delayHours,
-    resend_template_id: parsed.data.resendTemplateId.trim(),
-    active:            true,
+    sequence_id: sequenceId,
+    tenant_id:   tenantId,
+    step_order:  stepOrder,
+    active:      true,
+    ...stepColumns(parsed.data),
   })
 
   if (error) return { ok: false, error: error.message }
@@ -245,10 +293,10 @@ export async function addStep(
 
 export async function updateStep(
   stepId: string,
-  fields: z.infer<typeof StepSchema>,
+  fields: StepInput,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = StepSchema.safeParse(fields)
-  if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const ctx = await getCurrentTenantContext()
   const denied = requireWriteAccess(ctx)
@@ -257,10 +305,7 @@ export async function updateStep(
 
   let q = supabase
     .from('email_sequence_steps')
-    .update({
-      delay_hours:        parsed.data.delayHours,
-      resend_template_id: parsed.data.resendTemplateId.trim(),
-    })
+    .update(stepColumns(parsed.data))
     .eq('id', stepId)
 
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
@@ -281,15 +326,8 @@ export async function deleteStep(
   if (denied) return denied
   const supabase = createAdminClient()
 
-  // Guard: don't allow deleting the last step
-  const { count } = await supabase
-    .from('email_sequence_steps')
-    .select('id', { count: 'exact', head: true })
-    .eq('sequence_id', sequenceId)
-
-  if ((count ?? 0) <= 1) {
-    return { ok: false, error: 'No se puede eliminar el único paso de una secuencia' }
-  }
+  // Se permite borrar cualquier paso, incluido el último — la secuencia queda
+  // vacía y vuelve a ofrecer el bootstrap con IA.
 
   // Get the step's current order before deleting
   const { data: step } = await supabase
@@ -367,6 +405,94 @@ export async function moveStep(
 
   revalidateEmails()
   return { ok: true }
+}
+
+// ─── Vista previa del composer ────────────────────────────────────────────────
+// Compila el HTML con el MISMO renderer que usan los envíos (email-render.ts)
+// y variables de muestra. La consumen las tres superficies del composer:
+// steps de secuencia, correos de compra y envío one-off desde el lead.
+
+const PreviewSchema = z.object({
+  subject: z.string().trim().min(1).max(200),
+  content: EmailContentSchema,
+  locale:  z.enum(SUPPORTED_LANGUAGE_CODES as [string, ...string[]]).default('en'),
+  // Contexto opcional para mostrar la FIRMA REAL del agente que firmaría el
+  // envío: por lead (one-off), por secuencia (steps) o por agente (emails de
+  // cierre, que son de un agente concreto). Sin contexto → muestra.
+  leadId:     z.string().optional(),
+  sequenceId: z.string().optional(),
+  agentId:    z.string().optional(),
+})
+
+export async function previewEmailHtml(
+  input: z.infer<typeof PreviewSchema>,
+): Promise<{ ok: true; html: string; subject: string } | { ok: false; error: string }> {
+  const parsed = PreviewSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+
+  const ctx = await getCurrentTenantContext()
+  const supabase = createAdminClient()
+
+  const SAMPLE_SIGNATURE: Record<string, string> = {
+    es: 'Un abrazo,\nAdriana',
+    en: 'Warmly,\nAdriana',
+    pt: 'Um abraço,\nAdriana',
+  }
+
+  // Firma real del agente que firmaría este envío. Se resuelve del agente
+  // asignado al lead (one-off) o del agente de la secuencia (steps); si no hay
+  // firma configurada o no hay contexto, cae a la de muestra para que la vista
+  // previa nunca aparezca sin firma.
+  let signature: string | null = null
+  let agentName = 'Adriana'
+  if (parsed.data.leadId) {
+    let q = supabase.from('leads').select('agents (name, email_signature)').eq('id', parsed.data.leadId)
+    if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+    const { data } = await q.maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ag = data ? (Array.isArray((data as any).agents) ? (data as any).agents[0] : (data as any).agents) : null
+    signature = (ag?.email_signature as string | null) ?? null
+    if (ag?.name) agentName = ag.name as string
+  } else if (parsed.data.agentId) {
+    // Emails de cierre (058): el template es de UN agente, así que la vista
+    // previa puede mostrar su firma real igual que las de secuencia. El filtro
+    // por tenant no es cosmético: el id llega del cliente.
+    let aq = supabase.from('agents').select('name, email_signature').eq('id', parsed.data.agentId)
+    if (ctx.tenant_id) aq = aq.eq('tenant_id', ctx.tenant_id)
+    const { data: ag } = await aq.maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    signature = ((ag as any)?.email_signature as string | null) ?? null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((ag as any)?.name) agentName = (ag as any).name as string
+  } else if (parsed.data.sequenceId) {
+    let sq = supabase.from('email_sequences').select('agent_id').eq('id', parsed.data.sequenceId)
+    if (ctx.tenant_id) sq = sq.eq('tenant_id', ctx.tenant_id)
+    const { data: seq } = await sq.maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agentId = (seq as any)?.agent_id as string | null
+    if (agentId) {
+      const { data: ag } = await supabase.from('agents').select('name, email_signature').eq('id', agentId).maybeSingle()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      signature = ((ag as any)?.email_signature as string | null) ?? null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((ag as any)?.name) agentName = (ag as any).name as string
+    }
+  }
+
+  const rendered = renderEmail({
+    subject: parsed.data.subject,
+    content: parsed.data.content,
+    vars: {
+      customer_name: 'María',
+      agent_name:    agentName,
+      agent_email:   'agente@ejemplo.com',
+    },
+    signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.en,
+    unsubscribeUrl: '#',
+    locale:         parsed.data.locale as EmailLocale,
+  })
+
+  return { ok: true, html: rendered.html, subject: rendered.subject }
 }
 
 // ─── Manual enrollment ────────────────────────────────────────────────────────
@@ -504,4 +630,61 @@ export async function addLeadsToSequence(
   revalidateEmails()
   revalidatePath('/leads')
   return { ok: true, result }
+}
+
+// ─── Picker de leads (secuencias manuales) ────────────────────────────────────
+
+const EligibleLeadsQuerySchema = z.object({
+  sequenceId: z.string().uuid(),
+  q:          z.string().max(120).optional(),
+  stage:      z.string().max(40).optional(),
+  agentId:    z.string().max(80).optional(),
+  language:   z.string().max(8).optional(),
+})
+
+// Búsqueda del picker de /emails/[id]. El listado ya no viaja entero al
+// navegador: cada búsqueda o filtro vuelve al servidor y trae como mucho 50.
+export async function searchEligibleLeads(input: {
+  sequenceId: string
+  q?:         string
+  stage?:     string
+  agentId?:   string
+  language?:  string
+}): Promise<{ ok: true; data: EligibleLeadsResult } | { ok: false; error: string }> {
+  const parsed = EligibleLeadsQuerySchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: 'Búsqueda inválida' }
+
+  // Es una lectura: se acota por el mismo scope de visibilidad que usa la página
+  // (no por requireWriteAccess — un agente puede buscar entre SUS leads aunque
+  // la inscripción en lote sea de owner/super).
+  const ctx = await getCurrentTenantContext()
+  const scope = scopeFor(ctx)
+  const supabase = createAdminClient()
+
+  // La secuencia debe ser visible para quien pregunta: sin esto la acción sería
+  // una vía para enumerar leads de otro tenant.
+  let seqQ = supabase
+    .from('email_sequences')
+    .select('id, tenant_id, agent_id, activation_type')
+    .eq('id', parsed.data.sequenceId)
+  if (scope.tenantId) seqQ = seqQ.eq('tenant_id', scope.tenantId)
+
+  const { data: seq } = await seqQ.maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seqRow = seq as any
+  if (!seqRow) return { ok: false, error: 'Secuencia no encontrada' }
+  if (scope.agentId && seqRow.agent_id !== scope.agentId) {
+    return { ok: false, error: 'Secuencia no encontrada' }
+  }
+  if ((seqRow.activation_type as string) !== 'manual') {
+    return { ok: false, error: 'La secuencia no es de tipo manual' }
+  }
+
+  const data = await getEligibleLeadsForSequence(parsed.data.sequenceId, scope, {
+    q:        parsed.data.q,
+    stage:    parsed.data.stage,
+    agentId:  parsed.data.agentId,
+    language: parsed.data.language,
+  })
+  return { ok: true, data }
 }

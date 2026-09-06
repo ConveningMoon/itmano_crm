@@ -1,17 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { requireWriteAccess, assertCanWriteLead } from '@/lib/auth/guards'
+import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel, assertCanWriteLead, assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 
 // ─── Context factories ────────────────────────────────────────────────────────
 
 const superAdmin: TenantContext = {
-  user_id: 'u-super', role: 'super_admin', tenant_id: null, agent_id: null,
+  user_id: 'u-super', email: 'super@test.itmano.com', role: 'super_admin', tenant_id: null, agent_id: null, acting_as_tenant: false,
 }
 const ownerA: TenantContext = {
-  user_id: 'u-owner-a', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null,
+  user_id: 'u-owner-a', email: 'owner-a@test.itmano.com', role: 'agent_owner', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: false,
 }
 const agentA1: TenantContext = {
-  user_id: 'u-agent-a1', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1',
+  user_id: 'u-agent-a1', email: 'agent-a1@test.itmano.com', role: 'agent', tenant_id: 'tenant-a', agent_id: 'agent-a1', acting_as_tenant: false,
+}
+// super_admin con un tenant seleccionado vía cookie (actuando como tenant)
+const superActingAsA: TenantContext = {
+  user_id: 'u-super', email: 'super@test.itmano.com', role: 'super_admin', tenant_id: 'tenant-a', agent_id: null, acting_as_tenant: true,
 }
 
 // ─── requireWriteAccess (sources / email / settings / agents) ─────────────────
@@ -30,6 +34,67 @@ describe('requireWriteAccess', () => {
 
   it('super_admin is allowed', () => {
     expect(requireWriteAccess(superAdmin)).toBeNull()
+  })
+})
+
+// ─── requireChannelWriteAccess (fuentes: el agente SÍ escribe) ────────────────
+
+describe('requireChannelWriteAccess', () => {
+  it('agent is allowed — a diferencia del resto de recursos compartidos', () => {
+    expect(requireChannelWriteAccess(agentA1)).toBeNull()
+    // El contraste con requireWriteAccess es el punto de este guard.
+    expect(requireWriteAccess(agentA1)).not.toBeNull()
+  })
+
+  it('agent_owner and super_admin are allowed', () => {
+    expect(requireChannelWriteAccess(ownerA)).toBeNull()
+    expect(requireChannelWriteAccess(superAdmin)).toBeNull()
+  })
+
+  it('an agent with no linked agents row is denied', () => {
+    // Provisionamiento inválido: sin agent_id la fuente nacería como "Toda la
+    // agencia", que es justo lo contrario de la regla.
+    const huerfano: TenantContext = { ...agentA1, agent_id: null }
+    expect(requireChannelWriteAccess(huerfano)).not.toBeNull()
+  })
+})
+
+// ─── assertCanWriteChannel (fuente propia, nunca la de otro) ──────────────────
+
+describe('assertCanWriteChannel', () => {
+  const canalDeA1     = { tenant_id: 'tenant-a', agent_id: 'agent-a1' }
+  const canalDeA2     = { tenant_id: 'tenant-a', agent_id: 'agent-a2' }
+  const canalDeAgencia = { tenant_id: 'tenant-a', agent_id: null }
+  const canalTenantB  = { tenant_id: 'tenant-b', agent_id: 'agent-b1' }
+
+  it('super_admin can write any channel, any tenant', () => {
+    expect(assertCanWriteChannel(superAdmin, canalDeA1)).toBeNull()
+    expect(assertCanWriteChannel(superAdmin, canalTenantB)).toBeNull()
+    expect(assertCanWriteChannel(superAdmin, canalDeAgencia)).toBeNull()
+  })
+
+  it('agent_owner can write any channel in their tenant, including agency-wide', () => {
+    expect(assertCanWriteChannel(ownerA, canalDeA1)).toBeNull()
+    expect(assertCanWriteChannel(ownerA, canalDeA2)).toBeNull()
+    expect(assertCanWriteChannel(ownerA, canalDeAgencia)).toBeNull()
+  })
+
+  it('agent_owner CANNOT write a channel in another tenant', () => {
+    expect(assertCanWriteChannel(ownerA, canalTenantB)?.error).toBe('No tienes permiso sobre esta fuente')
+  })
+
+  it('agent can write only their own channel', () => {
+    expect(assertCanWriteChannel(agentA1, canalDeA1)).toBeNull()
+    expect(assertCanWriteChannel(agentA1, canalDeA2)).not.toBeNull()
+  })
+
+  it('agent CANNOT write an agency-wide channel — no es de nadie en particular', () => {
+    expect(assertCanWriteChannel(agentA1, canalDeAgencia)).not.toBeNull()
+  })
+
+  it('super_admin acting as a tenant is still super_admin (no tenant scoping)', () => {
+    expect(assertCanWriteChannel(superActingAsA, canalDeAgencia)).toBeNull()
+    expect(assertCanWriteChannel(superActingAsA, canalTenantB)).toBeNull()
   })
 })
 
@@ -70,5 +135,78 @@ describe('assertCanWriteLead', () => {
     const denied = assertCanWriteLead(agentA1, leadInTenantB)
     expect(denied).not.toBeNull()
     expect(denied?.error).toBe('No tienes permiso sobre este lead')
+  })
+})
+
+// ─── assertCanWriteProperty (tenant-scoped + per-creator authorship) ──────────
+
+describe('resolveTargetTenant', () => {
+  it('super_admin without selection nor chosen tenant → error', () => {
+    const res = resolveTargetTenant(superAdmin)
+    expect(res).toEqual({ error: 'Selecciona un tenant desde el centro de control' })
+  })
+
+  it('super_admin with an explicitly chosen tenant → that tenant', () => {
+    expect(resolveTargetTenant(superAdmin, 'tenant-b')).toBe('tenant-b')
+  })
+
+  it('super_admin acting as tenant (cookie) → falls back to the selected tenant', () => {
+    expect(resolveTargetTenant(superActingAsA)).toBe('tenant-a')
+  })
+
+  it('super_admin acting as tenant with explicit choice → the explicit choice wins', () => {
+    expect(resolveTargetTenant(superActingAsA, 'tenant-b')).toBe('tenant-b')
+  })
+
+  it('agent_owner → always their own tenant, chosen id is ignored', () => {
+    expect(resolveTargetTenant(ownerA)).toBe('tenant-a')
+    expect(resolveTargetTenant(ownerA, 'tenant-b')).toBe('tenant-a')
+  })
+})
+
+describe('assertCanWriteProperty', () => {
+  const propByAgent = { tenant_id: 'tenant-a', created_by_user_id: 'u-agent-a1' }
+  const propByOwner = { tenant_id: 'tenant-a', created_by_user_id: 'u-owner-a' }
+  const propByNobody = { tenant_id: 'tenant-a', created_by_user_id: null }
+  const propForeign  = { tenant_id: 'tenant-b', created_by_user_id: 'u-agent-b1' }
+
+  it('super_admin can write any property in any tenant', () => {
+    expect(assertCanWriteProperty(superAdmin, propByAgent)).toBeNull()
+    expect(assertCanWriteProperty(superAdmin, propForeign)).toBeNull()
+    expect(assertCanWriteProperty(superAdmin, propByNobody)).toBeNull()
+  })
+
+  it('agent_owner can write any property in their tenant', () => {
+    expect(assertCanWriteProperty(ownerA, propByAgent)).toBeNull()
+    expect(assertCanWriteProperty(ownerA, propByOwner)).toBeNull()
+    expect(assertCanWriteProperty(ownerA, propByNobody)).toBeNull()
+  })
+
+  it('agent_owner CANNOT write a property in another tenant', () => {
+    const denied = assertCanWriteProperty(ownerA, propForeign)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
+  })
+
+  it('agent can write a property they created', () => {
+    expect(assertCanWriteProperty(agentA1, propByAgent)).toBeNull()
+  })
+
+  it("agent CANNOT write another user's property in the same tenant", () => {
+    const denied = assertCanWriteProperty(agentA1, propByOwner)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
+  })
+
+  it('agent CANNOT write a property with null created_by_user_id (created by super_admin)', () => {
+    const denied = assertCanWriteProperty(agentA1, propByNobody)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
+  })
+
+  it('agent CANNOT write a property in another tenant', () => {
+    const denied = assertCanWriteProperty(agentA1, propForeign)
+    expect(denied).not.toBeNull()
+    expect(denied?.error).toBe('No tienes permiso sobre esta propiedad')
   })
 })

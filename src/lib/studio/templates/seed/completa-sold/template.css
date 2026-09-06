@@ -1,0 +1,46 @@
+/* Foto completa · vendida — la casa que se cerró, a sangre, con el anuncio
+   sobre el degradado.
+   Sin cifra, sin nota y sin specs: un cierre publica el hecho y quién lo
+   hizo. El encabezado se agranda hasta ser el titular real de la pieza y el
+   agente cierra abajo con su teléfono en un cuerpo que se lee desde el feed. */
+.pieza { position: relative; width: var(--w); height: var(--h);
+         background: var(--surface); overflow: hidden; }
+
+.hero { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Este degradado arranca antes (24% vs 28%) y con paradas distintas a las
+   otras dos variantes: sin precio ni specs, el bloque de texto es más alto y
+   necesita más recorrido de color detrás para seguir siendo legible. */
+.velo { position: absolute; inset: 0; background: linear-gradient(
+  to bottom,
+  transparent 24%,
+  color-mix(in srgb, var(--brand) 55%, transparent) 48%,
+  color-mix(in srgb, var(--brand) 88%, transparent) 68%,
+  color-mix(in srgb, var(--brand) 97%, transparent) 100%); }
+
+.logo { position: absolute; top: 50px; right: 50px; width: 120px; height: 120px;
+        object-fit: contain; }
+
+.texto { position: absolute; bottom: 100px; left: 70px; width: 860px;
+         display: flex; flex-direction: column; color: var(--on-photo); }
+html:not(.sin-foto-agente) .texto { width: 700px; }
+
+/* La insignia aquí no es el componente Badge común: es un rótulo mucho más
+   grande (54px, no 26px) porque sin precio ni specs es el único acento
+   corto de la pieza antes del titular. */
+.badge { font-family: Marcellus; font-size: 54px; letter-spacing: 12px; }
+
+/* Mismo truco que en las otras dos: font-size:0 en el h1 colapsa el espacio
+   literal entre palabras (values.ts las une con join(' ')). */
+.texto h1 { font-family: Spectral; font-size: 0; line-height: 1.08; margin-top: 26px; }
+.palabra, .palabra-fuerte { font-size: 62px; margin-right: 14px; }
+.palabra { font-weight: 400; }
+.palabra-fuerte { font-weight: 800; }
+
+.direccion { display: block; font-family: Spectral; font-size: 30px; margin-top: 20px; }
+.nombre-agente { display: block; font-family: Spectral; font-weight: 800; font-size: 40px; margin-top: 34px; }
+.telefono-agente { display: block; font-family: Marcellus; font-size: 30px; letter-spacing: 3px; margin-top: 6px; }
+
+/* El anillo es el único borde del diseño. */
+.retrato { position: absolute; right: 70px; bottom: 120px; width: 209px; height: 209px;
+           border-radius: 50%; object-fit: cover; border: 8px solid var(--surface); }

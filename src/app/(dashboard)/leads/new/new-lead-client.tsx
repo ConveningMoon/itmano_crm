@@ -2,19 +2,18 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
 import type { Agent, Language } from '@/lib/types'
 import type { ChannelOption, TenantOption } from './page'
 import { createLead, createLeadsBulk, getExistingLeadEmails } from './actions'
 import { parseLeadRows, type ParseLeadsResult, type NormalizedLead } from '@/lib/import/parse-leads'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { Tabs } from '@/components/ui/tabs'
 import {
   ArrowLeft,
   CheckCircle2,
   Mail,
   Phone,
   Building2,
-  Upload,
   PenLine,
   FileUp,
   Download,
@@ -154,15 +153,12 @@ const sectionBodyStyle: React.CSSProperties = {
   borderBottom: '1px solid var(--border-subtle)',
 }
 
-const SPECIALTY_LABEL: Record<string, string> = {
-  hispanic: 'Familias Hispanas',
-  military: 'Familias Militares',
-  first_buyer: 'Compradores Primerizos',
-  brazilian: 'Comunidad Brasileña',
-}
-
-const LANG_FLAG: Record<string, string> = { es: '🇪🇸', en: '🇺🇸', pt: '🇧🇷' }
-const LANG_LABEL: Record<string, string> = { es: 'ES', en: 'EN', pt: 'PT' }
+const LANG_FLAG: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map(c => [c, LANGUAGE_CONFIG[c].flag])
+)
+const LANG_LABEL: Record<string, string> = Object.fromEntries(
+  SUPPORTED_LANGUAGE_CODES.map(c => [c, c.toUpperCase()])
+)
 
 interface SuccessScreenProps {
   form: FormData
@@ -257,7 +253,6 @@ export function NewLeadClient({
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [autoAssigned, setAutoAssigned] = useState(false)
   const [mode, setMode] = useState<'manual' | 'import'>('manual')
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
   const [parseResult, setParseResult] = useState<ParseLeadsResult | null>(null)
@@ -293,7 +288,7 @@ export function NewLeadClient({
   function leadToRow(l: NormalizedLead): string[] {
     return [
       l.firstName, l.lastName, l.email, l.phone, l.language,
-      l.status === 'new' ? 'Nuevo' : 'Cerrado', l.lender, l.notes,
+      l.stage === 'nuevo' ? 'Nuevo' : 'Cerrado', l.lender, l.notes,
     ]
   }
 
@@ -320,8 +315,9 @@ export function NewLeadClient({
 
   // Exports the normalized, insert-ready dataset (already-existing rows excluded) in
   // the same format as the uploaded file.
-  function downloadFinal(rows: NormalizedLead[]) {
+  async function downloadFinal(rows: NormalizedLead[]) {
     if (fileFormat === 'xlsx') {
+      const XLSX = await import('xlsx')
       const aoa = [TEMPLATE_HEADERS, ...rows.map(leadToRow)]
       const ws  = XLSX.utils.aoa_to_sheet(aoa)
       const wb  = XLSX.utils.book_new()
@@ -357,6 +353,7 @@ export function NewLeadClient({
 
       if (extension === 'csv') {
         setFileFormat('csv')
+        const { default: Papa } = await import('papaparse')
         await new Promise<void>((resolve, reject) => {
           Papa.parse<Record<string, string>>(file, {
             header: true, skipEmptyLines: true, comments: '#',
@@ -370,6 +367,7 @@ export function NewLeadClient({
         })
       } else if (extension === 'xlsx') {
         setFileFormat('xlsx')
+        const XLSX = await import('xlsx')
         const buffer = await file.arrayBuffer()
         const workbook = XLSX.read(buffer, { type: 'array' })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -407,7 +405,7 @@ export function NewLeadClient({
         email:     r.email,
         phone:     r.phone || null,
         language:  r.language as Language,
-        status:    r.status,
+        stage:     r.stage,
         lender:    r.lender || null,
         notes:     r.notes || null,
       })),
@@ -429,24 +427,13 @@ export function NewLeadClient({
     }
   }
 
+  // El ruteo automático por idioma se retiró: el owner elige el agente.
   const handleLanguageChange = (lang: Language) => {
     updateField('language', lang)
-    // Language→agent auto-routing is A&J (tenant-aj) specific; skip it for
-    // super_admin (who may be creating in any tenant and picks the agent).
-    if (!isSuperAdmin && !form.agentId) {
-      const agentMap: Record<Language, string> = {
-        es: 'agent-adriana',
-        en: 'agent-john',
-        pt: 'agent-viviane',
-      }
-      updateField('agentId', agentMap[lang])
-      setAutoAssigned(true)
-    }
   }
 
   const handleAgentChange = (agentId: string) => {
     updateField('agentId', agentId)
-    setAutoAssigned(false)
     if (errors.agentId) setErrors(prev => ({ ...prev, agentId: undefined }))
   }
 
@@ -502,7 +489,6 @@ export function NewLeadClient({
   const handleReset = () => {
     setForm(INITIAL_FORM)
     setErrors({})
-    setAutoAssigned(false)
     setSubmitSuccess(false)
     resetImport()
   }
@@ -532,8 +518,8 @@ export function NewLeadClient({
   const importRows  = parseResult?.rows ?? []
   const finalRows   = importRows.filter(r => !existingEmails.has(r.email.toLowerCase()))
   const existingCount = importRows.length - finalRows.length
-  const newCount    = finalRows.filter(r => r.status === 'new').length
-  const closedCount = finalRows.filter(r => r.status === 'closed').length
+  const newCount    = finalRows.filter(r => r.stage === 'nuevo').length
+  const closedCount = finalRows.filter(r => r.stage === 'cerrado').length
   // Attribution: the linked agent if any, else the (mandatory) selector value.
   const attributionAgentId   = myAgentId ?? importAgentId
   const attributionAgentName = AGENT_DISPLAY_NAMES[attributionAgentId] || '—'
@@ -579,47 +565,17 @@ export function NewLeadClient({
           </p>
         </div>
 
-        {/* Mode tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '24px',
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '10px',
-          padding: '4px',
-          maxWidth: '400px',
-        }}>
-          {(['manual', 'import'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              style={{
-                flex: 1,
-                padding: '8px 16px',
-                borderRadius: '7px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: mode === m ? 500 : 400,
-                background: mode === m ? 'var(--bg-elevated)' : 'transparent',
-                color: mode === m ? 'var(--text-primary)' : 'var(--text-muted)',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              {m === 'manual'
-                ? <><PenLine size={14} /> Registro Manual</>
-                : <><Upload size={14} /> Importar CSV/XLSX</>
-              }
-            </button>
-          ))}
-        </div>
-
-        {mode === 'manual' && (
+        {/* Modo: registro manual o importación — el estado vive aquí (padre),
+            así que alternar tabs no pierde datos del formulario ni del import. */}
+        <Tabs
+          items={[
+            { key: 'manual', label: 'Registro manual' },
+            { key: 'import', label: 'Importar CSV/XLSX' },
+          ]}
+          value={mode}
+          onChange={m => setMode(m as 'manual' | 'import')}
+          content={{
+            manual: (
           <>
         {/* Form card */}
         <div style={{
@@ -791,18 +747,6 @@ export function NewLeadClient({
           <div style={{ ...sectionBodyStyle }}>
             <label style={labelStyle}>Agente asignado *</label>
 
-            {autoAssigned && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--accent-gold)' }}>✓ Autoasignado por idioma</span>
-                <button
-                  onClick={() => { updateField('agentId', ''); setAutoAssigned(false) }}
-                  style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  Cambiar
-                </button>
-              </div>
-            )}
-
             <div style={{ position: 'relative' }}>
               <select
                 className="new-lead-input"
@@ -818,7 +762,7 @@ export function NewLeadClient({
                 <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
                 {visibleAgents.map(agent => (
                   <option key={agent.id} value={agent.id}>
-                    {agent.avatarInitials} · {agent.name} · {SPECIALTY_LABEL[agent.specialty]} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
+                    {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
                   </option>
                 ))}
               </select>
@@ -857,7 +801,7 @@ export function NewLeadClient({
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{selectedAgent.name}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {SPECIALTY_LABEL[selectedAgent.specialty]} · {LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}
+                    {LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}
                   </div>
                 </div>
               </div>
@@ -1006,9 +950,8 @@ export function NewLeadClient({
           </button>
         </div>
           </>
-        )}
-
-        {mode === 'import' && (
+            ),
+            import: (
           <div style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-subtle)',
@@ -1146,7 +1089,7 @@ export function NewLeadClient({
                   if (parseResult.excludedNoEmail > 0)         warns.push(`${parseResult.excludedNoEmail} fila(s) sin email válido — omitidas`)
                   if (parseResult.excludedDuplicateInFile > 0) warns.push(`${parseResult.excludedDuplicateInFile} email(s) duplicado(s) en el archivo — se conserva la primera`)
                   if (existingCount > 0)                       warns.push(`${existingCount} ya existen en este tenant — omitidas`)
-                  if (parseResult.statusDefaulted > 0)         warns.push(`${parseResult.statusDefaulted} fila(s) sin estatus válido — asignadas a "Cerrado"`)
+                  if (parseResult.stageDefaulted > 0)          warns.push(`${parseResult.stageDefaulted} fila(s) sin etapa válida — asignadas a "Cerrado"`)
                   if (parseResult.ignoredColumns.length > 0)   warns.push(`Columnas ignoradas: ${parseResult.ignoredColumns.join(', ')}`)
                   if (warns.length === 0) return null
                   return (
@@ -1208,8 +1151,8 @@ export function NewLeadClient({
                             <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.language.toUpperCase()}</td>
                             <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.lender || '—'}</td>
                             <td style={{ padding: '8px 10px' }}>
-                              <span style={{ fontSize: '11px', color: r.status === 'new' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
-                                {r.status === 'new' ? 'Nuevo' : 'Cerrado'}
+                              <span style={{ fontSize: '11px', color: r.stage === 'nuevo' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+                                {r.stage === 'nuevo' ? 'Nuevo' : 'Cerrado'}
                               </span>
                             </td>
                           </tr>
@@ -1295,7 +1238,9 @@ export function NewLeadClient({
             )}
 
           </div>
-        )}
+            ),
+          }}
+        />
       </div>
     </>
   )

@@ -1,11 +1,16 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapAgent, mapLead, type LeadRow, type AgentRow } from '@/lib/db'
-import { STATUS_CONFIG } from '@/lib/config'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { scopeFor, applyVisibilityScope } from '@/lib/auth/visibility'
+import { mapAgent, type AgentRow } from '@/lib/db'
+import { getLeadDashboardStats, getPriorityQueue } from '@/lib/data/leads'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import { QUALITY_CONFIG, URGENCY_CONFIG } from '@/lib/scoring/priority'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
+import { scopeFor } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
 import { ActivityRow } from '../activity/activity-ui'
+import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { AnimatedNumber } from '@/components/motion/animated-number'
+import { GrowBar } from '@/components/motion/grow-bar'
 import type { Agent } from '@/lib/types'
 import {
   Flame,
@@ -17,9 +22,20 @@ import {
 type AgentStat = {
   agent: Agent
   total: number
-  hot: number
+  // Calidad alta, no "calientes": la temperatura salía del score, que decae, así
+  // que un agente con leads antiguos parecía peor sin que sus leads lo fueran.
+  highQuality: number
   percentage: number
   closed: number
+}
+
+// Hex (no var(--...)) porque las barras concatenan el alfa: '#RRGGBB' + 'CC'.
+const STAGE_COLORS: Record<string, string> = {
+  nuevo:      '#5B8EC9',
+  nutricion:  '#C9A96E',
+  en_proceso: '#9B72CF',
+  cerrado:    '#4A9B6B',
+  perdido:    '#C97B6B',
 }
 
 function getInitials(firstName: string, lastName: string): string {
@@ -28,26 +44,20 @@ function getInitials(firstName: string, lastName: string): string {
   return (f + l).toUpperCase() || f.toUpperCase()
 }
 
-function getTempColor(score: number): string {
-  if (score >= 70) return '#E04040'
-  if (score >= 40) return '#E07B3A'
-  return '#C9A96E'
-}
-
 export default async function DashboardPage() {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const scope = scopeFor(ctx)
   const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
-  const [{ data: rawLeads }, { data: rawAgents }, recentActivity] = await Promise.all([
-    // Leads: tenant-scoped (owner/super) + agent_id (agent). Fixes the prior
-    // cross-tenant leak (this query had no tenant filter at all).
-    applyVisibilityScope(
-      supabase.from('leads').select('*, acquisition_channels!acquisition_channel_id(channel_type, name)').order('created_at', { ascending: false }),
-      scope,
-    ),
+  // Los conteos se agregan en Postgres (RPC lead_dashboard_stats) y los leads
+  // calientes salen por índice: el dashboard ya no trae la tabla de leads entera
+  // para contarla en JS.
+  const [leadStats, queue, { data: rawAgents }, recentActivity] = await Promise.all([
+    // Scope: tenant (owner/super) + agent_id (agent) — mismo criterio que scopeFor.
+    getLeadDashboardStats(scope),
+    getPriorityQueue(scope, 6),
     tenant_id
       ? supabase.from('agents').select('*').eq('active', true).eq('tenant_id', tenant_id)
       : supabase.from('agents').select('*').eq('active', true),
@@ -55,92 +65,90 @@ export default async function DashboardPage() {
     getRecentActivity(tenant_id, { role, userId: user_id }, 10, scope.agentId),
   ])
 
-  const leads = (rawLeads ?? []).map(r => mapLead(r as LeadRow))
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+  const totalLeads = leadStats.total
 
   const stats = {
-    total:     leads.length,
-    hot:       leads.filter(l => l.status === 'hot' || (l.temperatureScore ?? 0) >= 70).length,
-    inProcess: leads.filter(l => l.status === 'process_started').length,
-    closed:    leads.filter(l => l.status === 'closed' || l.status === 'process_completed').length,
+    active:      leadStats.active,
+    highQuality: leadStats.highQuality,
+    urgentToday: leadStats.urgentToday,
+    closedMonth: leadStats.closedThisMonth,
   }
 
-  const hotLeads = leads
-    .filter(l => (l.temperatureScore ?? 0) >= 70)
-    .sort((a, b) => (b.temperatureScore ?? 0) - (a.temperatureScore ?? 0))
-    .slice(0, 6)
-
-  const statusCounts = {
-    new:               leads.filter(l => l.status === 'new').length,
-    nurturing:         leads.filter(l => l.status === 'nurturing').length,
-    warm:              leads.filter(l => l.status === 'warm').length,
-    hot:               leads.filter(l => l.status === 'hot').length,
-    process_started:   leads.filter(l => l.status === 'process_started').length,
-    process_completed: leads.filter(l => l.status === 'process_completed').length,
-    closed:            leads.filter(l => l.status === 'closed').length,
-    lost:              leads.filter(l => l.status === 'lost').length,
-  }
-
-  const mainStages = [
-    'new', 'nurturing', 'warm', 'hot', 'process_started', 'process_completed', 'closed',
-  ] as const
-
-  const maxCount = Math.max(...mainStages.map(k => statusCounts[k]))
-
-  function barHeight(count: number): number {
-    return Math.max(4, Math.round((count / maxCount) * 48))
-  }
+  // Embudo por ETAPA (4 columnas reales) en vez de barras por los 8 `status`.
+  // La tasa de paso entre etapas es lo que una agencia quiere saber de su
+  // operación y hoy no existía en ninguna pantalla.
+  const stageOf = (k: string) => leadStats.byStage[k] ?? 0
+  const funnel = [
+    { key: 'nuevo',      label: 'Nuevo',        count: stageOf('nuevo') },
+    { key: 'nutricion',  label: 'En Nutrición', count: stageOf('nutricion') },
+    { key: 'en_proceso', label: 'En proceso',   count: stageOf('en_proceso') },
+    { key: 'cerrado',    label: 'Cerrado',      count: stageOf('cerrado') },
+  ]
+  // Cada barra son los leads que están AHORA en esa etapa — el mismo número que
+  // el kanban, comprobable abriendo la lista.
+  //
+  // Antes mostraba un acumulado hacia atrás ("un cerrado también pasó por
+  // nuevo") con la etiqueta de la etapa, así que "Nuevo 4" salía con 1 solo lead
+  // en Nuevo y nadie podía reconciliarlo con nada. Y el acumulado además daba
+  // por hecho que todos pasan por Nutrición, que es opcional: un lead puede ir
+  // de Nuevo a En proceso directo.
+  //
+  // La tasa de paso REAL vive en lead_status_history, no aquí. Mientras esa
+  // tabla no tenga las transiciones de este tenant, cualquier porcentaje que
+  // pintáramos sería inventado — y un número inventado en un panel es peor que
+  // no tener el número.
+  const funnelMax = Math.max(...funnel.map(f => f.count), 1)
+  // Los leads traídos de otro CRM quedan FUERA del embudo (migración 080): no
+  // recorrieron estas etapas aquí, y contarlos daba un 100% de paso inventado.
+  // Se dicen aparte para que el total del embudo no parezca un lead perdido.
+  const importedLeads = leadStats.imported
+  const funnelTotal   = funnel.reduce((sum, f) => sum + f.count, 0) + stageOf('perdido')
 
   const agentStats: AgentStat[] = agents.map(agent => {
-    const agentLeads = leads.filter(l => l.agentId === agent.id)
-    const total = agentLeads.length
-    const hot = agentLeads.filter(l => (l.temperatureScore ?? 0) >= 70).length
-    const percentage = Math.round((total / leads.length) * 100)
-    const closed = agentLeads.filter(
-      l => l.status === 'closed' || l.status === 'process_completed'
-    ).length
-    return { agent, total, hot, percentage, closed }
+    const row = leadStats.byAgent.find(a => a.agentId === agent.id)
+    const total = row?.total ?? 0
+    return {
+      agent,
+      total,
+      highQuality: row?.highQuality ?? 0,
+      closed:      row?.closed      ?? 0,
+      percentage: totalLeads > 0 ? Math.round((total / totalLeads) * 100) : 0,
+    }
   })
-
-  const specialtyLabel: Record<string, string> = {
-    hispanic:    'Familias Hispanas',
-    military:    'Familias Militares',
-    first_buyer: 'Primeros Compradores',
-    brazilian:   'Comunidad Brasileña',
-  }
 
   const statCards = [
     {
-      label: 'Total Leads',
-      value: stats.total,
+      label: 'Cartera activa',
+      value: stats.active,
       icon: <Users size={16} />,
-      iconColor: '#C9A96E',
-      iconBg:    'rgba(201,169,110,0.12)',
-      desc: 'en el sistema',
+      iconColor: 'var(--accent-gold)',
+      iconBg:    'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
+      desc: 'nuevos y en nutrición',
     },
     {
-      label: 'Leads Calientes',
-      value: stats.hot,
+      label: 'Calidad alta',
+      value: stats.highQuality,
       icon: <Flame size={16} />,
-      iconColor: '#E04040',
-      iconBg:    'rgba(224,64,64,0.12)',
-      desc: 'temperatura ≥ 70',
+      iconColor: 'var(--status-hot)',
+      iconBg:    'color-mix(in srgb, var(--status-hot) 12%, transparent)',
+      desc: 'lo mejor de tu cartera',
     },
     {
-      label: 'En Proceso',
-      value: stats.inProcess,
+      label: 'Para hoy',
+      value: stats.urgentToday,
       icon: <ArrowRightCircle size={16} />,
-      iconColor: '#9B72CF',
-      iconBg:    'rgba(155,114,207,0.12)',
-      desc: 'comprando actualmente',
+      iconColor: 'var(--accent-coral)',
+      iconBg:    'color-mix(in srgb, var(--accent-coral) 12%, transparent)',
+      desc: 'necesitan acción hoy',
     },
     {
       label: 'Cerrados',
-      value: stats.closed,
+      value: stats.closedMonth,
       icon: <CheckCircle2 size={16} />,
-      iconColor: '#6BA368',
-      iconBg:    'rgba(107,163,104,0.12)',
-      desc: 'este ciclo',
+      iconColor: 'var(--accent-green)',
+      iconBg:    'color-mix(in srgb, var(--accent-green) 12%, transparent)',
+      desc: 'este mes',
     },
   ]
 
@@ -148,19 +156,12 @@ export default async function DashboardPage() {
     // Content gutter is owned by .app-shell-main (single source of truth); no inner
     // padding here — avoids the double-gutter and the dead utility classes.
     <div>
-      <style>{`
-        .stat-card { transition: border-color 200ms, transform 200ms; }
-        .stat-card:hover { border-color: var(--border-accent) !important; transform: translateY(-1px); }
-        .lead-row:hover  { background: var(--bg-elevated); }
-        .agent-row:hover { background: var(--bg-elevated); }
-      `}</style>
-
       {/* ── BLOQUE 1: Stats Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {statCards.map(card => (
-          <div
+          <StaggerItem
             key={card.label}
-            className="stat-card"
+            className="card-interactive"
             style={{
               background:   'var(--bg-surface)',
               border:       '1px solid var(--border-subtle)',
@@ -186,14 +187,14 @@ export default async function DashboardPage() {
               </span>
             </div>
             <div style={{ fontSize: '32px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1, marginBottom: '8px' }}>
-              {card.value}
+              <AnimatedNumber value={card.value} />
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
               ↑ {card.desc}
             </div>
-          </div>
+          </StaggerItem>
         ))}
-      </div>
+      </StaggerGroup>
 
       {/* ── BLOQUE 2: Pipeline Visual ── */}
       <div style={{
@@ -204,53 +205,66 @@ export default async function DashboardPage() {
         marginBottom: '24px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Pipeline de Leads</span>
+          <div>
+            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Embudo</span>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Cuántos leads llegaron a cada etapa, y qué porcentaje pasó a la siguiente
+              {importedLeads > 0 && (
+                <> · {importedLeads} importados de otro CRM quedan fuera</>
+              )}
+            </div>
+          </div>
           <span style={{
             fontSize: '11px', color: 'var(--accent-gold)',
             background: 'rgba(201,169,110,0.12)', padding: '2px 8px', borderRadius: '4px',
           }}>
-            {leads.length} leads
+            {funnelTotal} leads
           </span>
         </div>
 
-        {/* Pipeline is horizontal by nature — on phones the lane scrolls sideways
-            (max-md:) rather than breaking to a vertical list. Desktop unchanged. */}
+        {/* Dónde está la cartera AHORA: una barra por etapa, con el número que
+            se ve en el kanban. Sin acumulados ni porcentajes derivados de una
+            suposición — ver el comentario del cálculo. */}
         <div className="max-md:overflow-x-auto" style={{ display: 'flex', alignItems: 'flex-end' }}>
-          {mainStages.map((key, idx) => {
-            const cfg = STATUS_CONFIG[key]
-            const count = statusCounts[key]
-            const h = barHeight(count)
+          {funnel.map((stage, idx) => {
+            const h = Math.max(4, Math.round((stage.count / funnelMax) * 48))
+            const color = STAGE_COLORS[stage.key]
             return (
-              <div key={key} style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '76px' }}>
-                  <span style={{ fontSize: '22px', fontWeight: 500, color: cfg.color, lineHeight: 1 }}>{count}</span>
-                  <div style={{ width: '100%', height: `${h}px`, background: cfg.color + 'CC', borderRadius: '4px' }} />
+              <div key={stage.key} style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '92px' }}>
+                  <span style={{ fontSize: '22px', fontWeight: 500, color, lineHeight: 1 }}>{stage.count}</span>
+                  <GrowBar
+                    axis="y"
+                    delay={idx * 0.05}
+                    style={{ width: '100%', height: `${h}px`, background: color + 'CC', borderRadius: '4px' }}
+                  />
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
-                    {cfg.label}
+                    {stage.label}
                   </span>
                 </div>
-                {idx < mainStages.length - 1 && (
-                  <span style={{ color: 'var(--text-muted)', fontSize: '14px', margin: '0 2px', paddingBottom: '28px' }}>→</span>
-                )}
               </div>
             )
           })}
 
-          {/* Lost — exit from flow */}
+          {/* Perdidos — salida del embudo, no una etapa más */}
           <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
             <span style={{ color: 'var(--border-subtle)', fontSize: '24px', paddingBottom: '28px', margin: '0 8px' }}>|</span>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '60px' }}>
-              <span style={{ fontSize: '22px', fontWeight: 500, color: STATUS_CONFIG.lost.color, lineHeight: 1 }}>
-                {statusCounts.lost}
+              <span style={{ fontSize: '22px', fontWeight: 500, color: STAGE_COLORS.perdido, lineHeight: 1 }}>
+                {stageOf('perdido')}
               </span>
-              <div style={{
-                width: '100%',
-                height: `${barHeight(statusCounts.lost)}px`,
-                background: STATUS_CONFIG.lost.color + 'CC',
-                borderRadius: '4px',
-              }} />
+              <GrowBar
+                axis="y"
+                delay={funnel.length * 0.05}
+                style={{
+                  width: '100%',
+                  height: `${Math.max(4, Math.round((stageOf('perdido') / funnelMax) * 48))}px`,
+                  background: STAGE_COLORS.perdido + 'CC',
+                  borderRadius: '4px',
+                }}
+              />
               <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
-                {STATUS_CONFIG.lost.label}
+                Perdido
               </span>
             </div>
           </div>
@@ -258,40 +272,46 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── BLOQUE 3: Hot Leads + Actividad ── */}
-      <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
+      <FadeIn delay={0.1} className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
 
-        {/* Leads Calientes */}
+        {/* Tu cola de hoy — reemplaza "Leads Calientes". Un lead caliente que ya
+            está en proceso no es trabajo pendiente, y uno mediocre que acaba de
+            responder sí; ordenar por score no distinguía ninguno de los dos. */}
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Leads Calientes</span>
-              <span style={{ fontSize: '10px', color: '#E04040', background: 'rgba(224,64,64,0.12)', padding: '1px 6px', borderRadius: '4px' }}>
-                {hotLeads.length}
+              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Tu cola de hoy</span>
+              <span style={{ fontSize: '10px', color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)', padding: '1px 6px', borderRadius: '4px' }}>
+                {queue.length}
               </span>
             </div>
-            <span style={{ fontSize: '12px', color: 'var(--accent-gold)', cursor: 'pointer' }}>Ver todos →</span>
+            <Link href="/leads?sort=prioridad" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
+              Ver todos →
+            </Link>
           </div>
 
           <div>
-            {hotLeads.map(lead => {
-              const agent  = agents.find(a => a.id === lead.agentId)
-              // reason: Supabase returns untyped join data without generated schema
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const raw = (rawLeads ?? []).find(r => r.id === lead.id) as any
-              const channelName = raw?.acquisition_channels?.name ?? '—'
+            {queue.length === 0 && (
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px' }}>
+                No hay leads activos en tu cartera.
+              </div>
+            )}
+            {queue.map(lead => {
+              const agent    = agents.find(a => a.id === lead.agentId)
               const initials = getInitials(lead.firstName, lead.lastName)
-              const tempColor = getTempColor(lead.temperatureScore ?? 0)
-              const filled = Math.round((lead.temperatureScore ?? 0) / 10)
-              const cfg = STATUS_CONFIG[lead.status]
-              const agentBg = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
+              const agentBg  = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
+              const q        = QUALITY_CONFIG[lead.qualityBand]
 
               return (
-                <div
+                <Link
                   key={lead.id}
-                  className="lead-row"
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'default' }}
+                  href={`/leads/${lead.id}`}
+                  className="row-hover"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '10px 12px', borderRadius: '8px', textDecoration: 'none',
+                  }}
                 >
-                  {/* Avatar */}
                   <div style={{
                     width: '32px', height: '32px', borderRadius: '50%',
                     background: agentBg,
@@ -302,40 +322,35 @@ export default async function DashboardPage() {
                     {initials}
                   </div>
 
-                  {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {lead.firstName} {lead.lastName}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {agent?.name ?? '—'} · {channelName}
+                      {agent?.name ?? '—'} · {lead.channelName ?? '—'}
                     </div>
                   </div>
 
-                  {/* Temperature bar + score */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', gap: '2px' }}>
-                      {Array.from({ length: 10 }, (_, i) => (
-                        <div key={i} style={{
-                          width: '6px', height: '6px', borderRadius: '2px',
-                          background: i < filled ? tempColor : 'var(--bg-overlay)',
-                        }} />
-                      ))}
-                    </div>
-                    <span style={{ fontSize: '13px', color: tempColor, fontWeight: 500, width: '26px', textAlign: 'right' }}>
-                      {lead.temperatureScore ?? '—'}
+                  {/* Urgencia — sólo cuando hay algo que hacer */}
+                  {lead.urgency && lead.urgency !== 'sin_apuro' && (
+                    <span style={{
+                      fontSize: '10px', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
+                      color: URGENCY_CONFIG[lead.urgency].color,
+                      background: `color-mix(in srgb, ${URGENCY_CONFIG[lead.urgency].color} 14%, transparent)`,
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {URGENCY_CONFIG[lead.urgency].label}
                     </span>
-                  </div>
+                  )}
 
-                  {/* Status badge */}
-                  <div style={{
-                    fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
-                    background: cfg.bgColor, color: cfg.color,
-                    flexShrink: 0, whiteSpace: 'nowrap',
+                  <span style={{
+                    fontSize: '10px', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
+                    color: q.color, background: `color-mix(in srgb, ${q.color} 14%, transparent)`,
+                    whiteSpace: 'nowrap',
                   }}>
-                    {cfg.label}
-                  </div>
-                </div>
+                    {q.label}
+                  </span>
+                </Link>
               )
             })}
           </div>
@@ -366,21 +381,21 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
+      </FadeIn>
 
       {/* ── BLOQUE 4: Rendimiento por Agente ── (hidden for role 'agent' — they only see their own leads) */}
       {!isAgent && (
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px 20px' }}>
+      <FadeIn delay={0.15} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px 20px' }}>
         <div style={{ marginBottom: '16px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Rendimiento por Agente</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Distribución actual de leads</div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {agentStats.map(({ agent, total, hot, percentage }) => (
+          {agentStats.map(({ agent, total, highQuality, percentage }) => (
             <div
               key={agent.id}
-              className="agent-row"
+              className="row-hover"
               style={{
                 display:      'flex',
                 alignItems:   'center',
@@ -402,11 +417,11 @@ export default async function DashboardPage() {
                 {agent.avatarInitials}
               </div>
 
-              {/* Name + role */}
+              {/* Name + idiomas */}
               <div style={{ minWidth: '160px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {agent.specialty === 'hispanic' ? 'agent_owner' : 'agent'}
+                  {agent.languages.map(l => LANGUAGE_CONFIG[l]?.flag ?? l).join(' ')}
                 </div>
               </div>
 
@@ -420,18 +435,20 @@ export default async function DashboardPage() {
 
               {/* Count */}
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                {total}/{leads.length}
+                {total}/{totalLeads}
               </div>
 
-              {/* Specialty + hot */}
+              {/* Idiomas + calidad alta */}
               <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{specialtyLabel[agent.specialty]}</div>
-                <div style={{ fontSize: '11px', color: '#E04040' }}>{hot} calientes</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--status-hot)' }}>{highQuality} de calidad alta</div>
               </div>
             </div>
           ))}
         </div>
-      </div>
+      </FadeIn>
       )}
     </div>
   )

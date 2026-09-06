@@ -1,0 +1,15 @@
+-- 101 — Se va `lead_magnets`, que sobrevivia solo donde nadie la habia borrado.
+--
+-- La crea la 001. En produccion se elimino en algun momento fuera del historial
+-- de migraciones, asi que cualquier proyecto reconstruido desde el repo —el
+-- sandbox lo fue— nacia con una tabla que produccion ya no tenia. Esta migracion
+-- cierra esa diferencia por escrito en vez de a mano.
+--
+-- `if exists` la hace no-op donde ya no esta (produccion). Sin perdida de datos:
+-- estaba vacia en el sandbox y no existe en produccion.
+--
+-- Ojo: src/app/(dashboard)/lead-magnets/page.tsx todavia consulta esta tabla.
+-- No falla —el resultado se traga con `?? []`— pero es una pantalla que siempre
+-- se ve vacia. Su destino se decide aparte; las fuentes de adquisicion viven en
+-- acquisition_channels desde la 003.
+drop table if exists public.lead_magnets;

@@ -1,0 +1,6 @@
+{
+  "label": "Editorial",
+  "hint": "Pocas fotos, manda el texto",
+  "recipes": ["sold"],
+  "aspects": ["4:5"]
+}

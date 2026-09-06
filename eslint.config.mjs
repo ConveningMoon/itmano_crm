@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Git worktrees carry full copies of the repo, build output included.
+    // Without this their .next/ bundles drown out every real finding in src/.
+    ".claude/worktrees/**",
+    "**/.next/**",
   ]),
 ]);
 

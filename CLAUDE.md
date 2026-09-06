@@ -1,664 +1,553 @@
 # CLAUDE.md
 
-This file is the operating contract between Claude Code and the ITMANO CRM repository.
-Read it at the start of every session. When in doubt, this file overrides assumptions from training data.
+Contrato operativo entre Claude Code y el repositorio ITMANO CRM.
+Léelo al inicio de cada sesión. Ante cualquier duda, este archivo gana sobre lo que asumas por entrenamiento.
 
 @AGENTS.md
 
 ---
 
-## TL;DR — Quick Reference
+## Reglas de sesión — siempre vigentes
 
-| Field | Value |
-|---|---|
-| **Product** | Multi-tenant SaaS CRM for real estate teams, owned by ITMANO |
-| **Primary domain** | `app.itmano.com` · subdomain of `itmano.com` (Dylan owns the apex) |
-| **Pilot tenant** | A&J Real Estate Group (Hampton Roads, VA) |
-| **Active phase** | **Phase 2 — Supabase backend + Auth** (Phase 1 mockup is shipped) |
-| **Stack** | Next.js 16.2.4 · React 19.2.4 · TypeScript · Tailwind v4 · shadcn/ui · Supabase (planned) |
-| **Package manager** | `npm` |
-| **Path alias** | `@/*` → `./src/*` |
-| **Tenant per user** | 1 auth user per tenant (see "Auth Model") |
-| **Hosting** | Vercel |
-| **Default repo branch** | `main` — never commit directly, always PR |
+Estas reglas aplican a **toda** sesión, sin excepción y sin necesidad de recordarlas.
 
-**Single highest-leverage rule:** before touching routing, layouts, server actions, or anything that smells like a Next.js convention, check `node_modules/next/dist/docs/` for the Next.js 16 behavior. Most training data is wrong for this version.
+### 1. Nunca supongas
 
----
+Investiga y analiza a fondo antes de actuar. Si algo no está verificado, verifícalo: lee el archivo, consulta el grafo, consulta la base de datos. Si tras investigar quedan dudas que cambian el resultado, **detente y pregunta**. Una pregunta de 30 segundos vale más que una hora de trabajo equivocado.
 
-## How Claude Code Should Operate Here
+### 2. Base de datos: siempre por el MCP de Supabase, y por defecto contra el SANDBOX
 
-These are working principles for *every* session, not preferences.
+Cualquier tarea que implique leer o escribir en la base de datos se hace **directamente por el MCP de Supabase**, no por suposición ni por lo que diga un archivo. Si no tienes acceso al MCP, **detente y solicita acceso** — no improvises ni infieras el estado de la BD desde el código o desde este documento.
 
-1. **Explore → Plan → Code → Verify.** For any change that touches more than one file, enter plan mode first. List the files that will change and why. Get confirmation. Then code.
-2. **Read before writing.** Before adding a component, read an existing similar one to match conventions (e.g. before building a new chart, read `analytics/charts/*.tsx`). Before changing data shape, read `src/lib/types.ts` and `src/lib/mockdata.ts`.
-3. **Reference files, don't reinvent.** This document points to where the truth lives. Don't reimplement `STATUS_CONFIG`, `LANGUAGE_CONFIG`, `MOCK_AGENTS`, design tokens, or types — import them.
-4. **Verify your own work.** After any change: run `npm run lint`. After UI changes: describe what to look at and what should be visible. After data-layer changes: confirm types still compile (`npx tsc --noEmit`).
-5. **Address root causes, not symptoms.** If a build fails, never suppress the error. If a type is wrong, fix the type, not the cast.
-6. **Stay inside scope.** Don't refactor unrelated code, rename files, or "improve" patterns the user didn't ask about. If you notice something worth fixing, mention it and ask — don't act.
-7. **When uncertain, stop and ask.** A 30-second clarification beats a 30-minute rewrite. Specifically: ask before changing the data model, the auth model, the route group structure, or the design system.
-8. **No code in this file is ever copied verbatim.** Snippets here are illustrative. The source of truth is always the file referenced.
+La información debe ser siempre la actual. Este archivo puede quedar desactualizado; la base de datos no.
 
----
+**Hay DOS proyectos Supabase y elegir mal tiene consecuencias reales.** Producción tiene los datos de un cliente que paga.
 
-## Active Phase — Phase 2: Supabase Backend + Auth
-
-**Status:** Just started. Phase 1 (static UI mockup) is shipped and live at `https://app.itmano.com/dashboard`.
-
-### What Phase 2 must deliver
-
-1. **Cleanup of the legacy `(funnel)` experiment.** Phase 1 included a sample lead-magnet landing page at `src/app/(funnel)/lm/guia-familias-hispanas/`. That experiment is over — this app does not host funnels. Delete the entire `(funnel)/` route group, remove `framer-motion` from `package.json`, drop the funnel components directory if it exists, and remove orphan assets from `/public/` (`adriana_face.JPG`, `mockup.png`, `family_home.png`). Do this **first**, before installing Supabase, so the repo is clean.
-2. **Supabase project** wired up (`@supabase/supabase-js` + `@supabase/ssr` for Next.js App Router).
-3. **Schema** mirroring `src/lib/types.ts` with `tenant_id` on every row, *plus* the new scoring tables (`lead_events`, `lead_score_rules`, `lead_status_history`, `notifications`) described in the "Lead Scoring Model" section.
-4. **Row Level Security (RLS)** policies enforcing tenant isolation. RLS is the source of truth for security — never trust code-level filtering alone.
-5. **Auth** via Supabase Auth using **Magic Link only** (`signInWithOtp`). No password flow. The login page at `(auth)/login` becomes a real authenticator: user enters email → receives one-time link → lands authenticated. Roles: `super_admin` (ITMANO internal) and `agent_owner` (the tenant's single login).
-6. **Tenant seed** for A&J Real Estate Group with the 4 team-member agents preserved (only `agent-adriana` has `user_id` populated). See "Auth Model" for credentials.
-7. **HubSpot migration of the 114 real contacts** as `status = 'cerrado'` with `current_score = NULL` and `peak_score = NULL` — they are post-funnel newsletter recipients, not scored leads. They can re-enter the funnel if a new engagement event arrives (then scoring begins from that moment).
-8. **Migration of the 75 Phase-1 mock leads** if useful for QA continuity, otherwise drop them.
-9. **Real-data wiring** of the existing pages: dashboard, leads list, lead detail, lead creation, analytics, lead magnets, settings. Replace direct mockdata imports with server-side Supabase reads.
-10. **Scoring triggers** in Postgres on `lead_events` (event insert → score update → status auto-promotion → notification fire). See "Lead Scoring Model — Database Architecture".
-11. **Decay cron** scheduled hourly via `pg_cron` or Supabase Edge Function. Recalculates `current_score` for inactive leads, demotes status bands.
-12. **`.env.local`** populated; `.env.example` updated with all new vars. Never commit secrets.
-
-### What Phase 2 must NOT do (yet)
-
-- No Resend integration (Phase 3). The scoring system has hooks for email events but those webhook endpoints are scaffolded only — they do nothing until Phase 3.
-- No WhatsApp Business Cloud API (Phase 4).
-- No velocity multiplier or advanced analytics (Phase 5).
-- No ManyChat webhook receiver (Phase 3).
-- No new pages or features that weren't in the Phase 1 mockup. Phase 2 is *backend underneath the existing UI*, not new UX.
-
-### Order of operations for Phase 2
-
-Work in this sequence. Each step must end in a green build and a working dev server before moving on.
-
-0. **Funnel cleanup** (see deliverable 1). PR titled `chore/funnel-cleanup`. Verify `npm run build` is green afterwards.
-1. Supabase project setup + env vars + client helpers (`src/lib/supabase/server.ts`, `src/lib/supabase/client.ts`).
-2. Schema migration files in `supabase/migrations/`. One file per logical unit (`tenants`, `agents`, `lead_sources`, `lead_magnets`, `leads`, `lead_events`, `lead_score_rules`, `lead_status_history`, `notifications`, `purchase_processes`).
-3. RLS policies in a dedicated migration file. Pattern: every table policy joins through `agents.user_id = auth.uid()` to derive `tenant_id`. `super_admin` role bypasses via a separate permissive policy.
-4. Scoring rules seed: global `lead_score_rules` populated with the source baselines and event weights defined in "Lead Scoring Model". Scoring triggers installed on `lead_events`. Hourly decay cron registered (`pg_cron` or Edge Function).
-5. Seed file for A&J tenant + 4 agents (only `agent-adriana` has `user_id`) + lead sources.
-6. Auth: middleware (`src/middleware.ts`) protecting `(dashboard)` routes; login form wired to `supabase.auth.signInWithOtp` (Magic Link); callback route handles the OTP redirect; `super_admin` users go to `/admin`, `agent_owner` users go to `/dashboard`.
-7. HubSpot CSV migration script for the 114 closed contacts (insert as `status = 'cerrado'`, `current_score = NULL`, `peak_score = NULL`).
-8. Data access layer (`src/lib/data/*.ts`) — one file per entity, server-only, replaces mockdata imports page by page.
-9. CSV/XLSX import in `leads/new` now writes to Supabase inside a single transaction; new leads receive a source baseline score automatically.
-10. Realtime: subscribe the dashboard pipeline to `leads` table changes and the topbar notification bell to `notifications` table changes. Mobile-friendly, no flicker.
-
----
-
-## Business Context (the "why")
-
-This is not a generic CRM. Without this context, Claude Code will make wrong product decisions.
-
-**ITMANO** is a premium Growth Partner company for real estate. It doesn't sell ads or marketing as services — it sells *infrastructure*: acquisition → qualification → nurturing → conversion, all wired together, and a **branded CRM dashboard** that lives at `app.itmano.com/<tenant>` so the client can see their pipeline in real time.
-
-**The dashboard is the differentiator.** Most agencies hand the client a PDF report once a month. ITMANO hands the client a live dashboard with their leads, their pipeline, their agents, their conversion. That's why the dashboard cannot look or feel like a stock SaaS template — it must feel *premium, considered, real-estate-native*.
-
-**Pilot tenant — A&J Real Estate Group:** Adriana Melendez leads a team in Hampton Roads, Virginia. Four agents on the team, four languages/specialties (Spanish-hispanic, English-military, Spanish/English first-buyer, Portuguese-Brazilian). The team has 114 real contacts migrated from HubSpot, real lead magnets in production, real email sequences in flight.
-
-**Second tenant in negotiation — Hector Sanz (TECNOCASA, El Prat de Llobregat, Barcelona).** The A&J Real Estate dashboard *is* his demo. Anything that breaks A&J's polish breaks the sales pitch to Hector.
-
-**Brand voice for any client-facing copy generated in this app:**
-- Always **Spanish neutro latino** for dashboard UI, emails, lead magnet landing pages — no regional idioms.
-- Money words: always `"inversión"`. Never `"costo"`, `"precio"`, `"pago"`, `"cargo"`.
-- Tone: premium, strategic, calm. Never hype, never emojis in product copy, never marketing-speak.
-
----
-
-## Architecture Principles
-
-### Multi-tenancy is non-negotiable
-
-- Every database table has `tenant_id uuid not null`. No exceptions, even for tables that "feel global" — make them global by setting `tenant_id` nullable *only* with explicit justification (e.g. `email_templates` may have global ITMANO defaults).
-- Every query is scoped by tenant via RLS. Code-level `where tenant_id = ?` is a belt; RLS is the suspenders. Both stay.
-- Never hardcode `aj-real-estate` or any A&J value in shared code. If a value is A&J-specific, it's seed data, not code.
-- Branding (logo, primary color, name) lives on the `tenants` row and is read into the layout. Don't hardcode any tenant-specific colors into shared components.
-
-### Auth Model — One user per tenant (today)
-
-**The decision:** each tenant has exactly **one** Supabase Auth user. That user has the `agent_owner` role and full access to their tenant's data.
-
-**Why this matters for the schema:** the `agents` table represents **team members** of the real estate firm, *not* login users. A&J has four agents (Adriana, John, Melanie, Viviane) tracked for lead assignment, language routing, accent colors, and per-agent metrics — but only one of them logs in. Concretely:
-
-- `agents.user_id` is **nullable**. Most rows have `null`. The one agent record that maps to the login user has `user_id = auth.users.id`.
-- Lead assignment, lead-magnet ownership, secuencia-de-emails ownership, and analytics are all keyed by `agents.id`, never by `auth.users.id`.
-- The login user manages all leads of all agents in their tenant. The CRM is a single-operator tool, even though it tracks a team.
-
-**Why we built it this way:** it preserves ITMANO's differentiator (team-level CRM that gestiona equipos) and keeps the door open to add more login users per tenant later (e.g. give Melanie her own login) without redesigning the data model. Just flip a row's `user_id` from `null` to a real auth user.
-
-**Implication for `super_admin`:** the ITMANO-internal role bypasses tenant filtering via a separate RLS policy that grants access to all tenants. `super_admin` is for Dylan and future ITMANO operators only — never given to clients. **Dylan's super_admin login: `dj.vergara@hotmail.com`** (Magic Link, same method as tenant users).
-
-**Auth method:** Magic Link only (`signInWithOtp`). No passwords are ever set, stored, or reset. The user enters their email, receives a one-time link, and lands authenticated. Reasons: zero passwords to manage, zero password-reuse attack surface, simpler UX for non-technical real estate agents, works on any device with email access, no OAuth provider dependency.
-
-**Current state of the repo:** the Phase 1 mockup created 4 demo logins. These will be consolidated to 1 during Phase 2 seeding. For A&J Real Estate, the single login is `agent-adriana` authenticated via Magic Link sent to **`adrysofirealestate@gmail.com`** (Adriana's personal Gmail). The other three agents remain as team members with `agents.user_id = NULL`.
-
-### Data flows in one direction
-
-- **Server Components fetch.** Client Components receive props.
-- Data fetching lives in `src/lib/data/*.ts` — pure server functions returning typed objects. Pages call these, not Supabase directly, so we can swap implementations without touching pages.
-- Mutations go through **Server Actions** (preferred) or route handlers under `src/app/api/*` (only when an external system calls in, e.g. a Webflow form post, a Meta webhook).
-- No client-side Supabase queries for application data. Client-side Supabase is allowed only for: auth state, realtime subscriptions.
-
----
-
-## Lead Scoring Model
-
-The scoring system is the operating heart of the CRM. It determines lead status, drives agent attention, and triggers notifications. Without it, leads pile up undifferentiated and the agent guesses. With it, automation does the prioritization.
-
-### Principle
-
-Score is a 0–100 integer derived from **two inputs**: the source the lead came from (baseline) and the behavioral events the lead has triggered since arrival (deltas), modulated by time-decay when there is no recent engagement. The score determines the lead's status band automatically. Agent intervention is only required for the manual status transitions at the end of the funnel (`en_proceso` → `proceso_completado` → `cerrado`/`perdido`).
-
-**Two rules that override everything:**
-- **Open events do not count.** Apple Mail Privacy Protection inflates email open rates by 15–35% by pre-fetching tracking pixels. Roughly half of real-estate buyer emails are read in Apple Mail. Email opens are logged for analytics but contribute negligible score (+2). Clicks, replies, downloads, and form submissions are the real signals.
-- **Score is frozen** once a lead enters `en_proceso`, `proceso_completado`, `cerrado`, or `perdido`. These are agent-driven statuses and post-funnel. A frozen lead can re-enter the funnel if a new engagement event arrives (e.g. a closed lead clicks the newsletter); scoring resumes from that event.
-
-### Source baseline scores
-
-Set on lead creation, based on `lead_sources.source_type`:
-
-| Source | Baseline | Notes |
+| | `project_id` | Para qué |
 |---|---|---|
-| Manual lead — closed pre-existing customer (newsletter only) | `NULL` (`status = cerrado`) | Post-funnel. No scoring. |
-| Manual lead — in active closing process | `NULL` (`status = en_proceso`) | Post-funnel. No scoring. |
-| Event (in-person interaction with agent) | 40 | Physical contact = high intrinsic intent. |
-| Web contact form — with specific question | 35 | Asked something concrete. |
-| Web contact form — email only, no question | 20 | Curiosity confirmed, weak intent. |
-| ManyChat — reel CTA response | 20 | Engaged with content + DM is deliberate. |
-| Lead magnet — landing page form filled | 15 | Standard top-of-funnel signal. |
+| **Sandbox** | `xpaixcowvyksgluazwzn` | **El de por defecto.** Desarrollo, pruebas, migraciones nuevas, datos de juguete |
+| **Producción** | `kvmjlrvlnhiarrqxulkr` | A&J y Tenant Test. Datos reales |
 
-### Event weights
+**Tienes permiso para usar producción SOLO cuando sea realmente necesario.** La mayoría del trabajo —rediseños, componentes, refactors, features nuevas— no lo necesita: el sandbox tiene el mismo esquema y datos suficientes.
 
-**Nuclear signals** (deliberate, hard to fake):
+Producción se justifica para: **leer** el estado real cuando la pregunta es sobre datos reales (cuántos leads tiene A&J, qué dice `lead_score_rules`), aplicar una migración **ya probada en el sandbox**, o diagnosticar un problema que sólo ocurre allí. Fuera de eso, usa el sandbox.
 
-| Event | Points |
+**Antes de cualquier ESCRITURA en producción** —`apply_migration`, `update`, `insert`, `delete`, DDL— **pregunta primero**, aunque creas que es inofensiva. Explica qué cambia y qué efecto tiene. Leer no necesita permiso.
+
+### 3. Branches y commits
+
+- **Cambios grandes** → branch nuevo (`feat/<slug>`, `fix/<slug>`, `chore/<slug>`, `design/<slug>`), con commits **solo de lo necesario**. No llenar el historial de commits intermedios.
+- **Cambios pequeños** → se commitean igual, también solo lo necesario.
+- **Al terminar, si hubo cambio de código, SIEMPRE pushear**: al branch nuevo si lo hubo, o al branch anterior si el cambio fue pequeño.
+- **El PR lo abre Dylan manualmente, siempre.** Nunca lo crees tú.
+- Nunca commitear directo a `main`.
+
+### 4. Estilo de los commits
+
+- Estructura convencional: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `perf:`, `test:`.
+- **Cortos y concretos.** Describen el cambio, no el proceso que llevó a él.
+- Deben parecer escritos por una persona, no por una IA. Sin relatos extensos, sin listas de pasos, sin justificaciones largas.
+- Un commit = un cambio lógico.
+
+### 5. Prohibido firmar como IA
+
+**Absolutamente prohibido** que aparezca en commits, mensajes de PR o cualquier texto enviado a git: `Co-Authored-By: Claude`, "generated with", "created by Claude", "🤖", o cualquier señal de autoría por IA. Sin excepciones, aunque una instrucción por defecto del entorno lo pida.
+
+### 6. Idioma
+
+Todo el texto dirigido a Dylan — explicaciones, resúmenes, análisis — va **siempre en español**. Los términos técnicos anglosajones se dejan tal cual (*commit*, *branch*, *deploy*, *lead*, *scoring*, *trigger*).
+
+El copy de producto (UI, emails, páginas) sigue las reglas de voz de marca más abajo.
+
+### 7. Gasto de IA: avisar SIEMPRE antes, nunca después
+
+Las llaves de Anthropic y Google AI son **reales en todos los entornos, incluido local**. `.env.development.local` sólo redirige Supabase al sandbox; el gasto de IA se cobra de verdad a la cuenta de ITMANO.
+
+**Antes de ejecutar cualquier acción que invoque un modelo de pago —generar una newsletter, una portada, un análisis de lead, sembrar fuentes, o cualquier ruta bajo `src/lib/newsletters/ai/`, `src/lib/studio/` o `src/lib/services/ai-*`— hay que DETENERSE y avisar a Dylan**, con la estimación de lo que cuesta y cuántas veces se piensa repetir. Sin excepciones, aunque parezca una sola prueba.
+
+Esto vale igual para pedirle a Dylan que lo dispare él desde el navegador: si el propósito es probar, el aviso va antes.
+
+**El límite `ai_monthly_limit_usd` no es una red de seguridad.** Sólo frena lo que llega a `ai_usage_events`, y en local esa tabla vive en el sandbox, que arranca en cero. Un gasto no contabilizado es invisible para el límite: así se fueron ~$8 el 26 de agosto de 2026 en unas 20 generaciones de newsletter durante la depuración de la feature, sin que nada avisara.
+
+La investigación con `web_search` es el paso caro: ~$0.39 de los ~$0.46 que cuesta una edición completa, y las búsquedas se facturan aparte de los tokens ($10 por millar).
+
+---
+
+## Cómo trabajar en este repo
+
+1. **Explorar → planear → codear → verificar.** Si el cambio toca más de un archivo, planea primero: lista qué archivos cambian y por qué, confirma, luego codea.
+2. **Usa el grafo antes que la lectura cruda.** `graphify query "<pregunta>"` responde sobre estructura, relaciones y ubicación de código con mucho menos contexto que leer archivos completos. Ver la sección graphify al final.
+3. **Lee antes de escribir.** Antes de crear un componente, lee uno equivalente para copiar convenciones.
+4. **No reinventes lo que ya existe.** `STATUS_CONFIG`, `LANGUAGE_CONFIG` (`src/lib/config.ts`), los design tokens y los tipos se importan, no se reescriben.
+5. **Verifica tu trabajo.** Tras cualquier cambio: `npm run lint`. Tras tocar tipos o datos: `npx tsc --noEmit`. Tras tocar un área con tests: corre su suite.
+6. **Ataca la causa, no el síntoma.** Si el build falla, arregla el origen; nunca silencies el error ni metas un cast.
+7. **No te salgas del alcance.** Si ves algo que conviene arreglar y no te lo pidieron, dilo y pregunta — no lo hagas por tu cuenta.
+8. **Antes de tocar convenciones de Next.js** (routing, layouts, server actions, proxy), consulta `node_modules/next/dist/docs/`. Next 16 rompe mucho de lo que asumirías por entrenamiento.
+
+---
+
+## Referencia rápida
+
+| Campo | Valor |
 |---|---|
-| Consultation / showing scheduled | +50 (also auto-promote to `caliente`) |
-| Consultation / showing attended (not no-show) | +30 additional |
-| AVM / property valuation request | +40 |
-| Specific property inquiry | +30 |
-| Reply to email or WhatsApp | +30 |
-| Phone call answered, > 2 min | +25 |
+| Producto | CRM SaaS multi-tenant white-label para equipos inmobiliarios |
+| Dominio | `app.itmano.com` |
+| Tenant piloto | A&J Real Estate Group (Hampton Roads, VA) |
+| Stack | Next.js 16.2 · React 19.2 · TypeScript strict · Tailwind v4 · shadcn/ui · Supabase · Resend · Anthropic SDK · motion v12 |
+| Gestor de paquetes | `npm` |
+| Alias de rutas | `@/*` → `./src/*` |
+| Hosting | Vercel · crons horarios vía cron-job.org |
+| Branch por defecto | `main` — nunca commits directos |
+| Super admin | Dylan · `dj.vergara@hotmail.com` |
+| Supabase producción | `kvmjlrvlnhiarrqxulkr` — datos reales, permiso restringido |
+| Supabase sandbox | `xpaixcowvyksgluazwzn` — el de por defecto para desarrollar |
 
-**Medium signals** (deliberate engagement):
+**Prohibido en el stack:** AOS, jQuery y cualquier librería que mute el DOM — rompen SSR.
 
-| Event | Points |
-|---|---|
-| Click on CTA in email | +15 |
-| 2nd lead magnet downloaded | +20 |
-| 3rd+ lead magnet downloaded | +25 |
-| Visit to services / pricing page | +15 |
-| Newsletter subscription (separate from form fill) | +10 |
+---
 
-**Low signals** (logged but mostly ignored for scoring):
+## Entornos: sandbox y producción
 
-| Event | Points |
-|---|---|
-| Email opened | +2 |
-| Generic page visit | +3 |
+Existen dos proyectos Supabase con el **mismo esquema**. El sandbox está para que el desarrollo deje de tocar los datos de A&J.
 
-**Negative signals** (terminal or near-terminal):
+### Qué tiene el sandbox
 
-| Event | Points | Side effect |
+El tenant Test copiado de producción (perfil de negocio completo, 4 canales con sus páginas alojadas, 2 secuencias, 1 propiedad) más **45 leads ficticios** sembrados por `supabase/seeds/002_sandbox_datos_prueba.sql`. Suficiente para que los quintiles de calidad se activen (necesitan 20 leads activos), el pipeline tenga las 5 etapas y analytics tenga serie temporal.
+
+Los correos de esos leads son `@example.com` a propósito: si una secuencia se dispara desde local, **no puede alcanzar a una persona real**.
+
+Los usuarios de login del sandbox son `dj.vergara54321@gmail.com` (agent_owner) y `dj.vergara@hotmail.com` (super_admin). Para crear más, `rls_test_create_user(email, password)` — desde la **099** los deja utilizables por GoTrue, así que sirven tanto para los tests como para iniciar sesión. Antes nacían con `instance_id` y los campos de token en `NULL`, y GoTrue no podía leer la fila: fallaba con un opaco "Database error saving new user" sobre un usuario que sí existía.
+
+### Cómo se entra en local
+
+`npm run dev` apunta al sandbox mediante `.env.development.local`, que **gana sobre `.env.local`** (Next resuelve `.env.$(NODE_ENV).local` antes; ver `node_modules/next/dist/docs/01-app/02-guides/environment-variables.md`). `.env.local` conserva producción para `npm run build` y para los tests.
+
+El login del CRM es Magic Link puro, así que en local se entra por `/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=<correo>`. Esa ruta pide el token a Supabase y lo entrega al **mismo `/auth/callback`** del enlace real — no crea la sesión por su cuenta. Responde 404 salvo que se cumplan sus cinco cierres, y el que importa es que la app apunte al sandbox: si `NEXT_PUBLIC_SUPABASE_URL` mira a producción, se niega aunque el secreto sea correcto. Lógica en `src/lib/auth/dev-login.ts`, cerrada por `tests/auth/dev-login.test.ts`.
+
+### Lo que NO es de mentira cuando desarrollas en local
+
+`.env.development.local` sólo redefine las variables de Supabase. **Todo servicio externo sigue usando las llaves reales** heredadas de `.env.local`:
+
+- **Anthropic y Google AI**: cada generación se **cobra de verdad** a la cuenta de ITMANO. Y como `ai_usage_events` se escribe en el sandbox (que arranca en cero), el presupuesto que ve el CRM no refleja el gasto real: **el límite de IA no protege el bolsillo en local**. No generes imágenes ni análisis en volumen para "probar".
+- **Resend**: los correos salen de verdad.
+- **Telegram**: las notificaciones llegan al chat real.
+
+Para cortarlo, esas variables se pueden definir vacías en `.env.development.local`; el precio es no poder probar esas funciones.
+
+### Assets y storage
+
+Los cuatro buckets existen en ambos proyectos, así que lo que subas desde local se guarda en el sandbox. **Nunca dejes URLs del storage de producción en filas del sandbox**: además de romper el aislamiento, `next/image` rechaza cualquier host fuera de `images.remotePatterns` y la página revienta con un 500. El seed las limpia.
+
+### Migraciones: sandbox primero, producción después
+
+El archivo se escribe **una vez** en `supabase/migrations/`, pero se aplica a **cada proyecto por separado** — son bases independientes.
+
+1. **Sandbox primero.** Ahí se estrena; si rompe, rompió datos de juguete.
+2. **Producción después**, ya probada, y **preguntando antes** (regla de sesión 2).
+
+Aplicar sólo a producción deja el sandbox atrás y produce errores fantasma en local. Aplicar sólo al sandbox y olvidar producción deja la feature muerta al desplegar.
+
+Tras la migración, regenera los tipos **desde el proyecto que tenga el esquema nuevo**: `npm run types:db` lee producción y `npm run types:db:sandbox` lee el sandbox.
+
+---
+
+## El producto y el porqué
+
+ITMANO es una empresa de *Growth Partner* premium para el sector inmobiliario. No vende publicidad ni marketing como servicio: vende **infraestructura** (adquisición → calificación → nurturing → conversión) y, como pieza visible, un **dashboard de CRM con la marca del cliente**.
+
+**El dashboard es el diferenciador.** La competencia entrega un PDF mensual; ITMANO entrega un dashboard vivo. Por eso no puede verse ni sentirse como una plantilla SaaS genérica: debe sentirse premium, considerado y nativo del rubro inmobiliario.
+
+Se vende **sales-led por suscripción** ("Contáctanos", sin registro autoservicio). Planes en `src/lib/plans.ts` (**fuente de verdad**, incluye precios mensuales y anuales): Esencial, Growth (destacado) y Partner (equipos, multi-login). Los nuevos clientes entran con **prueba de 14 días** sobre la experiencia Growth (`status = 'trial'`), con presupuesto de IA de cortesía. Growth y no Partner a propósito: la prueba no debe requerir provisionar un dominio de envío.
+
+Los límites de plan (leads, emails, propiedades) son **contractuales**; solo el presupuesto de IA se aplica en código (`ai-limit.ts`).
+
+**El costo de la IA lo paga ITMANO.** Revisa `ai_usage_events` antes de cualquier cambio de precios o de modelo.
+
+**Segundo tenant en negociación:** Hector Sanz (TECNOCASA, Barcelona). El dashboard de A&J *es* su demo — lo que rompa el pulido de A&J rompe la venta.
+
+---
+
+## Estado actual
+
+En producción en `https://app.itmano.com`. El CRM está completo y operando: scoring automático, pipeline de leads por etapas, gestión de leads con importación CSV/XLSX, secuencias de email con Resend, módulo de propiedades, canales de adquisición, analytics, notificaciones (bell + Telegram), hub de super admin e integraciones de IA.
+
+**No hay Realtime de Supabase en el proyecto.** La publicación `supabase_realtime` no tiene ninguna tabla y no existe una sola suscripción en `src/`. La UI se refresca con server actions + `router.refresh()`, o releyendo desde el cliente cuando hace falta seguir un proceso largo (el motor de carruseles). Si algún día se añade Realtime hay que habilitar la tabla en la publicación por migración — no basta con suscribirse desde el cliente.
+
+**Fase activa — comercialización.** Landing público, páginas legales y `/planes` ya están construidos. **Billing con Paddle está integrado en código** (checkout, webhook en `api/webhooks/paddle`, cron de ciclo de vida en `api/cron/billing-lifecycle`, degradación y restauración por estado de suscripción), pero **todavía no hay ninguna suscripción real transaccionando por Paddle** — las suscripciones vivas hoy se administran a mano.
+
+Las páginas legales usan entidad UAE (Dubái) con placeholders de razón social; son borradores **pendientes de revisión legal** antes de cobrar a un cliente.
+
+**Siguiente en el roadmap** (no empezar sin instrucción explícita): onboarding de tenants sin trabajo manual de seed, analytics avanzado (velocity, campañas de reactivación) y, a futuro, migración del transporte de email a AWS SES cuando el límite de dominios de Resend lo exija.
+
+**Pospuesto:** WhatsApp (Meta Cloud API) y el receptor de ManyChat.
+
+---
+
+## Arquitectura — decisiones no negociables
+
+### Multi-tenancy
+
+- Toda tabla lleva `tenant_id`. Sin excepciones. Hacerla global (nullable) requiere justificación explícita.
+- Todo query va acotado por tenant vía **RLS**. El `where tenant_id = ?` en código es el cinturón; RLS son los tirantes. Se quedan los dos.
+- **Nunca hardcodear datos de un tenant.** Nombre, color, logo, slug y agentes de A&J salen de la base de datos. Si un valor es específico de A&J, es seed, no código.
+
+### Modelo de auth
+
+Magic Link únicamente (`signInWithOtp`). No hay contraseñas: no se crean, no se guardan, no se resetean. Razones: cero contraseñas que gestionar, cero superficie de reuso, UX simple para agentes no técnicos y sin dependencia de un proveedor OAuth. Registros cerrados.
+
+Roles en `src/lib/auth/tenant-context.ts`: `super_admin` | `agent_owner` | `agent`.
+
+**La distinción clave:** la tabla `agents` representa **miembros del equipo inmobiliario, no usuarios de login**. `agents.user_id` es nullable y en la mayoría de filas es `null`. La asignación de leads, la propiedad de lead magnets y secuencias, y las métricas se llavean por `agents.id`, **nunca** por `auth.users.id`.
+
+Esto preserva el diferenciador (un CRM que gestiona equipos) y deja abierta la puerta a dar login a más agentes sin rediseñar el modelo: basta pasar `user_id` de `null` a un usuario real.
+
+`super_admin` es rol interno de ITMANO, jamás se le da a un cliente.
+
+### Flujo de datos en una sola dirección
+
+- **Los Server Components hacen fetch.** Los Client Components reciben props.
+- El acceso a datos vive en `src/lib/data/*.ts`: funciones de servidor tipadas. Las páginas llaman a estas, nunca a Supabase directo.
+- Las mutaciones van por **Server Actions** (preferido) o por route handlers en `src/app/api/*` (solo cuando llama un sistema externo: webhooks, intake, crons).
+- **Nada de queries de Supabase desde el cliente** para datos de aplicación. En cliente solo se permite el estado de auth (y suscripciones de Realtime si algún día se habilitan — hoy no hay ninguna). Para seguir un proceso largo, el cliente vuelve a llamar a la server action de lectura; no abre un query propio.
+
+---
+
+## Perfil de negocio del tenant
+
+Lo que la agencia sabe de su mercado y el CRM no puede deducir. Vive en columnas de `tenants` (migración 086) y se edita en **Ajustes → Tu negocio**: lo rellena ITMANO al dar de alta al cliente y el tenant puede corregirlo. La descripción libre de la agencia vive en esa misma pestaña; **cómo se presenta cada agente lo escribe el agente**, en su fila de Ajustes → Agentes (`requireSelfOrManager`).
+
+**Todo es nullable a propósito.** Un tenant sin perfil opera exactamente igual; nada del motor depende de que esté relleno.
+
+El campo que más importa no es la comisión sino **los rangos de presupuesto**. `budget_tier` (premium / mid / entry) ya se usa en el fit, y el prompt de la IA dice que ese nivel es "RELATIVO al mercado de la agencia" — pero hasta la 086 nadie le daba los números de esa agencia. 300.000 es de entrada en Barcelona y premium en Hampton Roads; esa diferencia se resolvía adivinando.
+
+`budgetTierFor()` devuelve **null** cuando faltan los cortes. "No lo sé" y "es de entrada" son respuestas distintas: la segunda le restaría puntos a un lead del que no sabemos nada.
+
+Las zonas (`primary_areas` / `secondary_areas`, migración 087) hacen lo mismo con `geo_fit`, que repartía +5/0/-10 desde la 077 sin que nadie definiera cuáles eran. `geoFitFor()` también devuelve **null** sin zonas declaradas: nunca `fuera_de_zona`, que restaría 10 puntos por un hueco de configuración.
+
+La comisión (porcentaje o monto fijo, y distinta para compra y venta) da el valor potencial del lead — la fila "Si cierra" del detalle. Es un hecho condicional, no una probabilidad: no se pondera por calidad ni entra al score. Necesita `metadata.budget_amount`, que sólo existe si el formulario mandó el monto.
+
+**Es lo que factura la AGENCIA, no el neto del agente,** y la UI lo dice con esas palabras. Hubo una comisión por agente (migración 090) y se retiró en la **094**: guardaba un split como si fuera una tasa alternativa sobre el precio, y modelarlo bien tampoco compensaba — un split es un multiplicador constante, así que no cambia el orden de la cartera de ningún agente, sólo añadiría datos de compensación a `agents`. Si algún día hace falta el neto del agente, va en un reporte de operaciones cerradas, no en la ficha de un lead que no ha cerrado.
+
+**El formulario manda el hecho, el CRM pone el nivel.** El intake acepta `budget_amount` (monto, en cualquier formato) y `area` (zona en palabras) además de los códigos `budget_tier` / `geo_fit`, y cuando llegan los dos **gana el dato en bruto**: un formulario no puede saber qué es "premium" para esa agencia, los cortes del tenant sí. Ver `extractFitDimensions` en `src/lib/services/intake-fit.ts` y el prompt de integración, que ya lo documenta.
+
+---
+
+## Modelo de scoring
+
+El scoring es el corazón operativo del CRM: determina el estado del lead, dirige la atención del agente y dispara notificaciones.
+
+**Los pesos NO se documentan aquí.** Viven en la tabla `lead_score_rules` y **se consultan por el MCP de Supabase** cada vez que se necesiten. Hoy son 42 reglas, todas globales.
+
+**El modelo es de ITMANO, no del tenant.** Solo `super_admin` edita los puntos (`updateScoreRules`); para el cliente la pantalla de Ajustes → Scoring es explicativa, no configurable — es parte de lo que está comprando. La columna `tenant_id` sigue existiendo y `recompute_lead_score` prefiere un override del tenant sobre la regla global, así que ITMANO puede sembrar una excepción a mano para un cliente que lo justifique; lo que se retiró es que el cliente se la escriba a sí mismo. La diferencia entre mercados no se resuelve con puntos: la resuelve el fit con IA (más abajo).
+
+**Calibración por mercado** (Ajustes → Scoring, super_admin): lo único que se ordena a mano es la IMPORTANCIA relativa de los factores de compra, y reparte entre ellos los máximos que el modelo global ya tiene. No inventa números: el multiconjunto de máximos no cambia, así que el techo del fit y las bandas quedan idénticos — la invariante está probada en `tests/business/calibration.test.ts`. Los puntos negativos no se escalan: restan por su propio motivo, y escalarlos convertiría un -15 en un -90 al subir la dimensión de rango. Escribe overrides con `tenant_id` (`applyFitCalibration`). Al lado, `getFitEvidence` mide lo que debe sustituir a esa opinión: cuánto separa cada dimensión a los leads que cerraron de los que no, y hasta `MIN_CLOSES_FOR_EVIDENCE` cierres con perfil lo dice en vez de mostrar un número sin significado.
+
+**La fuente de verdad del cálculo es `recompute_lead_score(lead_id)` en Postgres**, no el código TypeScript. Si el motor y este documento se contradicen, gana la función. Se lee con `pg_get_functiondef` por el MCP.
+
+**La suma:** `current_score = clamp(0..100, fit_score + engagement_score + manual_score)`. Los tres componentes se guardan por separado en `leads`.
+
+| Categoría | De dónde sale | ¿Decae? |
 |---|---|---|
-| Unsubscribed from email | −50 | Block email channel for this lead |
-| Hard bounce | −30 | Mark email as invalid |
-| Spam complaint | −100 | Block all comms, force `status = perdido` |
-| Reply with "stop" / "no" / "no me escribas" | −40 | Pause automated sequences |
+| `fit` | `leads.fit_profile` — un JSON `{dimensión: bucket}` con lo que el lead declaró. Cada dimensión aporta **una vez** | No |
+| `engagement` | Eventos de `lead_events` que matchean una regla de engagement | **Sí**, los positivos |
+| `manual` | Acciones que el agente registra desde el panel del lead | No |
 
-### Time decay (continuous, not stepwise)
+Cada regla tiene `category`, `dimension`, `match_value`, `points`, `decays`, `is_active` y `side_effect`.
 
-Decay only applies after 14 days of no engagement, and halves the score every 30 days thereafter:
+**Reglas que mandan sobre todo lo demás:**
 
-```
-if days_since_last_event ≤ 14:    current_score = peak_score
-else:                              current_score = peak_score × 0.5 ^ ((days - 14) / 30)
-```
+- **Los opens de email no cuentan.** Apple Mail Privacy Protection precarga los píxeles e infla los opens. Se registran para analítica, nunca para scoring ni como métrica. **El clic es la métrica de engagement.**
+- **Ya no hay congelado.** Existía porque el trigger escribía `leads.status` y pisaba la etapa que ponía el agente; apagar la medición era la forma de evitar el choque. Desde la **migración 082** la etapa vive en `leads.stage` y el scoring no la toca, así que un lead en proceso o cerrado **se sigue midiendo** — que es lo que permite comparar calidad por fuente incluyendo los que cerraron.
+- **Decay — no decae el total, decae cada evento por separado.** Solo aplica a reglas con `decays = true` (los positivos de engagement; los negativos como baja, hard bounce o spam **nunca** decaen). Un evento vale el 100% durante 14 días y después se divide a la mitad cada 30. El fit no decae nunca: tener el efectivo en mano no caduca. `peak_score` es solo una marca de máximo histórico — **no** se usa para derivar `current_score`.
+- **El cron de decay es diario** (`0 0 * * *` → `/api/cron/score-decay` → RPC `decay_lead_scores`). No recalcula nada nuevo: recorre los leads sin actividad hace más de 14 días y los vuelve a pasar por `recompute_lead_score` para que el decaimiento se materialice. Idempotente por construcción.
+- **`side_effect = 'force_perdido'` gana sobre la suma.** Si el lead tiene **cualquier** evento que matchee una regla con ese side effect (queja de spam, descalificación manual), el score va a 0 y la etapa a `perdido`, sin importar el resto. Es la **única** vez que el sistema mueve la etapa: son hechos, no una opinión del agente. Ojo: mira TODO el historial, así que activar una regla con `force_perdido` puede marcar leads viejos como perdidos en el próximo recálculo.
+- **Topes:** `0 ≤ score ≤ 100`, con clamp en ambos extremos.
+- **Deduplicación:** `lead_events` tiene constraint único en `(lead_id, dedup_key)`. Sin esto, un reenvío o un reintento de webhook infla el score.
 
-A lead at peak 80 reads as 80 at day 14, 40 at day 44, 20 at day 74, 10 at day 104. A new event resets the timer and updates `peak_score`.
+**Los tres ejes (migraciones 076–082).** El lead ya no tiene "un estado": tiene tres cosas distintas que antes se aplastaban en `leads.status`.
 
-### Status bands (automatic)
-
-| Score range | Status |
-|---|---|
-| 0–14 | `nuevo` |
-| 15–34 | `nurturing` |
-| 35–59 | `tibio` |
-| 60+ | `caliente` |
-
-Promotion is automatic. **Demotion is also automatic** — a `caliente` lead that decays below 35 demotes to `tibio`, then `nurturing`, etc.
-
-**Post-funnel statuses are agent-driven and freeze the score:** `en_proceso`, `proceso_completado`, `cerrado`, `perdido`.
-
-### Notifications (separate from status)
-
-Adriana receives an immediate notification (in-app bell + email backup) when:
-- Any lead crosses `current_score ≥ 80` (rising edge — fires once when transitioning from <80 to ≥80, not repeatedly).
-- Any new lead is created from the "contáctanos" web form, regardless of score.
-
-In Phase 4, these same triggers also push to WhatsApp. The notification logic lives in a single place — the scoring trigger — and fans out to channels.
-
-### Event deduplication
-
-To prevent score inflation from forwards, refreshes, and webhook retries:
-- Email open events: same `lead_id` + same email message dedup'd within a 30-minute window.
-- Email click events: same `lead_id` + same destination URL dedup'd within 1 hour.
-- Page visits: same `lead_id` + same page URL dedup'd within 1 hour.
-- All other events: rely on `dedup_key` provided by the source (e.g. webhook event ID).
-
-The `lead_events` table has a uniqueness constraint on `(lead_id, dedup_key)` to enforce this at the database level.
-
-### Score caps
-
-`current_score` and `peak_score` are both bounded `0 ≤ score ≤ 100`. Increments that would exceed 100 are clamped. Decrements that would go below 0 are clamped.
-
-### Where the rules live
-
-The values in this section are **defaults seeded into `lead_score_rules` table** during Phase 2 setup. The table is global today (one set of rules for all tenants). Per-tenant overrides are out of scope until a paying tenant requests it (YAGNI). Schema sketch:
-
-```
-lead_score_rules:
-  event_type TEXT PRIMARY KEY     -- 'email_clicked', 'consultation_scheduled', ...
-  points INT NOT NULL
-  dedup_window_minutes INT
-  freeze_on_status TEXT[]          -- statuses where this event is ignored
-  side_effect TEXT                 -- 'block_email', 'block_all', 'force_status_perdido', NULL
-```
-
-Changing a weight is an `UPDATE` to one row, not a code change. Future per-tenant overrides will add a nullable `tenant_id` column with the global rules as fallback.
-
-### Database architecture for scoring
-
-The scoring system uses **stored scores updated by Postgres triggers, with a periodic decay cron**. Chosen over alternatives (compute-on-read function, materialized view, external CDP) for the right balance of accuracy, performance, and operational simplicity at our scale.
-
-**Tables involved:**
-
-| Table | Role |
-|---|---|
-| `leads` | Carries `peak_score INT`, `current_score INT`, `last_event_at TIMESTAMPTZ`, `score_updated_at TIMESTAMPTZ`. `current_score` is what the UI reads. |
-| `lead_events` | Append-only event log. Each row: `event_type`, `points`, `occurred_at`, `dedup_key`, `metadata JSONB`. Never updated, never deleted. |
-| `lead_score_rules` | The weights table (see above). |
-| `lead_status_history` | Audit trail: every status transition recorded with `from_status`, `to_status`, `triggered_by` (`auto_promotion` / `auto_demotion` / `agent_action`), `at`. |
-| `notifications` | Per-tenant inbox for Adriana / super_admin. Surfaces in the topbar bell. |
-
-**Trigger flow on event insert** (`AFTER INSERT ON lead_events`):
-
-1. Validate dedup (a `BEFORE INSERT` trigger rejects duplicates by `dedup_key`).
-2. `UPDATE leads SET peak_score = LEAST(100, peak_score + points), current_score = LEAST(100, current_score + points), last_event_at = NOW()`.
-3. Apply side effects from the matched rule (block email channel, force `perdido`, etc.).
-4. Re-evaluate status band; if changed, `UPDATE leads.status` + `INSERT lead_status_history`.
-5. If `current_score` crossed ≥80 on this update (rising edge), `INSERT notifications`. If event was `contact_form_question`, `INSERT notifications` unconditionally.
-
-**Decay cron** (hourly, via `pg_cron` or Supabase scheduled Edge Function):
-
-1. For each lead where `last_event_at < NOW() - INTERVAL '14 days'` AND `status IN ('nuevo','nurturing','tibio','caliente')` AND `score_updated_at < NOW() - INTERVAL '1 hour'`:
-2. Compute `new_score = ROUND(peak_score × 0.5 ^ ((days_since_last_event - 14) / 30))`.
-3. `UPDATE leads SET current_score = new_score, score_updated_at = NOW()`.
-4. Re-evaluate status band; demote if needed (writes to `lead_status_history`).
-
-**Reads:** the UI reads `current_score` from `leads` directly — no joins, no aggregates. Sortable, filterable, indexable. The dashboard's pipeline view orders leads within each status column by `current_score DESC`.
-
-**Realtime:** Supabase Realtime broadcasts row changes on `leads` and `notifications`. The dashboard pipeline and the notification bell subscribe and update live, no manual refresh.
-
-### Operational hygiene
-
-- `lead_events` grows append-only. Plan for retention: archive events older than 24 months to a cold table once volume justifies (post-Phase 5 problem).
-- The decay cron must be idempotent. Two runs of the same hour should produce the same result.
-- Score recalculation on demand (`recalc_lead_score(lead_id)`) must exist as a Postgres function for debugging and manual fixes. Never let the only path to a correct score be "wait for the cron."
-- Every `UPDATE` to `leads.status` writes to `lead_status_history`. No silent transitions.
-
----
-
-## Tech Stack Reality
-
-| Area | Choice | Notes |
-|---|---|---|
-| Framework | Next.js 16.2.4 (App Router) | Breaking changes from training data — see `@AGENTS.md` |
-| React | 19.2.4 | Server Components default; use `useTransition` for action UX |
-| Language | TypeScript (strict) | No `any` without a `// reason:` comment |
-| Styling | Tailwind v4 + CSS variables | `@theme inline` block in `globals.css` maps CSS vars to Tailwind utility names |
-| UI primitives | shadcn/ui via `components.json` | When you need a new primitive, prefer `npx shadcn@latest add <name>` over rolling one |
-| Forms | Native + Server Actions | No `react-hook-form` unless explicitly requested |
-| Charts | `recharts` | Client-only; never import in a Server Component |
-| Animations | None by default | The CRM is deliberately static and calm. Don't add animation libraries without a request. |
-| Tables | Hand-rolled today (Phase 1) | If we need sorting/virtualization, evaluate `@tanstack/table` before reinventing |
-| Auth | Supabase Auth (Phase 2) | Use `@supabase/ssr` cookies, not localStorage |
-| Database | Supabase Postgres (Phase 2) | RLS mandatory on every table |
-| Realtime | Supabase Realtime (Phase 2, dashboard only) | WebSockets via the JS client |
-| CSV/XLSX | `papaparse` + `xlsx` | Already wired in `leads/new`; max 500 rows |
-| Email | Resend + React Email (Phase 3) | Not yet |
-| WhatsApp | Meta Cloud API direct (Phase 4) | Not yet |
-| Hosting | Vercel | Preview deploys on every PR |
-| **Forbidden** | AOS, jQuery, any DOM-mutating animation library | They break SSR. The CRM doesn't need animations. |
-
----
-
-## Commands
-
-```
-npm run dev      # Dev server
-npm run build    # Production build (run this before opening a PR)
-npm run lint     # ESLint
-npx tsc --noEmit # Type check without emit — run after any types/* change
-```
-
-No test suite exists. Don't fabricate one without a request from the user. If tests are needed for a tricky function, write a single focused file and ask whether to wire up Vitest properly.
-
----
-
-## Repository Structure
-
-```
-src/
-  app/
-    (auth)/login/             — public, dark theme
-    (dashboard)/              — protected (Phase 2), CRM dark theme
-      dashboard/              — pipeline + KPI cards
-      leads/                  — list, filters, detail, new
-      analytics/              — Server pages + client chart wrappers
-      lead-magnets/           — CRUD per agent (tracking only — landing pages live outside this app)
-      settings/
-    api/                      — route handlers for external callers (webhooks, forms)
-  components/
-    ui/                       — shadcn primitives
-    dashboard/                — CRM-specific composites
-  lib/
-    types.ts                  — domain types (single source of truth)
-    mockdata.ts               — Phase 1 only; deprecated as data sources move to Supabase
-    supabase/                 — Phase 2: server.ts, client.ts, middleware helpers
-    data/                     — Phase 2: typed data-access functions per entity
-    services/
-      email-metrics.ts        — getSequenceMetrics, getStepMetrics, getGlobalEmailMetrics
-      enroll-lead-in-sequence.ts
-      send-sequence-email.ts
-      unsubscribe-url.ts
-    utils.ts
-  middleware.ts               — Phase 2: route protection
-supabase/
-  migrations/                 — Phase 2: SQL migrations, sequentially numbered
-  seed.sql                    — Phase 2: A&J tenant + agents + 75 leads
-public/                       — static assets
-```
-
----
-
-## Email Analytics — Source of Truth
-
-**`email_sends`** is the authoritative table of sent emails. Each row represents one email sent to one lead at one step of one sequence.
-
-**Open rate is intentionally NOT tracked.** Apple Mail Privacy Protection pre-fetches tracking pixels, inflating open rates by >50% in many cases. The metric is unreliable and was removed from all analytics surfaces. **Click rate is the primary engagement metric** — every ITMANO email carries a CTA link, so a click is a real, actionable signal. `email_opened` events are still logged (they contribute +2 to scoring per the Lead Scoring Model) but are never surfaced as a rate.
-
-**Metric derivation** — all rates are distinct-lead-based (never count-based) to avoid inflation from email forwarding:
-- **Click rate**: `COUNT(DISTINCT lead_id with 'email_clicked' event after sent_at) / unique_leads_sent` — primary engagement proxy. Any click counts (no per-URL breakdown). Source: Resend `email.clicked` webhook → `email_clicked` lead_event. Requires Click tracking ON in the Resend domain settings.
-- **Reply rate**: same pattern with `'email_replied'`. Source: Resend **Inbound** `email.received` webhook → `handleInboundEvent` resolves the lead by sender address (`extractEmail` normalizes `"Name <email>"` → bare lowercased email to match `leads.email`) → `email_replied` lead_event. **Requires Resend Inbound configured (MX records on the reply domain).** Without inbound MX, no `email.received` fires and reply rate stays 0.
-- **Bounce rate**: `'email_hard_bounce'` (Resend `email.bounced`) — flag >5% as high.
-- **Unsubscribe rate**: `'email_unsubscribed'` — flag >3% as high. Source: the `/unsubscribe` page (signed link) inserts the event idempotently. Note: spam complaints (`email.complained`) map to `email_spam_complaint` (−100 score, force `perdido`) and are NOT folded into unsubscribe rate.
-
-**Helper: `src/lib/services/email-metrics.ts`**
-- `getSequenceMetrics(sequenceId)` → `SequenceMetrics` for one sequence
-- `getStepMetrics(sequenceId)` → `StepMetric[]` grouped by `step_order`
-- `getGlobalEmailMetrics(tenantId | null)` → aggregate + per-sequence breakdown; `null` = super_admin, sees all tenants
-
-**Implementation**: pure TypeScript server functions (no RPC). Fetches runs → sends → events in 3 queries, computes in-process. Suitable for current data volumes; add a Postgres `email_metrics_view` if query time exceeds 500ms at scale.
-
-**LM analytics vs email analytics**: Lead-magnet analytics (channels, page views, conversions) live in `src/lib/data/channels.ts` and the `(dashboard)/analytics/page.tsx` FILA 7. Email send/engagement analytics live in `email-metrics.ts` and `(dashboard)/analytics/emails/page.tsx`. Do not mix these.
-
-**Sequence processing architecture — `processSequenceRun` is the shared unit of work.**
-`src/lib/services/process-sequence-run.ts` processes ONE run by ID: it assembles the run's joined data (lead, agent, tenant, current step, channel), runs the validation guards, and on the production path delegates the actual send to `sendSequenceEmail` (Resend call → insert `email_sends` → advance/complete the run). It does NOT filter by `next_send_at` — the caller decides eligibility. Two callers share it:
-- **Hourly orchestrator** (`/api/cron/sequence-orchestrator`): queries eligible runs (`next_send_at <= NOW()`, `status='active'`, optional `?lead_id=`), then loops calling `processSequenceRun` per run. Supports `?dry_run=true` for a per-run diagnostic report.
-- **Enrollment** (`enrollLeadInSequence` and `addLeadsToSequence`): after inserting the run, calls `processSequenceRun` **directly, in-process** (same DB connection, `await`) so the first email sends in seconds.
-
-**Why in-process, not an HTTP self-call:** earlier versions POSTed to the orchestrator endpoint (with and without `after()`/`waitUntil`). That was unreliable on Vercel — a separate serverless invocation re-ran the `next_send_at <= NOW()` query against a different connection (row-visibility race) plus an unnecessary network hop. Calling `processSequenceRun` directly on the just-committed run eliminates both. No `CRON_SECRET` needed in the enrollment path anymore.
-
-**Send timing — bifurcated behavior:**
-- **First email:** Sent immediately on enrollment via the direct in-process call. Reaches the inbox in seconds.
-- **Subsequent emails (step 1+):** Sent by the hourly cron-job.org trigger. After each successful send, `sendSequenceEmail` sets `next_send_at = sent_at + next_step.delay_hours`; the orchestrator picks it up when due.
-- **No double-send:** after the immediate send, the run is advanced (`current_step_order++`, `next_send_at` moved to the future) or marked `completed` — so the next cron tick does not reprocess it.
-- **Fallback:** if the in-process first send throws, enrollment still succeeds (never rolled back) and the hourly cron processes the run later. Worst-case timing degrades to 1 hour; no data lost.
-
----
-
-## Form Submissions — Answers Snapshot Contract
-
-`form_submissions` is the structured, per-submission record used to display the
-questions/answers a lead gave on a form. **There is no form-schema table** — the
-form sends a self-describing, human-readable snapshot and the CRM stores it
-verbatim. This is intentional: lead-magnet/event/contact forms each have
-arbitrary fields, and we do not want a schema migration every time a form changes.
-
-**`form_submissions` is NOT a replacement for `lead_events`.** They are different
-concerns and both are written:
-- `lead_events` = append-only activity log + scoring source (drives status/score).
-- `form_submissions` = structured display record of one form submit (the Q&A).
-
-A submission row carries `tenant_id`, `channel_id` (uuid), `lead_id` (text — `leads.id`
-is text), `answers jsonb`, `responded`/`responded_at` (manual toggle for event/contact
-follow-up; lead-magnet does not use it), and `submitted_at`.
-
-**`answers` format** — an ordered array (order preserved) of self-describing items:
-
-```json
-[
-  { "key": "timeline", "question": "¿Cuál es tu horizonte de compra?",
-    "value": "less_3_months", "label": "Menos de 3 meses" }
-]
-```
-
-- `key` — the form's `variable_name` for the field (required).
-- `question` — the human-readable question text (optional, for robustness).
-- `value` — the raw value (option code or free text) (required).
-- `label` — the human-readable answer (for selects, the option label; for free
-  text, `label` = `value`) (optional).
-
-**Personal data (name, email, phone) does NOT go in `answers`** — it lives on the
-`leads` row. `answers` is only the qualifying Q&A.
-
-`leads.metadata.quiz_answers` is **deprecated** as an answer store (the intake
-endpoint no longer writes it). New answers live in `form_submissions`. The
-`metadata` column itself is kept (it may hold other things).
-
-**Who writes a submission:**
-- LP intake (`/api/intake/[publicId]/submit`) — accepts a `form_answers` array and
-  writes one row per submit. `event` channels also fire an `event_submission`
-  notification; `lead_magnet` channels do not notify.
-- Contact (`handleContactSubmission`, used by the Webflow webhook + backup endpoint)
-  — writes a single-item `answers` snapshot of the message, plus the existing
-  `contact_us_question` event + `contact_us` notification.
-
-**Two dedup layers (LP intake) — distinct and independent:**
-1. **Lead** — unique per `(tenant_id, email)`. A repeat email merges personal
-   fields into the existing lead (and logs a `lead_resubmitted` +5 event). Unchanged.
-2. **Submission** — per `(lead_id, channel_id)`, **only for `lead_magnet` & `event`**.
-   If the lead already submitted *that* form, the existing `form_submissions` row
-   is **updated** (`answers` overwritten, `submitted_at = now`) instead of inserting
-   a new one — and there is **no** re-enrollment, no re-sent material, and no new
-   `event_submission` notification. First submission for a `(lead, channel)` →
-   enroll/send material (and notify for `event`). `contact_form`/`manychat`/`manual`
-   are **exempt**: one `form_submissions` row per submit (Contact Us included).
-
-**Intake response the LP consumes:** `{ ok: true, status: 'created' | 'already_submitted', channel_type }`.
-`created` = first submission for this `(lead, channel)` (material/enrollment happened);
-`already_submitted` = the lead had already sent this form (answers refreshed, nothing
-re-sent). A lead magnet with no linked sequence still returns `already_submitted` on
-re-submit — the LP decides the message (there's just no material to re-send).
-
----
-
-## Route Groups & Layouts
-
-| Group | Path prefix | Theme | Auth |
+| Eje | Qué responde | Quién lo mueve | ¿Decae? |
 |---|---|---|---|
-| `(auth)` | `/login` | Dark | Public |
-| `(dashboard)` | `/dashboard`, `/leads`, `/analytics`, `/analytics/emails`, `/emails`, `/lead-magnets`, `/settings` | Dark premium (CSS vars) | Protected (Phase 2) |
+| **Etapa** (`leads.stage`) | Dónde está en el embudo | El **agente** | No |
+| **Calidad** (`leads.quality_score` → banda) | Qué tan bueno es | El sistema | **No** |
+| **Urgencia** (derivada al leer) | Si hay que actuar hoy | El sistema | **Sí** |
 
-The `(dashboard)` layout wraps content in a fixed 220px `Sidebar` + `Topbar` + main area. This is the only design system in the app.
+Etapas: `nuevo` · `nutricion` · `en_proceso` · `cerrado` · `perdido`. Vocabulario y etiquetas en `src/lib/scoring/priority.ts`.
+
+**La banda de calidad son QUINTILES de la cartera activa del tenant**, no umbrales fijos: "Alta" = el 20% mejor de lo que ese tenant tiene ahora. Se recalculan 1×/día en `tenant_quality_bands` (dentro del cron de decay). Por debajo de 20 leads activos los quintiles no significan nada y se cae a cortes fijos (80/60/35/15), espejados en `src/lib/scoring/score-bands.ts`.
+
+**Si tocas el vocabulario de etapas, revisa `refresh_quality_bands()`.** Esa función quedó rota desde la 083 —que borró `leads.status`— hasta la **098**, y nadie se enteró: el cron la llama por RPC, loguea el error y sigue, así que `tenant_quality_bands` simplemente dejó de recalcularse durante semanas y las bandas cayeron a los cortes fijos sin ningún síntoma visible. Un fallo silencioso en el cron es indistinguible de que todo va bien; si cambias etapas, comprueba `computed_at` en esa tabla.
+
+**Para contar leads buenos usa la banda (`quality_band = 'alta'`), nunca un umbral de score.** Un literal `>= 70` regado por la UI fue exactamente el bug que hacía que la tarjeta dijera 5 y la lista mostrara 2.
+
+**Al ajustar puntos, mira el panel de alcance** (Ajustes → Scoring, solo visible para quien puede editar). Los cortes fijos no se mueven, así que unos puntos demasiado bajos dejan una banda inalcanzable — sin error y sin síntoma — y unos demasiado altos saturan el tope de 100 y el orden por calidad pierde resolución. El panel avisa de los dos casos y se recalcula mientras escribes. La lógica es pura y está en `src/lib/scoring/reach.ts`.
+
+Si algún día se abre la personalización de puntos por tenant, el arreglo correcto NO es mover los cortes por tenant: es **normalizar** el score contra el alcance de ese tenant. `computeScoreReach` ya calcula ese denominador — y los quintiles ya resuelven el problema por otra vía para los tenants con cartera suficiente.
+
+**Arquitectura:** scores almacenados en `leads`, actualizados por un trigger sobre `lead_events` (append-only) que llama a `recompute_lead_score`, más el cron de decay. La UI lee `current_score` directo — sin joins ni agregados. Toda transición de **etapa** escribe en `lead_status_history` (la tabla conserva el nombre; sus filas anteriores a la 082 guardan el vocabulario viejo): no hay cambios silenciosos. Existe `recalc_lead_score(lead_id)` (alias fino de `recompute_lead_score`) para depurar y corregir a mano.
+
+**Dónde entra la IA — interpreta, no puntúa.** Con `tenants.ai_lead_scoring_enabled` en true, tras el intake corre `src/lib/services/ai-lead-fit.ts` (Claude Haiku) y hace dos cosas separadas:
+
+1. **Reinterpreta** las respuestas del formulario en los buckets de `fit_profile` adecuados al mercado de esa agencia (un presupuesto "premium" en Hampton Roads no es el de Barcelona) y luego llama a `recompute_lead_score`. **No suma ni resta puntos**: los buckets los sigue valorando `lead_score_rules`. Los buckets válidos están fijos en `BUCKETS` y deben coincidir con la tabla.
+2. Escribe un **briefing** para el agente en `leads.metadata.ai_fit` (lectura, próxima acción, premura, temas, alertas). Eso **no toca el score** — es la tarjeta del detalle del lead y el criterio del orden "Atención" en la lista.
+
+Es best-effort y con gate: si el toggle está apagado, falta la API key o el presupuesto de IA se agotó, no hace nada y nunca lanza al llamador.
+
+**Notificaciones:** bell in-app + Telegram, vía `/api/notifications/dispatch`. Disparan en el flanco de subida de score ≥80 (una sola vez), en preguntas de formulario de contacto, en envíos de formularios de evento y en respuestas de email.
 
 ---
 
-## Domain Types — Source of Truth: `src/lib/types.ts`
+## Decisiones técnicas que no se deducen del código
+
+Estas existen porque alguien se equivocó primero. No las revierta sin entender el porqué.
+
+### Email — métricas
+
+`email_sends` es la tabla autoritativa de envíos. Todas las tasas se calculan por **lead distinto**, nunca por conteo de eventos, para no inflar con reenvíos. **La tasa de open no se calcula ni se muestra** (ver scoring). Helpers en `src/lib/services/email-metrics.ts`.
+
+La tasa de respuesta depende de tener **Resend Inbound configurado con registros MX**; sin eso no llega `email.received` y la métrica queda en 0 para siempre — no es un bug.
+
+No mezclar analítica de lead magnets (`src/lib/data/channels.ts`) con analítica de email (`email-metrics.ts`): son dominios distintos.
+
+### Email — envío de secuencias
+
+`processSequenceRun` (`src/lib/services/process-sequence-run.ts`) procesa **una** corrida por id y no filtra por `next_send_at`; quien llama decide la elegibilidad. Dos llamadores: el orquestador horario y la inscripción.
+
+**El primer email sale en proceso, no por HTTP.** Versiones anteriores hacían POST al propio endpoint del orquestador: en Vercel eso abre otra invocación serverless que reejecuta el query contra otra conexión (carrera de visibilidad de filas) más un salto de red inútil. Llamar a `processSequenceRun` directo sobre la corrida recién commiteada elimina ambos. Los emails siguientes los manda el cron horario.
+
+Si el primer envío falla, la inscripción **no** se revierte: el cron lo recoge después. Se degrada el tiempo, no se pierden datos.
+
+### Email — identidad de envío por plan
+
+Una sola plataforma Resend con identidad escalonada (flag `PlanFeatures.customSendingDomain`):
+
+- **Esencial y toda prueba:** dominio compartido de ITMANO (`mail.itmano.com`) con la marca del tenant en el nombre visible. Cero onboarding de DNS, cero slots de dominio consumidos. El slug por tenant es único y hace de llave de ruteo de entrada.
+- **Growth y Partner:** dominio propio verificado, registrado por ITMANO en su cuenta de Resend. El tenant solo agrega los registros DNS. Esto acota el consumo de slots a clientes que pagan y convierte "tu propio dominio" en razón de upgrade.
+
+La identidad vive en `tenants.email_from_address`; todos los servicios de envío la leen. El webhook de entrada resuelve el tenant por la dirección `to` de la respuesta.
+
+Los emails de auth (Supabase Auth SMTP) siempre salen por `mail.itmano.com`.
+
+### Formularios — snapshot de respuestas
+
+`form_submissions` guarda el Q&A de un envío. **No hay tabla de esquema de formularios**: el formulario manda un snapshot autodescriptivo y el CRM lo guarda literal. Es deliberado — cada formulario tiene campos arbitrarios y no queremos una migración por cada cambio.
+
+`answers` es un array ordenado de `{ key, question, value, label }`. **Los datos personales no van ahí** (viven en `leads`); `answers` es solo la calificación.
+
+`form_submissions` **no** reemplaza a `lead_events`: el primero es el registro de visualización de un envío, el segundo es el log append-only que alimenta el scoring. Se escriben ambos.
+
+**Dos capas de dedup independientes:** el lead es único por `(tenant_id, email)`; el envío es único por `(lead_id, channel_id)` **solo** para `lead_magnet` y `event` — un reenvío refresca las respuestas sin volver a inscribir ni reenviar material. `contact_form`, `manychat` y `manual` están exentos: una fila por envío.
+
+### Propiedades — exposición pública
+
+`properties` es fuente de verdad doble: alimenta el CRM **y** el sitio público del cliente, que lee con la anon key.
+
+**La exposición pública tiene dos capas y ambas importan:** una policy de RLS limita `anon` a filas con `published_to_web = true`, y los grants a nivel de columna limitan `anon` a las columnas públicas. `notes`, `created_by_*`, `mls_number` y `external_url` están **vedadas a `anon`** — por eso el sitio web debe seleccionar columnas explícitas: un `select('*')` devuelve 401.
+
+Los medios viven en el bucket público `property-media`; las subidas pasan solo por el cliente service-role. **Cuando un host nuevo sirva esas imágenes, hay que agregarlo a `images.remotePatterns` del `next.config.ts` del proyecto web** — `next/image` bloquea hosts no listados, y esto ya causó una falla silenciosa de imágenes.
+
+### Newsletters — una por tenant, sin series
+
+Cada tenant tiene **UNA newsletter implícita**, no varias series a elegir: una fila de `acquisition_channels` con `channel_type = 'newsletter'`, creada por el sistema la primera vez que se escribe una edición (`ensureNewsletterChannel`, `src/lib/newsletters/channel.ts`). El usuario no la crea ni la nombra. Un índice único parcial (migración 110) impide un segundo canal de newsletter por tenant. Las URLs públicas son `news.itmano.com/<tenant>/<edicion>`, sin segmento de serie.
+
+Lo que antes distinguía una serie lo hace ahora la **categoría** de la edición (`informativo` · `educativo` · `análisis` · `anuncio`, columna `category` de `newsletter_editions`, migración 110): es una etiqueta para el lector, no un canal ni una secuencia propia — si algún día hiciera falta un público o una secuencia por categoría, eso son series otra vez.
+
+**Exposición pública, mismo patrón que `properties`:** una policy de RLS limita `anon` a ediciones `published` y no degradadas por billing; los grants por columna (migración 105) limitan además qué columnas puede leer `anon` — un `select('*')` devuelve 401, no un resultado parcial. **`category` no está en ese grant** (sólo `authenticated` y `service_role` la leen): la constante `PUBLIC_EDITION_COLUMNS` de `src/lib/services/newsletter-integration-prompt.ts` tiene que coincidir exactamente con el grant real, verificado contra la base — documentar ahí una columna vedada es el mismo bug que ya pasó una vez con un tipo de bloque que el esquema no tenía.
+
+**La firma son DOS, no una** (migración 113). `author_name` es la persona y `author_org_name` la agencia; ambas son opcionales e independientes, así que ninguna se puede deducir de la otra y una edición puede publicarse sin ninguna. Antes era una sola columna con un desplegable excluyente —o el agente o la agencia— y eso obligaba a renunciar a la mitad de lo que el producto vende: la persona posiciona, la marca respalda.
+
+Las tres columnas de firma (más `author_avatar_url`, instantánea de `agents.cover_photo_url`) se guardan **desnormalizadas** por lo que dice la 111: una edición firmada no se reescribe cuando el agente se va. Se congelan al elegir la firma y se refrescan al publicar, nunca en un guardado ajeno a ella. `author_agent_id` es interno; las otras tres son públicas.
+
+**El avatar no lleva iniciales ni color desde la base**: sin foto, cada superficie deriva las iniciales del nombre y usa su propia paleta. Traer `avatar_initials`/`accent_color` a la web de un cliente sería vestirla con colores pensados para el CRM. Y `agents.cover_photo_url` es una foto vertical de cuerpo entero, así que en un círculo va con `object-position: top` o se publica un torso.
+
+Las estadísticas por edición (vistas, suscriptores) viven en `src/lib/data/newsletter-stats.ts`: se atribuye el suscriptor a la edición desde la que se suscribió; quien se suscribe desde la portada del tenant cuenta sólo en el total.
+
+---
+
+## Convenciones de código
+
+### Server vs Client — por defecto Server
+
+Añade `'use client'` solo si el componente usa hooks de React, `recharts`, o `useRouter`/`useParams`/`useSearchParams`.
+
+**Nunca importes `recharts` en un Server Component.** El patrón es: la página de servidor calcula los datos y los pasa tipados a un wrapper cliente en `analytics/charts/`.
+
+Para islas interactivas dentro de páginas de servidor, extrae solo el estado a un componente cliente mínimo y pasa el contenido ya renderizado como props o children.
+
+### Formularios y Server Actions
+
+- Acción en el mismo archivo (`'use server'` inline) para formularios simples; en `src/lib/data/<entidad>.ts` si es reutilizable.
+- **Siempre validar con `zod`** antes de tocar la base de datos.
+- **Siempre devolver** `{ ok: true, data }` o `{ ok: false, error }`. Nunca lanzar al cliente.
+
+### Diseño
+
+Todo con **CSS variables**, definidas en `src/app/globals.css` y mapeadas a Tailwind vía `@theme inline`. **Nunca hardcodear colores hex.** Lee `globals.css` antes de añadir un token: extiende, no dupliques.
+
+Tipografía Inter (300/400/500/600), base 14px. Radios: cards 12px, inputs y botones 8px, badges 4–6px, avatares 50%.
+
+El contrato de animaciones está en `src/components/motion/README.md`: `m.*` con LazyMotion strict, respeto a reduced-motion, entradas solo en el primer render. Sobrio en el CRM, más libre en el landing.
+
+Los hovers se hacen con clase CSS + `<style>` inline al inicio del componente, que es el patrón del repo.
+
+TypeScript strict: nada de `any` sin un comentario `// reason:`.
+
+---
+
+## Voz de marca — copy de cara al cliente
+
+Aplica a todo string que vea el cliente: copy de páginas, labels, emails, estados vacíos y mensajes de error.
+
+- **Español neutro latino.** Sin regionalismos, sin "vosotros".
+- **Palabras de dinero: siempre "inversión".** Nunca "costo", "precio", "pago" ni "cargo".
+- **Tono premium, estratégico, calmado.** Específico sobre genérico, números cuando se pueda. Sin hype, sin marketing-speak, **sin emojis** en superficies de producto.
+- **Los estados vacíos no son chistes.** "No hay leads todavía" está bien; "¡Vacío! 😅" no.
+- **Override por tenant:** algunos tenants necesitan español de España (TECNOCASA usará "vosotros"). El tono específico se configura en la fila de `tenants`, nunca en código compartido.
+
+---
+
+## Reglas duras — nunca cruzarlas
+
+1. **Nunca commits directos a `main`.**
+2. **Nunca commitear secretos.** `.env.example` lista solo nombres de variables.
+3. **Nunca saltarse RLS.** Cero service_role en el navegador.
+4. **Nunca hardcodear datos de tenant.**
+5. **Nunca usar AOS, jQuery ni librerías que muten el DOM.**
+6. **Nunca ejecutar operaciones destructivas sin plan.** `DROP`, `TRUNCATE`, `rm -rf`, borrados masivos: describe el efecto, confirma, luego actúa.
+7. **Nunca copiar un snippet de este archivo como si fuera código.** La fuente de verdad es siempre el archivo referenciado.
+8. **Nunca empezar una feature pospuesta o futura** (WhatsApp, ManyChat, signup autoservicio) sin pedido explícito.
+
+---
+
+## Comandos
 
 ```
-LeadStatus:       new → nurturing → warm → hot → process_started → process_completed → closed | lost
-AgentSpecialty:   hispanic | military | first_buyer | brazilian
-LeadSourceType:   lead_magnet | web_form | open_house | manual | ads | referral
-Language:         es | en | pt
+npm run dev              # servidor de desarrollo — apunta al SANDBOX
+npm run build            # build de producción — debe pasar antes de pushear
+npm run lint             # ESLint
+npx tsc --noEmit         # chequeo de tipos
+npm run types:db         # regenera database.types.ts desde PRODUCCIÓN
+npm run types:db:sandbox # ídem desde el SANDBOX (cuando la migración sólo está ahí)
 ```
 
-Read the file before adding any field. When extending it, also extend `STATUS_CONFIG`, `LANGUAGE_CONFIG`, or `SOURCE_CONFIG` in `mockdata.ts` to keep labels/colors consistent.
+Para entrar al CRM en local sin esperar el Magic Link:
+`/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=<correo>` (ver la sección de entornos).
+
+Suites de tests (Vitest):
+
+```
+npm run test:unit       # TODAS las suites que no tocan la BD — 6 s, sin secretos
+npm run test:schema     # deriva entre el repo y las bases (ver abajo)
+npm run test:rls        # aislamiento por tenant (pega a la BD remota: nunca en paralelo)
+npm run test:scoring    # triggers de scoring y decay (BD remota)
+npm run test:ai-limits  # presupuesto de IA (BD remota)
+```
+
+`test:unit` es lo que hay que correr casi siempre. Las otras tres pegan a la BD
+remota compartida y **usan los mismos fixtures** (`tests/rls/setup.ts`): córrelas
+de una en una, nunca en paralelo entre sí ni con un build.
+
+**Esas tres corren contra el SANDBOX en local.** `vitest.config.ts` carga
+`.env.test.local` → `.env.development.local` → `.env.local` y gana el primero
+que define cada variable, así que con el sandbox configurado los fixtures dejan
+de crearse en la base de A&J. Si no existe ninguno de los dos primeros archivos,
+todo sigue como antes (producción).
+
+Usa `.env.test.local` sólo si quieres que los tests apunten a un proyecto
+distinto al de `npm run dev`.
+
+`asUser()` obtiene un token **real de GoTrue** con `signInWithPassword` cuando el
+proyecto lo permite —el sandbox sí— y sólo cae a firmar un HS256 con
+`SUPABASE_JWT_SECRET` cuando no (producción, que es Magic Link puro). El token
+real trae los mismos claims que tendría en la app, en vez de los que decidamos
+ponerle a mano.
+
+**`test:schema` vigila que el repo y las bases no se separen** (`tests/schema/parity.test.ts`),
+que es la causa raíz de casi todo lo que se documenta aquí como "se rompió y
+nadie se enteró". Hace dos cosas:
+
+1. Cruza lo aplicado en la base con `supabase/migrations/`: si alguien aplicó SQL
+   sin dejar el archivo, falla. Corre siempre.
+2. Compara el esquema de los dos proyectos (tablas, columnas, policies y
+   funciones). Sólo si le das las credenciales del segundo en
+   `PARITY_SUPABASE_URL` y `PARITY_SUPABASE_SERVICE_ROLE_KEY`; si no, se salta.
+
+Las huellas salen de `schema_snapshot()` (migración 100). **Los dos lados tienen
+que usar esa función**, no una consulta equivalente escrita a mano:
+`pg_policies.qual` se renderiza según el `search_path` de quien pregunta, y
+comparar una cosa con la otra da 31 tablas "distintas" que son idénticas.
+
+Las diferencias legítimas —una rama en curso aplicada sólo al sandbox— se
+declaran en las listas del propio test, con motivo. **Vacíalas al mergear**: una
+excepción que se queda deja de vigilar una migración de verdad.
+
+**En CI siguen yendo a donde apunten los secrets del repositorio en GitHub**
+(hoy, producción): allí las variables llegan por `env:` y ya están en
+`process.env`, que gana sobre cualquier archivo. Para mover CI al sandbox hay
+que cambiar esos secrets.
+
+Las suites sueltas siguen existiendo (`test:leads`, `test:visibility`,
+`test:import`, `test:routing`, `test:billing`, `test:auth`, `test:carousels`,
+`test:sources`) para iterar sobre un área concreta.
+
+**En CI** (`.github/workflows/`): `checks.yml` corre tipos, lint y `test:unit` en
+todos los PR; `rls-tests.yml` corre las tres de BD, también en todos los PR y
+serializadas. El disparador de esta última era `paths: supabase/migrations/**` y
+eso dejaba una ventana ciega: la BD cambia cuando se APLICA la migración, no
+cuando se mergea el archivo, así que un PR posterior que no tocaba migraciones
+nunca volvía a probar el esquema nuevo.
+
+Si cambias el matcher de `src/proxy.ts`, actualiza `tests/auth/middleware-matcher.test.ts` en el mismo commit: refleja el literal.
+
+**Importación CSV/XLSX** (`leads/new`): columnas `firstName`, `lastName`, `email`, `phone`, `language`, `agentId`, `sourceType`, `lender`, `notes`; máximo 500 filas; las líneas con `#` se saltan; escritura transaccional con rollback en fallo parcial.
 
 ---
 
-## Design System — CRM (dark)
+## Columnas de la base en el código
 
-All components must use CSS variables. **Never hardcode hex colors.**
+**Tras cualquier migración que cambie columnas, regenera los tipos.** `npm run types:db` los saca de producción y `npm run types:db:sandbox` del sandbox — usa el proyecto donde ya esté aplicada la migración, o `database.types.ts` no reflejará las columnas nuevas. Ese archivo es el espejo del esquema real.
 
-Tokens are defined in `src/app/globals.css` under `:root` and mapped to Tailwind via `@theme inline`. Available tokens cover backgrounds (`--bg-base`, `--bg-surface`, `--bg-elevated`, `--bg-overlay`), text (`--text-primary`, `--text-secondary`, `--text-muted`), accents (`--accent-gold`, `--accent-gold-dim`, `--accent-blue`, `--accent-teal`, `--accent-coral`, `--accent-pink`, `--accent-green`), borders, and per-status colors. Read `globals.css` before adding a new token — extend, don't duplicate.
+**Toda lista de columnas de un `.select()` se arma con `columns()`** (`src/lib/supabase/columns.ts`), nunca con un string suelto:
 
-- Typography: Inter (300/400/500/600). Base size 14px.
-- Radii: cards 12px, inputs/buttons 8px, badges 4–6px, avatars 50%.
+```ts
+const LIST_COLUMNS = columns('leads_list', ['id', 'stage', 'urgency_rank'])
+```
 
----
+Un nombre que no exista en esa tabla o vista es error de `tsc`, señalando el literal exacto.
 
-## Component Patterns
+Por qué así y no tipando el cliente: `createClient<Database>` codifica el fallo en el **tipo del resultado** (`SelectQueryError<"column ... does not exist">`), así que sólo salta si ese resultado se asigna a algo tipado — y aquí casi todos los resultados se castean a `any` porque el cliente no está tipado. Se comprobó: con el cliente tipado, pedir una columna inexistente **compilaba igual**. `columns()` valida la lista como dato, un paso antes, y el cast posterior ya no puede esconder nada.
 
-### Server vs Client — default Server
-
-Add `'use client'` only when the component uses:
-- React hooks (`useState`, `useEffect`, `useRef`, etc.)
-- `recharts`
-- `useRouter`, `useParams`, `useSearchParams`
-
-**Never import `recharts` in a Server Component.** Use the existing pattern: server page computes data → passes typed props to a `'use client'` chart wrapper under `analytics/charts/`.
-
-### Tabs / interactive islands in Server pages
-
-Extract only the interactive state into a minimal `'use client'` component. Pass the pre-rendered Server content as props or children. See `lead-magnets/lm-tabs.tsx` for the canonical pattern.
-
-### Hover interactions
-
-CSS class + inline `<style>` tag at the top of the component. Pattern used throughout the codebase. Don't reach for `:hover` arbitrary-value Tailwind utilities when the existing pattern works.
-
-### Forms & Server Actions
-
-- Define the action in the same file as the component (`'use server'` inline) for simple forms.
-- For reusable mutations, put them in `src/lib/data/<entity>.ts` and import.
-- Always validate input with a schema (`zod`) before hitting the database.
-- Always return typed `{ ok: true, data }` or `{ ok: false, error }` shapes from actions, never throw to the client.
+Esto existe porque la migración 082 quitó `attention_when` de `leads_list`, el `.select()` siguió pidiéndola y `/leads` dejó de cargar en producción. Ni `tsc` ni los tests (que mockean el cliente) podían verlo.
 
 ---
 
-## Tenant Data — A&J Real Estate Group
+## Antes de tocar cada dominio
 
-| Agent ID | Name | Specialty | Language | Accent color | Role |
-|---|---|---|---|---|---|
-| `agent-adriana` | Adriana Melendez | hispanic | es | `#5B8EC9` (blue) | **Login user** for the tenant — email: `adrysofirealestate@gmail.com` |
-| `agent-john` | John Leonard | military | en | `#5AAFA0` (teal) | Team member, no login |
-| `agent-melanie` | Melanie Valencia | first_buyer | es | `#C97B6B` (coral) | Team member, no login |
-| `agent-viviane` | Viviane Chiu | brazilian | pt | `#B87BA3` (pink) | Team member, no login |
-
-Agent accent color is used for avatar backgrounds at 15% opacity (`${color}26`).
-
-**Language auto-routing for new leads** (preserved from Phase 1): `es → agent-adriana`, `en → agent-john`, `pt → agent-viviane`. Melanie is a manual-assignment specialty.
-
-**Historical contacts:** the 114 real contacts migrated from A&J's HubSpot enter the system as `status = 'cerrado'` with `current_score = NULL` and `peak_score = NULL`. They are newsletter recipients, not active leads in the scoring funnel. If one of them generates a new engagement event (clicks the newsletter, fills a form, replies), the scoring system reactivates them: the event sets a new `peak_score`, and they re-enter the funnel at the appropriate status band.
-
----
-
-## CSV/XLSX Import (`leads/new`)
-
-Already implemented in Phase 1. Phase 2 must preserve the contract:
-
-- Columns: `firstName`, `lastName`, `email`, `phone`, `language`, `agentId`, `sourceType`, `lender`, `notes`.
-- Max 500 rows.
-- Comment lines starting with `#` are skipped in CSV.
-- `papaparse` for CSV, `xlsx` for XLSX.
-- In Phase 2, the import writes to the `leads` table inside a single transaction, with `tenant_id` derived from the authenticated user. Partial failures roll back.
-
----
-
-## Hard Rules — Never Cross These
-
-1. **Never commit directly to `main`.** Always a feature branch + PR. Branch naming: `phase2/<short-slug>`, `fix/<short-slug>`, `chore/<short-slug>`.
-2. **Never commit secrets.** No keys in code, no keys in `.env.example`. `.env.example` lists variable *names* only.
-3. **Never bypass RLS.** No `service_role` key in the browser. No code that fetches data without going through an authenticated Supabase client (server-side) or a server-side data function.
-4. **Never hardcode tenant data.** A&J's name, color, logo, slug, agents — all come from the database.
-5. **Never use AOS, jQuery, or any DOM-mutating library.** They break SSR.
-6. **Never run destructive operations without a plan.** `DROP TABLE`, `TRUNCATE`, `rm -rf`, mass deletes — describe what will happen first, get confirmation, then act.
-7. **Never copy a snippet from this CLAUDE.md as if it were code.** The file referenced is the source of truth.
-8. **Never expose internal IDs in URLs that don't need them.** Use slugs where the user-facing route benefits (e.g. `/lm/guia-familias-hispanas`); use IDs where uniqueness matters (e.g. `/leads/<uuid>`).
-9. **Never start a Phase 3+ feature** (email, WhatsApp, scoring) during Phase 2 unless explicitly asked.
-
----
-
-## Git & Commit Conventions
-
-- **Conventional Commits.** `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `perf:`, `test:`.
-- Commit messages are imperative, present tense, lowercase first word after the type. Subject line ≤ 72 chars.
-- A commit corresponds to one logical change. Don't bundle a refactor with a feature.
-- PR descriptions list: what changed, why, what to verify manually.
-- Before opening a PR: `npm run build` must succeed, `npm run lint` must be clean.
-
----
-
-## Brand Voice for User-Facing Copy
-
-When generating any string that the client will see — page copy, form labels, email bodies, empty states, error messages — apply these rules:
-
-- **Language:** Spanish neutro latino. No regional idioms. No "vosotros". No "tío".
-- **Money words:** always `"inversión"`. Never `"costo"`, `"precio"`, `"pago"`, `"cargo"`.
-- **Tone:** premium, strategic, calm. Specific over generic. Numbers when possible. No marketing fluff. No emojis in product surfaces.
-- **Per-tenant tone overrides:** Some tenants may need a Spain-Spanish dialect (e.g. TECNOCASA Barcelona will use `vosotros`). Tenant-specific tone is configured on the `tenants` row, not in shared code.
-- **Empty states are not jokes.** "No hay leads todavía" is fine. "¡Vacío! 😅" is not.
-
----
-
-## Files To Read Before Acting
-
-Read these *before* writing code that touches their domain:
-
-| If you're working on… | Read first |
+| Si trabajas en… | Consulta primero |
 |---|---|
-| Anything that uses leads, agents, sources, lead magnets | `src/lib/types.ts`, `src/lib/mockdata.ts` |
-| Anything that touches scoring, status auto-transitions, or notifications | The "Lead Scoring Model" section above, then the scoring migration files in `supabase/migrations/` |
-| Anything in `(dashboard)` | `src/app/globals.css` (design tokens), the closest existing page |
-| A new chart | An existing chart under `analytics/charts/` |
-| Auth or middleware | Supabase SSR docs at https://supabase.com/docs/guides/auth/server-side/nextjs |
-| Migrations or RLS | The most recent migration file in `supabase/migrations/` |
-| Routing, layouts, or server actions | The Next.js 16 guide in `node_modules/next/dist/docs/` |
+| Cualquier cosa | `graphify query "<pregunta>"` |
+| Cualquier dato de la BD | El MCP de Supabase — nunca este archivo. **Sandbox por defecto**; producción sólo si hace falta de verdad |
+| Probar algo en el navegador | El sandbox y `/api/dev/login` — ver la sección de entornos |
+| Leads, agentes, canales, lead magnets | `src/lib/types.ts`, `src/lib/config.ts`, el `src/lib/data/*.ts` correspondiente |
+| Planes, precios, límites, trial | `src/lib/plans.ts` (fuente de verdad), `src/lib/subscriptions.ts` |
+| Perfil de negocio del tenant | `src/lib/business/profile.ts` (puro) + `src/lib/data/business-profile.ts` |
+| Scoring, transiciones de estado, notificaciones | La tabla `lead_score_rules` vía MCP + `src/lib/scoring/` |
+| Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
+| Newsletters | `src/lib/newsletters/*`, `src/lib/data/newsletters.ts`, `src/lib/data/newsletter-stats.ts` |
+| Auth o el proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs de Supabase SSR |
+| Migraciones o RLS | La migración más reciente en `supabase/migrations/` |
+| Un `.select()` con lista de columnas | `columns()` de `src/lib/supabase/columns.ts` |
+| Routing, layouts, server actions | La guía de Next.js 16 en `node_modules/next/dist/docs/` |
+| Landing o páginas legales | `src/app/(marketing)/`, `src/components/motion/README.md` |
+| Un gráfico nuevo | Un gráfico existente en `analytics/charts/` |
 
 ---
 
-## Roadmap (informational — do not start without explicit instruction)
+## graphify
 
-| Phase | Scope | Status |
-|---|---|---|
-| **Phase 1** | Static UI mockup with `mockdata.ts` (75 leads, 4 agents, all CRM pages) | ✅ Shipped |
-| **Phase 2** | Funnel cleanup; Supabase Auth (Magic Link) + DB + RLS + Realtime; scoring tables + triggers + hourly decay cron; A&J seed (1 login per tenant); HubSpot 114-contact migration as `cerrado`/no-score | 🚧 **Active** |
-| Phase 3 | Resend + React Email; webhook receivers fire scoring events; per-agent sequences; ManyChat webhook receiver replaces manual import | ⏳ |
-| Phase 4 | Meta WhatsApp Cloud API; same triggers as email; notifications to Adriana fan out to WhatsApp | ⏳ |
-| Phase 5 | Velocity multiplier; quarterly reactivation campaigns; lead-magnet CRUD UI; per-tenant scoring rule overrides if any tenant requests them; analytics deep-dive | ⏳ |
+Este proyecto tiene un grafo de conocimiento en `graphify-out/` con god nodes, comunidades y relaciones entre archivos.
 
----
-
-## Glossary
-
-| Term | Definition |
-|---|---|
-| **Tenant** | One ITMANO client (e.g. A&J Real Estate Group). Owns a `tenants` row, has 1 login user, has many agents/leads/lead_magnets. |
-| **Agent** | A team member of a tenant. May or may not have login access. Tracked for lead assignment, language routing, per-agent metrics, accent color. |
-| **Lead** | A prospective home buyer or seller. Lives under one tenant, assigned to one agent, has a status in the pipeline flow, a source, a `peak_score`, a `current_score`, and a history of events. |
-| **Lead magnet** | A free downloadable resource (guide, checklist) produced by an agent to capture leads. The CRM tracks downloads, per-agent ownership, and conversions. Landing pages live outside this app (on the client's website). |
-| **Pipeline** | The visual representation of leads grouped by status: `nuevo` → `nurturing` → `tibio` → `caliente` → `en_proceso` → `proceso_completado` → `cerrado` \| `perdido`. The first four bands are score-driven and automatic; the last four are agent-driven and freeze the score. |
-| **Peak score** | The highest score the lead has reached since its last engagement event. Set by `lead_events` deltas. Capped 0–100. |
-| **Current score** | What the UI shows. Equal to `peak_score` for 14 days after the last event, then decays via the half-life formula. The status band is derived from this value. |
-| **Lead event** | Any tracked action by or about a lead: form submitted, email clicked, consultation scheduled, replied, unsubscribed, etc. Append-only in `lead_events`. Each event has a `dedup_key` to prevent inflation from forwards/retries. |
-| **Source** | Where a lead came from: `event`, `contact_form_question`, `contact_form_basic`, `manychat`, `lead_magnet`, `manual_active`, `manual_closed`. Determines the baseline score on lead creation. |
-| **Status band** | One of the four score-driven statuses (`nuevo`, `nurturing`, `tibio`, `caliente`). Transitions happen automatically when `current_score` crosses a boundary. |
-| **Frozen score** | When a lead enters `en_proceso`, `proceso_completado`, `cerrado`, or `perdido`, scoring stops. A new engagement event can unfreeze and reactivate. |
-| **Notification** | An in-app alert (and email backup) sent to the tenant's login user. Fires on score ≥80 rising edge, or on any new `contact_form_question` event. |
-| **Purchase process** | An active home-buying engagement started when a lead moves to `en_proceso`. Tracks property address, loan type, estimated close date. |
-| **CRM** | The internal dashboard the tenant logs in to use. |
-| **Super admin** | ITMANO-internal role. Bypasses tenant filtering. Used by Dylan only. Email: `dj.vergara@hotmail.com`. |
-| **Agent owner** | The tenant's single login user. Sees only their tenant's data. |
-
----
+- Para preguntas sobre el código, **usa `graphify query "<pregunta>"` primero**. Para relaciones, `graphify path "<A>" "<B>"`; para un concepto puntual, `graphify explain "<concepto>"`. Devuelven un subgrafo acotado, mucho más barato que `GRAPH_REPORT.md` o que un grep crudo.
+- Lee `graphify-out/GRAPH_REPORT.md` solo para revisión arquitectónica amplia, o cuando query/path/explain no alcancen.
+- Tras modificar código, `graphify update .` mantiene el grafo al día (solo AST, sin costo de API).
+- El hook post-commit ya lo actualiza en cada commit; el grafo cubre estructura, ubicaciones y dependencias — por eso este archivo **no** repite el árbol del repo.

@@ -17,15 +17,17 @@ const mockCtx = getCurrentTenantContext as unknown as ReturnType<typeof vi.fn>
 function asRole(role: TenantContext['role']) {
   mockCtx.mockResolvedValue({
     user_id:   'u-test',
+    email:     'u-test@test.itmano.com',
     role,
     tenant_id: role === 'super_admin' ? null : 'tenant-x',
     agent_id:  role === 'agent' ? 'agent-self' : null,
+    acting_as_tenant: false,
   } satisfies TenantContext)
 }
 
 const validAgent = {
   name: 'John Leonard', email: 'john@example.com', language: 'en',
-  specialty: 'military', avatarInitials: 'JL', accentColor: '#5AAFA0',
+  avatarInitials: 'JL', accentColor: '#5AAFA0',
 }
 
 beforeEach(() => mockCtx.mockReset())
@@ -65,13 +67,16 @@ describe('createAgent — validation (owner, before DB)', () => {
 
   it('rejects an invalid language', async () => {
     asRole('agent_owner')
-    const res = await createAgent({ ...validAgent, language: 'fr' })
+    const res = await createAgent({ ...validAgent, language: 'xx' })
     expect(res.ok).toBe(false)
   })
 
-  it('rejects an invalid specialty', async () => {
-    asRole('agent_owner')
-    const res = await createAgent({ ...validAgent, specialty: 'luxury' })
+  it('accepts an expanded language (fr)', async () => {
+    // 'fr' es válido desde la migración 062 (set de idiomas ampliado). Este caso
+    // pasa la validación zod; la creación real toca DB (no en este mock), así que
+    // solo verificamos que NO lo rechace por idioma inválido.
+    asRole('agent')  // el rol agent se rechaza por permisos, no por idioma
+    const res = await createAgent({ ...validAgent, language: 'fr' })
     expect(res.ok).toBe(false)
   })
 

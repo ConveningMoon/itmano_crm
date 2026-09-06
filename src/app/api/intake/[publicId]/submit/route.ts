@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
-import { normalizeIntent, extractFitDimensions } from '@/lib/services/intake-fit'
+import { normalizeIntent, extractFitDimensions, extractBudgetAmount, DERIVED_KEYS } from '@/lib/services/intake-fit'
+import { getBusinessProfile } from '@/lib/data/business-profile'
 import { emitFormBaselineOnce } from '@/lib/services/emit-form-baseline'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import { resolveChannelAgent } from '@/lib/services/route-channel-agent'
+import { assessLeadFit } from '@/lib/services/ai-lead-fit'
+import {
+  shouldAssessFit, subscriberMetadata, mergeSubmissionMetadata, graduateSubscriber,
+  hasSubscriberMark, withNewsletterConsent,
+} from '@/lib/newsletters/subscriber'
 
 export function OPTIONS() {
   return corsOptions()
@@ -35,6 +43,8 @@ const SubmitSchema = z.object({
   form_answers: z.array(FormAnswerSchema).max(50).optional(),
   intent:       z.string().max(40).optional(), // buyer/seller path — drives fit extraction
   source_url:   z.string().max(2048).optional(),
+  consent_text: z.string().max(2000).optional(), // prueba del consentimiento — obligatoria si el canal es newsletter
+  edition_id:   z.string().uuid().optional(), // desde qué edición se suscribió (sólo canal newsletter)
   website:      z.string().optional(), // honeypot — must be empty
 })
 
@@ -75,6 +85,33 @@ async function countDistinctLeadMagnetSubmissions(
     .in('id', channelIds)
     .eq('channel_type', 'lead_magnet')
   return (lm ?? []).length
+}
+
+const EDITION_ID_COLUMNS = columns('newsletter_editions', ['id'])
+
+/**
+ * Valida el `edition_id` que manda el formulario de suscripción antes de
+ * guardarlo: llega del cliente, así que hay que comprobar que la edición
+ * existe, es del MISMO tenant y cuelga del MISMO canal que este envío —
+ * nunca confiar en que el front no lo manipuló. Si no cuadra, devuelve
+ * `null` en vez de rechazar el envío: perder la atribución a la edición es
+ * preferible a perder al suscriptor.
+ */
+async function resolveSubscriptionEditionId(
+  db: ReturnType<typeof createAdminClient>,
+  tenantId:  string,
+  channelId: string,
+  editionId: string | undefined,
+): Promise<string | null> {
+  if (!editionId) return null
+  const { data } = await db
+    .from('newsletter_editions')
+    .select(EDITION_ID_COLUMNS)
+    .eq('id', editionId)
+    .eq('tenant_id', tenantId)
+    .eq('channel_id', channelId)
+    .maybeSingle()
+  return data ? editionId : null
 }
 
 function ok(extra?: Record<string, unknown>): NextResponse {
@@ -154,6 +191,14 @@ export async function POST(
   const tenantId   = channelRow.tenant_id as string
   const channelId  = channelRow.id as string
   const channelName = channelRow.name as string
+  const channelType = channelRow.channel_type as string
+
+  // Sin prueba de consentimiento no se guarda un suscriptor de newsletter: el
+  // RGPD no exige doble opt-in, pero sí exige poder demostrarlo (art. 7.1), y
+  // eso no se puede añadir retroactivamente a una lista ya capturada.
+  if (channelType === 'newsletter' && !parsed.consent_text) {
+    return err('Falta el consentimiento', 400)
+  }
 
   // Resolve agent — channel.agent_id (explicit) or round-robin ("Toda la agencia").
   // Language is NO LONGER a routing criterion. See route-channel-agent.ts.
@@ -168,14 +213,25 @@ export async function POST(
 
   const { data: existingLead } = await db
     .from('leads')
-    .select('id, status, first_name, last_name, phone, language, fit_profile, metadata')
+    .select('id, stage, first_name, last_name, phone, language, fit_profile, metadata')
     .eq('tenant_id', tenantId)
     .eq('email', parsed.email)
     .maybeSingle()
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existingLeadAny = existingLead as any
+
   let leadId: string
   let duplicate = false
   const fullName = `${parsed.first_name} ${parsed.last_name}`.trim() || 'Lead'
+
+  // Vista LOCAL de lo que quedará en `leads.metadata` tras esta request.
+  // Arranca en lo ya leído (o null, si el lead es nuevo) y cada rama de abajo
+  // la actualiza — el insert de un suscriptor nuevo ESCRIBE la marca, la
+  // graduación de uno existente la QUITA — para que FASE 1, más adelante en
+  // esta misma request, nunca fusione metadata sobre un valor desactualizado
+  // y resucite (o pierda) `newsletter_subscriber`.
+  let leadMetadata = (existingLeadAny?.metadata ?? null) as Record<string, unknown> | null
 
   if (existingLead) {
     duplicate = true
@@ -183,12 +239,39 @@ export async function POST(
     const existing = existingLead as any
     leadId = existing.id as string
 
+    // Graduación: si este lead YA venía marcado como suscriptor de newsletter
+    // y llega ahora por un canal que NO es newsletter, acaba de mostrar
+    // intención real — deja de ser sólo un lector (migración 106). El guard
+    // sobre `leadMetadata` evita el SELECT por PK de graduateSubscriber cuando
+    // ya sabemos, con el metadata que acabamos de leer, que no hay marca.
+    if (channelType !== 'newsletter' && hasSubscriberMark(leadMetadata)) {
+      await graduateSubscriber(db, leadId)
+      const stripped = { ...leadMetadata }
+      delete stripped.newsletter_subscriber
+      leadMetadata = stripped
+    }
+
+    // Consentimiento de un lead que YA existía. No recibe la marca de
+    // procedencia (un email con historial previo no es sólo un lector), pero sí
+    // acaba de consentir: la PRUEBA se guarda igual, en su propia clave. El
+    // RGPD art. 7.1 exige poder demostrarlo y eso no se puede añadir
+    // retroactivamente a una lista ya capturada (spec §7).
+    if (channelType === 'newsletter') {
+      leadMetadata = withNewsletterConsent(leadMetadata, {
+        consentText: parsed.consent_text as string,
+        sourceUrl:   parsed.source_url ?? '',
+      })
+    }
+
     // a) Merge non-empty changed fields
-    const updates: Record<string, string> = {}
+    const updates: Record<string, unknown> = {}
     if (parsed.first_name && parsed.first_name !== existing.first_name) updates.first_name = parsed.first_name
     if (parsed.last_name  && parsed.last_name  !== existing.last_name)  updates.last_name  = parsed.last_name
     if (parsed.phone      && parsed.phone      !== existing.phone)      updates.phone      = parsed.phone
     if (parsed.language   && parsed.language   !== existing.language)   updates.language   = parsed.language
+    // La graduación ya escribió su propio UPDATE; aquí sólo viaja el metadata
+    // cuando esta misma request lo cambió por el consentimiento.
+    if (channelType === 'newsletter') updates.metadata = leadMetadata
 
     if (Object.keys(updates).length > 0) {
       await db.from('leads').update(updates).eq('id', leadId)
@@ -215,6 +298,19 @@ export async function POST(
     leadId         = crypto.randomUUID()
     const utms     = parsed.utms
 
+    // Un suscriptor de newsletter es un LECTOR, no un prospecto: la marca lo
+    // saca del cálculo de quintiles (migración 106) y evita gastar IA
+    // analizando un fit_profile vacío (ver shouldAssessFit más abajo). Se
+    // guarda también en `leadMetadata` — no sólo en el insert — porque este
+    // lead es nuevo: no hay fila previa que FASE 1 pueda leer más abajo si
+    // este mismo envío también trae `intent` o `budget_amount`.
+    if (channelType === 'newsletter') {
+      const editionId = await resolveSubscriptionEditionId(db, tenantId, channelId, parsed.edition_id)
+      leadMetadata = subscriberMetadata({
+        channelId, consentText: parsed.consent_text as string, sourceUrl: parsed.source_url ?? '', editionId,
+      })
+    }
+
     const { error: leadError } = await db.from('leads').insert({
       id:                   leadId,
       tenant_id:            tenantId,
@@ -224,7 +320,7 @@ export async function POST(
       email:                parsed.email,
       phone:                parsed.phone ?? null,
       language:             parsed.language,
-      status:               'new',
+      stage:                'nuevo',
       acquisition_channel_id: channelId,
       traffic_source:       resolveTrafficSource(utms),
       traffic_source_detail: Object.keys(utms).length > 0 ? utms : null,
@@ -232,6 +328,7 @@ export async function POST(
       current_score:        0,
       // quiz_answers is no longer persisted to metadata — answers now live in
       // form_submissions (see CLAUDE.md → answers contract).
+      ...(leadMetadata ? { metadata: leadMetadata } : {}),
     })
 
     if (leadError) {
@@ -262,6 +359,7 @@ export async function POST(
         tenant_id: tenantId,
         type:      'contact_form_question',
         lead_id:   leadId,
+        agent_id:  agentId,
         message:   question,
       })
       if (notifError) {
@@ -270,23 +368,44 @@ export async function POST(
     }
   }
 
-  const channelType = channelRow.channel_type as string
-
   // ── FASE 1: merge fit dimensions (latest-wins) + record intent ────────────────
   // Recognized fit answers update leads.fit_profile, overwriting only the dimensions
   // present in this submission and preserving the rest. The intent is stored on
   // leads.metadata for routing/display. recompute_lead_score (at the end) folds
   // fit_profile into the score. Runs for every channel_type that sends form_answers.
   const intent  = normalizeIntent(parsed.intent)
-  const fitDims = extractFitDimensions(intent, parsed.form_answers)
-  if (Object.keys(fitDims).length > 0 || intent) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const existing       = existingLead as any
-    const currentProfile = (existing?.fit_profile ?? {}) as Record<string, unknown>
-    const currentMeta    = (existing?.metadata ?? {}) as Record<string, unknown>
+
+  // El perfil del tenant sólo hace falta para clasificar datos crudos
+  // (budget_amount, area). Se pide únicamente si el envío trae alguno: la
+  // inmensa mayoría de formularios manda códigos y no debe pagar un viaje extra
+  // a la base por un dato que no usa.
+  const traeDatoCrudo = (parsed.form_answers ?? []).some(a => a.key in DERIVED_KEYS)
+  const profile = traeDatoCrudo ? await getBusinessProfile(tenantId) : undefined
+
+  const fitDims      = extractFitDimensions(intent, parsed.form_answers, profile)
+  const budgetAmount = extractBudgetAmount(parsed.form_answers)
+  // El fit_profile efectivo del lead tras este envío — lo que ya tenía más lo
+  // que aporta esta sumisión. shouldAssessFit lo usa más abajo para decidir si
+  // vale la pena gastar IA analizándolo.
+  let fitProfile = (existingLeadAny?.fit_profile ?? null) as Record<string, unknown> | null
+  if (Object.keys(fitDims).length > 0 || intent || budgetAmount !== null) {
+    const currentProfile = (fitProfile ?? {}) as Record<string, unknown>
     const leadUpdate: Record<string, unknown> = {}
-    if (Object.keys(fitDims).length > 0) leadUpdate.fit_profile = { ...currentProfile, ...fitDims }
-    if (intent)                          leadUpdate.metadata    = { ...currentMeta, intent }
+    if (Object.keys(fitDims).length > 0) {
+      fitProfile = { ...currentProfile, ...fitDims }
+      leadUpdate.fit_profile = fitProfile
+    }
+    // El monto crudo se guarda además del bucket: el bucket dice en qué rango
+    // cae, el monto es lo que la comisión necesita para valer algo.
+    //
+    // `leadMetadata` (NO `existingLead.metadata`) es la base de la fusión: para
+    // un lead nuevo `existingLead` es null, y `leadMetadata` es lo único que
+    // sabe que este mismo insert acaba de escribir la marca de suscriptor (o
+    // que la graduación de arriba la acaba de quitar). Ver mergeSubmissionMetadata.
+    if (intent || budgetAmount !== null) {
+      leadMetadata = mergeSubmissionMetadata(leadMetadata, { intent, budgetAmount })
+      leadUpdate.metadata = leadMetadata
+    }
     const { error: fitErr } = await db.from('leads').update(leadUpdate).eq('id', leadId)
     if (fitErr) {
       console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'fit_profile_update_failed', detail: fitErr.message }))
@@ -384,6 +503,7 @@ export async function POST(
         // Telegram notification (unchanged).
         const { error: evNotifError } = await db.from('notifications').insert({
           tenant_id: tenantId, type: 'event_submission', lead_id: leadId,
+          agent_id:  agentId,
           message: `${fullName} se registró en ${channelName}`,
         })
         if (evNotifError) {
@@ -405,10 +525,23 @@ export async function POST(
   // ── FASE 3: recompute score from fit_profile + events (idempotent) ────────────
   // Engagement-event inserts above already trigger recompute, but this final call
   // also covers fit-only submissions (no event fired) and guarantees a consistent end
-  // state. recompute_lead_score is a no-op for frozen (post-funnel) leads.
+  // state. Desde la 082 recompute_lead_score ya no se salta ningun lead.
   const { error: recomputeErr } = await db.rpc('recompute_lead_score', { p_lead_id: leadId })
   if (recomputeErr) {
     console.error(JSON.stringify({ service: 'intake-submit', public_id: publicId, lead_id: leadId, error: 'recompute_failed', detail: recomputeErr.message }))
+  }
+
+  // ── FASE FIT-IA (opcional, apagado por defecto) ───────────────────────────────
+  // Si el tenant tiene el análisis con IA activado, reinterpreta el fit_profile con
+  // contexto de mercado tras responder. Fire-and-forget con after(): no bloquea la
+  // respuesta al visitante y el servicio verifica el toggle + presupuesto + clave.
+  // Sin fit que analizar no se gasta IA. Ver shouldAssessFit: la newsletter
+  // entra siempre por aquí. La graduación (quitar la marca de suscriptor) es
+  // un mecanismo APARTE — graduateSubscriber, llamado arriba y desde el
+  // webhook de respuestas de email — porque assessLeadFit sólo reinterpreta
+  // fit_profile y nunca toca metadata.
+  if (shouldAssessFit(channelType, fitProfile)) {
+    after(() => assessLeadFit({ leadId, tenantId, reason: 'form_submit' }))
   }
 
   console.log(JSON.stringify({

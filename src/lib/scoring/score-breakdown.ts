@@ -12,7 +12,6 @@ export interface ScoreBreakdown {
   engagement:    { total: number }
   manual:        { total: number }
   total:         number   // = current_score
-  frozen:        boolean
   hasFitProfile: boolean
 }
 
@@ -26,7 +25,6 @@ export function buildScoreBreakdown(args: {
   engagementScore: number
   manualScore:     number
   currentScore:    number
-  frozen:          boolean
   rules:           ScoreRule[]
 }): ScoreBreakdown {
   const fitRules = args.rules.filter(r => r.category === 'fit' && r.isActive)
@@ -45,7 +43,6 @@ export function buildScoreBreakdown(args: {
     engagement:    { total: args.engagementScore },
     manual:        { total: args.manualScore },
     total:         args.currentScore,
-    frozen:        args.frozen,
     hasFitProfile: Object.keys(profile).length > 0,
   }
 }

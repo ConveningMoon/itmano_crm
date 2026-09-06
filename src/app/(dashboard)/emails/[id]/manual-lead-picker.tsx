@@ -1,35 +1,64 @@
 'use client'
 
-import { useState, useMemo, useTransition } from 'react'
+import { useState, useEffect, useRef, useTransition, useCallback } from 'react'
 import { Search, X, UserPlus } from 'lucide-react'
-import { addLeadsToSequence } from '../actions'
+import { addLeadsToSequence, searchEligibleLeads } from '../actions'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import { STAGE_CONFIG, type Stage } from '@/lib/scoring/priority'
+import type { EligibleLead, EligibleLeadsResult } from '@/lib/data/leads'
+import type { Language } from '@/lib/types'
 
-export interface PickerLead {
-  id:        string
-  firstName: string
-  lastName:  string
-  email:     string
-}
+export type PickerLead = EligibleLead
 
 interface Props {
   sequenceId: string
-  leads:      PickerLead[]
+  // Primera página de elegibles resuelta en el servidor. La búsqueda y los
+  // filtros vuelven al servidor: la lista completa nunca viaja al navegador.
+  initial:    EligibleLeadsResult
+  agents:     Array<{ id: string; name: string }>
 }
 
-export function ManualLeadPicker({ sequenceId, leads }: Props) {
+const SELECT_STYLE: React.CSSProperties = {
+  background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
+  borderRadius: '8px', padding: '6px 10px', color: 'var(--text-primary)',
+  fontSize: '12px', cursor: 'pointer', outline: 'none',
+}
+
+export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
   const [search,   setSearch]   = useState('')
+  const [fStage,   setFStage]   = useState<string>('all')
+  const [fAgent,   setFAgent]   = useState<string>('all')
+  const [fLang,    setFLang]    = useState<string>('all')
+  const [result,   setResult]   = useState<EligibleLeadsResult>(initial)
+  const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [toast,    setToast]    = useState<string | null>(null)
   const [pending,  start]       = useTransition()
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return leads.filter(l =>
-      q === '' ||
-      `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
-      l.email.toLowerCase().includes(q)
-    )
-  }, [leads, search])
+  const leads = result.items
+  const agentName = (id: string | null) => (id ? agents.find(a => a.id === id)?.name ?? null : null)
+
+  const runSearch = useCallback(async () => {
+    setLoading(true)
+    const res = await searchEligibleLeads({
+      sequenceId,
+      q:        search   || undefined,
+      stage:    fStage   !== 'all' ? fStage  : undefined,
+      agentId:  fAgent   !== 'all' ? fAgent  : undefined,
+      language: fLang    !== 'all' ? fLang   : undefined,
+    })
+    setLoading(false)
+    if (res.ok) setResult(res.data)
+    else setToast(`Error: ${res.error}`)
+  }, [sequenceId, search, fStage, fAgent, fLang])
+
+  // La primera página ya viene del servidor: sólo se consulta al cambiar algo.
+  const firstRun = useRef(true)
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return }
+    const t = setTimeout(() => { void runSearch() }, 300)
+    return () => clearTimeout(t)
+  }, [runSearch])
 
   function toggle(id: string) {
     setSelected(prev => {
@@ -40,7 +69,7 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
   }
 
   function toggleAll() {
-    const visibleIds = filtered.map(l => l.id)
+    const visibleIds = leads.map(l => l.id)
     const allSelected = visibleIds.every(id => selected.has(id))
     setSelected(prev => {
       const next = new Set(prev)
@@ -69,10 +98,12 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
       if (errors.length > 0) parts.push(`${errors.length} error${errors.length > 1 ? 'es' : ''}`)
       setToast(parts.join(' · '))
       setSelected(new Set())
+      // Los recién inscritos ya no son elegibles: se recarga la lista.
+      await runSearch()
     })
   }
 
-  const visibleIds  = filtered.map(l => l.id)
+  const visibleIds  = leads.map(l => l.id)
   const allChecked  = visibleIds.length > 0 && visibleIds.every(id => selected.has(id))
   const someChecked = visibleIds.some(id => selected.has(id)) && !allChecked
 
@@ -109,10 +140,46 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
         )}
       </div>
 
+      {/* Filtros — permiten seleccionar grupos (p. ej. todos los "tibio" de un agente) */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+        <select value={fStage} onChange={e => setFStage(e.target.value)} style={SELECT_STYLE}>
+          <option value="all">Todas las etapas</option>
+          {result.stages.map(s => (
+            <option key={s} value={s}>{STAGE_CONFIG[s as Stage]?.label ?? s}</option>
+          ))}
+        </select>
+
+        {agents.length > 0 && (
+          <select value={fAgent} onChange={e => setFAgent(e.target.value)} style={SELECT_STYLE}>
+            <option value="all">Todos los agentes</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
+
+        {result.languages.length > 1 && (
+          <select value={fLang} onChange={e => setFLang(e.target.value)} style={SELECT_STYLE}>
+            <option value="all">Todos los idiomas</option>
+            {result.languages.map(l => (
+              <option key={l} value={l}>{LANGUAGE_CONFIG[l as Language]?.label ?? l}</option>
+            ))}
+          </select>
+        )}
+
+        {(fStage !== 'all' || fAgent !== 'all' || fLang !== 'all') && (
+          <button
+            onClick={() => { setFStage('all'); setFAgent('all'); setFLang('all') }}
+            style={{ ...SELECT_STYLE, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <X size={11} /> Limpiar filtros
+          </button>
+        )}
+      </div>
+
       {/* Lead list */}
       <div style={{
         background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
         borderRadius: '8px', overflow: 'hidden', maxHeight: '320px', overflowY: 'auto',
+        opacity: loading ? 0.6 : 1, transition: 'opacity var(--dur-fast)',
       }}>
         {/* Header row with select-all */}
         <div style={{
@@ -128,16 +195,17 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
             style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
           />
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
-            {filtered.length} leads disponibles
+            {result.matched} leads disponibles
+            {result.matched > leads.length ? ` · mostrando ${leads.length}` : ''}
           </span>
         </div>
 
-        {filtered.length === 0 ? (
+        {leads.length === 0 ? (
           <div style={{ padding: '24px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
             No se encontraron leads
           </div>
         ) : (
-          filtered.map(lead => (
+          leads.map(lead => (
             <label
               key={lead.id}
               className="picker-row"
@@ -159,9 +227,19 @@ export function ManualLeadPicker({ sequenceId, leads }: Props) {
                   {lead.firstName} {lead.lastName}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {lead.email}
+                  {lead.email}{agentName(lead.agentId) ? ` · ${agentName(lead.agentId)}` : ''}
                 </div>
               </div>
+              {STAGE_CONFIG[lead.stage] && (
+                <span style={{
+                  flexShrink: 0, fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+                  letterSpacing: '0.04em',
+                  color: STAGE_CONFIG[lead.stage].color,
+                  background: STAGE_CONFIG[lead.stage].bg,
+                }}>
+                  {STAGE_CONFIG[lead.stage].label}
+                </span>
+              )}
             </label>
           ))
         )}

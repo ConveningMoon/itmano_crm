@@ -1,17 +1,14 @@
+import { Skeleton } from '@/components/ui/skeleton'
+
 export default function Loading() {
   return (
     <div style={{ maxWidth: '520px', paddingTop: '40px' }}>
       {[100, 200, 320, 240, 80].map((w, i) => (
-        <div
+        <Skeleton
           key={i}
-          style={{
-            height: i === 0 ? '28px' : i === 4 ? '36px' : '44px',
-            width: `${w}px`,
-            background: 'var(--bg-elevated)',
-            borderRadius: '8px',
-            marginBottom: i === 0 ? '28px' : '16px',
-            maxWidth: '100%',
-          }}
+          w={`${w}px`}
+          h={i === 0 ? 28 : i === 4 ? 36 : 44}
+          style={{ marginBottom: i === 0 ? '28px' : '16px', maxWidth: '100%' }}
         />
       ))}
     </div>

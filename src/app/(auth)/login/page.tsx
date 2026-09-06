@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, Suspense } from 'react'
+import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
+import { FadeIn } from '@/components/motion/primitives'
 import { createClient } from '@/lib/supabase/client'
 
 const COOLDOWN_SECONDS = 60
@@ -60,11 +62,18 @@ function LoginForm() {
     })
 
     if (authError) {
-      // With shouldCreateUser:false, an unregistered email returns an error.
-      // Show the friendly no-access message; rate limiting gets its own note.
-      setError(authError.status === 429
-        ? 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
-        : NO_ACCESS_MSG)
+      // Distinguir tres casos por el status del error:
+      //  429 → rate limit; 5xx → el envío del correo falló (p. ej. SMTP/dominio
+      //  no verificado en Resend) — NO es un problema de acceso; 4xx → la cuenta
+      //  no existe (shouldCreateUser:false), el mensaje de "sin acceso".
+      const status = authError.status ?? 0
+      setError(
+        status === 429
+          ? 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+          : status >= 500
+            ? 'No pudimos enviar el enlace de acceso en este momento. Es un problema temporal de nuestro servicio de correo — inténtalo de nuevo en unos minutos.'
+            : NO_ACCESS_MSG
+      )
       setLoading(false)
     } else {
       setLoading(false)
@@ -77,6 +86,10 @@ function LoginForm() {
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--bg-base)',
+        // Halo dorado apenas perceptible detrás de la composición
+        backgroundImage:
+          'radial-gradient(ellipse 620px 420px at 50% 28%, color-mix(in srgb, var(--accent-gold) 7%, transparent), transparent 70%)',
+        backgroundRepeat: 'no-repeat',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -85,25 +98,51 @@ function LoginForm() {
     >
       <div
         style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '28px',
           width: '100%',
           maxWidth: '380px',
+        }}
+      >
+        {/* Marca: la mano de ITMANO teñida al dorado del tema, flotando sobre la card */}
+        <FadeIn y={10}>
+          <Image
+            src="/itmano_logo.webp"
+            alt="ITMANO"
+            width={64}
+            height={64}
+            priority
+            className="img-tint-gold-glow"
+            style={{ display: 'block' }}
+          />
+        </FadeIn>
+
+      <FadeIn
+        y={12}
+        delay={0.08}
+        style={{
+          width: '100%',
           backgroundColor: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
+          borderTop: '1px solid var(--border-accent)',
           borderRadius: '16px',
           padding: '40px 32px',
           display: 'flex',
           flexDirection: 'column',
           gap: '24px',
+          boxShadow: 'var(--highlight-top), var(--shadow-lg)',
         }}
       >
-        {/* Logo */}
+        {/* Wordmark — el dorado vive en la mano y el CTA */}
         <div style={{ textAlign: 'center' }}>
           <div
             style={{
-              fontSize: '28px',
+              fontSize: '22px',
               fontWeight: '600',
-              letterSpacing: '0.08em',
-              color: 'var(--accent-gold)',
+              letterSpacing: '0.22em',
+              color: 'var(--text-primary)',
               marginBottom: '6px',
             }}
           >
@@ -149,6 +188,7 @@ function LoginForm() {
             <button
               onClick={handleSend}
               disabled={loading || cooldown > 0}
+              className={loading || cooldown > 0 ? undefined : 'btn-cta'}
               style={{
                 width: '100%',
                 padding: '11px',
@@ -160,9 +200,25 @@ function LoginForm() {
                 fontWeight: '600',
                 letterSpacing: '0.06em',
                 cursor: (loading || cooldown > 0) ? 'not-allowed' : 'pointer',
-                transition: 'background-color 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
               }}
             >
+              {loading && (
+                <span
+                  className="animate-spin"
+                  style={{
+                    width: '13px',
+                    height: '13px',
+                    borderRadius: '50%',
+                    border: '2px solid rgba(11,12,14,0.25)',
+                    borderTopColor: 'var(--bg-base)',
+                    flexShrink: 0,
+                  }}
+                />
+              )}
               {loading
                 ? 'Enviando...'
                 : cooldown > 0
@@ -181,6 +237,7 @@ function LoginForm() {
         <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
           ITMANO CRM
         </div>
+      </FadeIn>
       </div>
     </div>
   )
@@ -211,6 +268,6 @@ const inputStyle: React.CSSProperties = {
   backgroundColor: 'var(--bg-elevated)',
   color: 'var(--text-primary)',
   fontSize: '13px',
-  outline: 'none',
   boxSizing: 'border-box',
+  transition: 'border-color var(--dur-fast)',
 }

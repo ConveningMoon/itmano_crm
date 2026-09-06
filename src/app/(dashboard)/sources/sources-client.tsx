@@ -3,9 +3,21 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, Copy, Check, X, Trash2, AlertTriangle } from 'lucide-react'
+import { Plus, X, Trash2, AlertTriangle, ExternalLink } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
+import { resolveChannelPageUrl, type TenantPageInfo } from '@/lib/sources/page-link'
+import { STATUS_COPY, MEASUREMENT_COPY, type SourceHealth } from '@/lib/sources/health'
+
+const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', { fg: string; bg: string }> = {
+  ok:   { fg: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.12)' },
+  warn: { fg: 'var(--accent-gold)',   bg: 'rgba(201,169,110,0.14)' },
+  bad:  { fg: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.14)' },
+  mute: { fg: 'var(--text-muted)',    bg: 'var(--bg-overlay)' },
+}
 import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
+import { FormSection } from '@/components/ui/form-section'
+import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
+import { IntegrationPromptModal } from './integration-prompt-modal'
 
 type TabValue = ChannelType | 'all' | 'archived'
 
@@ -43,25 +55,109 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
   { value: 'archived',     label: 'Archivados' },
 ]
 
+// ─── Página de la fuente ──────────────────────────────────────────────────────
+
+// Aviso cuando la fuente todavía no tiene página. El camino para arreglarlo es
+// distinto según quién construye la página, así que el mensaje también.
+function NoPageModal({ channelName, managedByItmano, onClose }: {
+  channelName:     string
+  managedByItmano: boolean
+  onClose:         () => void
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+          borderRadius: '16px', width: '100%', maxWidth: '440px',
+        }}
+      >
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={16} style={{ color: 'var(--accent-gold)' }} />
+            Página sin configurar
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{channelName}</strong> todavía no tiene una página que abrir.
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            {managedByItmano
+              ? <>La página de esta fuente la conecta ITMANO, pero su link aún no está registrado. Abre la
+                  fuente, pulsa <strong style={{ color: 'var(--text-primary)' }}>Editar</strong> y pega el
+                  link en <strong style={{ color: 'var(--text-primary)' }}>Link de la página</strong>.</>
+              : <>Abre la fuente, entra a la sección <strong style={{ color: 'var(--text-primary)' }}>Página</strong> y
+                  configúrala. Cuando la publiques, este botón la abrirá directamente.</>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={BTN_PRIMARY}>Entendido</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Channel Card ─────────────────────────────────────────────────────────────
 
-function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
+function ChannelCard({ ch, index = 0, health, tenant }: {
+  ch: ChannelWithMetrics
+  index?: number
+  health?: SourceHealth
+  tenant?: TenantPageInfo
+}) {
+  const { navigate, pending: navPending } = useCardNavigation()
+  const [noPage, setNoPage] = useState(false)
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
+  const pageUrl   = resolveChannelPageUrl(ch, tenant)
+
+  // Atajo para no tener que entrar a la fuente y bajar al tab Página cada vez.
+  function openPage(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!pageUrl) { setNoPage(true); return }
+    window.open(pageUrl, '_blank', 'noopener,noreferrer')
+  }
 
   return (
     <div
       className="source-card"
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(`/sources/${ch.slug}`)}
+      onKeyDown={e => { if (e.key === 'Enter') navigate(`/sources/${ch.slug}`) }}
       style={{
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-subtle)',
         borderRadius: '16px',
         overflow: 'hidden',
+        cursor: 'pointer',
+        animationDelay: `${Math.min(index * 45, 360)}ms`,
         borderTop: `3px solid ${typeColor}`,
         display: 'flex',
         flexDirection: 'column',
       }}
     >
+      <NavLoadingOverlay show={navPending} />
+      {noPage && (
+        <NoPageModal
+          channelName={ch.name}
+          managedByItmano={tenant?.managedByItmano === true}
+          onClose={() => setNoPage(false)}
+        />
+      )}
       {/* Header */}
       <div style={{
         background: 'var(--bg-elevated)',
@@ -99,12 +195,54 @@ function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
 
       {/* Body */}
       <div style={{ padding: '16px', flex: 1 }}>
-        <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          {ch.name}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            {ch.name}
+          </span>
+          <button
+            onClick={openPage}
+            className="page-open-btn"
+            title={pageUrl ? `Abrir la página · ${pageUrl}` : 'La página aún no está configurada'}
+            aria-label={pageUrl ? `Abrir la página de ${ch.name}` : `${ch.name} no tiene página configurada`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '24px', height: '24px', flexShrink: 0,
+              background: 'transparent', border: '1px solid var(--border-subtle)',
+              borderRadius: '6px', cursor: 'pointer',
+              color: pageUrl ? 'var(--accent-gold)' : 'var(--text-muted)',
+            }}
+          >
+            <ExternalLink size={12} />
+          </button>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
           {ch.publicId}
         </div>
+
+        {/* Dos semáforos, dos problemas distintos: el del FORMULARIO (qué tan
+            bien califica lo que pregunta) y el de la FUENTE (si está reportando
+            lo que hace falta para medirla). Se arreglan en sitios distintos —
+            uno cambiando preguntas, el otro pegando un script — así que
+            juntarlos escondía uno detrás del otro. */}
+        {health && health.status !== 'sin_envios' && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+            {[STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
+              <span key={i} title={`${b.label} — ${b.what}
+
+${b.why}`} style={{
+                cursor: 'help',
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+                letterSpacing: '0.05em', textTransform: 'uppercase',
+                color: HEALTH_TONE[b.tone].fg,
+                background: HEALTH_TONE[b.tone].bg,
+              }}>
+                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
+                {b.label}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Metrics 2×2 grid */}
         <div style={{
@@ -117,10 +255,14 @@ function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
           marginBottom: '12px',
         }}>
           {[
-            { value: ch.metrics.leadsInWindow, label: 'Leads' },
-            { value: ch.metrics.pageViewsInWindow, label: 'Vistas' },
-            { value: `${ch.metrics.conversionRate}%`, label: 'Conversión' },
-            { value: ch.metrics.avgTempScore !== null ? ch.metrics.avgTempScore : '—', label: 'Score prom.' },
+            // Envíos y leads son cosas distintas: quien ya era lead y vuelve a
+            // llenar un formulario suma envío pero no adquisición. Sin el primer
+            // número, un canal con actividad real salía con un cero mudo.
+            { value: ch.metrics.submissionsInWindow, label: 'Envíos' },
+            { value: ch.metrics.leadsInWindow, label: 'Leads nuevos' },
+            // Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió.
+            { value: ch.metrics.pageViewsInWindow || '—', label: 'Vistas' },
+            { value: ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`, label: 'Conversión' },
           ].map((s, i) => (
             <div key={i} style={{ background: 'var(--bg-elevated)', padding: '10px 14px' }}>
               <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.2 }}>
@@ -165,30 +307,16 @@ function ChannelCard({ ch }: { ch: ChannelWithMetrics }) {
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
+        {/* El parámetro es `channelId`: con `channel` la lista lo ignoraba y el
+            enlace abría /leads sin filtrar, sin ninguna señal de que fallara. */}
         <Link
-          href={`/leads?channel=${ch.id}`}
+          href={`/leads?channelId=${ch.id}`}
+          onClick={e => e.stopPropagation()}
           style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}
         >
           Ver leads →
         </Link>
-        <Link
-          href={`/sources/${ch.slug}`}
-          className="detail-link"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            textDecoration: 'none',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '6px',
-            padding: '5px 10px',
-            transition: 'border-color 0.15s, color 0.15s',
-          }}
-        >
-          Ver detalle
-        </Link>
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Abrir detalle →</span>
       </div>
     </div>
   )
@@ -243,99 +371,63 @@ type AgentOption = { id: string; name: string; tenantId: string }
 
 // ─── Agent selector (organizational owner; "Toda la agencia" = round-robin) ─────
 
-function AgentSelect({ agents, value, onChange }: {
+function AgentSelect({ agents, value, onChange, locked }: {
   agents:   AgentOption[]
   value:    string
   onChange: (v: string) => void
+  /**
+   * El que crea es un agente: la fuente es suya y el selector queda fijo en su
+   * nombre, sin "Toda la agencia". Es sólo la pantalla — quien lo hace cumplir
+   * es el servidor, que reescribe el propietario pase lo que pase por aquí.
+   */
+  locked:   boolean
 }) {
+  // Si su propia fila no está en la lista (inactiva, o filtrada por tenant), se
+  // sigue mostrando: un desplegable vacío parecería un error de la app.
+  const opciones = locked
+    ? (agents.some(a => a.id === value) ? agents.filter(a => a.id === value) : [{ id: value, name: 'Tú', tenantId: '' }])
+    : agents
+
   return (
     <div>
       <label style={LABEL}>Agente</label>
-      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
-        <option value="">Toda la agencia</option>
-        {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={locked}
+        style={{ ...INPUT, appearance: 'none', cursor: locked ? 'not-allowed' : 'pointer', opacity: locked ? 0.65 : 1 }}
+      >
+        {!locked && <option value="">Toda la agencia</option>}
+        {opciones.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
       </select>
       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-        Los leads de esta fuente se atribuyen a este agente. &quot;Toda la agencia&quot; reparte entre los agentes activos.
+        {locked
+          ? 'Los leads de esta fuente se atribuyen a ti. Las fuentes para toda la agencia las crea el propietario del equipo.'
+          : 'Los leads de esta fuente se atribuyen a este agente. "Toda la agencia" los atribuye al propietario del equipo.'}
       </div>
-    </div>
-  )
-}
-
-// ─── Snippet copy block ────────────────────────────────────────────────────────
-
-function SnippetBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false)
-
-  function copy() {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-
-  return (
-    <div style={{ position: 'relative', marginTop: '6px' }}>
-      <pre style={{
-        background: 'var(--bg-overlay)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '8px',
-        padding: '12px',
-        fontSize: '11px',
-        color: 'var(--text-secondary)',
-        overflowX: 'auto',
-        margin: 0,
-        fontFamily: 'monospace',
-        lineHeight: 1.5,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all',
-      }}>
-        {code}
-      </pre>
-      <button
-        onClick={copy}
-        style={{
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          background: copied ? 'var(--accent-green)' : 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '6px',
-          padding: '4px 8px',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          fontSize: '11px',
-          color: copied ? '#fff' : 'var(--text-muted)',
-        }}
-      >
-        {copied ? <Check size={11} /> : <Copy size={11} />}
-        {copied ? 'Copiado' : 'Copiar'}
-      </button>
     </div>
   )
 }
 
 // ─── Lead Magnet modal ─────────────────────────────────────────────────────────
 
-function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
+function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   onClose:     () => void
   isSuperAdmin: boolean
   tenants:     Array<{ id: string; name: string }>
   agents:      AgentOption[]
+  myAgentId:   string | null
 }) {
   const [name,     setName]     = useState('')
   const [slug,     setSlug]     = useState('')
   const [lpUrl,    setLpUrl]    = useState('')
   const [fileUrl,  setFileUrl]  = useState('')
   const [tenantId, setTenantId] = useState(tenants[0]?.id ?? '')
-  const [agentId,  setAgentId]  = useState('')
+  const [agentId,  setAgentId]  = useState(myAgentId ?? '')
   const [error,    setError]    = useState<string | null>(null)
-  const [result,   setResult]   = useState<{ publicId: string; slug: string; sequenceId: string; embedSnippet: string } | null>(null)
+  const [result,   setResult]   = useState<{ publicId: string; slug: string; sequenceId: string; integrationPrompt: string } | null>(null)
   const [pending,  startTransition] = useTransition()
 
-  // super_admin: only agents of the selected tenant; agent_owner: all (its tenant).
   const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
 
   function handleSubmit() {
@@ -347,8 +439,18 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
-      setResult({ publicId: res.publicId, slug: res.slug, sequenceId: res.sequenceId, embedSnippet: res.embedSnippet })
+      setResult({ publicId: res.publicId, slug: res.slug, sequenceId: res.sequenceId, integrationPrompt: res.integrationPrompt })
     })
+  }
+
+  if (result) {
+    return (
+      <IntegrationPromptModal
+        title="Lead Magnet creado"
+        prompt={result.integrationPrompt}
+        onClose={onClose}
+      />
+    )
   }
 
   return (
@@ -367,10 +469,9 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
         maxHeight: '90vh',
         overflowY: 'auto',
       }}>
-        {/* Modal header */}
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            {result ? 'Lead Magnet creado' : 'Nuevo Lead Magnet'}
+            Nuevo Lead Magnet
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
             <X size={18} />
@@ -378,72 +479,49 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
         </div>
 
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {!result ? (
-            <>
-              {isSuperAdmin && (
-                <div>
-                  <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-                  <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
-                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label style={LABEL}>Nombre *</label>
-                <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Guía para Primeros Compradores" autoFocus />
-              </div>
-              <div>
-                <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional — se genera del nombre)</span></label>
-                <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="guia-primeros-compradores" />
-              </div>
-              <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
-              <div>
-                <label style={LABEL}>URL de la landing page <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
-                <input value={lpUrl} onChange={e => setLpUrl(e.target.value)} style={INPUT} placeholder="https://..." type="url" />
-              </div>
-              <div>
-                <label style={LABEL}>URL del recurso descargable <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
-                <input value={fileUrl} onChange={e => setFileUrl(e.target.value)} style={INPUT} placeholder="https://drive.google.com/..." type="url" />
-              </div>
-
-              {error && (
-                <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
-                  {error}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
-                  {pending ? 'Creando…' : 'Crear Lead Magnet'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ padding: '10px 14px', background: 'rgba(107,163,104,0.08)', border: '1px solid rgba(107,163,104,0.2)', borderRadius: '8px', fontSize: '13px', color: 'var(--accent-green)' }}>
-                Lead magnet creado y secuencia de email iniciada.
-              </div>
-
-              <div>
-                <label style={LABEL}>ID público</label>
-                <code style={{ fontSize: '13px', color: 'var(--accent-gold)', fontFamily: 'monospace' }}>{result.publicId}</code>
-              </div>
-              <div>
-                <label style={LABEL}>Slug</label>
-                <code style={{ fontSize: '13px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>/sources/{result.slug}</code>
-              </div>
-
-              <div>
-                <label style={LABEL}>Snippet de seguimiento de vistas (pegarlo en el <code style={{ textTransform: 'none', letterSpacing: 0 }}>&lt;head&gt;</code> de la landing)</label>
-                <SnippetBlock code={result.embedSnippet} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                <button onClick={onClose} style={BTN_PRIMARY}>Listo</button>
-              </div>
-            </>
+          <FormSection title="Básico" first>
+          {isSuperAdmin && (
+            <div>
+              <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
           )}
+          <div>
+            <label style={LABEL}>Nombre *</label>
+            <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Guía para Primeros Compradores" autoFocus />
+          </div>
+          <div>
+            <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional — se genera del nombre)</span></label>
+            <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="guia-primeros-compradores" />
+          </div>
+          </FormSection>
+
+          <FormSection title="Material y atribución">
+          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
+          <div>
+            <label style={LABEL}>URL de la landing page <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
+            <input value={lpUrl} onChange={e => setLpUrl(e.target.value)} style={INPUT} placeholder="https://..." type="url" />
+          </div>
+          <div>
+            <label style={LABEL}>URL del recurso descargable <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
+            <input value={fileUrl} onChange={e => setFileUrl(e.target.value)} style={INPUT} placeholder="https://drive.google.com/..." type="url" />
+          </div>
+          </FormSection>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
+            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
+            <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+              {pending ? 'Creando…' : 'Crear Lead Magnet'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -452,35 +530,47 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents }: {
 
 // ─── Event modal ───────────────────────────────────────────────────────────────
 
-function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
+function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   onClose:      () => void
   isSuperAdmin: boolean
   tenants:      Array<{ id: string; name: string }>
   agents:       AgentOption[]
+  myAgentId:    string | null
 }) {
   const [name,      setName]      = useState('')
   const [slug,      setSlug]      = useState('')
   const [eventDate, setEventDate] = useState('')
   const [location,  setLocation]  = useState('')
   const [tenantId,  setTenantId]  = useState(tenants[0]?.id ?? '')
-  const [agentId,   setAgentId]   = useState('')
+  const [agentId,   setAgentId]   = useState(myAgentId ?? '')
   const [error,     setError]     = useState<string | null>(null)
-  const [result,    setResult]    = useState<{ publicId: string; slug: string; formSnippet: string } | null>(null)
+  const [result,    setResult]    = useState<{ publicId: string; slug: string; integrationPrompt: string } | null>(null)
   const [pending,   startTransition] = useTransition()
 
   const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
 
   function handleSubmit() {
     setError(null)
+    if (!eventDate) { setError('La fecha del evento es obligatoria'); return }
     startTransition(async () => {
       const res = await createEvent({
-        name, slug: slug || undefined, eventDate: eventDate || undefined, location: location || undefined,
+        name, slug: slug || undefined, eventDate, location: location || undefined,
         agentId: agentId || null,
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
-      setResult({ publicId: res.publicId, slug: res.slug, formSnippet: res.formSnippet })
+      setResult({ publicId: res.publicId, slug: res.slug, integrationPrompt: res.integrationPrompt })
     })
+  }
+
+  if (result) {
+    return (
+      <IntegrationPromptModal
+        title="Evento creado"
+        prompt={result.integrationPrompt}
+        onClose={onClose}
+      />
+    )
   }
 
   return (
@@ -501,7 +591,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
       }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            {result ? 'Evento creado' : 'Nuevo Evento'}
+            Nuevo Evento
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
             <X size={18} />
@@ -509,74 +599,51 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
         </div>
 
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {!result ? (
-            <>
-              {isSuperAdmin && (
-                <div>
-                  <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-                  <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
-                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label style={LABEL}>Nombre del evento *</label>
-                <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Open House Virginia Beach Jun 2026" autoFocus />
-              </div>
-              <div>
-                <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
-                <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="open-house-vb-jun-2026" />
-              </div>
-              <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
-                  <input value={eventDate} onChange={e => setEventDate(e.target.value)} style={INPUT} type="date" />
-                </div>
-                <div>
-                  <label style={LABEL}>Ubicación <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
-                  <input value={location} onChange={e => setLocation(e.target.value)} style={INPUT} placeholder="Virginia Beach, VA" />
-                </div>
-              </div>
-
-              {error && (
-                <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
-                  {error}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
-                  {pending ? 'Creando…' : 'Crear Evento'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ padding: '10px 14px', background: 'rgba(107,163,104,0.08)', border: '1px solid rgba(107,163,104,0.2)', borderRadius: '8px', fontSize: '13px', color: 'var(--accent-green)' }}>
-                Evento creado correctamente.
-              </div>
-
-              <div>
-                <label style={LABEL}>ID público</label>
-                <code style={{ fontSize: '13px', color: 'var(--accent-gold)', fontFamily: 'monospace' }}>{result.publicId}</code>
-              </div>
-              <div>
-                <label style={LABEL}>Slug</label>
-                <code style={{ fontSize: '13px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>/sources/{result.slug}</code>
-              </div>
-
-              <div>
-                <label style={LABEL}>Snippet de formulario de registro (HTML base)</label>
-                <SnippetBlock code={result.formSnippet} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                <button onClick={onClose} style={BTN_PRIMARY}>Listo</button>
-              </div>
-            </>
+          <FormSection title="Básico" first>
+          {isSuperAdmin && (
+            <div>
+              <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
           )}
+          <div>
+            <label style={LABEL}>Nombre del evento *</label>
+            <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Open House Virginia Beach Jun 2026" autoFocus />
+          </div>
+          <div>
+            <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
+            <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="open-house-vb-jun-2026" />
+          </div>
+          </FormSection>
+
+          <FormSection title="Detalles del evento">
+          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <input value={eventDate} onChange={e => setEventDate(e.target.value)} style={INPUT} type="date" />
+            </div>
+            <div>
+              <label style={LABEL}>Ubicación <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
+              <input value={location} onChange={e => setLocation(e.target.value)} style={INPUT} placeholder="Virginia Beach, VA" />
+            </div>
+          </div>
+          </FormSection>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
+            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
+            <button onClick={handleSubmit} disabled={!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+              {pending ? 'Creando…' : 'Crear Evento'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -585,23 +652,20 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents }: {
 
 // ─── Contact Form (Web) modal ──────────────────────────────────────────────────
 
-function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
+function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   onClose:      () => void
   isSuperAdmin: boolean
   tenants:      Array<{ id: string; name: string }>
   agents:       AgentOption[]
+  myAgentId:    string | null
 }) {
-  const [name,          setName]          = useState('')
-  const [slug,          setSlug]          = useState('')
-  const [webflowSecret, setWebflowSecret] = useState('')
-  const [tenantId,      setTenantId]      = useState(tenants[0]?.id ?? '')
-  const [agentId,       setAgentId]       = useState('')
-  const [error,         setError]         = useState<string | null>(null)
-  const [result,        setResult]        = useState<{
-    publicId: string; slug: string
-    webflowWebhookUrl: string; contactBackupUrl: string; publicIntakeUrl: string; hasChannelSecret: boolean
-  } | null>(null)
-  const [pending, startTransition] = useTransition()
+  const [name,     setName]     = useState('')
+  const [slug,     setSlug]     = useState('')
+  const [tenantId, setTenantId] = useState(tenants[0]?.id ?? '')
+  const [agentId,  setAgentId]  = useState(myAgentId ?? '')
+  const [error,    setError]    = useState<string | null>(null)
+  const [result,   setResult]   = useState<{ publicId: string; slug: string; integrationPrompt: string } | null>(null)
+  const [pending,  startTransition] = useTransition()
 
   const visibleAgents = isSuperAdmin ? agents.filter(a => a.tenantId === tenantId) : agents
 
@@ -611,16 +675,21 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
       const res = await createContactForm({
         name, slug: slug || undefined,
         agentId: agentId || null,
-        webflowSecret: webflowSecret || undefined,
         tenantId: isSuperAdmin ? tenantId : undefined,
       })
       if (!res.ok) { setError(res.error); return }
-      setResult({
-        publicId: res.publicId, slug: res.slug,
-        webflowWebhookUrl: res.webflowWebhookUrl, contactBackupUrl: res.contactBackupUrl,
-        publicIntakeUrl: res.publicIntakeUrl, hasChannelSecret: res.hasChannelSecret,
-      })
+      setResult({ publicId: res.publicId, slug: res.slug, integrationPrompt: res.integrationPrompt })
     })
+  }
+
+  if (result) {
+    return (
+      <IntegrationPromptModal
+        title="Formulario creado"
+        prompt={result.integrationPrompt}
+        onClose={onClose}
+      />
+    )
   }
 
   return (
@@ -641,7 +710,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
       }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            {result ? 'Formulario creado' : 'Nuevo Formulario Web'}
+            Nuevo Formulario Web
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
             <X size={18} />
@@ -649,86 +718,41 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents }: {
         </div>
 
         <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {!result ? (
-            <>
-              {isSuperAdmin && (
-                <div>
-                  <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-                  <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
-                    {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label style={LABEL}>Nombre del formulario *</label>
-                <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Contáctanos — Página de inicio" autoFocus />
-              </div>
-              <div>
-                <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
-                <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="contactanos-home" />
-              </div>
-              <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} />
-              <div>
-                <label style={LABEL}>Secret de Webflow <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
-                <input value={webflowSecret} onChange={e => setWebflowSecret(e.target.value)} style={INPUT} placeholder="Secret del webhook de Webflow (HMAC)" />
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
-                  Solo si conectas con Webflow y quieres un secret propio para este formulario. Si lo dejas vacío, se usa el secret global del servidor.
-                </div>
-              </div>
-
-              {error && (
-                <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
-                  {error}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-                <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
-                  {pending ? 'Creando…' : 'Crear Formulario'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ padding: '10px 14px', background: 'rgba(107,163,104,0.08)', border: '1px solid rgba(107,163,104,0.2)', borderRadius: '8px', fontSize: '13px', color: 'var(--accent-green)' }}>
-                Formulario creado. Conéctalo con una de las opciones siguientes — todas alimentan el mismo pipeline (registro, notificación de contacto y scoring).
-              </div>
-
-              <div>
-                <label style={LABEL}>ID público</label>
-                <code style={{ fontSize: '13px', color: 'var(--accent-gold)', fontFamily: 'monospace' }}>{result.publicId}</code>
-              </div>
-
-              <div>
-                <label style={LABEL}>1 · Webhook de Webflow <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(recomendado)</span></label>
-                <SnippetBlock code={result.webflowWebhookUrl} />
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>
-                  En Webflow → Site settings → Forms → Webhooks, apunta el form &quot;Contact Us&quot; a esta URL. Valida la firma HMAC con {result.hasChannelSecret ? 'el secret que guardaste para este formulario' : 'el secret global del servidor'}.
-                </div>
-              </div>
-
-              <div>
-                <label style={LABEL}>2 · Endpoint con secret <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(servidor a servidor)</span></label>
-                <SnippetBlock code={result.contactBackupUrl} />
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>
-                  POST con header <code style={{ fontFamily: 'monospace' }}>x-contact-secret</code>. Útil para integraciones propias desde tu backend.
-                </div>
-              </div>
-
-              <div>
-                <label style={LABEL}>3 · Formulario propio <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(código custom, sin Webflow)</span></label>
-                <SnippetBlock code={result.publicIntakeUrl} />
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>
-                  Un form en tu sitio puede hacer POST a esta URL pública (sin secret) con los campos del lead y la pregunta.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                <button onClick={onClose} style={BTN_PRIMARY}>Listo</button>
-              </div>
-            </>
+          <FormSection title="Básico" first>
+          {isSuperAdmin && (
+            <div>
+              <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
+                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
           )}
+          <div>
+            <label style={LABEL}>Nombre del formulario *</label>
+            <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Contáctanos — Página de inicio" autoFocus />
+          </div>
+          <div>
+            <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
+            <input value={slug} onChange={e => setSlug(e.target.value)} style={INPUT} placeholder="contactanos-home" />
+          </div>
+          </FormSection>
+
+          <FormSection title="Agente">
+          <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
+          </FormSection>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
+            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
+            <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+              {pending ? 'Creando…' : 'Crear Formulario'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -844,10 +868,16 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
 
 // ─── Archived channel card ───────────────────────────────────────────────────
 
-function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
+function ArchivedChannelCard({ ch, isSuperAdmin, tenantName, canDelete }: {
   ch:           ChannelWithMetrics
   isSuperAdmin: boolean
   tenantName?:  string
+  /**
+   * El borrado permanente sigue siendo de owner/super: huerfaniza los leads de
+   * esa fuente. Un agente archiva las suyas, pero aquí sólo vería un botón que
+   * la action va a rechazar.
+   */
+  canDelete:    boolean
 }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
@@ -912,7 +942,7 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
             </span>
           )}
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
           {ch.publicId}
         </div>
 
@@ -925,24 +955,26 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={() => setShowDelete(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            fontSize: '12px', fontWeight: 500,
-            color: 'var(--accent-coral)',
-            background: 'transparent',
-            border: '1px solid rgba(224,64,64,0.3)',
-            borderRadius: '6px',
-            padding: '5px 10px',
-            cursor: 'pointer',
-          }}
-        >
-          <Trash2 size={13} />
-          Eliminar permanentemente
-        </button>
-      </div>
+      {canDelete && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => setShowDelete(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              fontSize: '12px', fontWeight: 500,
+              color: 'var(--accent-coral)',
+              background: 'transparent',
+              border: '1px solid rgba(224,64,64,0.3)',
+              borderRadius: '6px',
+              padding: '5px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            <Trash2 size={13} />
+            Eliminar permanentemente
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -950,15 +982,24 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName }: {
 // ─── Main client component ────────────────────────────────────────────────────
 
 interface Props {
+  /** Diagnóstico por canal — vacío mientras no haya envíos. */
+  health:           Record<string, SourceHealth>
   channels:         ChannelWithMetrics[]
   archivedChannels: ChannelWithMetrics[]
   windowDays:       number
   isSuperAdmin:     boolean
   tenants:          Array<{ id: string; name: string }>
   agents:           AgentOption[]
+  /**
+   * agents.id del que mira, sólo para el rol 'agent'. Cuando llega, las fuentes
+   * que cree son suyas: el selector de agente queda fijo y sin "Toda la agencia".
+   */
+  myAgentId:        string | null
+  /** tenantId → slug + si ITMANO administra sus páginas. */
+  tenantPages:      Record<string, TenantPageInfo>
 }
 
-export function SourcesClient({ channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents }: Props) {
+export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, myAgentId, tenantPages }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<TabValue>('all')
@@ -983,10 +1024,15 @@ export function SourcesClient({ channels, archivedChannels, windowDays, isSuperA
     <div>
       <style>{`
         .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
+        .page-open-btn:hover { border-color: var(--accent-gold) !important; background: rgba(201,169,110,0.10) !important; }
+        @keyframes src-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        .source-card { animation: src-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
+        .source-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--shadow-md); transform: translateY(-3px); }
+        @media (prefers-reduced-motion: reduce) { .source-card { animation: none !important; transition: none !important; } }
       `}</style>
-      {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
-      {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
-      {openModal === 'contact_form' && <ContactFormModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} />}
+      {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
+      {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
+      {openModal === 'contact_form' && <ContactFormModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
 
       {/* Create buttons */}
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>
@@ -1081,9 +1127,12 @@ export function SourcesClient({ channels, archivedChannels, windowDays, isSuperA
                   ch={ch}
                   isSuperAdmin={isSuperAdmin}
                   tenantName={tenantName(ch.tenantId)}
+                  canDelete={myAgentId === null}
                 />
               ))
-            : display.map(ch => <ChannelCard key={ch.id} ch={ch} />)}
+            : display.map((ch, i) => (
+                <ChannelCard key={ch.id} ch={ch} index={i} health={health[ch.id]} tenant={tenantPages[ch.tenantId]} />
+              ))}
         </div>
       )}
     </div>

@@ -151,7 +151,7 @@ export function LeadSubmissionsList({ submissions }: { submissions: LeadSubmissi
   const [openId, setOpenId] = useState<string | null>(null)
 
   return (
-    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden', marginTop: '24px' }}>
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
         <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           Formularios completados · {submissions.length}

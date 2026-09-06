@@ -1,8 +1,11 @@
 import { Webhook } from 'svix'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { resendInbound } from '@/lib/resend'
+import { resendInboundForAccount } from '@/lib/resend'
+import { stripQuotedReply } from '@/lib/email/strip-quoted-reply'
+import { assessLeadFit } from '@/lib/services/ai-lead-fit'
+import { graduateSubscriber } from '@/lib/newsletters/subscriber'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -204,9 +207,35 @@ async function handleOutboundEvent(
 // email.received = someone replied to one of our sequences. Resolve the lead by
 // the sender's email address and insert an email_replied event (+30 points).
 //
-// Multi-tenant note: if two tenants have a lead with the same email address,
-// we skip rather than guess. At one active tenant this never fires. A per-tenant
-// inbound mailbox strategy is deferred to Phase 4/5.
+// Multi-tenant routing: the reply's `to` address is OUR sending address, so it
+// identifies the tenant — se compara contra tenants.email_from_address (cada
+// tenant tiene una dirección única, sea de su dominio propio Growth/Partner o
+// de un slug del dominio compartido de ITMANO en Esencial). Con tenant
+// resuelto, la búsqueda del lead queda scoped y la ambigüedad entre tenants
+// (mismo email de lead en dos equipos) desaparece: leads es único por
+// (tenant_id, email). Si el `to` no matchea ningún tenant (config vieja,
+// forward raro), cae al comportamiento global anterior: match único o skip.
+
+// Resuelve el tenant dueño de la dirección destino del inbound. tenants es una
+// tabla chica — se trae completa y se normaliza en proceso porque
+// email_from_address puede estar guardado como "Nombre <email@dominio>".
+async function resolveTenantByToAddress(
+  db: ReturnType<typeof createAdminClient>,
+  toRaw: string[] | undefined,
+): Promise<string | null> {
+  if (!toRaw || toRaw.length === 0) return null
+  const toAddresses = new Set(toRaw.map(extractEmail))
+
+  const { data: tenants, error } = await db
+    .from('tenants')
+    .select('id, email_from_address')
+  if (error) throw error
+
+  const matches = ((tenants ?? []) as { id: string; email_from_address: string | null }[])
+    .filter(t => t.email_from_address && toAddresses.has(extractEmail(t.email_from_address)))
+
+  return matches.length === 1 ? matches[0].id : null
+}
 
 async function handleInboundEvent(
   db: ReturnType<typeof createAdminClient>,
@@ -223,10 +252,15 @@ async function handleInboundEvent(
   // Normalize "Name <email>" → "email" (lowercased) so the lookup matches leads.email
   const fromAddress = extractEmail(fromRaw)
 
-  const { data: matches, error: lookupError } = await db
+  const tenantId = await resolveTenantByToAddress(db, event.data.to)
+
+  let leadQuery = db
     .from('leads')
-    .select('id, tenant_id')
+    .select('id, tenant_id, agent_id')
     .eq('email', fromAddress)
+  if (tenantId) leadQuery = leadQuery.eq('tenant_id', tenantId)
+
+  const { data: matches, error: lookupError } = await leadQuery
 
   if (lookupError) throw lookupError
 
@@ -270,6 +304,15 @@ async function handleInboundEvent(
 
   log({ event_type: event.type, event_id: svixId, lead_id: match.id, result: 'inserted' })
 
+  // Una respuesta de un humano es intención inequívoca: si este lead venía
+  // marcado como suscriptor de newsletter, se gradúa aquí (ver
+  // graduateSubscriber). Best-effort — nunca lanza, no puede tumbar el webhook.
+  await graduateSubscriber(db, match.id)
+
+  // Reanaliza el fit del lead con IA (si el tenant lo tiene activado): una
+  // respuesta agrega información. Fire-and-forget; el servicio verifica el gate.
+  after(() => assessLeadFit({ leadId: match.id, tenantId: match.tenant_id, reason: 'email_reply' }))
+
   // Fetch the full email body via the Resend API.
   // The email.received webhook carries metadata only (from/to/subject/email_id)
   // — body content is never included in the webhook payload (Resend design).
@@ -280,7 +323,16 @@ async function handleInboundEvent(
   const inboundEmailId = event.data.email_id
   if (inboundEmailId) {
     try {
-      const { data: received, error: fetchErr } = await resendInbound.emails.receiving.get(inboundEmailId)
+      const { data: tenant, error: tenantLookupError } = await db
+        .from('tenants')
+        .select('resend_account')
+        .eq('id', match.tenant_id)
+        .maybeSingle()
+
+      if (tenantLookupError) throw tenantLookupError
+
+      const inboundClient = resendInboundForAccount(tenant?.resend_account)
+      const { data: received, error: fetchErr } = await inboundClient.emails.receiving.get(inboundEmailId)
       if (fetchErr) {
         // Log full error object (not String() which gives [object Object])
         console.error(JSON.stringify({
@@ -294,11 +346,15 @@ async function handleInboundEvent(
           detail:        fetchErr.message,
         }))
       } else if (received) {
-        if (received.text) {
-          bodyText = received.text.trim() || null
-        } else if (received.html) {
-          // Only HTML arrived — derive plain-text (XSS prevention: never store raw HTML)
-          bodyText = htmlToText(received.html) || null
+        const raw = received.text
+          ? received.text.trim()
+          : received.html
+            ? htmlToText(received.html)
+            : null
+
+        if (raw) {
+          // Strip the quoted/forwarded block — store only what the lead wrote.
+          bodyText = stripQuotedReply(raw) || null
         } else {
           // API succeeded but returned neither text nor html — log for visibility
           console.log(JSON.stringify({
@@ -373,6 +429,8 @@ async function handleInboundEvent(
       tenant_id: match.tenant_id,
       type:      'email_replied',
       lead_id:   match.id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      agent_id:  (match as any).agent_id ?? null,
       message:   parts.join('\n') || 'Sin contenido',
     })
   } catch (notifErr) {

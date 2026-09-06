@@ -1,0 +1,130 @@
+import 'server-only'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getAgentActionTypes } from '@/lib/scoring/agent-actions'
+
+// Cierra el loop del análisis de fit con IA: mide si SEGUIR la recomendación
+// correlaciona con que el lead avance en el embudo. Sin ML — correlación directa
+// sobre el log ai_briefings (069) más el estado actual del lead.
+//
+// "Siguió" = el agente registró una acción sobre el lead dentro de la ventana de
+// la premura del briefing (una acción del panel manual, un correo one-off o un
+// cambio de etapa). "Avanzó" = la etapa actual del lead está más adelante en el
+// embudo que la que tenía cuando se hizo el briefing.
+
+export interface BriefingOutcomes {
+  windowDays:          number
+  total:               number
+  followed:            number
+  notFollowed:         number
+  advancedFollowed:    number
+  advancedNotFollowed: number
+  // % de leads que avanzaron, entre los que siguieron / no siguieron (null si no hay muestra).
+  rateFollowed:        number | null
+  rateNotFollowed:     number | null
+  // Diferencia (puntos porcentuales) — el "lift" de seguir la recomendación.
+  lift:                number | null
+  followRate:          number | null // % de briefings donde el agente actuó
+}
+
+// Los tipos que cuentan como accion del agente se resuelven contra
+// lead_score_rules (ver scoring/agent-actions.ts). Antes eran una lista fija que
+// se quedo con los nombres de la migracion 009: la analitica daba por "no
+// seguido" todo lo que el agente registraba desde el panel manual.
+
+// Rango de la etapa en el embudo (mayor = más avanzado). 'perdido' es terminal
+// negativo. Se incluyen los valores del viejo leads.status porque
+// ai_briefings.status_at es un SNAPSHOT histórico: las filas anteriores a la
+// migración 082 guardan el vocabulario de entonces, y sin estas entradas
+// cualquier briefing viejo contaría como "no avanzó" por comparar contra 0.
+const STAGE_RANK: Record<string, number> = {
+  nuevo: 0, nutricion: 1, en_proceso: 2, cerrado: 3, perdido: -1,
+  // Legado (pre-082)
+  new: 0, nurturing: 1, warm: 1, hot: 1,
+  process_started: 2, process_completed: 3, closed: 3, lost: -1,
+}
+
+// Días de ventana para considerar "siguió" según la premura del briefing.
+function windowDaysFor(when: string | null): number {
+  if (when === 'hoy') return 2
+  if (when === 'sin_apuro') return 21
+  return 8 // esta_semana / desconocido
+}
+
+const empty = (windowDays: number): BriefingOutcomes => ({
+  windowDays, total: 0, followed: 0, notFollowed: 0,
+  advancedFollowed: 0, advancedNotFollowed: 0,
+  rateFollowed: null, rateNotFollowed: null, lift: null, followRate: null,
+})
+
+export async function getBriefingOutcomes(
+  tenantId: string | null,
+  days = 90,
+): Promise<BriefingOutcomes> {
+  const db = createAdminClient()
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString()
+
+  try {
+    let bq = db
+      .from('ai_briefings')
+      .select('lead_id, next_action_when, status_at, created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .limit(2000)
+    if (tenantId) bq = bq.eq('tenant_id', tenantId)
+    const { data: briefingsRaw, error } = await bq
+    if (error) {
+      // Tabla ausente (migración sin aplicar) u otro fallo → panel vacío, sin romper.
+      console.error(JSON.stringify({ service: 'briefing-outcomes', error: error.message }))
+      return empty(days)
+    }
+    const briefings = (briefingsRaw ?? []) as { lead_id: string; next_action_when: string | null; status_at: string | null; created_at: string }[]
+    if (briefings.length === 0) return empty(days)
+
+    const leadIds = [...new Set(briefings.map(b => b.lead_id))]
+    const earliest = briefings[0].created_at
+
+    const followTypes = await getAgentActionTypes(db, tenantId)
+
+    const [{ data: leadsRaw }, { data: eventsRaw }] = await Promise.all([
+      db.from('leads').select('id, stage').in('id', leadIds),
+      db.from('lead_events').select('lead_id, created_at')
+        .in('lead_id', leadIds).in('type', followTypes).gte('created_at', earliest),
+    ])
+
+    const stageNow = new Map<string, string>()
+    for (const l of (leadsRaw ?? []) as { id: string; stage: string }[]) stageNow.set(l.id, l.stage)
+
+    // Tiempos de acción del agente por lead (ordenados ascendente por lead).
+    const actionsByLead = new Map<string, number[]>()
+    for (const e of (eventsRaw ?? []) as { lead_id: string; created_at: string }[]) {
+      const arr = actionsByLead.get(e.lead_id) ?? []
+      arr.push(new Date(e.created_at).getTime())
+      actionsByLead.set(e.lead_id, arr)
+    }
+
+    const out = empty(days)
+    out.total = briefings.length
+    for (const b of briefings) {
+      const start = new Date(b.created_at).getTime()
+      const end   = start + windowDaysFor(b.next_action_when) * 24 * 3600 * 1000
+      const acts  = actionsByLead.get(b.lead_id) ?? []
+      const followed = acts.some(t => t > start && t <= end)
+
+      const curr = stageNow.get(b.lead_id) ?? null
+      const advanced = !!b.status_at && !!curr && curr !== 'perdido' &&
+        (STAGE_RANK[curr] ?? 0) > (STAGE_RANK[b.status_at] ?? 0)
+
+      if (followed) { out.followed++; if (advanced) out.advancedFollowed++ }
+      else          { out.notFollowed++; if (advanced) out.advancedNotFollowed++ }
+    }
+
+    out.rateFollowed    = out.followed    > 0 ? Math.round((out.advancedFollowed    / out.followed)    * 100) : null
+    out.rateNotFollowed = out.notFollowed > 0 ? Math.round((out.advancedNotFollowed / out.notFollowed) * 100) : null
+    out.lift            = out.rateFollowed !== null && out.rateNotFollowed !== null ? out.rateFollowed - out.rateNotFollowed : null
+    out.followRate      = out.total > 0 ? Math.round((out.followed / out.total) * 100) : null
+    return out
+  } catch (e) {
+    console.error(JSON.stringify({ service: 'briefing-outcomes', error: e instanceof Error ? e.message : 'unknown' }))
+    return empty(days)
+  }
+}

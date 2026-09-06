@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { groupSendsBySequence, type SendWithRun } from './email-metrics-group'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 //
@@ -141,6 +142,63 @@ export async function getSequenceMetrics(sequenceId: string): Promise<SequenceMe
     uniqueLeads: leadIds.length,
     ...buildMetrics(sends, events),
   }
+}
+
+/**
+ * Las mismas métricas que `getSequenceMetrics`, para varias secuencias a la vez.
+ *
+ * Existe para la LISTA de /emails: llamar a la versión de una en una haría 3
+ * queries por fila, y son exactamente los mismos datos leídos en trozos. Aquí
+ * son 3 queries en total, sin importar cuántas secuencias haya.
+ *
+ * Las secuencias sin envíos SÍ vienen en el mapa, en cero: la fila necesita
+ * distinguir "todavía no envió" de "no la encontré".
+ */
+export async function getMetricsForSequences(
+  sequenceIds: string[],
+): Promise<Map<string, SequenceMetrics>> {
+  const empty = (): SequenceMetrics =>
+    ({ totalSends: 0, uniqueLeads: 0, clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0 })
+
+  const result = new Map<string, SequenceMetrics>(sequenceIds.map(id => [id, empty()]))
+  if (sequenceIds.length === 0) return result
+
+  const db = createAdminClient()
+
+  const { data: runRows } = await db
+    .from('lead_sequence_runs')
+    .select('id, sequence_id')
+    .in('sequence_id', sequenceIds)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const runs = (runRows ?? []) as any[]
+  if (runs.length === 0) return result
+
+  const sequenceByRun = new Map<string, string>(runs.map(r => [r.id as string, r.sequence_id as string]))
+
+  const { data: sendRows } = await db
+    .from('email_sends')
+    .select('lead_id, step_order, sent_at, sequence_run_id')
+    .in('sequence_run_id', [...sequenceByRun.keys()])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sends = (sendRows ?? []) as any[]
+  if (sends.length === 0) return result
+
+  // Los eventos se traen UNA vez para todos los leads implicados; buildMetrics
+  // sólo mira los que casan con los envíos que le pasan, así que compartir la
+  // lista entre secuencias no cruza métricas.
+  const events = await fetchEventsForLeads(db, [...new Set(sends.map(s => s.lead_id as string))])
+
+  const sendsBySequence = groupSendsBySequence(sends as SendWithRun[], sequenceByRun)
+
+  for (const [seqId, seqSends] of sendsBySequence) {
+    result.set(seqId, {
+      totalSends:  seqSends.length,
+      uniqueLeads: new Set(seqSends.map(s => s.lead_id)).size,
+      ...buildMetrics(seqSends, events),
+    })
+  }
+
+  return result
 }
 
 export async function getStepMetrics(sequenceId: string): Promise<StepMetric[]> {

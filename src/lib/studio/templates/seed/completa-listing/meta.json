@@ -1,0 +1,6 @@
+{
+  "label": "Foto completa",
+  "hint": "Una foto excelente",
+  "recipes": ["new_listing"],
+  "aspects": ["4:5"]
+}

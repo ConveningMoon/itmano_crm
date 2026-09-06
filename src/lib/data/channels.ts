@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,15 +17,40 @@ export interface AcquisitionChannel {
   agentId: string | null      // owning agent (routing); null = "Toda la agencia"
   agentName: string | null    // resolved display name, null when agentId is null
   metadata: Record<string, unknown>
+  /**
+   * Link de la página de esta fuente cuando NO la construye el CRM (migración
+   * 092): la conectó ITMANO por fuera, o el tenant ya tenía su landing. Es el
+   * único link posible para un tenant administrado por ITMANO, que no ve el
+   * constructor.
+   */
+  pageUrl: string | null
+  /** hosted_page.enabled — la página del constructor está publicada. */
+  hostedPageEnabled: boolean
   createdAt: string
   archivedAt: string | null
 }
 
+/** Lee metadata.page_url tolerando filas viejas sin la clave o con basura. */
+export function channelPageUrl(metadata: Record<string, unknown> | null | undefined): string | null {
+  const raw = metadata?.page_url
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : null
+}
+
 export interface ChannelMetrics {
+  /** Leads que este canal ADQUIRIO (leads.acquisition_channel_id). */
   leadsTotal: number
   leadsInWindow: number
+  /**
+   * Formularios enviados en este canal. Distinto de los leads: un visitante que
+   * ya era lead y vuelve a llenar otro formulario suma envio pero no adquisicion
+   * — se adquirio una vez. Sin este numero, un canal con actividad real salia
+   * con un cero mudo.
+   */
+  submissionsTotal: number
+  submissionsInWindow: number
   pageViewsInWindow: number
-  conversionRate: number
+  /** Envios / vistas. `null` sin vistas: un 0% afirmaria que nadie convirtio. */
+  conversionRate: number | null
   avgTempScore: number | null
 }
 
@@ -35,8 +61,8 @@ export interface ChannelLead {
   firstName: string
   lastName: string
   email: string
-  status: string
-  temperatureScore: number | null
+  stage: string
+  score: number | null
   trafficSource: string | null
   createdAt: string
 }
@@ -73,7 +99,6 @@ async function fetchChannelsWithMetrics(
   if (tenantId === '') return []
 
   const supabase = createAdminClient()
-  const windowStart = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
 
   let channelQ = supabase
     .from('acquisition_channels')
@@ -107,52 +132,32 @@ async function fetchChannelsWithMetrics(
     for (const a of (agentRows ?? []) as any[]) agentNameMap.set(a.id, a.name)
   }
 
-  const [{ data: windowLeads }, { data: windowViews }, { data: allLeads }] = await Promise.all([
-    supabase
-      .from('leads')
-      .select('acquisition_channel_id, current_score')
-      .in('acquisition_channel_id', channelIds)
-      .gte('created_at', windowStart),
-    supabase
-      .from('channel_page_views')
-      .select('channel_id')
-      .in('channel_id', channelIds)
-      .gte('created_at', windowStart),
-    supabase
-      .from('leads')
-      .select('acquisition_channel_id')
-      .in('acquisition_channel_id', channelIds),
-  ])
+  // Las métricas las agrega Postgres (`channel_metrics`, migración 075). Antes
+  // esta función traía TODOS los leads de estos canales —sin filtro de fecha— y
+  // los recorría una vez por canal para contarlos en memoria: O(canales × leads)
+  // sobre filas que ya venían enteras por la red.
+  const { data: metricsRaw } = await supabase.rpc('channel_metrics', {
+    p_channel_ids:  channelIds,
+    p_window_days:  windowDays,
+  })
+  const metricsById = (metricsRaw ?? {}) as Record<string, {
+    leads_total: number
+    leads_in_window: number
+    submissions_total: number
+    submissions_in_window: number
+    page_views_in_window: number
+    conversion_rate: number | null
+    avg_temp_score: number | null
+  } | undefined>
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return channels.map((c: any) => { // reason: Supabase returns untyped rows
-    const wLeads = (windowLeads ?? []).filter(
-      (l: { acquisition_channel_id: string }) => l.acquisition_channel_id === c.id
-    )
-    const totalLeads = (allLeads ?? []).filter(
-      (l: { acquisition_channel_id: string }) => l.acquisition_channel_id === c.id
-    )
-    const views = (windowViews ?? []).filter(
-      (pv: { channel_id: string }) => pv.channel_id === c.id
-    )
-
-    const leadsInWindow = wLeads.length
-    const pageViewsInWindow = views.length
-    const conversionRate = pageViewsInWindow > 0
-      ? Math.round((leadsInWindow / pageViewsInWindow) * 100)
-      : 0
-
-    const scoredLeads = wLeads.filter(
-      (l: { current_score: number | null }) => l.current_score !== null
-    )
-    const avgTempScore = scoredLeads.length > 0
-      ? Math.round(
-          scoredLeads.reduce(
-            (sum: number, l: { current_score: number | null }) => sum + (l.current_score ?? 0),
-            0
-          ) / scoredLeads.length
-        )
-      : null
+    const m = metricsById[c.id as string]
+    const leadsInWindow     = m?.leads_in_window ?? 0
+    const pageViewsInWindow = m?.page_views_in_window ?? 0
+    const conversionRate    = m?.conversion_rate ?? null
+    const avgTempScore      = m?.avg_temp_score ?? null
+    const totalLeadsCount   = m?.leads_total ?? 0
 
     return {
       id:              c.id,
@@ -166,11 +171,15 @@ async function fetchChannelsWithMetrics(
       agentId:         c.agent_id ?? null,
       agentName:       c.agent_id ? (agentNameMap.get(c.agent_id) ?? null) : null,
       metadata:        c.metadata ?? {},
+      pageUrl:         channelPageUrl(c.metadata),
+      hostedPageEnabled: c.hosted_page?.enabled === true,
       createdAt:       c.created_at,
       archivedAt:      c.archived_at,
       metrics: {
-        leadsTotal:       totalLeads.length,
+        leadsTotal:       totalLeadsCount,
         leadsInWindow,
+        submissionsTotal:    m?.submissions_total ?? 0,
+        submissionsInWindow: m?.submissions_in_window ?? 0,
         pageViewsInWindow,
         conversionRate,
         avgTempScore,
@@ -197,7 +206,10 @@ export async function getChannelLeads(
 
   const { data, error } = await supabase
     .from('leads')
-    .select('id, first_name, last_name, email, status, current_score, traffic_source, created_at')
+    .select(columns('leads', [
+      'id', 'first_name', 'last_name', 'email', 'stage',
+      'current_score', 'traffic_source', 'created_at',
+    ]))
     .eq('tenant_id', tenantId)
     .eq('acquisition_channel_id', channelId)
     .order('created_at', { ascending: false })
@@ -210,8 +222,8 @@ export async function getChannelLeads(
     firstName:        r.first_name,
     lastName:         r.last_name,
     email:            r.email,
-    status:           r.status,
-    temperatureScore: r.current_score,
+    stage:            r.stage,
+    score:            r.current_score,
     trafficSource:    r.traffic_source,
     createdAt:        r.created_at,
   }))

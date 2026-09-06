@@ -13,6 +13,8 @@ export async function markAllNotificationsRead(): Promise<{ ok: true } | { ok: f
 
   let q = supabase.from('notifications').update({ read: true }).eq('read', false)
   if (ctx.tenant_id) q = q.eq('tenant_id', ctx.tenant_id)
+  // Agent role: only mark their own notifications as read
+  if (ctx.role === 'agent' && ctx.agent_id) q = q.eq('agent_id', ctx.agent_id)
 
   const { error } = await q
   if (error) {

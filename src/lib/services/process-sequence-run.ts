@@ -1,6 +1,11 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendSequenceEmail, type PendingRun } from '@/lib/services/send-sequence-email'
+import { resolveSenderIdentity } from '@/lib/services/sender-identity'
+import { parseEmailContent } from '@/lib/email-content'
+import type { EmailLocale } from '@/lib/services/email-render'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { isRunStale } from '@/lib/subscriptions/access'
 
 // Resend template IDs are UUIDs; anything else is a placeholder.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -41,7 +46,7 @@ export async function processSequenceRun(params: {
   // ── Fetch the run ──────────────────────────────────────────────────────────
   const { data: run } = await db
     .from('lead_sequence_runs')
-    .select('id, tenant_id, lead_id, sequence_id, current_step_order, status')
+    .select('id, tenant_id, lead_id, sequence_id, current_step_order, status, next_send_at')
     .eq('id', runId)
     .maybeSingle()
 
@@ -56,17 +61,19 @@ export async function processSequenceRun(params: {
   const stepOrder  = r.current_step_order as number
 
   // ── Bulk-fetch related entities in parallel ────────────────────────────────
-  const [leadRes, tenantRes, stepRes, channelRes, seqRes] = await Promise.all([
+  // getTenantAccessFor viaja en el mismo Promise.all — es una query barata y
+  // así no añade una vuelta secuencial extra al camino de envío.
+  const [leadRes, tenantRes, stepRes, channelRes, seqRes, access] = await Promise.all([
     db.from('leads')
-      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email)')
+      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email, email_signature)')
       .eq('id', leadId)
       .maybeSingle(),
     db.from('tenants')
-      .select('id, email_from_address')
+      .select('id, name, slug, email_from_address, resend_account, domain_status')
       .eq('id', tenantId)
       .maybeSingle(),
     db.from('email_sequence_steps')
-      .select('id, sequence_id, step_order, resend_template_id, delay_hours')
+      .select('id, sequence_id, step_order, resend_template_id, delay_hours, subject, body_json')
       .eq('sequence_id', sequenceId)
       .eq('step_order', stepOrder)
       .eq('active', true)
@@ -77,9 +84,10 @@ export async function processSequenceRun(params: {
       .limit(1)
       .maybeSingle(),
     db.from('email_sequences')
-      .select('name')
+      .select('name, language')
       .eq('id', sequenceId)
       .maybeSingle(),
+    getTenantAccessFor(tenantId),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,7 +100,9 @@ export async function processSequenceRun(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const channel = channelRes.data as any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seqName = (seqRes.data as any)?.name as string | undefined
+  const seq     = seqRes.data as any
+  const seqName = seq?.name as string | undefined
+  const seqLang: EmailLocale = seq?.language === 'en' || seq?.language === 'pt' ? seq.language : 'es'
 
   // ── Guard: email channel blocked ──────────────────────────────────────────
   // Cancel the run so the cron never retries it. The block is permanent until
@@ -123,32 +133,66 @@ export async function processSequenceRun(params: {
     step_id:            step?.id ?? null,
     resend_template_id: step?.resend_template_id ?? null,
     next_delay_hours:   step?.delay_hours ?? null,
+    step_subject:       (step?.subject as string | null) ?? null,
+    step_body_json:     step?.body_json ?? null,
     first_name:            lead?.first_name ?? '',
     lead_email:            lead?.email ?? '',
     agent_id:              lead?.agent_id ?? '',
     email_blocked:         (lead?.email_blocked as boolean) ?? false,
     email_blocked_reason:  (lead?.email_blocked_reason as string | null) ?? null,
-    email_from_address: tenant?.email_from_address ?? null,
+    email_from_address:   tenant?.email_from_address ?? null,
+    tenant_name:          (tenant?.name as string | undefined) ?? '',
+    tenant_slug:          (tenant?.slug as string | undefined) ?? '',
+    resend_account:       (tenant?.resend_account as string | null | undefined) ?? null,
+    domain_status:        (tenant?.domain_status as string | null | undefined) ?? null,
+    // Suscripción degradada: revoca el dominio propio en la resolución de
+    // identidad (no en la base — ver sender-identity.ts). Pasado a través de
+    // PendingRun para que sendSequenceEmail lo use en el envío real.
+    custom_domain_allowed: access.customDomainAllowed,
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',
+    agent_signature:    (agent?.email_signature as string | null) ?? null,
     channel_name:       channel?.name ?? null,
+    sequence_language:  seqLang,
+    next_send_at:       (r.next_send_at as string | null) ?? null,
   }
 
   const diag = { leadEmail: pending.lead_email, sequenceName: seqName ?? sequenceId, stepOrder }
+
+  // ── Guard: suscripción degradada — secuencias automáticas en pausa ────────
+  // El run NO cambia de estado en la base: se re-evalúa en el siguiente tick
+  // del cron, y al reactivar la suscripción se reanuda solo, sin barrido ni
+  // columna nueva. `access` ya viene resuelto del Promise.all de arriba.
+  if (!access.sequencesRunnable) {
+    return {
+      action:  'paused',
+      reason:  'subscription_inactive',
+      details: 'Suscripción inactiva: las secuencias automáticas están en pausa',
+      ...diag,
+    }
+  }
 
   // ── Dry-run: diagnose guards without side effects ──────────────────────────
   if (dryRun) {
     if (!pending.step_id) {
       return { action: 'paused', reason: 'no_step', details: `No active step at order ${stepOrder}`, ...diag }
     }
-    if (!pending.resend_template_id) {
-      return { action: 'paused', reason: 'no_template', details: 'resend_template_id is null on this step', ...diag }
+    // Un step es válido con contenido CRM (composer) O con un template de
+    // Resend (legacy). El contenido CRM tiene precedencia en el envío.
+    const hasCrmContent = !!(parseEmailContent(pending.step_body_json) && pending.step_subject?.trim())
+    if (!hasCrmContent) {
+      if (!pending.resend_template_id) {
+        return { action: 'paused', reason: 'no_content', details: 'Step has neither CRM content (subject + body_json) nor a Resend template id', ...diag }
+      }
+      if (!UUID_RE.test(pending.resend_template_id)) {
+        return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
+      }
     }
-    if (!UUID_RE.test(pending.resend_template_id)) {
-      return { action: 'paused', reason: 'invalid_template_id', details: `'${pending.resend_template_id}' is not a UUID — verify/replace in Resend dashboard`, ...diag }
-    }
-    if (!pending.email_from_address) {
-      return { action: 'paused', reason: 'no_from_address', details: 'tenant.email_from_address is null', ...diag }
+    if (!resolveSenderIdentity(
+      { name: pending.tenant_name, slug: pending.tenant_slug, email_from_address: pending.email_from_address, resend_account: pending.resend_account, domain_status: pending.domain_status },
+      { customDomainAllowed: pending.custom_domain_allowed },
+    )) {
+      return { action: 'paused', reason: 'no_from_address', details: 'No se pudo resolver la identidad de envío del tenant (email_from_address y dominio)', ...diag }
     }
     if (!pending.lead_email) {
       return { action: 'paused', reason: 'no_lead_email', details: 'lead.email is null', ...diag }
@@ -157,6 +201,17 @@ export async function processSequenceRun(params: {
       return { action: 'paused', reason: 'no_agent', details: 'agent.email is null', ...diag }
     }
     return { action: 'sent', reason: 'would_send', ...diag }
+  }
+
+  // ── Guard: envío vencido — no reactivar un run stale ────────────────────────
+  // Enviar el "paso N" a un lead que no sabe nada del agente desde hace meses
+  // es malo para el cliente y para la reputación de envío. Se completa el run
+  // en vez de dispararlo; el owner re-inscribe deliberadamente a quien quiera.
+  if (pending.next_send_at && isRunStale(pending.next_send_at, new Date())) {
+    if (!dryRun) {
+      await db.from('lead_sequence_runs').update({ status: 'completed' }).eq('id', runId)
+    }
+    return { action: 'completed', reason: 'stale_run', details: 'Envío vencido hace más de 30 días', ...diag }
   }
 
   // ── Production: delegate the actual send to sendSequenceEmail ───────────────

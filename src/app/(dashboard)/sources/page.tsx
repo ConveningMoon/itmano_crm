@@ -1,8 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/data/channels'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
+import { getSourcesHealth } from '@/lib/data/source-health'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
 
 export default async function SourcesPage({
@@ -10,7 +11,7 @@ export default async function SourcesPage({
 }: {
   searchParams: Promise<{ window?: string }>
 }) {
-  const ctx = await getCurrentTenantContext()
+  const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
@@ -21,21 +22,47 @@ export default async function SourcesPage({
   // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
   const channels         = await getChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
   const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
+  // Cómo está entrando cada fuente, según lo que realmente llega.
+  const health = tenant_id ? await getSourcesHealth(tenant_id) : {}
 
   const supabase = createAdminClient()
 
-  // super_admin needs tenant list for create-modal selects
+  // Picker de tenant en los modales: solo super_admin SIN selección (hoy
+  // inalcanzable aquí por requireTenantContext; actuando como tenant, las
+  // actions resuelven el tenant desde el contexto).
+  const needsTenantPicker = isSuperAdmin && !tenant_id
   let tenants: Array<{ id: string; name: string }> = []
-  if (isSuperAdmin) {
+  if (needsTenantPicker) {
     const { data } = await supabase.from('tenants').select('id, name').order('name')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
   }
 
-  // Active agents for the owner selector (scoped to tenant; all tenants for
-  // super_admin — the modals filter by the selected tenant).
+  // Slug y modo de gestión de cada tenant presente en las tarjetas: el botón de
+  // "abrir página" arma la URL alojada con el slug, y el mensaje cuando no hay
+  // página depende de si ITMANO administra a ese tenant. Se resuelve por tenant
+  // porque el super_admin sin selección ve canales de varios a la vez.
+  const tenantIds = [...new Set([...channels, ...archivedChannels].map(c => c.tenantId))]
+  let tenantPages: Record<string, { slug: string; managedByItmano: boolean }> = {}
+  if (tenantIds.length > 0) {
+    const { data } = await supabase
+      .from('tenants').select('id, slug, pages_managed_by_itmano').in('id', tenantIds)
+    tenantPages = Object.fromEntries(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data ?? []).map((t: any) => [
+        t.id as string,
+        { slug: (t.slug as string) ?? '', managedByItmano: t.pages_managed_by_itmano === true },
+      ]),
+    )
+  }
+
+  // Active agents for the owner selector, scoped al tenant del contexto
+  // (incluye al super_admin actuando como tenant).
   let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
-  if (!isSuperAdmin && tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  if (tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
+  // Un agente sólo crea fuentes suyas, así que el resto del equipo no tiene por
+  // qué viajar en el payload de una lista que él no puede elegir.
+  if (scope.agentId) agentsQ = agentsQ.eq('id', scope.agentId)
   const { data: agentRows } = await agentsQ
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
@@ -105,12 +132,15 @@ export default async function SourcesPage({
 
       {/* Client: tabs + window selector + cards */}
       <SourcesClient
+        health={health}
         channels={channels}
         archivedChannels={archivedChannels}
         windowDays={validWindow}
-        isSuperAdmin={isSuperAdmin}
+        isSuperAdmin={needsTenantPicker}
         tenants={tenants}
         agents={agents}
+        myAgentId={scope.agentId}
+        tenantPages={tenantPages}
       />
     </>
   )

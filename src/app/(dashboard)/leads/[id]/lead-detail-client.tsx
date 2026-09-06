@@ -2,19 +2,25 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { STATUS_CONFIG, LANGUAGE_CONFIG } from '@/lib/config'
-import type { Lead, Agent, LeadEvent, LeadStatus, PurchaseProcess } from '@/lib/types'
+import { LANGUAGE_CONFIG } from '@/lib/config'
+import { STAGE_CONFIG, type Stage } from '@/lib/scoring/priority'
+import type { Lead, Agent, LeadEvent, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
-import { updateLeadStatus, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
+import { updateLeadStage, completePurchaseProcess, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
 import {
   ArrowLeft, MoreHorizontal, X, Trash2,
-  UserPlus, Mail, FileDown, MousePointer2, Calendar,
-  ArrowRightCircle, CheckCircle2, Circle,
-  MessageCircle, XCircle,
-  Phone, Activity,
+  Mail, XCircle,
   Copy, Check,
 } from 'lucide-react'
+import { ModalShell } from '@/components/motion/modal-shell'
+import { Tabs } from '@/components/ui/tabs'
+import { FormSection } from '@/components/ui/form-section'
+import { ActivityTimeline } from './activity-timeline'
 import { EditLeadModal } from './edit-lead-modal'
+import { SendEmailModal, type EmailSendingInfo } from './send-email-modal'
+import { AiFitCard, type AiFitBriefing } from './ai-fit-card'
+import { PriorityCard, type LeadPriority, type LeadPotentialValue } from './priority-card'
+import type { LeadOpportunity } from '@/lib/scoring/opportunities'
 import { ManualActionsPanel, type ManualActionItem } from './manual-actions-panel'
 import { StatusHistoryTimeline } from './status-history-timeline'
 import type { StatusChange } from '@/lib/data/lead-status-history'
@@ -48,16 +54,7 @@ function getInitials(firstName: string, lastName: string): string {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FROZEN_STATUSES: LeadStatus[] = ['process_started', 'process_completed', 'closed', 'lost']
-
 const LOAN_TYPES = ['VA Loan', 'FHA', 'Convencional', 'USDA', 'Jumbo', 'Cash']
-
-const SPECIALTY_LABEL: Record<string, string> = {
-  hispanic:    'Familias Hispanas',
-  military:    'Familias Militares',
-  first_buyer: 'Primeros Compradores',
-  brazilian:   'Comunidad Brasileña',
-}
 
 const CARD: React.CSSProperties = {
   background:   'var(--bg-surface)',
@@ -72,51 +69,26 @@ const CARD_TITLE: React.CSSProperties = {
   color: 'var(--text-primary)', marginBottom: '16px',
 }
 
-// Calculated score breakdown (not events): fit dimensions + component subtotals.
-function ScoreBreakdownPanel({ breakdown }: { breakdown: ScoreBreakdown }) {
-  const ptsColor = (p: number) => p > 0 ? '#6BA368' : p < 0 ? '#C97B6B' : 'var(--text-muted)'
-  const row = (label: string, pts: number, muted = false) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', fontSize: '12px' }}>
-      <span style={{ color: muted ? 'var(--text-muted)' : 'var(--text-secondary)' }}>{label}</span>
-      <span style={{ color: ptsColor(pts), fontWeight: 600 }}>{pts > 0 ? `+${pts}` : pts}</span>
-    </div>
-  )
-  const sectionTitle = (t: string) => (
-    <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginTop: '14px', marginBottom: '2px' }}>{t}</div>
-  )
+// Icono de copiar en línea (junto al email/teléfono del perfil). Maneja su
+// propio feedback de "copiado".
+function InlineCopy({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
   return (
-    <div style={CARD}>
-      <div style={CARD_TITLE}>Desglose del score</div>
-
-      {sectionTitle('Fit')}
-      {breakdown.hasFitProfile ? (
-        breakdown.fit.lines.length > 0
-          ? breakdown.fit.lines.map(l => <div key={l.dimension}>{row(l.label, l.points)}</div>)
-          : <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '5px 0' }}>Sin dimensiones puntuables.</div>
-      ) : (
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '5px 0', fontStyle: 'italic' }}>Sin datos de perfil aún</div>
-      )}
-      {row('Subtotal Fit', breakdown.fit.total, true)}
-
-      {sectionTitle('Engagement')}
-      {row('Subtotal Engagement', breakdown.engagement.total, true)}
-      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-        Las señales positivas pierden valor con el tiempo.
-      </div>
-
-      {sectionTitle('Manual')}
-      {row('Subtotal Manual', breakdown.manual.total, true)}
-
-      <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: '14px', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Total</span>
-        <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>{breakdown.total}/100</span>
-      </div>
-      {breakdown.frozen && (
-        <div style={{ fontSize: '11px', color: 'var(--accent-gold)', marginTop: '6px' }}>
-          Score congelado por estado.
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600) }}
+      title={`Copiar ${label}`}
+      aria-label={`Copiar ${label}`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        color: copied ? 'var(--accent-green)' : 'var(--text-muted)',
+        transition: 'color 0.15s',
+      }}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
   )
 }
 
@@ -143,22 +115,6 @@ const LABEL_STYLE: React.CSSProperties = {
   textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500,
 }
 
-const EVENT_ICON_MAP: Record<string, { icon: React.ReactNode; color: string }> = {
-  lead_created:            { icon: <UserPlus size={14} />,          color: '#5B8EC9' },
-  email_opened:            { icon: <Mail size={14} />,              color: '#C9A96E' },
-  email_clicked:           { icon: <MousePointer2 size={14} />,     color: '#C9A96E' },
-  lm_downloaded:           { icon: <FileDown size={14} />,          color: '#5AAFA0' },
-  consultation_scheduled:  { icon: <Calendar size={14} />,          color: '#9B72CF' },
-  consultation_attended:   { icon: <CheckCircle2 size={14} />,      color: '#6BA368' },
-  reply_received:          { icon: <MessageCircle size={14} />,     color: '#5AAFA0' },
-  phone_call:              { icon: <Phone size={14} />,             color: '#5B8EC9' },
-  unsubscribed:            { icon: <XCircle size={14} />,           color: '#C97B6B' },
-  status_changed:          { icon: <ArrowRightCircle size={14} />,  color: '#9B72CF' },
-  score_manual:            { icon: <Activity size={14} />,          color: '#C9A96E' },
-}
-
-const DEFAULT_EVENT = { icon: <Circle size={14} />, color: '#C9A96E' }
-
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface LeadDetailProps {
@@ -170,18 +126,22 @@ interface LeadDetailProps {
   submissions: LeadSubmissionRow[]
   emailReplies: LeadEmailReply[]
   purchaseProcess: PurchaseProcess | null
-  hasActiveSequenceRun: boolean
   manualActions: ManualActionItem[]
   statusHistory: StatusChange[]
   scoreBreakdown: ScoreBreakdown
+  opportunities: LeadOpportunity[]
+  priority: LeadPriority | null
+  potentialValue: LeadPotentialValue | null
+  emailSending?: EmailSendingInfo
+  aiFit?: { enabled: boolean; briefing: AiFitBriefing | null; at: string | null }
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, hasActiveSequenceRun, manualActions, statusHistory, scoreBreakdown }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, opportunities, priority, potentialValue, emailSending, aiFit }: LeadDetailProps) {
   const router = useRouter()
 
-  const [currentStatus, setCurrentStatus] = useState<LeadStatus>(lead.status)
+  const [currentStage, setCurrentStage] = useState<Stage>(lead.stage)
   const [notes, setNotes]                 = useState(lead.notes ?? '')
   const [savedNotes, setSavedNotes]       = useState(lead.notes ?? '')
   const [showProcessModal, setShowProcessModal] = useState(false)
@@ -190,9 +150,21 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [modalClosingDate, setModalClosingDate] = useState('')
   const [modalNotes, setModalNotes]         = useState('')
   const [showEditModal, setShowEditModal]   = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  // Tab activo del historial (controlado) — permite que los eventos de la
+  // actividad enlacen a su contenido (formulario / correo).
+  const [historyTab, setHistoryTab] = useState('actividad')
+  function openHistoryTab(tab: string) {
+    setHistoryTab(tab)
+    document.getElementById('lead-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   const [confirmClose, setConfirmClose]     = useState(false)
   const [confirmLost, setConfirmLost]       = useState(false)
   const [actionError, setActionError]       = useState<string | null>(null)
+  // true cuando startPurchaseProcess se bloquea por faltar los emails de cierre:
+  // en ese caso el error se muestra como alerta con botón a /emails, no como
+  // texto simple de error.
+  const [needsClosingEmails, setNeedsClosingEmails] = useState(false)
   const [isPending, startTransition]        = useTransition()
 
   // Delete lead — two-step confirmation
@@ -200,14 +172,6 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [deleteInput, setDeleteInput] = useState('')
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isDeleting,  startDelete]    = useTransition()
-
-  // Force-next-send
-  const [forceResult,   setForceResult]   = useState<string | null>(null)
-  const [isForceSending, startForceSend]  = useTransition()
-
-  // Clipboard copy feedback (auto-reset after 2 s)
-  const [copiedEmail, setCopiedEmail] = useState(false)
-  const [copiedPhone, setCopiedPhone] = useState(false)
 
   function handleDeleteConfirm() {
     setDeleteError(null)
@@ -218,45 +182,26 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
     })
   }
 
-  function handleForceSend() {
-    setForceResult(null)
-    startForceSend(async () => {
-      try {
-        const res = await fetch(`/api/leads/${lead.id}/force-next-send`, { method: 'POST' })
-        const json = await res.json() as Record<string, unknown>
-        if (!res.ok) {
-          setForceResult(`Error: ${(json.error as string) ?? 'Error desconocido'}`)
-          return
-        }
-        const sent = (json.sent as number) ?? 0
-        setForceResult(sent > 0 ? `Email enviado (paso procesado)` : `Sin emails enviados — revisa el run`)
-      } catch (err) {
-        setForceResult(`Error de red: ${err instanceof Error ? err.message : String(err)}`)
-      }
-    })
-  }
-
   // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing server-prop to local state after router.refresh()
-  useEffect(() => { setCurrentStatus(lead.status) }, [lead.status])
+  useEffect(() => { setCurrentStage(lead.stage) }, [lead.stage])
 
   const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
   const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
   const langCfg    = LANGUAGE_CONFIG[lead.language]
   const initials  = getInitials(lead.firstName, lead.lastName)
 
-  const isProcessActive = currentStatus === 'process_started' || currentStatus === 'process_completed'
-  const scoreColor = (s: number) => s >= 60 ? '#E04040' : s >= 35 ? '#E07B3A' : '#C9A96E'
-  // Primary: status-based freeze; null score is a DB consequence of closed/lost
-  const isFrozen = lead.temperatureScore === null || FROZEN_STATUSES.includes(currentStatus)
+  // El proceso de compra sigue vivo mientras no se haya marcado completado. Su
+  // estado ya no se deduce de la etapa del lead: vive en purchase_processes.
+  const isProcessActive = currentStage === 'en_proceso' || purchaseProcess?.completedAt != null
 
-  const infoRows = [
+  const infoRows: { label: string; value: string; copy?: string }[] = [
     { label: 'Nombre',      value: `${lead.firstName} ${lead.lastName}` },
-    { label: 'Email',       value: lead.email },
-    { label: 'Teléfono',    value: lead.phone || '—' },
+    { label: 'Email',       value: lead.email, copy: lead.email },
+    { label: 'Teléfono',    value: lead.phone || '—', copy: lead.phone || undefined },
     { label: 'Idioma',      value: `${langCfg.flag} ${langCfg.label}` },
     { label: 'Registrado',  value: formatFullDate(lead.createdAt) },
     { label: 'Prestamista', value: lead.lender || '—' },
-	{ label: 'Última act.', value: formatFullDate(lead.updatedAt) },
+    { label: 'Última act.', value: formatFullDate(lead.updatedAt) },
   ]
 
   return (
@@ -303,11 +248,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 <span style={{
                   display: 'inline-flex', alignItems: 'center',
                   padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
-                  background: STATUS_CONFIG[currentStatus].bgColor,
-                  color:      STATUS_CONFIG[currentStatus].color,
-                  border:     `1px solid ${STATUS_CONFIG[currentStatus].color}40`,
+                  background: STAGE_CONFIG[currentStage].bg,
+                  color:      STAGE_CONFIG[currentStage].color,
+                  border:     `1px solid color-mix(in srgb, ${STAGE_CONFIG[currentStage].color} 40%, transparent)`,
                 }}>
-                  {STATUS_CONFIG[currentStatus].label}
+                  {STAGE_CONFIG[currentStage].label}
                 </span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -321,6 +266,19 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
           {/* Header actions */}
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <button
+              onClick={() => setShowEmailModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                height: '32px', padding: '0 12px', borderRadius: '8px',
+                background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.25)',
+                cursor: 'pointer', color: 'var(--accent-gold)', fontSize: '12px', fontWeight: 500,
+              }}
+              title="Redactar un correo (corporativo o personal), con IA opcional"
+            >
+              <Mail size={14} />
+              <span>Enviar correo</span>
+            </button>
             <button
               onClick={() => setShowEditModal(true)}
               style={{
@@ -374,56 +332,23 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 }}>
                   {row.label}
                 </span>
-                <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1, textAlign: 'right' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1, textAlign: 'right', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                   {row.value}
+                  {row.copy && <InlineCopy text={row.copy} label={row.label.toLowerCase()} />}
                 </span>
               </div>
             ))}
           </div>
 
-          {/* Card 2: Temperature */}
-          <div style={CARD}>
-            <div style={CARD_TITLE}>Temperatura del lead</div>
+          {/* Card 2: Prioridad — reemplaza "Temperatura del lead" y "Desglose del
+              score". El agente no trabaja con fit/engagement/manual: trabaja con
+              a quién llamar y por qué. El desglose sigue dentro, plegado. */}
+          <PriorityCard priority={priority} breakdown={scoreBreakdown} opportunities={opportunities} potentialValue={potentialValue} />
 
-            {isFrozen ? (
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                Score congelado — lead {STATUS_CONFIG[currentStatus].label.toLowerCase()}
-              </div>
-            ) : (
-              <>
-                {/* 10 large pills */}
-                <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-                  {Array.from({ length: 10 }, (_, i) => (
-                    <div key={i} style={{
-                      flex: 1, height: '12px', borderRadius: '3px',
-                      background: i < Math.round((lead.temperatureScore ?? 0) / 10)
-                        ? scoreColor(lead.temperatureScore ?? 0)
-                        : 'var(--bg-overlay)',
-                    }} />
-                  ))}
-                </div>
-
-                {/* Continuous bar */}
-                <div style={{ width: '100%', height: '6px', background: 'var(--bg-overlay)', borderRadius: '3px', marginBottom: '8px' }}>
-                  <div style={{
-                    width: `${lead.temperatureScore ?? 0}%`, height: '100%',
-                    background: scoreColor(lead.temperatureScore ?? 0), borderRadius: '3px',
-                  }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '12px', color: scoreColor(lead.temperatureScore ?? 0) }}>
-                    {(lead.temperatureScore ?? 0) >= 60 ? 'Caliente' : (lead.temperatureScore ?? 0) >= 35 ? 'Tibio' : 'Frío'}
-                  </span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Score {lead.temperatureScore ?? 0}/100
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Card: Score breakdown */}
-          <ScoreBreakdownPanel breakdown={scoreBreakdown} />
+          {/* Card: Análisis de fit con IA */}
+          {aiFit && (
+            <AiFitCard leadId={lead.id} enabled={aiFit.enabled} briefing={aiFit.briefing} at={aiFit.at} />
+          )}
 
           {/* Card 3: Notes */}
           <div style={CARD}>
@@ -473,15 +398,15 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               {isProcessActive && (
                 <span style={{
                   fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-                  background: STATUS_CONFIG[currentStatus].bgColor,
-                  color: STATUS_CONFIG[currentStatus].color,
+                  background: STAGE_CONFIG[currentStage].bg,
+                  color: STAGE_CONFIG[currentStage].color,
                 }}>
-                  {STATUS_CONFIG[currentStatus].label}
+                  {STAGE_CONFIG[currentStage].label}
                 </span>
               )}
             </div>
 
-            {(currentStatus === 'closed' || currentStatus === 'lost') && (
+            {(currentStage === 'cerrado' || currentStage === 'perdido') && (
               <div style={{
                 marginBottom: '12px', padding: '8px 12px', borderRadius: '6px',
                 background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
@@ -491,8 +416,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </div>
             )}
             <div style={{
-              opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
-              pointerEvents: currentStatus === 'closed' || currentStatus === 'lost' ? 'none' : 'auto',
+              opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
+              pointerEvents: currentStage === 'cerrado' || currentStage === 'perdido' ? 'none' : 'auto',
             }}>
               {isProcessActive ? (
                 <>
@@ -514,13 +439,13 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                     </div>
                   ))}
 
-                  {currentStatus === 'process_started' && (
+                  {currentStage === 'en_proceso' && (
                     <button
                       onClick={() => {
                         startTransition(async () => {
                           setActionError(null)
-                          const res = await updateLeadStatus(lead.id, 'process_completed')
-                          if (res.ok) setCurrentStatus('process_completed')
+                          const res = await completePurchaseProcess(lead.id)
+                          if (res.ok) setCurrentStage('cerrado')
                           else setActionError(res.error)
                         })
                       }}
@@ -578,7 +503,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   </div>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{SPECIALTY_LABEL[agent.specialty]}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
+                    </div>
                   </div>
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>{agent.email}</div>
@@ -618,76 +545,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             <div style={CARD_TITLE}>Acciones</div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {/* Mailto — opens the agent's personal email client. No server send, no Resend. */}
-              <a
-                href={`mailto:${lead.email}?subject=${encodeURIComponent(`${lead.firstName} ${lead.lastName}`)}`}
-                className="action-btn"
-                style={{ ...ACTION_BTN_STYLE, textDecoration: 'none', minHeight: '40px' }}
-              >
-                <Mail size={14} /> Enviar email
-              </a>
-              {/* Copy email — always visible */}
-              <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(lead.email)
-                  setCopiedEmail(true)
-                  setTimeout(() => setCopiedEmail(false), 2000)
-                }}
-                className="action-btn"
-                style={{
-                  ...ACTION_BTN_STYLE,
-                  minHeight: '40px',
-                  ...(copiedEmail && { color: 'var(--accent-green)', borderColor: 'rgba(107,163,104,0.3)' }),
-                }}
-              >
-                {copiedEmail ? <Check size={14} /> : <Copy size={14} />}
-                {copiedEmail ? 'Copiado' : 'Copiar email'}
-              </button>
-              {/* Copy phone — only when the lead has a phone number */}
-              {lead.phone && (
-                <button
-                  onClick={() => {
-                    void navigator.clipboard.writeText(lead.phone!)
-                    setCopiedPhone(true)
-                    setTimeout(() => setCopiedPhone(false), 2000)
-                  }}
-                  className="action-btn"
-                  style={{
-                    ...ACTION_BTN_STYLE,
-                    minHeight: '40px',
-                    ...(copiedPhone && { color: 'var(--accent-green)', borderColor: 'rgba(107,163,104,0.3)' }),
-                  }}
-                >
-                  {copiedPhone ? <Check size={14} /> : <Copy size={14} />}
-                  {copiedPhone ? 'Copiado' : 'Copiar teléfono'}
-                </button>
-              )}
-
-              {/* Force-next-send — visible only when lead has an active sequence run */}
-              {hasActiveSequenceRun && (
-                <button
-                  onClick={handleForceSend}
-                  disabled={isForceSending}
-                  className="action-btn"
-                  style={{
-                    ...ACTION_BTN_STYLE,
-                    color: isForceSending ? 'var(--text-muted)' : 'var(--accent-teal)',
-                    borderColor: 'rgba(90,175,160,0.3)',
-                    cursor: isForceSending ? 'not-allowed' : 'pointer',
-                    opacity: isForceSending ? 0.7 : 1,
-                  }}
-                >
-                  <Activity size={14} /> {isForceSending ? 'Enviando...' : 'Mandar siguiente ahora'}
-                </button>
-              )}
-              {forceResult && (
-                <p style={{
-                  fontSize: '11px', margin: '2px 0 0',
-                  color: forceResult.startsWith('Error') ? '#C97B6B' : 'var(--accent-green)',
-                }}>
-                  {forceResult}
-                </p>
-              )}
+              {/* El envío (corporativo o personal) vive en el botón "Enviar correo"
+                  del encabezado, que abre el popup con ambas opciones. Copiar
+                  email/teléfono vive como icono junto al dato en el perfil. */}
 
               {/* Marcar como Cerrado — inline confirm */}
               {confirmClose ? (
@@ -697,8 +557,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                       setConfirmClose(false)
                       startTransition(async () => {
                         setActionError(null)
-                        const res = await updateLeadStatus(lead.id, 'closed')
-                        if (res.ok) setCurrentStatus('closed')
+                        const res = await updateLeadStage(lead.id, 'cerrado')
+                        if (res.ok) setCurrentStage('cerrado')
                         else setActionError(res.error)
                       })
                     }}
@@ -724,12 +584,12 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               ) : (
                 <button
                   onClick={() => setConfirmClose(true)}
-                  disabled={currentStatus === 'closed' || currentStatus === 'lost'}
+                  disabled={currentStage === 'cerrado' || currentStage === 'perdido'}
                   className="action-btn"
                   style={{
                     ...ACTION_BTN_STYLE,
-                    opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
-                    cursor: currentStatus === 'closed' || currentStatus === 'lost' ? 'not-allowed' : 'pointer',
+                    opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
+                    cursor: currentStage === 'cerrado' || currentStage === 'perdido' ? 'not-allowed' : 'pointer',
                   }}
                 >
                   <XCircle size={14} style={{ color: '#4A9B6B' }} /> Marcar como Cerrado
@@ -744,8 +604,8 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                       setConfirmLost(false)
                       startTransition(async () => {
                         setActionError(null)
-                        const res = await updateLeadStatus(lead.id, 'lost')
-                        if (res.ok) setCurrentStatus('lost')
+                        const res = await updateLeadStage(lead.id, 'perdido')
+                        if (res.ok) setCurrentStage('perdido')
                         else setActionError(res.error)
                       })
                     }}
@@ -771,12 +631,12 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               ) : (
                 <button
                   onClick={() => setConfirmLost(true)}
-                  disabled={currentStatus === 'closed' || currentStatus === 'lost'}
+                  disabled={currentStage === 'cerrado' || currentStage === 'perdido'}
                   className="action-btn"
                   style={{
                     ...ACTION_BTN_STYLE, color: 'rgba(201,123,107,0.7)',
-                    opacity: currentStatus === 'closed' || currentStatus === 'lost' ? 0.4 : 1,
-                    cursor: currentStatus === 'closed' || currentStatus === 'lost' ? 'not-allowed' : 'pointer',
+                    opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
+                    cursor: currentStage === 'cerrado' || currentStage === 'perdido' ? 'not-allowed' : 'pointer',
                   }}
                 >
                   <XCircle size={14} /> Marcar como Perdido
@@ -794,73 +654,28 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       {/* ── Manual actions panel ── */}
       <ManualActionsPanel
         leadId={lead.id}
-        currentStatus={currentStatus}
+        currentStage={currentStage}
         actions={manualActions}
       />
 
-      {/* ── Formularios completados ── */}
-      <LeadSubmissionsList submissions={submissions} />
-
-      {/* ── Respuestas por email ── */}
-      <LeadEmailRepliesList replies={emailReplies} />
-
-      {/* ── Historial de estados ── */}
-      <StatusHistoryTimeline changes={statusHistory} />
-
-      {/* ── Timeline ── */}
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px 24px', marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Historial de actividad</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{events.length} eventos</span>
-        </div>
-
-        {events.length === 0 ? (
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Sin actividad registrada todavía.
-          </p>
-        ) : (
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: '13px', top: '14px', bottom: '14px', width: '2px', background: 'var(--border-subtle)' }} />
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {events.map(event => {
-                const { icon, color } = EVENT_ICON_MAP[event.type] ?? DEFAULT_EVENT
-                return (
-                  <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', paddingBottom: '16px' }}>
-                    <div style={{
-                      width: '28px', height: '28px', borderRadius: '50%',
-                      background: `${color}1F`, color,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0, position: 'relative', zIndex: 1,
-                    }}>
-                      {icon}
-                    </div>
-                    <div style={{ flex: 1, paddingTop: '5px' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4, flex: 1 }}>
-                          {event.description}
-                        </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                          {event.points !== null && event.points !== 0 && (
-                            <span style={{
-                              fontSize: '11px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
-                              background: event.points > 0 ? 'rgba(107,163,104,0.12)' : 'rgba(201,123,107,0.12)',
-                              color: event.points > 0 ? '#6BA368' : '#C97B6B',
-                            }}>
-                              {event.points > 0 ? `+${event.points}` : event.points} pts
-                            </span>
-                          )}
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                            {event.author ? `${event.author} · ` : ''}{formatDateTime(event.createdAt)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+      {/* ── Historial del lead: actividad, formularios, emails y estados ── */}
+      <div id="lead-history" style={{ marginTop: '24px', scrollMarginTop: '80px' }}>
+        <Tabs
+          value={historyTab}
+          onChange={setHistoryTab}
+          items={[
+            { key: 'actividad',   label: 'Actividad',   badge: events.length },
+            { key: 'formularios', label: 'Formularios', badge: submissions.length },
+            { key: 'emails',      label: 'Emails',      badge: emailReplies.length },
+            { key: 'historial',   label: 'Historial',   badge: statusHistory.length },
+          ]}
+          content={{
+            actividad:   <ActivityTimeline events={events} onOpen={openHistoryTab} />,
+            formularios: <LeadSubmissionsList submissions={submissions} />,
+            emails:      <LeadEmailRepliesList replies={emailReplies} />,
+            historial:   <StatusHistoryTimeline changes={statusHistory} />,
+          }}
+        />
       </div>
 
       {/* ── Modal: Edit Lead ── */}
@@ -872,21 +687,20 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         onClose={() => setShowEditModal(false)}
       />
 
+      <SendEmailModal
+        open={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        leadId={lead.id}
+        leadEmail={lead.email}
+        language={lead.language}
+        leadFirstName={lead.firstName}
+        agentName={agent?.name}
+        sending={emailSending}
+      />
+
       {/* ── Modal: Iniciar proceso ── */}
-      {showProcessModal && (
-        <>
-          <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }}
-            onClick={() => setShowProcessModal(false)}
-          />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px',
-            width: '480px', maxWidth: '90vw',
-            zIndex: 51,
-          }}>
+      <ModalShell open={showProcessModal} onClose={() => setShowProcessModal(false)} maxWidth={480}>
+          <div style={{ padding: '24px' }}>
             {/* Modal header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Iniciar proceso de compra</div>
@@ -903,6 +717,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
             {/* Form fields */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
+              <FormSection title="Propiedad" first>
               <div>
                 <label style={LABEL_STYLE}>Dirección de la propiedad</label>
                 <input
@@ -927,6 +742,9 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   ))}
                 </select>
               </div>
+              </FormSection>
+
+              <FormSection title="Cierre">
               <div>
                 <label style={LABEL_STYLE}>Fecha estimada de cierre <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
                 <input
@@ -950,11 +768,34 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   style={{ ...INPUT_STYLE, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
                 />
               </div>
+              </FormSection>
             </div>
 
             {/* Modal actions */}
             {actionError && (
-              <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '8px' }}>{actionError}</p>
+              needsClosingEmails ? (
+                <div style={{
+                  marginBottom: '12px', padding: '12px 14px', borderRadius: '8px',
+                  background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.28)',
+                }}>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.55, margin: '0 0 10px' }}>
+                    {actionError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/emails#emails-de-cierre')}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px',
+                      background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    Configurar emails de cierre →
+                  </button>
+                </div>
+              ) : (
+                <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '8px' }}>{actionError}</p>
+              )
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
@@ -971,6 +812,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 onClick={() => {
                   startTransition(async () => {
                     setActionError(null)
+                    setNeedsClosingEmails(false)
                     const res = await startPurchaseProcess(lead.id, {
                       address:     modalAddress,
                       loanType:    modalLoanType,
@@ -985,6 +827,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                       setModalNotes('')
                     } else {
                       setActionError(res.error)
+                      setNeedsClosingEmails(res.needsClosingEmails === true)
                     }
                   })
                 }}
@@ -999,18 +842,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
 
       {/* ── Modal: Eliminar lead — Step 1: first confirmation ── */}
-      {deleteStep === 1 && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setDeleteStep(0)} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px', width: '440px', maxWidth: '90vw', zIndex: 51,
-          }}>
+      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={440}>
+          <div style={{ padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar lead</span>
               <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
@@ -1029,18 +865,11 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               }}>Continuar →</button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
 
       {/* ── Modal: Eliminar lead — Step 2: type confirmation ── */}
-      {deleteStep === 2 && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setDeleteStep(0)} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid rgba(201,123,107,0.35)',
-            borderRadius: '16px', padding: '24px', width: '420px', maxWidth: '90vw', zIndex: 51,
-          }}>
+      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
+          <div style={{ padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--accent-coral)' }}>Confirmar eliminación</span>
               <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
@@ -1062,7 +891,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               }}
             />
             {deleteError && (
-              <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>
                 {deleteError}
               </div>
             )}
@@ -1084,8 +913,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </button>
             </div>
           </div>
-        </>
-      )}
+      </ModalShell>
     </div>
   )
 }

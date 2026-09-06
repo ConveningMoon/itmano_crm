@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Image from 'next/image'
+import { AnimatePresence, m } from 'motion/react'
 import { Menu, X, LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { BrandLogo } from './brand-logo'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
@@ -11,9 +12,16 @@ import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 // Mobile navigation: a hamburger trigger (phones only) + a left-sliding drawer that
 // mirrors the desktop sidebar (logo · nav · user/sign-out). Closes on overlay tap and
 // on navigation. Entirely additive — the trigger is `md:hidden`, so ≥768px is unaffected.
-export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: string }) {
+export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
+  role: TenantRole
+  userEmail: string
+  hubMode?: boolean
+  logoUrl?: string | null
+  tenantName?: string | null
+  planLabel?: string | null
+}) {
   const [open, setOpen] = useState(false)
-  const items = navItemsForRole(role)
+  const items = navItemsForRole(role, { hubMode })
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {
@@ -50,9 +58,14 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
         <Menu size={18} strokeWidth={2} />
       </button>
 
-      {/* Overlay + sliding panel. Always mounted so the slide transition runs both ways. */}
-      <div
-        aria-hidden={!open}
+      {/* Overlay + sliding panel. AnimatePresence anima entrada y salida. */}
+      <AnimatePresence>
+        {open && (
+      <m.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, transition: { duration: 0.15 } }}
+        transition={{ duration: 0.2 }}
         onClick={() => setOpen(false)}
         style={{
           position: 'fixed',
@@ -60,12 +73,13 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
           zIndex: 60,
           background: 'rgba(0,0,0,0.55)',
           backdropFilter: 'blur(4px)',
-          opacity: open ? 1 : 0,
-          pointerEvents: open ? 'auto' : 'none',
-          transition: 'opacity 0.2s ease',
         }}
       >
-        <aside
+        <m.aside
+          initial={{ x: '-100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '-100%', transition: { duration: 0.2, ease: 'easeIn' } }}
+          transition={{ type: 'spring', stiffness: 380, damping: 34 }}
           onClick={e => e.stopPropagation()}
           style={{
             position: 'absolute',
@@ -78,8 +92,6 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
             borderRight: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            transform: open ? 'translateX(0)' : 'translateX(-100%)',
-            transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
           }}
         >
           {/* Header: logo + close */}
@@ -93,7 +105,7 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <Image src="/A&J_Logo_White.png" alt="ITMANO" width={120} height={44} priority style={{ objectFit: 'contain', display: 'block', marginBottom: '8px' }} />
+              <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
               <div style={{ fontSize: '10px', fontWeight: 300, color: 'var(--text-muted)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
                 CRM by ITMANO
               </div>
@@ -119,7 +131,7 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
             style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}
           >
             {items.map(item => (
-              <NavItem key={item.href} {...item} />
+              <NavItem key={item.href} {...item} indicatorId="nav-indicator-mobile" hrefs={items.map(i => i.href)} />
             ))}
           </nav>
 
@@ -144,6 +156,11 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   {ROLE_LABELS[role]}
                 </div>
+                {planLabel && (
+                  <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
+                    {planLabel}
+                  </div>
+                )}
               </div>
             </div>
             <form action={signOut} style={{ padding: '0 12px 14px' }}>
@@ -162,8 +179,10 @@ export function MobileNav({ role, userEmail }: { role: TenantRole; userEmail: st
               </button>
             </form>
           </div>
-        </aside>
-      </div>
+        </m.aside>
+      </m.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

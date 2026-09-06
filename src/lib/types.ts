@@ -1,11 +1,13 @@
-export type LeadStatus =
-  | 'new' | 'nurturing' | 'warm' | 'hot'
-  | 'process_started' | 'process_completed' | 'closed' | 'lost'
+// La etapa vive en src/lib/scoring/priority.ts junto a las otras dos dimensiones
+// (calidad y urgencia); aquí sólo se reexporta para no obligar a cada consumidor
+// de Lead a importar de dos sitios.
+export type { Stage } from './scoring/priority'
 
-export type AgentSpecialty =
-  | 'hispanic' | 'military' | 'first_buyer' | 'brazilian'
-
-export type Language = 'es' | 'en' | 'pt'
+// Idiomas soportados (migración 062). Fuente única: LANGUAGE_CONFIG en
+// src/lib/config.ts refleja exactamente este set y el CHECK de la base.
+export type Language =
+  | 'es' | 'en' | 'pt' | 'fr' | 'de' | 'it' | 'zh' | 'ja' | 'ko'
+  | 'ru' | 'ar' | 'hi' | 'vi' | 'tl' | 'ht' | 'pl' | 'uk' | 'tr' | 'nl'
 
 export interface Tenant {
   id: string
@@ -27,24 +29,20 @@ export interface Agent {
   name: string
   email: string
   phone?: string
+  /** Idioma principal (ruteo automático de leads). Siempre ∈ languages. */
   language: Language
-  specialty: AgentSpecialty
+  /** Idiomas registrados que atiende — definen sus emails de cierre (058). */
+  languages: Language[]
   avatarInitials: string
   accentColor: string
   active: boolean
-}
-
-export interface LeadMagnet {
-  id: string
-  tenantId: string
-  agentId: string
-  title: string
-  subtitle: string
-  language: Language
-  monthYear: string
-  pageUrl: string
-  coverEmoji: string
-  active: boolean
+  emailSignature?: string | null
+  /** Descripción del agente para personalizar el análisis de fit con IA (064). */
+  description?: string | null
+  /** Portada del agente (095). La usan los diseños del Estudio; siempre opcional. */
+  coverPhotoUrl?: string | null
+  /** true si el archivo traía transparencia real → se usa recortada, no en círculo. */
+  coverPhotoCutout?: boolean
 }
 
 export interface Lead {
@@ -58,10 +56,12 @@ export interface Lead {
   email: string
   phone?: string
   language: Language
-  status: LeadStatus
-  temperatureScore: number | null
-  peakScore: number | null
+  /** Dónde está en el embudo. La mueve el agente, no el scoring (migración 082). */
+  stage: import('./scoring/priority').Stage
+  /** El score del motor. Decae con el tiempo — para "qué tan bueno es", usa quality. */
   currentScore: number | null
+  /** Qué tan bueno es. Lo calcula el sistema y NO decae. */
+  qualityScore: number | null
   fitScore: number | null
   engagementScore: number | null
   manualScore: number | null
@@ -92,6 +92,8 @@ export interface PurchaseProcess {
   loanType: string
   closingDate?: string   // ISO date string "YYYY-MM-DD" from Postgres date column
   notes?: string
+  /** Cuándo se completó el proceso. Null = sigue abierto (migración 082). */
+  completedAt: string | null
   createdAt: string
 }
 
