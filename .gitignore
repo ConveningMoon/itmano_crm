@@ -13,8 +13,6 @@ node_modules/
 # Testing
 coverage/
 graphify-out/
-.graphifyignore
-.claudignore
 
 # Next.js
 .next/
@@ -59,9 +57,7 @@ yarn-error.log*
 # ESLint cache
 .eslintcache
 
-# AI / local planning (not shipped)
-CLAUDE.md
-AGENTS.md
+# AI agents
 .cursor/
 docs/superpowers/
 

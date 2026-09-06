@@ -70,27 +70,12 @@ the PR is merged and before running the smoke test.
 
 ---
 
-## Step 5 — Smoke test: verify sends
+## Step 5 — Smoke test: verify sends — completed
 
-With the PR deployed and env vars set, run:
-
-```bash
-curl -X POST https://app.itmano.com/api/test/resend-send \
-  -H "Authorization: Bearer <CRON_SECRET>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "to": "dj.vergara@hotmail.com",
-    "subject": "ITMANO Resend smoke test",
-    "html": "<p>Si recibes esto, el SDK de Resend está funcionando.</p>"
-  }'
-```
-
-Expected response:
-```json
-{ "data": { "id": "msg_xxx" }, "error": null }
-```
-
-Verify the email arrives in the inbox.
+The original one-use public endpoint was removed after the provider was
+verified. If delivery must be tested again, use Resend's dashboard or a local
+script with an explicitly approved recipient. Do not expose `CRON_SECRET` to a
+general-purpose send endpoint.
 
 ---
 
@@ -106,10 +91,12 @@ Verify the email arrives in the inbox.
 
 ---
 
-## Step 7 — Delete the test endpoint
+## Step 7 — Delete the test endpoint — completed
 
-Once smoke test passes, delete `src/app/api/test/resend-send/route.ts` and open a
-small cleanup PR (`chore/remove-test-send-endpoint`).
+The smoke-test endpoint was removed after verification. Do not recreate a
+public route that accepts arbitrary recipients or HTML. For future provider
+diagnostics, use a local script or a deliberately constrained admin tool with
+an allowlist, audit trail, and rate limiting.
 
 ---
 

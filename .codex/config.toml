@@ -1,0 +1,7 @@
+# Configuración compartida del proyecto. Codex sólo la carga cuando el repo es
+# de confianza. La autenticación OAuth permanece local a cada computadora.
+
+[mcp_servers.supabase_sandbox]
+url = "https://mcp.supabase.com/mcp?project_ref=xpaixcowvyksgluazwzn&features=database%2Cdebugging%2Cdevelopment%2Cdocs"
+required = false
+default_tools_approval_mode = "writes"

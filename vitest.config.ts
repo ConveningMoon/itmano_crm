@@ -9,16 +9,17 @@ import path from 'node:path'
 //                                 apunten a un proyecto distinto al de `npm run dev`
 //   2. .env.development.local   — el sandbox; con esto las suites de BD dejan de
 //                                 crear y borrar fixtures en la base de A&J
-//   3. .env.local               — producción; sigue siendo el respaldo, así que
-//                                 quien no tenga ninguno de los dos anteriores
-//                                 corre exactamente como antes
-//
-// Lo que no esté definido en el archivo que gana se completa con los siguientes:
-// las llaves de Resend, Anthropic o Telegram viven sólo en .env.local y se
-// heredan igual.
-for (const archivo of ['.env.test.local', '.env.development.local', '.env.local']) {
-  dotenvConfig({ path: archivo })
+// No se carga `.env.local`: puede apuntar a producción y contener credenciales
+// reales de Resend, Anthropic o Telegram. Una suite que necesite Supabase debe
+// tener sandbox en uno de los dos archivos anteriores o recibir env explícito
+// desde CI.
+for (const archivo of ['.env.test.local', '.env.development.local']) {
+  dotenvConfig({ path: archivo, quiet: true })
 }
+
+// Algunos módulos validan la key al importarse aunque el test no envíe correo.
+// El valor sintético evita depender de secretos reales en suites unitarias.
+process.env.RESEND_API_KEY ??= 'test-key-no-envia-nada'
 
 export default defineConfig({
   resolve: {
