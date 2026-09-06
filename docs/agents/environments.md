@@ -11,6 +11,12 @@ El sandbox es el destino predeterminado de agentes, desarrollo y suites remotas.
 El MCP persistente está acotado por URL a ese proyecto. La autenticación es OAuth
 local a cada computadora; no se versionan tokens.
 
+Codex fija explícitamente en `.codex/config.toml` los scopes aceptados por el
+resource metadata del MCP. El authorization server general de Supabase anuncia
+otros scopes que su registro dinámico rechaza; sin esa lista, `codex mcp login
+supabase_sandbox` falla antes de abrir el consentimiento. No reemplaces OAuth
+por un PAT persistente ni elimines los scopes sin verificar el login completo.
+
 Producción sólo se conecta cuando la pregunta exige evidencia real o al aplicar
 una migración ya probada. Para lectura, usa una conexión temporal con
 `project_ref`, `read_only=true` y sólo `database`, `debugging`, `development` o
