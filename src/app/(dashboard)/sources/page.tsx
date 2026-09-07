@@ -4,6 +4,7 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
 import { getSourcesHealth } from '@/lib/data/source-health'
+import { listFolders } from '@/lib/data/folders'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
 
 export default async function SourcesPage({
@@ -24,6 +25,9 @@ export default async function SourcesPage({
   const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
   // Cómo está entrando cada fuente, según lo que realmente llega.
   const health = tenant_id ? await getSourcesHealth(tenant_id) : {}
+  // Carpetas de QUIEN MIRA: la organización es personal, así que dos usuarios
+  // del mismo tenant ven el mismo catálogo repartido de forma distinta.
+  const folders = await listFolders('source', tenant_id, ctx.user_id)
 
   const supabase = createAdminClient()
 
@@ -80,8 +84,6 @@ export default async function SourcesPage({
 
   return (
     <>
-      <style>{`.source-card:hover { border-color: var(--border-accent) !important; }`}</style>
-
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
         <div>
@@ -141,6 +143,7 @@ export default async function SourcesPage({
         agents={agents}
         myAgentId={scope.agentId}
         tenantPages={tenantPages}
+        folders={folders}
       />
     </>
   )

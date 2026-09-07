@@ -695,6 +695,96 @@ export type Database = {
           },
         ]
       }
+      folder_items: {
+        Row: {
+          channel_id: string | null
+          created_at: string
+          folder_id: string
+          id: string
+          owner_user_id: string
+          sequence_id: string | null
+        }
+        Insert: {
+          channel_id?: string | null
+          created_at?: string
+          folder_id: string
+          id?: string
+          owner_user_id: string
+          sequence_id?: string | null
+        }
+        Update: {
+          channel_id?: string | null
+          created_at?: string
+          folder_id?: string
+          id?: string
+          owner_user_id?: string
+          sequence_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folder_items_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "acquisition_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folder_items_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folder_items_sequence_id_fkey"
+            columns: ["sequence_id"]
+            isOneToOne: false
+            referencedRelation: "email_sequences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folders: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          owner_user_id: string
+          position: number
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          owner_user_id: string
+          position?: number
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          owner_user_id?: string
+          position?: number
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form_submissions: {
         Row: {
           answers: Json

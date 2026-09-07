@@ -20,28 +20,31 @@ export default function SourcesLoading() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-        {[...Array(3)].map((_, i) => (
-          <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '16px', overflow: 'hidden' }}>
-            <div style={{ background: 'var(--bg-elevated)', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-              <Skeleton w="80px" h={20} r={10} />
-              <Skeleton w="55px" h={20} r={10} />
+      {/* La lista es una tabla de filas (no tarjetas): el esqueleto imita esa
+          forma para que no haya un salto de layout al llegar los datos. */}
+      <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '10px 20px', marginBottom: '10px', display: 'flex', gap: '24px' }}>
+        {['70px', '54px', '48px', '48px', '86px', '48px', '72px', '62px'].map((w, i) => (
+          <Skeleton key={i} w={w} h={10} r={3} />
+        ))}
+      </div>
+
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px', overflow: 'hidden' }}>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px',
+            padding: '14px 20px', borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+              <Skeleton w="42%" h={13} r={4} />
+              <Skeleton w="28%" h={10} r={3} />
             </div>
-            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <Skeleton w="75%" h={15} r={4} />
-              <div style={{ marginBottom: '8px' }}><Skeleton w="45%" h={10} r={3} /></div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: 'var(--border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-                {[...Array(4)].map((_, j) => (
-                  <div key={j} style={{ background: 'var(--bg-elevated)', padding: '10px 14px' }}>
-                    <Skeleton w="36px" h={18} r={3} />
-                    <div style={{ marginTop: '4px' }}><Skeleton w="55px" h={10} r={3} /></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-              <Skeleton w="65px" h={14} r={3} />
-              <Skeleton w="80px" h={28} r={6} />
+            <Skeleton w="62px" h={18} r={10} />
+            <Skeleton w="120px" h={18} r={10} />
+            <Skeleton w="34px" h={13} r={3} />
+            <Skeleton w="34px" h={13} r={3} />
+            <Skeleton w="34px" h={13} r={3} />
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[0, 1, 2, 3].map(j => <Skeleton key={j} w="28px" h={28} r={6} />)}
             </div>
           </div>
         ))}
