@@ -70,6 +70,30 @@ iniciales; no lleves colores internos del CRM al sitio del cliente.
 Las estadísticas viven en `src/lib/data/newsletter-stats.ts`; la atribución de un
 suscriptor corresponde a la edición desde la que se registró.
 
+## Carpetas
+
+Las carpetas de `/sources` y `/emails` (migración 115) son **personales**: cada
+usuario tiene las suyas y la organización de uno no se le impone a nadie más.
+`folders.owner_user_id` es parte de la identidad de la carpeta y `folder_items`
+guarda la pertenencia con dos FK anulables —`channel_id` o `sequence_id`—, así
+que borrar una fuente o una secuencia limpia sus filas por cascada.
+
+- `kind` separa los dos catálogos: `source` para fuentes, `sequence` para emails.
+- Un elemento está en una sola carpeta por usuario (índices únicos parciales).
+  Mover es "sacar de donde esté y volver a poner".
+- Son una capa de VISTA, no de permisos: quién ve qué lo siguen decidiendo
+  `scopeFor` y RLS. Por eso la página filtra primero y agrupa después
+  (`groupByFolder`), y una carpeta nunca revela algo que el usuario no vería.
+- Sus policies no siguen el patrón `is_super_admin() or tenant_id = ...` del
+  resto del repo: filtran por dueño, porque una carpeta ajena no es asunto del
+  super_admin.
+- En `/sources` sólo agrupan en el tab "Todos". Los tabs por tipo y "Archivados"
+  siguen mostrando listas planas.
+- Borrar una carpeta no borra su contenido: los elementos vuelven a "Sin carpeta".
+
+Fuente inicial: `src/lib/data/folders.ts`, `src/app/(dashboard)/folder-actions.ts`
+y `src/components/dashboard/folders.tsx`.
+
 ## Archivos iniciales por área
 
 | Área | Fuente inicial |
@@ -79,6 +103,7 @@ suscriptor corresponde a la edición desde la que se registró.
 | Perfil de negocio | `src/lib/business/profile.ts`, `src/lib/data/business-profile.ts` |
 | Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
 | Newsletters | `src/lib/newsletters/*`, `src/lib/data/newsletters.ts` |
+| Carpetas | `src/lib/data/folders.ts`, `src/app/(dashboard)/folder-actions.ts` |
 | Auth y proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs actuales de Supabase SSR |
 | Migraciones/RLS | Última migración, skills Supabase y esquema real sandbox |
 | Landing/legal | `src/app/(marketing)/`, `src/components/motion/README.md` |

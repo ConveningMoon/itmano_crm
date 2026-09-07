@@ -3,8 +3,10 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Plus, X, Trash2, AlertTriangle, ExternalLink } from 'lucide-react'
+import { Plus, X, Trash2, AlertTriangle, ExternalLink, Eye, Users } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
+import { groupByFolder, type Folder } from '@/lib/data/folders'
+import { FolderGroup, FolderPicker, NewFolderButton } from '@/components/dashboard/folders'
 import { resolveChannelPageUrl, type TenantPageInfo } from '@/lib/sources/page-link'
 import { STATUS_COPY, MEASUREMENT_COPY, type SourceHealth } from '@/lib/sources/health'
 
@@ -110,13 +112,66 @@ function NoPageModal({ channelName, managedByItmano, onClose }: {
   )
 }
 
-// ─── Channel Card ─────────────────────────────────────────────────────────────
+// ─── Tabla de fuentes ─────────────────────────────────────────────────────────
+//
+// Antes cada fuente era una tarjeta. Con más de un puñado de fuentes la
+// cuadrícula obligaba a recorrer la pantalla entera para comparar dos números
+// que deberían estar en la misma columna, y una fuente ocupaba lo que ahora
+// ocupan seis. La fila es la misma información con la lectura de /emails.
+//
+// Una sola definición de columnas para la cabecera y las filas: si divergen, la
+// tabla se desalinea sin que nada falle.
+const GRID_COLUMNS   = '2fr 92px 176px 72px 88px 72px 92px 132px'
+const GRID_MIN_WIDTH = '1080px'
 
-function ChannelCard({ ch, index = 0, health, tenant }: {
-  ch: ChannelWithMetrics
-  index?: number
-  health?: SourceHealth
-  tenant?: TenantPageInfo
+const HEADERS = ['Fuente', 'Estado', 'Salud', 'Envíos', 'Leads nuevos', 'Vistas', 'Conversión', 'Acciones']
+
+function TableHeader({ labels, gridColumns }: { labels: string[]; gridColumns: string }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: gridColumns,
+      padding: '10px 20px',
+      background: 'var(--bg-elevated)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: '10px',
+      marginBottom: '10px',
+      gap: '10px',
+    }}>
+      {labels.map(h => (
+        <span key={h} style={{ fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {h}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** Contenedor de un bloque de filas (una carpeta, o el grupo sin carpeta). */
+function RowGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: '10px',
+      overflow: 'hidden',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+const CELL_NUM: React.CSSProperties = { fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }
+
+function ChannelRow({ ch, first, health, tenant, folders, folderId }: {
+  ch:       ChannelWithMetrics
+  /** La primera fila del bloque no lleva separador superior. */
+  first:    boolean
+  health?:  SourceHealth
+  tenant?:  TenantPageInfo
+  folders:  Folder[]
+  /** Carpeta en la que está para ESTE usuario, o null. */
+  folderId: string | null
 }) {
   const { navigate, pending: navPending } = useCardNavigation()
   const [noPage, setNoPage] = useState(false)
@@ -133,21 +188,19 @@ function ChannelCard({ ch, index = 0, health, tenant }: {
 
   return (
     <div
-      className="source-card"
+      className="source-row"
       role="link"
       tabIndex={0}
       onClick={() => navigate(`/sources/${ch.slug}`)}
       onKeyDown={e => { if (e.key === 'Enter') navigate(`/sources/${ch.slug}`) }}
       style={{
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '16px',
-        overflow: 'hidden',
+        display: 'grid',
+        gridTemplateColumns: GRID_COLUMNS,
+        gap: '10px',
+        alignItems: 'center',
+        padding: '12px 20px',
+        borderTop: first ? undefined : '1px solid var(--border-subtle)',
         cursor: 'pointer',
-        animationDelay: `${Math.min(index * 45, 360)}ms`,
-        borderTop: `3px solid ${typeColor}`,
-        display: 'flex',
-        flexDirection: 'column',
       }}
     >
       <NavLoadingOverlay show={navPending} />
@@ -158,165 +211,149 @@ function ChannelCard({ ch, index = 0, health, tenant }: {
           onClose={() => setNoPage(false)}
         />
       )}
-      {/* Header */}
-      <div style={{
-        background: 'var(--bg-elevated)',
-        padding: '12px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid var(--border-subtle)',
-      }}>
-        <span style={{
-          fontSize: '10px',
-          fontWeight: 500,
-          color: typeColor,
-          background: `${typeColor}18`,
-          padding: '2px 8px',
-          borderRadius: '10px',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-        }}>
-          {typeLabel}
-        </span>
-        <span style={{
-          fontSize: '10px',
-          fontWeight: 500,
-          color: ch.active ? 'var(--accent-green)' : 'var(--text-muted)',
-          background: ch.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-overlay)',
-          padding: '2px 8px',
-          borderRadius: '10px',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-        }}>
-          {ch.active ? 'Activo' : 'Inactivo'}
-        </span>
-      </div>
 
-      {/* Body */}
-      <div style={{ padding: '16px', flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
+      {/* Fuente: tipo, nombre, public id, agente y si tiene secuencia */}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            fontSize: '9px', fontWeight: 500, color: typeColor, background: `${typeColor}18`,
+            padding: '2px 7px', borderRadius: '10px', letterSpacing: '0.06em',
+            textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            {typeLabel}
+          </span>
+          <span style={{
+            fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
             {ch.name}
           </span>
-          <button
-            onClick={openPage}
-            className="page-open-btn"
-            title={pageUrl ? `Abrir la página · ${pageUrl}` : 'La página aún no está configurada'}
-            aria-label={pageUrl ? `Abrir la página de ${ch.name}` : `${ch.name} no tiene página configurada`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: '24px', height: '24px', flexShrink: 0,
-              background: 'transparent', border: '1px solid var(--border-subtle)',
-              borderRadius: '6px', cursor: 'pointer',
-              color: pageUrl ? 'var(--accent-gold)' : 'var(--text-muted)',
-            }}
-          >
-            <ExternalLink size={12} />
-          </button>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
-          {ch.publicId}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+            {ch.publicId}
+          </span>
+          <span style={{
+            fontSize: '10px', padding: '1px 7px', borderRadius: '4px',
+            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+          }}>
+            {ch.agentName ?? 'Toda la agencia'}
+          </span>
+          {ch.emailSequenceId && (
+            <span title="Secuencia de emails activa" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--accent-teal)' }}>
+              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-teal)' }} />
+              Secuencia
+            </span>
+          )}
         </div>
+      </div>
 
-        {/* Dos semáforos, dos problemas distintos: el del FORMULARIO (qué tan
-            bien califica lo que pregunta) y el de la FUENTE (si está reportando
-            lo que hace falta para medirla). Se arreglan en sitios distintos —
-            uno cambiando preguntas, el otro pegando un script — así que
-            juntarlos escondía uno detrás del otro. */}
-        {health && health.status !== 'sin_envios' && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-            {[STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
+      {/* Estado */}
+      <span style={{
+        fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+        letterSpacing: '0.06em', textTransform: 'uppercase', width: 'fit-content',
+        color: ch.active ? 'var(--accent-green)' : 'var(--text-muted)',
+        background: ch.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
+      }}>
+        {ch.active ? 'Activo' : 'Inactivo'}
+      </span>
+
+      {/* Dos semáforos, dos problemas distintos: el del FORMULARIO (qué tan
+          bien califica lo que pregunta) y el de la FUENTE (si está reportando
+          lo que hace falta para medirla). Se arreglan en sitios distintos —
+          uno cambiando preguntas, el otro pegando un script — así que
+          juntarlos escondía uno detrás del otro. */}
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        {health && health.status !== 'sin_envios'
+          ? [STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
               <span key={i} title={`${b.label} — ${b.what}
 
 ${b.why}`} style={{
                 cursor: 'help',
-                display: 'inline-flex', alignItems: 'center', gap: '5px',
-                fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                fontSize: '9px', fontWeight: 500, padding: '2px 7px', borderRadius: '10px',
                 letterSpacing: '0.05em', textTransform: 'uppercase',
                 color: HEALTH_TONE[b.tone].fg,
                 background: HEALTH_TONE[b.tone].bg,
               }}>
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor' }} />
+                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }} />
                 {b.label}
               </span>
-            ))}
-          </div>
-        )}
-
-        {/* Metrics 2×2 grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: '1px',
-          background: 'var(--border-subtle)',
-          borderRadius: '8px',
-          overflow: 'hidden',
-          marginBottom: '12px',
-        }}>
-          {[
-            // Envíos y leads son cosas distintas: quien ya era lead y vuelve a
-            // llenar un formulario suma envío pero no adquisición. Sin el primer
-            // número, un canal con actividad real salía con un cero mudo.
-            { value: ch.metrics.submissionsInWindow, label: 'Envíos' },
-            { value: ch.metrics.leadsInWindow, label: 'Leads nuevos' },
-            // Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió.
-            { value: ch.metrics.pageViewsInWindow || '—', label: 'Vistas' },
-            { value: ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`, label: 'Conversión' },
-          ].map((s, i) => (
-            <div key={i} style={{ background: 'var(--bg-elevated)', padding: '10px 14px' }}>
-              <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-                {s.value}
-              </div>
-              <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginTop: '2px' }}>
-                {s.label}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Owning agent */}
-        <div style={{ marginBottom: '8px' }}>
-          <span style={{
-            fontSize: '10px', padding: '2px 8px', borderRadius: '4px',
-            background: 'var(--bg-overlay)', color: 'var(--text-secondary)',
-          }}>
-            {ch.agentName ?? 'Toda la agencia'}
-          </span>
-        </div>
-
-        {/* Email sequence indicator */}
-        {ch.emailSequenceId && (
-          <div style={{ fontSize: '11px', color: 'var(--accent-teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent-teal)', display: 'inline-block' }} />
-            Secuencia de emails activa
-          </div>
-        )}
-
-        {/* All-time total */}
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
-          {ch.metrics.leadsTotal} leads en total
-        </div>
+            ))
+          : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>}
       </div>
 
-      {/* Footer */}
-      <div style={{
-        padding: '12px 16px',
-        borderTop: '1px solid var(--border-subtle)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
+      {/* Envíos y leads son cosas distintas: quien ya era lead y vuelve a llenar
+          un formulario suma envío pero no adquisición. */}
+      <span style={CELL_NUM}>{ch.metrics.submissionsInWindow}</span>
+
+      <span style={CELL_NUM}>
+        {ch.metrics.leadsInWindow}
+        <span style={{ display: 'block', fontSize: '10px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
+          {ch.metrics.leadsTotal} en total
+        </span>
+      </span>
+
+      {/* Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió. */}
+      <span style={CELL_NUM}>{ch.metrics.pageViewsInWindow || '—'}</span>
+      <span style={{ ...CELL_NUM, color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+        {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
+      </span>
+
+      {/* Acciones — no navegan a la fila: cada una para su propio clic */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+      >
+        <FolderPicker
+          kind="source"
+          itemId={ch.id}
+          folders={folders}
+          currentFolderId={folderId}
+          label={ch.name}
+        />
+        <button
+          onClick={openPage}
+          className="row-icon-btn"
+          title={pageUrl ? `Abrir la página · ${pageUrl}` : 'La página aún no está configurada'}
+          aria-label={pageUrl ? `Abrir la página de ${ch.name}` : `${ch.name} no tiene página configurada`}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '28px', height: '28px', borderRadius: '6px',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+            color: pageUrl ? 'var(--accent-gold)' : 'var(--text-muted)', cursor: 'pointer',
+          }}
+        >
+          <ExternalLink size={13} />
+        </button>
         {/* El parámetro es `channelId`: con `channel` la lista lo ignoraba y el
             enlace abría /leads sin filtrar, sin ninguna señal de que fallara. */}
         <Link
           href={`/leads?channelId=${ch.id}`}
-          onClick={e => e.stopPropagation()}
-          style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}
+          className="row-icon-btn"
+          title="Ver leads de esta fuente"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '28px', height: '28px', borderRadius: '6px',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+            color: 'var(--text-secondary)', textDecoration: 'none',
+          }}
         >
-          Ver leads →
+          <Users size={13} />
         </Link>
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Abrir detalle →</span>
+        <button
+          onClick={() => navigate(`/sources/${ch.slug}`)}
+          className="row-icon-btn"
+          title="Abrir detalle"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '28px', height: '28px', borderRadius: '6px',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+            color: 'var(--text-secondary)', cursor: 'pointer',
+          }}
+        >
+          <Eye size={13} />
+        </button>
       </div>
     </div>
   )
@@ -866,10 +903,14 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
   )
 }
 
-// ─── Archived channel card ───────────────────────────────────────────────────
+// ─── Fila de fuente archivada ────────────────────────────────────────────────
 
-function ArchivedChannelCard({ ch, isSuperAdmin, tenantName, canDelete }: {
+const ARCHIVED_GRID    = '2fr 110px 160px 120px 132px'
+const ARCHIVED_HEADERS = ['Fuente', 'Estado', 'Archivado', 'Leads', 'Acciones']
+
+function ArchivedChannelRow({ ch, first, isSuperAdmin, tenantName, canDelete }: {
   ch:           ChannelWithMetrics
+  first:        boolean
   isSuperAdmin: boolean
   tenantName?:  string
   /**
@@ -889,15 +930,14 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName, canDelete }: {
 
   return (
     <div
-      className="source-card"
+      className="source-row"
       style={{
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '16px',
-        overflow: 'hidden',
-        borderTop: `3px solid var(--text-muted)`,
-        display: 'flex',
-        flexDirection: 'column',
+        display: 'grid',
+        gridTemplateColumns: ARCHIVED_GRID,
+        gap: '10px',
+        alignItems: 'center',
+        padding: '12px 20px',
+        borderTop: first ? undefined : '1px solid var(--border-subtle)',
         opacity: 0.92,
       }}
     >
@@ -909,72 +949,66 @@ function ArchivedChannelCard({ ch, isSuperAdmin, tenantName, canDelete }: {
         />
       )}
 
-      {/* Header */}
-      <div style={{
-        background: 'var(--bg-elevated)',
-        padding: '12px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid var(--border-subtle)',
-      }}>
-        <span style={{
-          fontSize: '10px', fontWeight: 500, color: typeColor, background: `${typeColor}18`,
-          padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
-        }}>
-          {typeLabel}
-        </span>
-        <span style={{
-          fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', background: 'var(--bg-overlay)',
-          padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
-        }}>
-          Archivado
-        </span>
-      </div>
-
-      {/* Body */}
-      <div style={{ padding: '16px', flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>{ch.name}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            fontSize: '9px', fontWeight: 500, color: typeColor, background: `${typeColor}18`,
+            padding: '2px 7px', borderRadius: '10px', letterSpacing: '0.06em',
+            textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            {typeLabel}
+          </span>
+          <span style={{
+            fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {ch.name}
+          </span>
           {isSuperAdmin && tenantName && (
             <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '4px', background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}>
               {tenantName}
             </span>
           )}
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace', letterSpacing: '0.02em', marginTop: '3px' }}>
           {ch.publicId}
-        </div>
-
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-          Archivado el {archivedStr}
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          {ch.metrics.leadsTotal} lead{ch.metrics.leadsTotal === 1 ? '' : 's'} atribuido{ch.metrics.leadsTotal === 1 ? '' : 's'}
         </div>
       </div>
 
-      {/* Footer */}
-      {canDelete && (
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+      <span style={{
+        fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', background: 'var(--bg-elevated)',
+        padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
+        width: 'fit-content',
+      }}>
+        Archivado
+      </span>
+
+      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{archivedStr}</span>
+
+      <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+        {ch.metrics.leadsTotal}
+        <span style={{ display: 'block', fontSize: '10px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
+          atribuido{ch.metrics.leadsTotal === 1 ? '' : 's'}
+        </span>
+      </span>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        {canDelete && (
           <button
             onClick={() => setShowDelete(true)}
+            className="row-icon-btn"
+            title="Eliminar definitivamente"
             style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              fontSize: '12px', fontWeight: 500,
-              color: 'var(--accent-coral)',
-              background: 'transparent',
-              border: '1px solid rgba(224,64,64,0.3)',
-              borderRadius: '6px',
-              padding: '5px 10px',
-              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '28px', height: '28px', borderRadius: '6px',
+              background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
+              color: 'var(--accent-coral)', cursor: 'pointer',
             }}
           >
             <Trash2 size={13} />
-            Eliminar permanentemente
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -997,9 +1031,11 @@ interface Props {
   myAgentId:        string | null
   /** tenantId → slug + si ITMANO administra sus páginas. */
   tenantPages:      Record<string, TenantPageInfo>
+  /** Carpetas de QUIEN MIRA (migración 115). Cada usuario tiene las suyas. */
+  folders:          Folder[]
 }
 
-export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, myAgentId, tenantPages }: Props) {
+export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, myAgentId, tenantPages, folders }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
   const [activeTab,    setActiveTab]    = useState<TabValue>('all')
@@ -1020,15 +1056,36 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
 
   const tenantName = (id: string) => tenants.find(t => t.id === id)?.name
 
+  // Las carpetas sólo agrupan en "Todos". Los tabs por tipo siguen haciendo
+  // exactamente lo de antes —filtrar— y muestran los resultados sueltos: quien
+  // pregunta "¿qué eventos tengo?" quiere la lista, no volver a abrir carpetas.
+  const grouped     = groupByFolder(display, folders)
+  const foldersView = activeTab === 'all'
+  // channelId → carpeta en la que está, para pintar el selector de cada fila.
+  const folderOf = new Map<string, string>()
+  for (const f of folders) for (const id of f.itemIds) folderOf.set(id, f.id)
+
+  function renderRow(ch: ChannelWithMetrics, i: number) {
+    return (
+      <ChannelRow
+        key={ch.id}
+        ch={ch}
+        first={i === 0}
+        health={health[ch.id]}
+        tenant={tenantPages[ch.tenantId]}
+        folders={folders}
+        folderId={folderOf.get(ch.id) ?? null}
+      />
+    )
+  }
+
   return (
     <div>
       <style>{`
         .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
-        .page-open-btn:hover { border-color: var(--accent-gold) !important; background: rgba(201,169,110,0.10) !important; }
-        @keyframes src-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        .source-card { animation: src-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
-        .source-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--shadow-md); transform: translateY(-3px); }
-        @media (prefers-reduced-motion: reduce) { .source-card { animation: none !important; transition: none !important; } }
+        .row-icon-btn:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
+        .source-row { background: var(--bg-surface); transition: background 0.1s; }
+        .source-row:hover { background: var(--bg-elevated); }
       `}</style>
       {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
       {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
@@ -1036,6 +1093,7 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
 
       {/* Create buttons */}
       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <NewFolderButton kind="source" />
         <button
           onClick={() => setOpenModal('contact_form')}
           style={{ ...BTN_GHOST, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
@@ -1113,26 +1171,60 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
         </div>
       </div>
 
-      {/* Cards grid */}
-      {display.length === 0 ? (
+      {/* Filas. La tabla no se aplasta en pantallas estrechas: se desplaza. */}
+      {display.length === 0 && (isArchivedTab || !foldersView || folders.length === 0) ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: '14px' }}>
           {isArchivedTab ? 'No hay fuentes archivadas.' : 'No hay fuentes en esta categoría.'}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-          {isArchivedTab
-            ? display.map(ch => (
-                <ArchivedChannelCard
-                  key={ch.id}
-                  ch={ch}
-                  isSuperAdmin={isSuperAdmin}
-                  tenantName={tenantName(ch.tenantId)}
-                  canDelete={myAgentId === null}
-                />
-              ))
-            : display.map((ch, i) => (
-                <ChannelCard key={ch.id} ch={ch} index={i} health={health[ch.id]} tenant={tenantPages[ch.tenantId]} />
-              ))}
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: isArchivedTab ? '880px' : GRID_MIN_WIDTH }}>
+            <TableHeader
+              labels={isArchivedTab ? ARCHIVED_HEADERS : HEADERS}
+              gridColumns={isArchivedTab ? ARCHIVED_GRID : GRID_COLUMNS}
+            />
+
+            {isArchivedTab ? (
+              <RowGroup>
+                {display.map((ch, i) => (
+                  <ArchivedChannelRow
+                    key={ch.id}
+                    ch={ch}
+                    first={i === 0}
+                    isSuperAdmin={isSuperAdmin}
+                    tenantName={tenantName(ch.tenantId)}
+                    canDelete={myAgentId === null}
+                  />
+                ))}
+              </RowGroup>
+            ) : foldersView ? (
+              <>
+                {grouped.folders.map(f => (
+                  <FolderGroup key={f.id} folder={f} count={f.items.length}>
+                    {f.items.map(renderRow)}
+                  </FolderGroup>
+                ))}
+
+                {folders.length > 0 && grouped.loose.length > 0 && (
+                  <div style={{
+                    fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    margin: '18px 0 8px 2px',
+                  }}>
+                    Sin carpeta
+                  </div>
+                )}
+                {grouped.loose.length > 0 && <RowGroup>{grouped.loose.map(renderRow)}</RowGroup>}
+                {grouped.loose.length === 0 && folders.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: '14px' }}>
+                    No hay fuentes en esta categoría.
+                  </div>
+                )}
+              </>
+            ) : (
+              <RowGroup>{display.map(renderRow)}</RowGroup>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -2,31 +2,13 @@ import Link from 'next/link'
 import { listSequences } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
-import { SequenceListActions } from './sequence-list-actions'
 import { getAllPurchaseTemplatesByTenant, getPurchaseTemplatesByAgent } from './purchase-templates-actions'
 import { PurchaseTemplatesPanel } from './purchase-templates-panel'
 import { getMetricsForSequences } from '@/lib/services/email-metrics'
+import { listFolders } from '@/lib/data/folders'
+import { SequencesTable } from './sequences-table'
+import { NewFolderButton } from '@/components/dashboard/folders'
 import { Plus, Mail } from 'lucide-react'
-
-// Una sola definición de columnas para la cabecera y las filas: si divergen, la
-// tabla se desalinea sin que nada falle.
-const GRID_COLUMNS = '2fr 96px 56px 64px 76px 76px 72px 72px 72px 72px 88px 116px'
-const GRID_MIN_WIDTH = '1180px'
-
-// Mismos criterios que la tarjeta del detalle (email-metrics-card): un 0% no se
-// pinta de color —no hay nada que celebrar ni que alarmar— y rebotes o bajas por
-// encima del umbral sano se marcan en coral.
-function rateColor(value: number, opts: { alertOver?: number; color: string }): string {
-  if (opts.alertOver !== undefined && value > opts.alertOver) return 'var(--accent-coral)'
-  return value === 0 ? 'var(--text-muted)' : opts.color
-}
-
-const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
-const LANG_COLOR: Record<string, string> = {
-  es: 'var(--accent-gold)',
-  en: 'var(--accent-blue)',
-  pt: 'var(--accent-teal)',
-}
 
 export default async function EmailsPage() {
   const ctx = await requireTenantContext()
@@ -46,6 +28,8 @@ export default async function EmailsPage() {
   // Las mismas métricas de la tarjeta del detalle, para cada fila. Batcheado:
   // una llamada por secuencia serían 3 queries por fila leyendo los mismos datos.
   const metrics = await getMetricsForSequences(sequences.map(s => s.id))
+  // Carpetas de QUIEN MIRA: la organización es personal, no del tenant.
+  const folders = await listFolders('sequence', tenant_id, ctx.user_id)
 
   return (
     <>
@@ -64,18 +48,21 @@ export default async function EmailsPage() {
             {sequences.length} {sequences.length === 1 ? 'secuencia' : 'secuencias'}
           </p>
         </div>
-        <Link
-          href="/emails/new"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-            background: 'var(--accent-gold)', color: 'var(--bg-base)',
-            borderRadius: '8px', textDecoration: 'none', border: 'none',
-          }}
-        >
-          <Plus size={14} />
-          Nueva Secuencia
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <NewFolderButton kind="sequence" />
+          <Link
+            href="/emails/new"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+              background: 'var(--accent-gold)', color: 'var(--bg-base)',
+              borderRadius: '8px', textDecoration: 'none', border: 'none',
+            }}
+          >
+            <Plus size={14} />
+            Nueva Secuencia
+          </Link>
+        </div>
       </div>
 
       {sequences.length === 0 ? (
@@ -111,161 +98,12 @@ export default async function EmailsPage() {
           </Link>
         </div>
       ) : (
-        // La tabla creció con las métricas: en pantallas estrechas se desplaza
-        // de lado en vez de aplastar las columnas.
-        <div className="overflow-x-auto" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px' }}>
-          <div style={{ minWidth: GRID_MIN_WIDTH }}>
-          {/* Table header */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: GRID_COLUMNS,
-            padding: '10px 20px',
-            background: 'var(--bg-elevated)',
-            borderBottom: '1px solid var(--border-subtle)',
-          }}>
-            {[
-              'Nombre',
-              'Idioma',
-              'Pasos',
-              'Canales',
-              'Runs activos',
-              'Enviados',
-              'Click rate',
-              'Reply rate',
-              'Bounce rate',
-              'Unsub rate',
-              'Estado',
-              'Acciones',
-            ].map(h => (
-              <span key={h} style={{ fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                {h}
-              </span>
-            ))}
-          </div>
-
-          {sequences.map((seq, i) => {
-            const m = metrics.get(seq.id)
-            return (
-            <div
-              key={seq.id}
-              className="seq-row"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: GRID_COLUMNS,
-                padding: '14px 20px',
-                borderTop: i > 0 ? '1px solid var(--border-subtle)' : undefined,
-                alignItems: 'center',
-                background: 'var(--bg-surface)',
-              }}
-            >
-              {/* Name + tenant + channel list */}
-              <div>
-                <Link
-                  href={`/emails/${seq.id}`}
-                  style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}
-                >
-                  {seq.name}
-                </Link>
-                <div style={{ marginTop: '2px' }}>
-                  <span style={{
-                    fontSize: '10px', padding: '1px 7px', borderRadius: '4px',
-                    background: 'var(--bg-elevated)', color: 'var(--text-muted)',
-                  }}>
-                    {seq.agentName ?? 'Toda la agencia'}
-                  </span>
-                </div>
-                {isSuperAdmin && seq.tenantName && (
-                  <div style={{ marginTop: '2px' }}>
-                    <span style={{
-                      fontSize: '10px', padding: '1px 6px', borderRadius: '4px',
-                      background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
-                    }}>
-                      {seq.tenantName}
-                    </span>
-                  </div>
-                )}
-                {seq.channels.length > 0 && (
-                  <div style={{ marginTop: '3px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {seq.channels.map(ch => ch.name).join(', ')}
-                  </div>
-                )}
-              </div>
-
-              {/* Language */}
-              <span style={{
-                fontSize: '11px', fontWeight: 500,
-                color: LANG_COLOR[seq.language] ?? 'var(--text-muted)',
-                background: `${LANG_COLOR[seq.language] ?? 'var(--text-muted)'}18`,
-                padding: '2px 8px', borderRadius: '10px',
-                letterSpacing: '0.04em', width: 'fit-content',
-              }}>
-                {LANG_LABEL[seq.language] ?? seq.language}
-              </span>
-
-              {/* Steps */}
-              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                {seq.stepCount}
-              </span>
-
-              {/* Channels count */}
-              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                {seq.channels.length}
-              </span>
-
-              {/* Active runs */}
-              <span style={{
-                fontSize: '13px', fontWeight: 500,
-                color: seq.activeRunCount > 0 ? 'var(--accent-gold)' : 'var(--text-muted)',
-              }}>
-                {seq.activeRunCount}
-              </span>
-
-              {/* Métricas de envío — las mismas que la tarjeta del detalle.
-                  El open rate no está a propósito: Apple Mail precarga los
-                  píxeles y lo infla (ver CLAUDE.md). */}
-              <span style={{ fontSize: '13px', fontWeight: 500, color: (m?.totalSends ?? 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
-                {m?.totalSends ?? 0}
-                {m && m.uniqueLeads > 0 && (
-                  <span style={{ display: 'block', fontSize: '10px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
-                    {m.uniqueLeads} {m.uniqueLeads === 1 ? 'lead' : 'leads'}
-                  </span>
-                )}
-              </span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.clickRate ?? 0, { color: 'var(--accent-blue)' }) }}>
-                {m?.clickRate ?? 0}%
-              </span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.replyRate ?? 0, { color: 'var(--accent-green)' }) }}>
-                {m?.replyRate ?? 0}%
-              </span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.bounceRate ?? 0, { alertOver: 5, color: 'var(--text-secondary)' }) }}>
-                {m?.bounceRate ?? 0}%
-              </span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: rateColor(m?.unsubscribeRate ?? 0, { alertOver: 3, color: 'var(--text-secondary)' }) }}>
-                {m?.unsubscribeRate ?? 0}%
-              </span>
-
-              {/* Status */}
-              <span style={{
-                fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-                letterSpacing: '0.06em', textTransform: 'uppercase', width: 'fit-content',
-                color: seq.active ? 'var(--accent-green)' : 'var(--text-muted)',
-                background: seq.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
-              }}>
-                {seq.active ? 'Activa' : 'Inactiva'}
-              </span>
-
-              {/* Actions */}
-              <SequenceListActions
-                sequenceId={seq.id}
-                sequenceName={seq.name}
-                active={seq.active}
-                activeRunCount={seq.activeRunCount}
-              />
-            </div>
-            )
-          })}
-          </div>
-        </div>
+        <SequencesTable
+          sequences={sequences}
+          metrics={Object.fromEntries(metrics)}
+          isSuperAdmin={isSuperAdmin}
+          folders={folders}
+        />
       )}
 
       {/* Emails de cierre POR AGENTE (058) — super_admin: por tenant → agente;
