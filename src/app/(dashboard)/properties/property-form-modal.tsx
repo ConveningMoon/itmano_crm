@@ -11,8 +11,9 @@ import { FormSection } from '@/components/ui/form-section'
 import { Switch } from '@/components/ui/switch'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import {
-  parseEmbedInput, EMBED_PLACEMENTS, MAX_EMBEDS, PLACEMENT_LABEL, PLACEMENT_HINT,
-  PROVIDER_LABEL, type EmbedPlacement,
+  parseEmbedInput, commitEmbedDraft, EMBED_PLACEMENTS, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
+  PLACEMENT_LABEL, PLACEMENT_HINT, PROVIDER_LABEL,
+  type EmbedPlacement, type EmbedDraft,
 } from '@/lib/services/property-embeds'
 
 // Modal de crear/editar propiedad — extraído de properties-client para poder
@@ -216,6 +217,16 @@ export function PropertyFormModal({
     })
   }
 
+  // El borrador de embed vive AQUÍ y no dentro del campo: al guardar hay que
+  // poder incorporarlo. Cuando era estado interno del componente, pegar y darle
+  // a Guardar sin pulsar "Agregar embed" lo descartaba en silencio.
+  const [embedDraft, setEmbedDraft] = useState<EmbedDraft>(EMPTY_EMBED_DRAFT)
+
+  function updateEmbedDraft(next: EmbedDraft) {
+    setEmbedDraft(next)
+    if (next.raw.trim()) setDirty(true)
+  }
+
   function setField<K extends keyof PropertyInput>(key: K, value: PropertyInput[K]) {
     setForm(prev => ({ ...prev, [key]: value }))
     clearAiFlag(key as string)
@@ -384,6 +395,15 @@ export function PropertyFormModal({
 
   function submitForm() {
     setFormError(null)
+
+    // Lo que quedó escrito en el campo de embeds entra ahora. Si no es válido,
+    // el guardado se detiene con el motivo: perderlo callando fue el bug.
+    const embeds = commitEmbedDraft(form.web_embeds ?? [], embedDraft)
+    if (!embeds.ok) {
+      setFormError(embeds.error)
+      return
+    }
+
     startTransition(async () => {
       // Características por idioma desde el texto libre (solo idiomas elegidos).
       const langs = form.content_languages ?? []
@@ -396,6 +416,7 @@ export function PropertyFormModal({
         ...form,
         content_languages: langs,
         features_i18n,
+        web_embeds: embeds.embeds,
       }
       try {
         const result = editingId
@@ -408,6 +429,8 @@ export function PropertyFormModal({
         }
         // Reconcile Storage: delete files that were saved before or uploaded
         // this session but are no longer referenced by the saved property.
+        setForm(prev => ({ ...prev, web_embeds: embeds.embeds }))
+        setEmbedDraft(EMPTY_EMBED_DRAFT)
         const finalUrls = mediaUrlsOf(payload)
         const orphans = [...new Set([...initialUrls, ...sessionUrls])].filter(u => !finalUrls.includes(u))
         fireDeleteMedia(orphans)
@@ -902,6 +925,8 @@ export function PropertyFormModal({
               <EmbedsField
                 value={form.web_embeds ?? []}
                 onChange={next => setField('web_embeds', next)}
+                draft={embedDraft}
+                onDraftChange={updateEmbedDraft}
               />
             </FormSection>
 
@@ -1171,20 +1196,26 @@ function UploadButton({ label, busy, progress, accept, multiple = false, onFiles
 
 type EmbedRow = NonNullable<PropertyInput['web_embeds']>[number]
 
-function EmbedsField({ value, onChange }: { value: EmbedRow[]; onChange: (next: EmbedRow[]) => void }) {
-  const [raw, setRaw] = useState('')
-  const [title, setTitle] = useState('')
-  const [placement, setPlacement] = useState<EmbedPlacement>('tour')
+function EmbedsField({ value, onChange, draft, onDraftChange }: {
+  value: EmbedRow[]
+  onChange: (next: EmbedRow[]) => void
+  draft: EmbedDraft
+  onDraftChange: (next: EmbedDraft) => void
+}) {
   const [error, setError] = useState<string | null>(null)
 
+  const { raw, title, placement } = draft
   const full = value.length >= MAX_EMBEDS
 
+  // Agregar sigue existiendo para encadenar varios y ver el proveedor al vuelo,
+  // pero ya no es obligatorio: al guardar, lo que quede aquí se incorpora igual.
   function add() {
     const parsed = parseEmbedInput(raw)
     if (!parsed.ok) { setError(parsed.error); return }
     if (value.some(e => e.url === parsed.url)) { setError('Ese embed ya está agregado.'); return }
     onChange([...value, { url: parsed.url, title: title.trim() || null, placement }])
-    setRaw(''); setTitle(''); setError(null)
+    onDraftChange(EMPTY_EMBED_DRAFT)
+    setError(null)
   }
 
   return (
@@ -1231,7 +1262,7 @@ function EmbedsField({ value, onChange }: { value: EmbedRow[]; onChange: (next: 
             <span style={labelTextStyle}>Código o enlace</span>
             <textarea
               value={raw}
-              onChange={e => { setRaw(e.target.value); setError(null) }}
+              onChange={e => { onDraftChange({ ...draft, raw: e.target.value }); setError(null) }}
               rows={3}
               placeholder={'<iframe src="https://www.zillow.com/view-imx/…"></iframe>'}
               style={{ ...inputStyle, resize: 'vertical', minHeight: '72px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}
@@ -1243,7 +1274,7 @@ function EmbedsField({ value, onChange }: { value: EmbedRow[]; onChange: (next: 
               <span style={labelTextStyle}>Dónde se muestra</span>
               <select
                 value={placement}
-                onChange={e => setPlacement(e.target.value as EmbedPlacement)}
+                onChange={e => onDraftChange({ ...draft, placement: e.target.value as EmbedPlacement })}
                 style={selectStyle}
               >
                 {EMBED_PLACEMENTS.map(p => (
@@ -1256,7 +1287,7 @@ function EmbedsField({ value, onChange }: { value: EmbedRow[]; onChange: (next: 
               <input
                 type="text"
                 value={title}
-                onChange={e => setTitle(e.target.value)}
+                onChange={e => onDraftChange({ ...draft, title: e.target.value })}
                 maxLength={120}
                 placeholder="Recorrido 3D — planta baja"
                 style={inputStyle}
@@ -1281,6 +1312,10 @@ function EmbedsField({ value, onChange }: { value: EmbedRow[]; onChange: (next: 
           >
             Agregar embed
           </button>
+
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            Si guardas con algo escrito aquí, se agrega solo.
+          </span>
         </>
       )}
     </div>
