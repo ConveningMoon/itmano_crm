@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseEmbedInput, toPropertyEmbeds, embedAspectRatio, PROVIDER_LABEL, MAX_EMBEDS,
+  parseEmbedInput, toPropertyEmbeds, commitEmbedDraft, embedAspectRatio,
+  PROVIDER_LABEL, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
 } from '@/lib/services/property-embeds'
 
 // El agente pega lo que le da el botón de compartir del proveedor. De ese texto
@@ -164,6 +165,49 @@ describe('toPropertyEmbeds — leer la columna jsonb', () => {
   it('corta en el tope aunque la fila traiga más', () => {
     const many = Array.from({ length: MAX_EMBEDS + 4 }, () => ({ url: ZILLOW_URL, placement: 'tour' }))
     expect(toPropertyEmbeds(many)).toHaveLength(MAX_EMBEDS)
+  })
+})
+
+describe('commitEmbedDraft — lo pegado no se pierde al guardar', () => {
+  // El bug que lo motiva: "Agregar embed" era un paso de confirmación oculto.
+  // Pegabas el iframe, dabas a Guardar y la propiedad se guardaba SIN el embed,
+  // sin un solo error. Se descubrió porque el mismo tour entró en un tenant y
+  // en otro no: en el primero se pulsó el botón y en el segundo no.
+  const draft = (raw: string, extra: Partial<typeof EMPTY_EMBED_DRAFT> = {}) =>
+    ({ ...EMPTY_EMBED_DRAFT, ...extra, raw })
+
+  it('incorpora el borrador pendiente al guardar', () => {
+    const r = commitEmbedDraft([], draft(ZILLOW_SNIPPET, { title: 'Tour', placement: 'extra' }))
+    expect(r).toEqual({
+      ok: true,
+      embeds: [{ url: ZILLOW_URL, title: 'Tour', placement: 'extra' }],
+    })
+  })
+
+  it('deja la lista intacta cuando no hay nada pendiente', () => {
+    const ya = [{ url: ZILLOW_URL, title: null, placement: 'tour' as const }]
+    expect(commitEmbedDraft(ya, draft('   '))).toEqual({ ok: true, embeds: ya })
+  })
+
+  it('bloquea el guardado si lo pendiente no es válido', () => {
+    // Perder el texto en silencio fue el bug; descartarlo callando tampoco vale.
+    const r = commitEmbedDraft([], draft('https://tours.example.com/x'))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/no est[áa] en la lista/i)
+  })
+
+  it('no duplica un embed que ya está en la lista', () => {
+    const ya = [{ url: ZILLOW_URL, title: 'Tour', placement: 'tour' as const }]
+    expect(commitEmbedDraft(ya, draft(ZILLOW_SNIPPET))).toEqual({ ok: true, embeds: ya })
+  })
+
+  it('rechaza pasar del tope en vez de recortar en silencio', () => {
+    const llena = Array.from({ length: MAX_EMBEDS }, (_, i) => ({
+      url: `https://my.matterport.com/show/?m=abc${i}`, title: null, placement: 'tour' as const,
+    }))
+    const r = commitEmbedDraft(llena, draft(ZILLOW_SNIPPET))
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(new RegExp(String(MAX_EMBEDS)))
   })
 })
 

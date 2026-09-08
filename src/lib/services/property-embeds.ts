@@ -199,6 +199,51 @@ function vimeoId(u: URL): string | null {
   return candidate && VIMEO_ID.test(candidate) ? candidate : null
 }
 
+// ── Borrador del formulario ──────────────────────────────────────────────────
+// Lo que el agente tiene escrito en el campo y todavía no agregó a la lista.
+
+export type EmbedDraft = { raw: string; title: string; placement: EmbedPlacement }
+export const EMPTY_EMBED_DRAFT: EmbedDraft = { raw: '', title: '', placement: 'tour' }
+
+/**
+ * Una fila tal como la maneja el formulario: sin `provider`, que lo deriva el
+ * servidor. `title` admite undefined porque así lo deja el schema de la action
+ * (`.optional().nullable()`) y este tipo tiene que aceptar sus filas tal cual.
+ */
+export type EmbedDraftRow = { url: string; title?: string | null; placement: EmbedPlacement }
+
+/**
+ * Resuelve el borrador pendiente contra la lista ya agregada, al guardar.
+ *
+ * Existe porque "Agregar embed" era un paso de confirmación invisible: pegabas
+ * el iframe, dabas a Guardar y la propiedad se guardaba sin el embed y sin un
+ * solo error. Todos los demás campos del formulario se guardan con sólo
+ * escribir; éste no, y nada lo advertía.
+ *
+ * La regla es que lo pegado nunca se pierde callando: o entra, o el guardado se
+ * detiene con el motivo. Nunca se descarta ni se recorta en silencio.
+ */
+export function commitEmbedDraft(
+  current: EmbedDraftRow[],
+  draft: EmbedDraft,
+): { ok: true; embeds: EmbedDraftRow[] } | { ok: false; error: string } {
+  if (!draft.raw.trim()) return { ok: true, embeds: current }
+
+  const parsed = parseEmbedInput(draft.raw)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+
+  if (current.some(e => e.url === parsed.url)) return { ok: true, embeds: current }
+
+  if (current.length >= MAX_EMBEDS) {
+    return { ok: false, error: `Máximo ${MAX_EMBEDS} embeds por propiedad. Quita uno para agregar otro.` }
+  }
+
+  return {
+    ok: true,
+    embeds: [...current, { url: parsed.url, title: draft.title.trim() || null, placement: draft.placement }],
+  }
+}
+
 /**
  * Lee la columna jsonb `properties.web_embeds`. Defensivo a propósito: la fila
  * puede venir de una versión anterior del formulario o de una edición a mano, y
