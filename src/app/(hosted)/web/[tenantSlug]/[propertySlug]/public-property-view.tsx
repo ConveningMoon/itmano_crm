@@ -7,6 +7,10 @@ import { ArrowLeft, BedDouble, Bath, Maximize, Car, Ruler, CalendarDays, Chevron
 import type { PublicProperty, PublicTenant } from '../shared'
 import { PROPERTY_STATUS_LABEL, formatPrice, bathroomsLabel } from '../web-format'
 import { LANGUAGE_CONFIG } from '@/lib/config'
+import {
+  embedAspectRatio, PLACEMENT_LABEL, PROVIDER_LABEL,
+  type EmbedPlacement, type PropertyEmbed,
+} from '@/lib/services/property-embeds'
 
 // Detalle público de una propiedad — tema claro editorial (misma dirección que
 // el catálogo). Galería en mosaico (portada 2×2 + "+N más") con lightbox, y
@@ -46,6 +50,8 @@ export function PublicPropertyView({
     .filter((u): u is string => !!u)
     .filter((u, i, arr) => arr.indexOf(u) === i)
   const floorPlans = (property.floor_plans ?? []).filter(Boolean)
+  const embeds = property.web_embeds ?? []
+  const embedsAt = (placement: EmbedPlacement) => embeds.filter(e => e.placement === placement)
 
   const [box, setBox] = useState<{ list: string[]; i: number } | null>(null)
   const close = useCallback(() => setBox(null), [])
@@ -266,6 +272,9 @@ export function PublicPropertyView({
           </section>
         )}
 
+        {/* Recorrido virtual — tours 3D, entre la descripción y las características */}
+        <EmbedSection P={P} placement="tour" embeds={embedsAt('tour')} />
+
         {/* Características */}
         {features.length > 0 && (
           <section style={{ marginTop: '44px' }}>
@@ -279,6 +288,9 @@ export function PublicPropertyView({
             </ul>
           </section>
         )}
+
+        {/* Video y multimedia — lo que el agente quiso dejar junto a los planos */}
+        <EmbedSection P={P} placement="extra" embeds={embedsAt('extra')} />
 
         {/* Planos */}
         {floorPlans.length > 0 && (
@@ -341,6 +353,45 @@ export function PublicPropertyView({
         </div>
       )}
     </div>
+  )
+}
+
+// Embeds de terceros. La url ya viene validada contra la lista blanca (ver
+// src/lib/services/property-embeds.ts): aquí se construye NUESTRO iframe, nunca
+// se reinyecta el HTML que pegó el agente.
+//
+// El sandbox es defensa en profundidad sobre un host que ya es de confianza. Va
+// sin `allow-top-navigation` a propósito: ningún embed debe poder llevarse al
+// visitante fuera de la ficha del cliente. `allow-same-origin` no lo debilita —
+// el marco es de otro origen, así que conserva el suyo y sigue sin poder tocar
+// esta página; sin él, los visores que usan storage se quedan en blanco.
+function EmbedSection({ P, placement, embeds }: { P: Pal; placement: EmbedPlacement; embeds: PropertyEmbed[] }) {
+  if (embeds.length === 0) return null
+  return (
+    <section style={{ marginTop: '44px' }}>
+      <SectionTitle P={P}>{PLACEMENT_LABEL[placement]}</SectionTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {embeds.map((embed, i) => (
+          <figure key={`${embed.url}-${i}`} style={{ margin: 0 }}>
+            <div style={{ borderRadius: '14px', overflow: 'hidden', border: `1px solid ${P.line}`, background: '#fff' }}>
+              <iframe
+                src={embed.url}
+                title={embed.title ?? `${PROVIDER_LABEL[embed.provider]} — ${placement === 'tour' ? 'recorrido virtual' : 'multimedia'}`}
+                loading="lazy"
+                allow="fullscreen; xr-spatial-tracking; accelerometer; gyroscope; picture-in-picture"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-presentation"
+                style={{ display: 'block', width: '100%', aspectRatio: embedAspectRatio(embed.provider), border: 0 }}
+              />
+            </div>
+            {embed.title && (
+              <figcaption style={{ fontSize: '13px', color: P.textFaint, marginTop: '9px' }}>{embed.title}</figcaption>
+            )}
+          </figure>
+        ))}
+      </div>
+    </section>
   )
 }
 

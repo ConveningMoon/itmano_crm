@@ -10,6 +10,10 @@ import type { AiPropertyDraft } from './ai-actions'
 import { FormSection } from '@/components/ui/form-section'
 import { Switch } from '@/components/ui/switch'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import {
+  parseEmbedInput, EMBED_PLACEMENTS, MAX_EMBEDS, PLACEMENT_LABEL, PLACEMENT_HINT,
+  PROVIDER_LABEL, type EmbedPlacement,
+} from '@/lib/services/property-embeds'
 
 // Modal de crear/editar propiedad — extraído de properties-client para poder
 // abrirlo también desde la página de detalle (/properties/[id]) sin volver a
@@ -67,7 +71,7 @@ const EMPTY_FORM: PropertyInput = {
   garage_spaces: null, lot_sqft: null,
   content_languages: ['en'], descriptions: {}, features_i18n: {},
   image_url: null, gallery: [], floor_plans: [],
-  detail_pdf_url: null, published_to_web: false,
+  detail_pdf_url: null, web_embeds: [], published_to_web: false,
 }
 
 function formFromProperty(p: Property): PropertyInput {
@@ -99,6 +103,7 @@ function formFromProperty(p: Property): PropertyInput {
     gallery:         p.gallery,
     floor_plans:     p.floorPlans,
     detail_pdf_url:  p.detailPdfUrl,
+    web_embeds:      p.webEmbeds.map(e => ({ url: e.url, title: e.title, placement: e.placement })),
     published_to_web: p.publishedToWeb,
   }
 }
@@ -893,6 +898,13 @@ export function PropertyFormModal({
             </div>
             </FormSection>
 
+            <FormSection title="Recorridos y video" description="Pega el código que te da el botón de compartir del proveedor, o su enlace. Se admiten Zillow 3D Home, Matterport, iGuide, YouTube, Vimeo y Google Maps.">
+              <EmbedsField
+                value={form.web_embeds ?? []}
+                onChange={next => setField('web_embeds', next)}
+              />
+            </FormSection>
+
             <FormSection title="Publicación">
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
               <Switch
@@ -1149,6 +1161,129 @@ function UploadButton({ label, busy, progress, accept, multiple = false, onFiles
         style={{ display: 'none' }}
       />
     </label>
+  )
+}
+
+// ─── Embeds de terceros ──────────────────────────────────────────────────────
+// El agente pega el snippet del proveedor; aquí se valida con el MISMO parser
+// que usa la server action, así el error aparece al agregar y no al guardar. Lo
+// que se guarda es la url, nunca el HTML (ver src/lib/services/property-embeds).
+
+type EmbedRow = NonNullable<PropertyInput['web_embeds']>[number]
+
+function EmbedsField({ value, onChange }: { value: EmbedRow[]; onChange: (next: EmbedRow[]) => void }) {
+  const [raw, setRaw] = useState('')
+  const [title, setTitle] = useState('')
+  const [placement, setPlacement] = useState<EmbedPlacement>('tour')
+  const [error, setError] = useState<string | null>(null)
+
+  const full = value.length >= MAX_EMBEDS
+
+  function add() {
+    const parsed = parseEmbedInput(raw)
+    if (!parsed.ok) { setError(parsed.error); return }
+    if (value.some(e => e.url === parsed.url)) { setError('Ese embed ya está agregado.'); return }
+    onChange([...value, { url: parsed.url, title: title.trim() || null, placement }])
+    setRaw(''); setTitle(''); setError(null)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {value.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {value.map((embed, i) => {
+            const parsed = parseEmbedInput(embed.url)
+            return (
+              <div key={`${embed.url}-${i}`} style={{ ...mediaRowStyle, justifyContent: 'space-between', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '9px 12px', background: 'var(--bg-elevated)' }}>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {embed.title || (parsed.ok ? PROVIDER_LABEL[parsed.provider] : 'Embed')}
+                    <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {PLACEMENT_LABEL[embed.placement]}</span>
+                  </span>
+                  <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {embed.url}
+                  </span>
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <a href={embed.url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>Ver</a>
+                  <button
+                    type="button"
+                    onClick={() => onChange(value.filter((_, j) => j !== i))}
+                    style={mediaRemoveStyle}
+                    aria-label="Quitar embed"
+                  >
+                    <X size={13} />
+                  </button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {full ? (
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          Llegaste al máximo de {MAX_EMBEDS} embeds. Quita uno para agregar otro.
+        </span>
+      ) : (
+        <>
+          <label style={labelStyle}>
+            <span style={labelTextStyle}>Código o enlace</span>
+            <textarea
+              value={raw}
+              onChange={e => { setRaw(e.target.value); setError(null) }}
+              rows={3}
+              placeholder={'<iframe src="https://www.zillow.com/view-imx/…"></iframe>'}
+              style={{ ...inputStyle, resize: 'vertical', minHeight: '72px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}
+            />
+          </label>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <label style={labelStyle}>
+              <span style={labelTextStyle}>Dónde se muestra</span>
+              <select
+                value={placement}
+                onChange={e => setPlacement(e.target.value as EmbedPlacement)}
+                style={selectStyle}
+              >
+                {EMBED_PLACEMENTS.map(p => (
+                  <option key={p} value={p}>{PLACEMENT_LABEL[p]} — {PLACEMENT_HINT[p].toLowerCase()}</option>
+                ))}
+              </select>
+            </label>
+            <label style={labelStyle}>
+              <span style={labelTextStyle}>Título (opcional)</span>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                maxLength={120}
+                placeholder="Recorrido 3D — planta baja"
+                style={inputStyle}
+              />
+            </label>
+          </div>
+
+          {error && (
+            <span style={{ fontSize: '12px', color: 'var(--accent-coral)' }}>{error}</span>
+          )}
+
+          <button
+            type="button"
+            onClick={add}
+            disabled={!raw.trim()}
+            style={{
+              alignSelf: 'flex-start', padding: '8px 14px', fontSize: '12px', fontWeight: 600,
+              borderRadius: '8px', border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+              cursor: raw.trim() ? 'pointer' : 'not-allowed', opacity: raw.trim() ? 1 : 0.5,
+            }}
+          >
+            Agregar embed
+          </button>
+        </>
+      )}
+    </div>
   )
 }
 

@@ -7,6 +7,9 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
 import { MEDIA_BUCKET, sanitizeSlugFolder, objectPathFromPublicUrl } from '@/lib/services/property-media'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import {
+  parseEmbedInput, toPropertyEmbeds, EMBED_PLACEMENTS, MAX_EMBEDS, MAX_EMBED_URL,
+} from '@/lib/services/property-embeds'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 // http(s)-only URL, empty string tolerated (normalized to null before insert).
@@ -64,9 +67,31 @@ const PropertySchema = z
     gallery:        z.array(httpUrl.min(1)).max(60).optional().default([]),
     floor_plans:    z.array(httpUrl.min(1)).max(30).optional().default([]),
     detail_pdf_url: httpUrl.optional().nullable(),
+    // ── Embeds de terceros (migración 113) ──────────────────────────────────────
+    // El cliente manda lo que el agente pegó; el proveedor NO viaja, se deriva
+    // aquí. La url se revalida en el superRefine contra la lista blanca: que el
+    // formulario ya la haya validado no la hace de fiar.
+    web_embeds: z
+      .array(z.object({
+        url:       z.string().trim().min(1).max(MAX_EMBED_URL * 4),
+        title:     z.string().trim().max(120).optional().nullable(),
+        placement: z.enum(EMBED_PLACEMENTS),
+      }))
+      .max(MAX_EMBEDS, `Máximo ${MAX_EMBEDS} embeds por propiedad`)
+      .optional()
+      .default([]),
     published_to_web: z.boolean().optional().default(false),
   })
   .superRefine((data, ctx) => {
+    // Los embeds se validan siempre, publicada o no: una url que no pasa la
+    // lista blanca no debe llegar a la base en ningún caso.
+    ;(data.web_embeds ?? []).forEach((embed, i) => {
+      const parsed = parseEmbedInput(embed.url)
+      if (!parsed.ok) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error, path: ['web_embeds', i, 'url'] })
+      }
+    })
+
     // Web-required fields are only mandatory when the property is published.
     if (!data.published_to_web) return
     const requireField = (field: string, value: unknown, message: string) => {
@@ -97,6 +122,7 @@ export type PropertyInput = z.infer<typeof PropertySchema>
 // strings collapse to null; bathrooms is derived from the full/half split so the
 // legacy numeric column stays coherent (full + 0.5 × half).
 type ParsedProperty = z.infer<typeof PropertySchema>
+
 function toColumns(data: ParsedProperty) {
   const nz = (v: string | null | undefined) => {
     const t = (v ?? '').trim()
@@ -152,6 +178,10 @@ function toColumns(data: ParsedProperty) {
     gallery:          data.gallery ?? [],
     floor_plans:      data.floor_plans ?? [],
     detail_pdf_url:   nz(data.detail_pdf_url),
+    // Guarda la url que devolvió el parser, no la que pegó el agente, y deriva
+    // el proveedor del host. Lo que llega del navegador nunca decide qué se
+    // embebe: es el mismo normalizador que usa la lectura.
+    web_embeds:       toPropertyEmbeds(data.web_embeds ?? []),
     published_to_web: data.published_to_web ?? false,
   }
 }
