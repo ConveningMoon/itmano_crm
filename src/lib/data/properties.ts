@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { toPropertyEmbeds, type PropertyEmbed } from '@/lib/services/property-embeds'
 
 export type PropertyType =
   | 'residential'
@@ -52,6 +53,9 @@ export interface Property {
   gallery:             string[]
   floorPlans:          string[]
   detailPdfUrl:        string | null
+  // Embeds de terceros (migración 113). Se revalidan al leer: la lista blanca
+  // vive en el código, así que una url guardada ayer puede dejar de valer hoy.
+  webEmbeds:           PropertyEmbed[]
   publishedToWeb:      boolean
   createdAt:           string
   updatedAt:           string
@@ -97,6 +101,7 @@ function mapRow(r: any, tenantName: string | null, agentName: string | null): Pr
     gallery:            Array.isArray(r.gallery) ? (r.gallery as string[]) : [],
     floorPlans:         Array.isArray(r.floor_plans) ? (r.floor_plans as string[]) : [],
     detailPdfUrl:       r.detail_pdf_url ?? null,
+    webEmbeds:          toPropertyEmbeds(r.web_embeds),
     publishedToWeb:     r.published_to_web === true,
     createdAt:          r.created_at as string,
     updatedAt:          r.updated_at as string,

@@ -1,5 +1,6 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { toPropertyEmbeds, type PropertyEmbed } from '@/lib/services/property-embeds'
 
 // Datos públicos del catálogo de propiedades alojado
 // (properties.itmano.com/<tenant-slug> → rewrite a /web/...). Se seleccionan
@@ -40,6 +41,9 @@ export type PublicProperty = {
   gallery: string[] | null
   floor_plans: string[] | null
   detail_pdf_url: string | null
+  // Embeds de terceros (migración 113). Ya revalidados contra la lista blanca:
+  // la vista pinta el iframe sin volver a preguntarse si la url es admisible.
+  web_embeds: PropertyEmbed[]
 }
 
 export const PUBLIC_PROPERTY_COLS = [
@@ -47,8 +51,15 @@ export const PUBLIC_PROPERTY_COLS = [
   'list_price', 'bedrooms', 'bathrooms_full', 'bathrooms_half', 'garage_spaces',
   'sqft', 'lot_sqft', 'year_built', 'status', 'description_es', 'description_en',
   'features_es', 'features_en', 'content_languages', 'descriptions', 'features_i18n',
-  'image_url', 'gallery', 'floor_plans', 'detail_pdf_url',
+  'image_url', 'gallery', 'floor_plans', 'detail_pdf_url', 'web_embeds',
 ].join(', ')
+
+// La columna es jsonb crudo: pasa por el parser antes de salir de este módulo,
+// para que ni la vista ni el catálogo vean nunca una url sin validar.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function hydrate(row: any): PublicProperty {
+  return { ...row, web_embeds: toPropertyEmbeds(row?.web_embeds) } as PublicProperty
+}
 
 export async function getPublicTenant(tenantSlug: string): Promise<PublicTenant | null> {
   const db = createAdminClient()
@@ -68,7 +79,7 @@ export async function getPublishedProperties(tenantId: string): Promise<PublicPr
     .eq('tenant_id', tenantId)
     .eq('published_to_web', true)
     .order('created_at', { ascending: false })
-  return (data ?? []) as unknown as PublicProperty[]
+  return (data ?? []).map(hydrate)
 }
 
 export async function getPublishedProperty(tenantId: string, slug: string): Promise<PublicProperty | null> {
@@ -80,7 +91,7 @@ export async function getPublishedProperty(tenantId: string, slug: string): Prom
     .eq('published_to_web', true)
     .eq('slug', slug)
     .maybeSingle()
-  return (data as unknown as PublicProperty | null) ?? null
+  return data ? hydrate(data) : null
 }
 
 export function formatPrice(price: number | null): string {

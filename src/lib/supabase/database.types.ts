@@ -1696,6 +1696,7 @@ export type Database = {
           tenant_id: string
           unpublished_by_billing: boolean
           updated_at: string
+          web_embeds: Json
           year_built: number | null
         }
         Insert: {
@@ -1737,6 +1738,7 @@ export type Database = {
           tenant_id: string
           unpublished_by_billing?: boolean
           updated_at?: string
+          web_embeds?: Json
           year_built?: number | null
         }
         Update: {
@@ -1778,6 +1780,7 @@ export type Database = {
           tenant_id?: string
           unpublished_by_billing?: boolean
           updated_at?: string
+          web_embeds?: Json
           year_built?: number | null
         }
         Relationships: [
