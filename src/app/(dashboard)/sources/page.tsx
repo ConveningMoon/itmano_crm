@@ -5,6 +5,7 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
 import { getSourcesHealth } from '@/lib/data/source-health'
 import { listFolders } from '@/lib/data/folders'
+import { columns } from '@/lib/supabase/columns'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
 
 export default async function SourcesPage({
@@ -20,14 +21,18 @@ export default async function SourcesPage({
   const windowDays = Number(windowParam ?? 30)
   const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
-  // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
-  const channels         = await getChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
-  const archivedChannels = await getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId)
-  // Cómo está entrando cada fuente, según lo que realmente llega.
-  const health = tenant_id ? await getSourcesHealth(tenant_id) : {}
-  // Carpetas de QUIEN MIRA: la organización es personal, así que dos usuarios
-  // del mismo tenant ven el mismo catálogo repartido de forma distinta.
-  const folders = await listFolders('source', tenant_id, ctx.user_id)
+  // Ninguna de estas lecturas depende de otra. Antes se hacían en serie, de
+  // modo que cada cambio de carpeta pagaba toda la suma al regenerar /sources.
+  const [channels, archivedChannels, health, folders] = await Promise.all([
+    // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
+    getChannelsWithMetrics(tenant_id, validWindow, scope.agentId),
+    getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId),
+    // Cómo está entrando cada fuente, según lo que realmente llega.
+    tenant_id ? getSourcesHealth(tenant_id) : Promise.resolve({}),
+    // Carpetas de QUIEN MIRA: la organización es personal, así que dos usuarios
+    // del mismo tenant ven el mismo catálogo repartido de forma distinta.
+    listFolders('source', tenant_id, ctx.user_id),
+  ])
 
   const supabase = createAdminClient()
 
@@ -35,41 +40,51 @@ export default async function SourcesPage({
   // inalcanzable aquí por requireTenantContext; actuando como tenant, las
   // actions resuelven el tenant desde el contexto).
   const needsTenantPicker = isSuperAdmin && !tenant_id
-  let tenants: Array<{ id: string; name: string }> = []
-  if (needsTenantPicker) {
-    const { data } = await supabase.from('tenants').select('id, name').order('name')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tenants = (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
-  }
 
   // Slug y modo de gestión de cada tenant presente en las tarjetas: el botón de
   // "abrir página" arma la URL alojada con el slug, y el mensaje cuando no hay
   // página depende de si ITMANO administra a ese tenant. Se resuelve por tenant
   // porque el super_admin sin selección ve canales de varios a la vez.
   const tenantIds = [...new Set([...channels, ...archivedChannels].map(c => c.tenantId))]
-  let tenantPages: Record<string, { slug: string; managedByItmano: boolean }> = {}
-  if (tenantIds.length > 0) {
-    const { data } = await supabase
-      .from('tenants').select('id, slug, pages_managed_by_itmano').in('id', tenantIds)
-    tenantPages = Object.fromEntries(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (data ?? []).map((t: any) => [
-        t.id as string,
-        { slug: (t.slug as string) ?? '', managedByItmano: t.pages_managed_by_itmano === true },
-      ]),
-    )
-  }
 
   // Active agents for the owner selector, scoped al tenant del contexto
   // (incluye al super_admin actuando como tenant).
-  let agentsQ = supabase.from('agents').select('id, name, tenant_id').eq('active', true).order('name')
+  let agentsQ = supabase
+    .from('agents')
+    .select(columns('agents', ['id', 'name', 'tenant_id']))
+    .eq('active', true)
+    .order('name')
   if (tenant_id) agentsQ = agentsQ.eq('tenant_id', tenant_id)
   // Un agente sólo crea fuentes suyas, así que el resto del equipo no tiene por
   // qué viajar en el payload de una lista que él no puede elegir.
   if (scope.agentId) agentsQ = agentsQ.eq('id', scope.agentId)
-  const { data: agentRows } = await agentsQ
+
+  // Estas tres lecturas sólo dependen de los ids calculados arriba. Lanzarlas
+  // juntas evita otras dos esperas secuenciales al refrescar la página.
+  const [tenantPickerResult, tenantPagesResult, agentResult] = await Promise.all([
+    needsTenantPicker
+      ? supabase.from('tenants').select(columns('tenants', ['id', 'name'])).order('name')
+      : Promise.resolve({ data: [] }),
+    tenantIds.length > 0
+      ? supabase
+          .from('tenants')
+          .select(columns('tenants', ['id', 'slug', 'pages_managed_by_itmano']))
+          .in('id', tenantIds)
+      : Promise.resolve({ data: [] }),
+    agentsQ,
+  ])
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
+  const tenants = (tenantPickerResult.data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
+  const tenantPages: Record<string, { slug: string; managedByItmano: boolean }> = Object.fromEntries(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (tenantPagesResult.data ?? []).map((t: any) => [
+      t.id as string,
+      { slug: (t.slug as string) ?? '', managedByItmano: t.pages_managed_by_itmano === true },
+    ]),
+  )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agents = (agentResult.data ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
 
   const totalLeads     = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
   const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)

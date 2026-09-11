@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { unstable_rethrow } from 'next/navigation'
-import { X, Upload, Globe, Sparkles, Trash2 } from 'lucide-react'
+import { X, Upload, Globe, Sparkles, Trash2, Pencil } from 'lucide-react'
 import type { Property, PropertyType, PropertyStatus } from '@/lib/data/properties'
 import { createProperty, updateProperty, deleteProperty, deletePropertyMediaByUrls, deletePropertyFolder } from './actions'
 import type { PropertyInput } from './actions'
@@ -11,7 +11,7 @@ import { FormSection } from '@/components/ui/form-section'
 import { Switch } from '@/components/ui/switch'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import {
-  parseEmbedInput, commitEmbedDraft, EMBED_PLACEMENTS, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
+  parseEmbedInput, commitEmbedDraft, replaceEmbedDraft, EMBED_PLACEMENTS, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
   PLACEMENT_LABEL, PLACEMENT_HINT, PROVIDER_LABEL,
   type EmbedPlacement, type EmbedDraft,
 } from '@/lib/services/property-embeds'
@@ -1203,9 +1203,32 @@ function EmbedsField({ value, onChange, draft, onDraftChange }: {
   onDraftChange: (next: EmbedDraft) => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const { raw, title, placement } = draft
   const full = value.length >= MAX_EMBEDS
+
+  function updateRow(index: number, patch: Partial<EmbedRow>) {
+    onChange(value.map((embed, i) => i === index ? { ...embed, ...patch } : embed))
+    setEditError(null)
+  }
+
+  function finishEditing(index: number) {
+    const embed = value[index]
+    if (!embed) { setEditingIndex(null); return }
+
+    const result = replaceEmbedDraft(value, index, {
+      raw: embed.url,
+      title: embed.title ?? '',
+      placement: embed.placement,
+    })
+    if (!result.ok) { setEditError(result.error); return }
+
+    onChange(result.embeds)
+    setEditingIndex(null)
+    setEditError(null)
+  }
 
   // Agregar sigue existiendo para encadenar varios y ver el proveedor al vuelo,
   // pero ya no es obligatorio: al guardar, lo que quede aquí se incorpora igual.
@@ -1224,22 +1247,87 @@ function EmbedsField({ value, onChange, draft, onDraftChange }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {value.map((embed, i) => {
             const parsed = parseEmbedInput(embed.url)
+            const editing = editingIndex === i
             return (
-              <div key={`${embed.url}-${i}`} style={{ ...mediaRowStyle, justifyContent: 'space-between', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '9px 12px', background: 'var(--bg-elevated)' }}>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {embed.title || (parsed.ok ? PROVIDER_LABEL[parsed.provider] : 'Embed')}
-                    <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {PLACEMENT_LABEL[embed.placement]}</span>
+              <div
+                key={i}
+                style={{
+                  ...mediaRowStyle,
+                  alignItems: editing ? 'stretch' : 'center',
+                  flexDirection: editing ? 'column' : 'row',
+                  justifyContent: 'space-between',
+                  border: '1px solid var(--border-subtle)', borderRadius: '8px',
+                  padding: '9px 12px', background: 'var(--bg-elevated)', gap: '10px',
+                }}
+              >
+                {editing ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                    <label style={labelStyle}>
+                      <span style={labelTextStyle}>Código o enlace</span>
+                      <textarea
+                        value={embed.url}
+                        onChange={e => updateRow(i, { url: e.target.value })}
+                        rows={3}
+                        style={{ ...inputStyle, resize: 'vertical', minHeight: '72px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px' }}
+                      />
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                      <label style={labelStyle}>
+                        <span style={labelTextStyle}>Dónde se muestra</span>
+                        <select
+                          value={embed.placement}
+                          onChange={e => updateRow(i, { placement: e.target.value as EmbedPlacement })}
+                          style={selectStyle}
+                        >
+                          {EMBED_PLACEMENTS.map(p => (
+                            <option key={p} value={p}>{PLACEMENT_LABEL[p]} — {PLACEMENT_HINT[p].toLowerCase()}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={labelStyle}>
+                        <span style={labelTextStyle}>Título (opcional)</span>
+                        <input
+                          type="text"
+                          value={embed.title ?? ''}
+                          onChange={e => updateRow(i, { title: e.target.value })}
+                          maxLength={120}
+                          style={inputStyle}
+                        />
+                      </label>
+                    </div>
+                    {editError && <span style={{ fontSize: '12px', color: 'var(--accent-coral)' }}>{editError}</span>}
+                  </div>
+                ) : (
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {embed.title || (parsed.ok ? PROVIDER_LABEL[parsed.provider] : 'Embed')}
+                      <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {PLACEMENT_LABEL[embed.placement]}</span>
+                    </span>
+                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {embed.url}
+                    </span>
                   </span>
-                  <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {embed.url}
-                  </span>
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  <a href={embed.url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>Ver</a>
+                )}
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flexShrink: 0 }}>
+                  {parsed.ok && <a href={parsed.url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>Ver</a>}
+                  {editing ? (
+                    <button type="button" onClick={() => finishEditing(i)} style={{ ...mediaLinkButtonStyle, color: 'var(--accent-gold)' }}>
+                      Listo
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setEditingIndex(i); setEditError(null) }}
+                      style={{ ...mediaRemoveStyle, color: 'var(--accent-gold)' }}
+                      aria-label="Editar embed"
+                      title="Editar embed"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => onChange(value.filter((_, j) => j !== i))}
+                    onClick={() => { onChange(value.filter((_, j) => j !== i)); setEditingIndex(null); setEditError(null) }}
                     style={mediaRemoveStyle}
                     aria-label="Quitar embed"
                   >
@@ -1352,6 +1440,10 @@ const mediaRowStyle: React.CSSProperties = {
 }
 const mediaLinkStyle: React.CSSProperties = {
   fontSize: '12px', color: 'var(--accent-blue)', textDecoration: 'none',
+}
+const mediaLinkButtonStyle: React.CSSProperties = {
+  padding: 0, border: 'none', background: 'transparent', cursor: 'pointer',
+  fontSize: '12px', fontFamily: 'inherit',
 }
 const mediaRemoveStyle: React.CSSProperties = {
   padding: '4px', borderRadius: '6px', border: 'none', cursor: 'pointer',

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseEmbedInput, toPropertyEmbeds, commitEmbedDraft, embedAspectRatio,
+  parseEmbedInput, toPropertyEmbeds, commitEmbedDraft, replaceEmbedDraft, embedAspectRatio,
   PROVIDER_LABEL, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
 } from '@/lib/services/property-embeds'
 
@@ -208,6 +208,48 @@ describe('commitEmbedDraft — lo pegado no se pierde al guardar', () => {
     const r = commitEmbedDraft(llena, draft(ZILLOW_SNIPPET))
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(new RegExp(String(MAX_EMBEDS)))
+  })
+})
+
+describe('replaceEmbedDraft — los embeds guardados se pueden editar', () => {
+  const current = [
+    { url: ZILLOW_URL, title: 'Tour anterior', placement: 'tour' as const },
+    { url: 'https://my.matterport.com/show/?m=abc123', title: null, placement: 'extra' as const },
+  ]
+
+  it('cambia enlace, título y ubicación, normalizando el iframe pegado', () => {
+    const r = replaceEmbedDraft(current, 0, {
+      raw: '<iframe src="https://www.youtube.com/watch?v=dQw4w9WgXcQ"></iframe>',
+      title: '  Video principal  ',
+      placement: 'extra',
+    })
+
+    expect(r).toEqual({
+      ok: true,
+      embeds: [
+        { url: 'https://www.youtube.com/embed/dQw4w9WgXcQ', title: 'Video principal', placement: 'extra' },
+        current[1],
+      ],
+    })
+  })
+
+  it('rechaza convertir una fila en duplicado de otra', () => {
+    const r = replaceEmbedDraft(current, 0, {
+      raw: current[1].url,
+      title: '',
+      placement: 'tour',
+    })
+    expect(r).toEqual({ ok: false, error: 'Ese embed ya está agregado.' })
+  })
+
+  it('no modifica la lista si el nuevo enlace no es válido', () => {
+    const r = replaceEmbedDraft(current, 1, {
+      raw: 'https://tours.example.com/x',
+      title: 'No válido',
+      placement: 'tour',
+    })
+    expect(r.ok).toBe(false)
+    expect(current[1].title).toBeNull()
   })
 })
 
