@@ -31,44 +31,41 @@ export async function listFolders(
   if (!tenantId) return []
 
   const supabase = createAdminClient()
+  const folderColumns = columns('folders', ['id', 'name', 'position', 'created_at'])
+  const itemColumns = columns('folder_items', ['channel_id', 'sequence_id'])
 
   const { data: folderRows, error } = await supabase
     .from('folders')
-    .select(columns('folders', ['id', 'name', 'position', 'created_at']))
+    // PostgREST resuelve la FK inversa en el mismo viaje. Antes se leían las
+    // carpetas y luego sus elementos con otro request secuencial.
+    .select(`${folderColumns}, folder_items(${itemColumns})`)
     .eq('owner_user_id', userId)
     .eq('tenant_id', tenantId)
     .eq('kind', kind)
+    .eq('folder_items.owner_user_id', userId)
     .order('position')
     .order('created_at')
 
   if (error || !folderRows || folderRows.length === 0) return []
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const folderIds = (folderRows as any[]).map(f => f.id as string)
-
   const itemColumn = kind === 'source' ? 'channel_id' : 'sequence_id'
-  const { data: itemRows } = await supabase
-    .from('folder_items')
-    .select(`folder_id, ${itemColumn}`)
-    .eq('owner_user_id', userId)
-    .in('folder_id', folderIds)
-
-  const itemsByFolder = new Map<string, string[]>()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const row of (itemRows ?? []) as any[]) {
-    const itemId = row[itemColumn] as string | null
-    if (!itemId) continue
-    const list = itemsByFolder.get(row.folder_id as string)
-    if (list) list.push(itemId)
-    else itemsByFolder.set(row.folder_id as string, [itemId])
+  type FolderRow = {
+    id: string
+    name: string
+    position: number
+    folder_items: Array<{ channel_id: string | null; sequence_id: string | null }> | null
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (folderRows as any[]).map(f => ({
-    id:       f.id as string,
-    name:     f.name as string,
-    position: f.position as number,
-    itemIds:  itemsByFolder.get(f.id as string) ?? [],
+  // La selección se compone con `columns()` para validar cada nombre; el
+  // parser genérico de supabase-js pierde el literal al interpolarlos y la
+  // representa como ParserError aunque PostgREST devuelva esta forma.
+  return (folderRows as unknown as FolderRow[]).map(folder => ({
+    id:       folder.id,
+    name:     folder.name,
+    position: folder.position,
+    itemIds:  (folder.folder_items ?? [])
+      .map(item => item[itemColumn])
+      .filter((id): id is string => typeof id === 'string'),
   }))
 }
 

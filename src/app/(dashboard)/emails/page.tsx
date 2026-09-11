@@ -15,7 +15,7 @@ export default async function EmailsPage() {
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const [sequences, purchaseByTenant, ownAgentTemplates] = await Promise.all([
+  const [sequences, purchaseByTenant, ownAgentTemplates, folders] = await Promise.all([
     listSequences(tenant_id, scope.agentId),
     isSuperAdmin ? getAllPurchaseTemplatesByTenant() : Promise.resolve([]),
     // Emails de cierre por agente (058): owner ve todos los agentes del tenant;
@@ -23,13 +23,14 @@ export default async function EmailsPage() {
     !isSuperAdmin && tenant_id
       ? getPurchaseTemplatesByAgent(tenant_id, { agentId: scope.agentId })
       : Promise.resolve([]),
+    // No depende de las secuencias: leerla aquí evita sumar sus queries al
+    // final de cada render y de cada Server Action de carpetas.
+    listFolders('sequence', tenant_id, ctx.user_id),
   ])
 
   // Las mismas métricas de la tarjeta del detalle, para cada fila. Batcheado:
   // una llamada por secuencia serían 3 queries por fila leyendo los mismos datos.
   const metrics = await getMetricsForSequences(sequences.map(s => s.id))
-  // Carpetas de QUIEN MIRA: la organización es personal, no del tenant.
-  const folders = await listFolders('sequence', tenant_id, ctx.user_id)
 
   return (
     <>

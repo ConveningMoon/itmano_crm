@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { ChevronRight, Folder as FolderIcon, FolderPlus, MoreVertical, Pencil, Trash2, X } from 'lucide-react'
 import type { Folder, FolderKind } from '@/lib/data/folders'
-import { createFolder, renameFolder, deleteFolder, moveToFolder } from '@/app/(dashboard)/folder-actions'
+import { createFolder, createFolderAndMove, renameFolder, deleteFolder, moveToFolder } from '@/app/(dashboard)/folder-actions'
 
 // ─── Carpetas: la UI compartida entre /sources y /emails ──────────────────────
 //
@@ -134,7 +133,6 @@ function NameModal({ title, initial, confirmLabel, onConfirm, onClose }: {
 // ─── Botón "Nueva carpeta" ────────────────────────────────────────────────────
 
 export function NewFolderButton({ kind }: { kind: FolderKind }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
 
   return (
@@ -149,7 +147,9 @@ export function NewFolderButton({ kind }: { kind: FolderKind }) {
           initial=""
           confirmLabel="Crear"
           onConfirm={name => createFolder(kind, name)}
-          onClose={() => { setOpen(false); router.refresh() }}
+          // createFolder ya incluye el RSC actualizado en la respuesta de la
+          // Server Action. Otro router.refresh duplicaba toda la lectura.
+          onClose={() => setOpen(false)}
         />
       )}
     </>
@@ -217,7 +217,6 @@ export function FolderGroup({ folder, count, children }: {
   count:    number
   children: React.ReactNode
 }) {
-  const router = useRouter()
   const [collapsed, setCollapsed] = useCollapsed(folder.id)
   const [menu,      setMenu]      = useState(false)
   const [modal,     setModal]     = useState<'rename' | 'delete' | null>(null)
@@ -230,7 +229,6 @@ export function FolderGroup({ folder, count, children }: {
       const res = await deleteFolder(folder.id)
       if (!res.ok) { setError(res.error); return }
       setModal(null)
-      router.refresh()
     })
   }
 
@@ -329,7 +327,7 @@ export function FolderGroup({ folder, count, children }: {
           initial={folder.name}
           confirmLabel="Guardar"
           onConfirm={name => renameFolder(folder.id, name)}
-          onClose={() => { setModal(null); router.refresh() }}
+          onClose={() => setModal(null)}
         />
       )}
 
@@ -393,7 +391,6 @@ export function FolderPicker({ kind, itemId, folders, currentFolderId, label }: 
   /** Nombre del elemento, sólo para lectores de pantalla. */
   label:           string
 }) {
-  const router = useRouter()
   // El desplegable se posiciona con `fixed` y coordenadas calculadas al abrir:
   // las filas viven en un contenedor con `overflow: hidden` (el que redondea las
   // esquinas de la tabla), y en `absolute` el menú se cortaba por abajo en la
@@ -423,7 +420,6 @@ export function FolderPicker({ kind, itemId, folders, currentFolderId, label }: 
       const res = await moveToFolder(kind, itemId, folderId)
       if (!res.ok) { setError(res.error); return }
       setOpen(false)
-      router.refresh()
     })
   }
 
@@ -515,12 +511,10 @@ export function FolderPicker({ kind, itemId, folders, currentFolderId, label }: 
           // Crear y mover en un gesto: quien abre este menú ya sabe dónde quiere
           // el elemento, y obligarle a crear la carpeta arriba y volver aquí
           // convertía una acción en tres.
-          onConfirm={async name => {
-            const created = await createFolder(kind, name)
-            if (!created.ok) return created
-            return moveToFolder(kind, itemId, created.data.id)
-          }}
-          onClose={() => { setCreating(false); setOpen(false); router.refresh() }}
+          // Una sola Server Action: Next despacha las actions secuencialmente,
+          // así que crear y luego mover obligaba a esperar dos RSC completos.
+          onConfirm={name => createFolderAndMove(kind, itemId, name)}
+          onClose={() => { setCreating(false); setOpen(false) }}
         />
       )}
     </div>

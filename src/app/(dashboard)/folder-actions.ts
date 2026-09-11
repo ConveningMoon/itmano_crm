@@ -33,19 +33,14 @@ function isDuplicateName(error: { code?: string } | null): boolean {
   return error?.code === '23505'
 }
 
-// ─── Crear ────────────────────────────────────────────────────────────────────
+type TenantContext = Awaited<ReturnType<typeof requireTenantContext>>
+type AdminClient = ReturnType<typeof createAdminClient>
 
-async function createFolderImpl(kind: FolderKind, rawName: string): Promise<ActionResult<{ id: string }>> {
-  const parsed = NameSchema.safeParse(rawName)
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
-
-  const ctx = await requireTenantContext()
-  if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant para organizar en carpetas.' }
-
-  const supabase = createAdminClient()
-
-  // La carpeta nueva va al final: `position` se ordena junto a created_at, así
-  // que basta con dejar hueco por encima de la última.
+async function nextFolderPosition(
+  supabase: AdminClient,
+  ctx: TenantContext,
+  kind: FolderKind,
+): Promise<number> {
   const { data: last } = await supabase
     .from('folders')
     .select(columns('folders', ['position']))
@@ -56,27 +51,54 @@ async function createFolderImpl(kind: FolderKind, rawName: string): Promise<Acti
     .limit(1)
     .maybeSingle()
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((last as any)?.position ?? -1) + 1
+}
+
+async function insertFolder(
+  supabase: AdminClient,
+  ctx: TenantContext,
+  kind: FolderKind,
+  name: string,
+  position: number,
+): Promise<ActionResult<{ id: string }>> {
   const { data, error } = await supabase
     .from('folders')
     .insert({
-      tenant_id:     ctx.tenant_id,
+      tenant_id:     ctx.tenant_id!,
       owner_user_id: ctx.user_id,
       kind,
-      name:          parsed.data,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      position:      ((last as any)?.position ?? -1) + 1,
+      name,
+      position,
     })
-    .select('id')
+    .select(columns('folders', ['id']))
     .single()
 
   if (error) {
-    if (isDuplicateName(error)) return { ok: false, error: `Ya tienes una carpeta llamada "${parsed.data}".` }
+    if (isDuplicateName(error)) return { ok: false, error: `Ya tienes una carpeta llamada "${name}".` }
     return { ok: false, error: error.message }
   }
 
-  revalidatePath(KIND_PATH[kind])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { ok: true, data: { id: (data as any).id as string } }
+}
+
+// ─── Crear ────────────────────────────────────────────────────────────────────
+
+async function createFolderImpl(kind: FolderKind, rawName: string): Promise<ActionResult<{ id: string }>> {
+  const parsed = NameSchema.safeParse(rawName)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
+
+  const ctx = await requireTenantContext()
+  if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant para organizar en carpetas.' }
+
+  const supabase = createAdminClient()
+  const position = await nextFolderPosition(supabase, ctx, kind)
+  const created = await insertFolder(supabase, ctx, kind, parsed.data, position)
+  if (!created.ok) return created
+
+  revalidatePath(KIND_PATH[kind])
+  return created
 }
 
 export async function createFolder(kind: FolderKind, name: string): Promise<ActionResult<{ id: string }>> {
@@ -100,7 +122,7 @@ async function renameFolderImpl(folderId: string, rawName: string): Promise<Acti
     .update({ name: parsed.data })
     .eq('id', folderId)
     .eq('owner_user_id', ctx.user_id)
-    .select('id, kind')
+    .select(columns('folders', ['id', 'kind']))
     .maybeSingle()
 
   if (error) {
@@ -131,7 +153,7 @@ async function deleteFolderImpl(folderId: string): Promise<ActionResult<null>> {
     .delete()
     .eq('id', folderId)
     .eq('owner_user_id', ctx.user_id)
-    .select('id, kind')
+    .select(columns('folders', ['id', 'kind']))
     .maybeSingle()
 
   if (error) return { ok: false, error: error.message }
@@ -150,17 +172,21 @@ export async function deleteFolder(folderId: string): Promise<ActionResult<null>
 
 /** El elemento existe, es de este tenant y este usuario puede verlo. */
 async function assertItemVisible(
+  supabase: AdminClient,
   kind:   FolderKind,
   itemId: string,
-  ctx:    Awaited<ReturnType<typeof requireTenantContext>>,
+  ctx:    TenantContext,
 ): Promise<{ error: string } | null> {
-  const supabase = createAdminClient()
   const table = kind === 'source' ? 'acquisition_channels' : 'email_sequences'
+  const itemColumns = kind === 'source'
+    ? columns('acquisition_channels', ['id', 'tenant_id', 'agent_id'])
+    : columns('email_sequences', ['id', 'tenant_id', 'agent_id'])
 
   const { data } = await supabase
     .from(table)
-    .select('id, tenant_id, agent_id')
+    .select(itemColumns)
     .eq('id', itemId)
+    .eq('tenant_id', ctx.tenant_id)
     .maybeSingle()
 
   const notFound = kind === 'source' ? 'Fuente no encontrada.' : 'Secuencia no encontrada.'
@@ -172,6 +198,68 @@ async function assertItemVisible(
   return null
 }
 
+/** La carpeta destino pertenece al usuario, tenant y sección actuales. */
+async function assertFolderVisible(
+  supabase: AdminClient,
+  kind: FolderKind,
+  folderId: string,
+  ctx: TenantContext,
+): Promise<{ error: string } | null> {
+  const { data, error } = await supabase
+    .from('folders')
+    .select(columns('folders', ['id']))
+    .eq('id', folderId)
+    .eq('owner_user_id', ctx.user_id)
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('kind', kind)
+    .maybeSingle()
+
+  if (error) return { error: error.message }
+  return data ? null : { error: 'Carpeta no encontrada.' }
+}
+
+/**
+ * Cambia la pertenencia con un UPDATE primero: mover entre carpetas cuesta una
+ * sola escritura y conserva la carpeta anterior si la nueva operación falla.
+ * Sólo hace INSERT cuando el elemento todavía estaba en "Sin carpeta".
+ */
+async function setFolderMembership(
+  supabase: AdminClient,
+  kind: FolderKind,
+  itemId: string,
+  folderId: string | null,
+  ctx: TenantContext,
+): Promise<{ error: string } | null> {
+  const itemColumn = kind === 'source' ? 'channel_id' : 'sequence_id'
+
+  if (!folderId) {
+    const { error } = await supabase
+      .from('folder_items')
+      .delete()
+      .eq('owner_user_id', ctx.user_id)
+      .eq(itemColumn, itemId)
+    return error ? { error: error.message } : null
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from('folder_items')
+    .update({ folder_id: folderId })
+    .eq('owner_user_id', ctx.user_id)
+    .eq(itemColumn, itemId)
+    .select(columns('folder_items', ['id']))
+    .maybeSingle()
+
+  if (updateError) return { error: updateError.message }
+  if (updated) return null
+
+  const { error: insertError } = await supabase.from('folder_items').insert({
+    folder_id:     folderId,
+    owner_user_id: ctx.user_id,
+    [itemColumn]:  itemId,
+  })
+  return insertError ? { error: insertError.message } : null
+}
+
 async function moveToFolderImpl(
   kind:     FolderKind,
   itemId:   string,
@@ -180,46 +268,18 @@ async function moveToFolderImpl(
   const ctx = await requireTenantContext()
   if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant para organizar en carpetas.' }
 
-  const invisible = await assertItemVisible(kind, itemId, ctx)
-  if (invisible) return { ok: false, error: invisible.error }
-
   const supabase = createAdminClient()
-  const itemColumn = kind === 'source' ? 'channel_id' : 'sequence_id'
+  // Las dos lecturas no dependen entre sí. Hacerlas juntas ahorra una latencia
+  // completa de red antes de la escritura.
+  const [invisible, hiddenFolder] = await Promise.all([
+    assertItemVisible(supabase, kind, itemId, ctx),
+    folderId ? assertFolderVisible(supabase, kind, folderId, ctx) : Promise.resolve(null),
+  ])
+  if (invisible) return { ok: false, error: invisible.error }
+  if (hiddenFolder) return { ok: false, error: hiddenFolder.error }
 
-  // Un elemento está en una sola carpeta por usuario, así que mover es siempre
-  // "quitar de donde esté y, si hay destino, poner ahí".
-  const { error: clearError } = await supabase
-    .from('folder_items')
-    .delete()
-    .eq('owner_user_id', ctx.user_id)
-    .eq(itemColumn, itemId)
-
-  if (clearError) return { ok: false, error: clearError.message }
-
-  if (folderId) {
-    // La carpeta destino tiene que ser de este usuario Y de esta sección: sin
-    // comprobarlo, un id de otra sección metería una fuente en una carpeta de
-    // emails, donde no se vería nunca más.
-    const { data: folder } = await supabase
-      .from('folders')
-      .select(columns('folders', ['id', 'kind', 'tenant_id']))
-      .eq('id', folderId)
-      .eq('owner_user_id', ctx.user_id)
-      .maybeSingle()
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const f = folder as any
-    if (!f || f.kind !== kind || f.tenant_id !== ctx.tenant_id) {
-      return { ok: false, error: 'Carpeta no encontrada.' }
-    }
-
-    const { error } = await supabase.from('folder_items').insert({
-      folder_id:     folderId,
-      owner_user_id: ctx.user_id,
-      [itemColumn]:  itemId,
-    })
-    if (error) return { ok: false, error: error.message }
-  }
+  const membershipError = await setFolderMembership(supabase, kind, itemId, folderId, ctx)
+  if (membershipError) return { ok: false, error: membershipError.error }
 
   revalidatePath(KIND_PATH[kind])
   return { ok: true, data: null }
@@ -231,4 +291,47 @@ export async function moveToFolder(
   folderId: string | null,
 ): Promise<ActionResult<null>> {
   return guarded('moveToFolder', () => moveToFolderImpl(kind, itemId, folderId))
+}
+
+// ─── Crear y mover en un solo viaje ──────────────────────────────────────────
+
+async function createFolderAndMoveImpl(
+  kind: FolderKind,
+  itemId: string,
+  rawName: string,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = NameSchema.safeParse(rawName)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message }
+
+  const ctx = await requireTenantContext()
+  if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant para organizar en carpetas.' }
+
+  const supabase = createAdminClient()
+  const [invisible, position] = await Promise.all([
+    assertItemVisible(supabase, kind, itemId, ctx),
+    nextFolderPosition(supabase, ctx, kind),
+  ])
+  if (invisible) return { ok: false, error: invisible.error }
+
+  const created = await insertFolder(supabase, ctx, kind, parsed.data, position)
+  if (!created.ok) return created
+
+  const membershipError = await setFolderMembership(supabase, kind, itemId, created.data.id, ctx)
+  if (membershipError) {
+    // El gesto es una sola intención. Si no se pudo mover, no dejamos una
+    // carpeta vacía que el usuario nunca pidió por separado.
+    await supabase.from('folders').delete().eq('id', created.data.id).eq('owner_user_id', ctx.user_id)
+    return { ok: false, error: membershipError.error }
+  }
+
+  revalidatePath(KIND_PATH[kind])
+  return created
+}
+
+export async function createFolderAndMove(
+  kind: FolderKind,
+  itemId: string,
+  name: string,
+): Promise<ActionResult<{ id: string }>> {
+  return guarded('createFolderAndMove', () => createFolderAndMoveImpl(kind, itemId, name))
 }

@@ -245,6 +245,38 @@ export function commitEmbedDraft(
 }
 
 /**
+ * Valida y normaliza una fila existente después de editarla.
+ *
+ * La edición permite pegar otra vez el iframe completo, igual que el alta. La
+ * lista sólo recibe la URL normalizada cuando el agente termina, y nunca puede
+ * quedar con dos filas que apunten al mismo recurso.
+ */
+export function replaceEmbedDraft(
+  current: EmbedDraftRow[],
+  index: number,
+  draft: EmbedDraft,
+): { ok: true; embeds: EmbedDraftRow[] } | { ok: false; error: string } {
+  if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+    return { ok: false, error: 'Ese embed ya no existe.' }
+  }
+
+  const parsed = parseEmbedInput(draft.raw)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+
+  if (current.some((embed, i) => i !== index && embed.url === parsed.url)) {
+    return { ok: false, error: 'Ese embed ya está agregado.' }
+  }
+
+  const embeds = current.slice()
+  embeds[index] = {
+    url: parsed.url,
+    title: draft.title.trim() || null,
+    placement: draft.placement,
+  }
+  return { ok: true, embeds }
+}
+
+/**
  * Lee la columna jsonb `properties.web_embeds`. Defensivo a propósito: la fila
  * puede venir de una versión anterior del formulario o de una edición a mano, y
  * un embed mal formado no debe tumbar la página pública — se descarta.
