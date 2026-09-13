@@ -16,6 +16,7 @@ import type { PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor, isRowVisible } from '@/lib/auth/visibility'
+import { assertCanWriteLead } from '@/lib/auth/guards'
 import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
 import { getLeadEmailReplies } from '@/lib/data/lead-email-replies'
@@ -27,6 +28,7 @@ import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { getBusinessProfile } from '@/lib/data/business-profile'
+import { getTagsForLead, listLeadTags } from '@/lib/data/lead-tags'
 import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
 
@@ -66,6 +68,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     tenantAccess,
     priority,
     businessProfile,
+    leadTags,
+    tagCatalog,
   ] = await Promise.all([
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
@@ -89,6 +93,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     // Comisión y moneda de la agencia — sin esto el monto del lead es un número
     // sin significado para quien lo mira.
     getBusinessProfile(leadTenantId),
+    // Etiquetas (116): las del lead y el catálogo del tenant para el
+    // desplegable. Van en esta ola y no en un await suelto por lo mismo que el
+    // resto: cada eslabón encadenado se paga entero al abrir la ficha.
+    getTagsForLead(id),
+    listLeadTags(leadTenantId),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -103,6 +112,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     }))
 
   const lead           = mapLead(rawLead as LeadRow)
+  // Quién puede etiquetar = quién puede escribir el lead. Se calcula con el
+  // MISMO guard que la acción (assertCanWriteLead) en vez de deducirlo del rol:
+  // así el botón y el permiso real no pueden separarse.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const canTag         = assertCanWriteLead(ctx, rawLead as any) === null
   const agents         = (rawAgents  ?? []).map(r => mapAgent(r as AgentRow))
   // Resolve event authors in one batch (no N+1) and attach the display label.
   const actorNames     = await resolveActorNames((rawEvents ?? []).map(r => (r as LeadEventRow).actor_user_id ?? null))
@@ -215,6 +229,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       potentialValue={potentialValue}
       emailSending={emailSending}
       aiFit={aiFit}
+      tags={leadTags}
+      tagCatalog={tagCatalog}
+      canTag={canTag}
     />
   )
 }

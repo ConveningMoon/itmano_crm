@@ -40,6 +40,10 @@ export interface LeadListItem {
   // Monto declarado por el lead (columna generada, migración 088). null cuando
   // el formulario no lo mandó — que hoy es casi siempre.
   budgetAmount:         number | null
+  // Etiquetas del lead (116), como ids del catálogo. La fila sólo pinta chips:
+  // el nombre y el color los resuelve el cliente contra el catálogo que ya
+  // recibe para el filtro, así la lista no repite 20 veces el mismo texto.
+  tagIds:               string[]
   createdAt:            string
 }
 
@@ -51,6 +55,9 @@ export interface LeadListFilters {
   channelId: string  // 'all' | acquisition_channels.id
   language:  string  // 'all' | es | en | pt
   quality:   string  // 'all' | QualityBand
+  // 'all' | slug de lead_tags. Va el SLUG y no el id: es legible en la URL y
+  // sobrevive a que se renombre la etiqueta (ver planTagFilter).
+  tag:       string
   sort:      LeadSortMode
   view:      LeadsView
   page:      number
@@ -112,6 +119,7 @@ export function parseLeadListFilters(params: RawParams): LeadListFilters {
     channelId: one(params.channelId) || 'all',
     language:  one(params.lang)      || 'all',
     quality:   one(params.quality)   || 'all',
+    tag:       one(params.tag)       || 'all',
     sort,
     view,
     page: Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1,
@@ -129,6 +137,7 @@ export function leadListFiltersToQuery(filters: LeadListFilters): string {
   if (filters.channelId !== 'all')       p.set('channelId', filters.channelId)
   if (filters.language  !== 'all')       p.set('lang',      filters.language)
   if (filters.quality   !== 'all')       p.set('quality',   filters.quality)
+  if (filters.tag       !== 'all')       p.set('tag',       filters.tag)
   if (filters.sort      !== 'recientes') p.set('sort',      filters.sort)
   if (filters.view      !== 'table')     p.set('view',      filters.view)
   if (filters.page > 1)                  p.set('page',      String(filters.page))
@@ -142,7 +151,8 @@ export function hasActiveLeadFilters(f: LeadListFilters): boolean {
     f.source    !== 'all' ||
     f.channelId !== 'all' ||
     f.language  !== 'all' ||
-    f.quality   !== 'all'
+    f.quality   !== 'all' ||
+    f.tag       !== 'all'
 }
 
 // ─── Filtro de fuente ─────────────────────────────────────────────────────────

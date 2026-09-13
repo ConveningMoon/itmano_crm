@@ -8,7 +8,7 @@ import { STAGES, STAGE_CONFIG } from '@/lib/scoring/priority'
 
 const DEFAULTS: LeadListFilters = {
   q: '', agentId: 'all', stage: 'all', source: 'all', channelId: 'all',
-  language: 'all', quality: 'all', sort: 'recientes', view: 'table', page: 1,
+  language: 'all', quality: 'all', tag: 'all', sort: 'recientes', view: 'table', page: 1,
 }
 
 describe('parseLeadListFilters', () => {
@@ -22,7 +22,7 @@ describe('parseLeadListFilters', () => {
       channelId: 'ch-1', lang: 'es', sort: 'prioridad', view: 'kanban', page: '3',
     })).toEqual({
       q: 'juan', agentId: 'agent-dylan', stage: 'nutricion', source: 'lead_magnet',
-      channelId: 'ch-1', language: 'es', quality: 'all', sort: 'prioridad', view: 'kanban', page: 3,
+      channelId: 'ch-1', language: 'es', quality: 'all', tag: 'all', sort: 'prioridad', view: 'kanban', page: 3,
     })
   })
 
@@ -51,7 +51,7 @@ describe('leadListFiltersToQuery', () => {
   it('parse ∘ toQuery es ida y vuelta', () => {
     const filters: LeadListFilters = {
       q: 'ana', agentId: 'agent-adriana', stage: 'nutricion', source: 'event',
-      channelId: 'ch-9', language: 'pt', quality: 'all', sort: 'prioridad', view: 'kanban', page: 5,
+      channelId: 'ch-9', language: 'pt', quality: 'all', tag: 'all', sort: 'prioridad', view: 'kanban', page: 5,
     }
     const params = Object.fromEntries(new URLSearchParams(leadListFiltersToQuery(filters)))
     expect(parseLeadListFilters(params)).toEqual(filters)
@@ -67,6 +67,20 @@ describe('hasActiveLeadFilters', () => {
     expect(hasActiveLeadFilters({ ...DEFAULTS, q: 'x' })).toBe(true)
     expect(hasActiveLeadFilters({ ...DEFAULTS, stage: 'cerrado' })).toBe(true)
     expect(hasActiveLeadFilters({ ...DEFAULTS, channelId: 'ch-1' })).toBe(true)
+    expect(hasActiveLeadFilters({ ...DEFAULTS, tag: 'contactado-sin-respuesta' })).toBe(true)
+  })
+})
+
+describe('Filtro por etiqueta (116)', () => {
+  it('viaja en la URL como slug legible', () => {
+    const f = parseLeadListFilters({ tag: 'contactado-sin-respuesta' })
+    expect(f.tag).toBe('contactado-sin-respuesta')
+    expect(leadListFiltersToQuery(f)).toBe('tag=contactado-sin-respuesta')
+  })
+
+  it('sin parámetro queda en "all" y no ensucia la URL', () => {
+    expect(parseLeadListFilters({}).tag).toBe('all')
+    expect(leadListFiltersToQuery({ ...DEFAULTS, tag: 'all' })).toBe('')
   })
 })
 

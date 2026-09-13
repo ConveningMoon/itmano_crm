@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteLead } from '@/lib/auth/guards'
+import { loadGuardedLead } from '@/lib/auth/lead-write-guard'
 import { EmailContentSchema } from '@/lib/email-content'
 import { assessLeadFit, type LeadBriefing } from '@/lib/services/ai-lead-fit'
 import { ACTIVE_STAGES, type Stage } from '@/lib/scoring/priority'
@@ -14,27 +15,11 @@ import { graduateSubscriber, hasSubscriberMark } from '@/lib/newsletters/subscri
 // para que el trigger de scoring no pisara la etapa que ponía el agente, y con
 // `stage` en su propia columna ese choque ya no ocurre.
 
-// Minimal lead shape needed to gate a write (tenant + assigned agent).
+// Minimal lead shape needed to gate a write (tenant + assigned agent). El helper
+// que la usa vive en @/lib/auth/lead-write-guard: lo comparten estas acciones y
+// las de etiquetas.
 type LeadGuardRow = { tenant_id: string; agent_id: string }
 
-// Loads a lead scoped to the caller's tenant (super_admin: ctx.tenant_id null →
-// no filter) and gates it through assertCanWriteLead. Returns the row's
-// tenant_id (for downstream inserts) on success, or an AuthDenial to return.
-async function loadGuardedLead(
-  supabase: ReturnType<typeof createAdminClient>,
-  ctx: Awaited<ReturnType<typeof getCurrentTenantContext>>,
-  leadId: string,
-): Promise<{ tenant_id: string } | { ok: false; error: string }> {
-  let leadQ = supabase.from('leads').select('tenant_id, agent_id').eq('id', leadId)
-  if (ctx.tenant_id) leadQ = leadQ.eq('tenant_id', ctx.tenant_id)
-  const { data: lead } = await leadQ.maybeSingle()
-  if (!lead) return { ok: false, error: 'Lead no encontrado o sin acceso' }
-
-  const row    = lead as LeadGuardRow
-  const denied = assertCanWriteLead(ctx, row)
-  if (denied) return denied
-  return { tenant_id: row.tenant_id }
-}
 
 // ─── Mover la etapa ──────────────────────────────────────────────────────────
 

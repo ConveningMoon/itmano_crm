@@ -28,7 +28,7 @@
     "build": "next build && node scripts/check-sharp-tracing.mjs",
     "start": "next start",
     "lint": "eslint",
-    "test:unit": "vitest run tests/actions tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/studio tests/access tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business tests/sources/page-link.test.ts tests/agent-api/ tests/newsletters tests/folders",
+    "test:unit": "vitest run tests/actions tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/studio tests/access tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business tests/sources/page-link.test.ts tests/agent-api/ tests/newsletters tests/folders tests/tags",
     "test:rls": "npm run check:db-targets && vitest run tests/rls",
     "test:schema": "npm run check:db-targets && vitest run tests/schema",
     "test:scoring": "npm run check:db-targets && vitest run tests/scoring",

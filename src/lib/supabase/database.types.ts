@@ -1189,6 +1189,103 @@ export type Database = {
           },
         ]
       }
+      lead_tag_assignments: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          lead_id: string
+          tag_id: string
+          tenant_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          lead_id: string
+          tag_id: string
+          tenant_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          lead_id?: string
+          tag_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_tag_assignments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_tag_assignments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_tag_assignments_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "lead_tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_tag_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_tags: {
+        Row: {
+          color: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          position: number
+          slug: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_tags_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           acquisition_channel_id: string | null
@@ -2338,6 +2435,7 @@ export type Database = {
           score_updated_at: string | null
           search_text: string | null
           stage: string | null
+          tag_ids: string[] | null
           tenant_id: string | null
           traffic_source: string | null
           traffic_source_detail: Json | null
@@ -2440,6 +2538,10 @@ export type Database = {
         | { Args: { p_email: string }; Returns: string }
         | { Args: { p_email: string; p_secret: string }; Returns: string }
       schema_snapshot: { Args: never; Returns: Json }
+      seed_default_lead_tags: {
+        Args: { p_tenant_id: string }
+        Returns: undefined
+      }
       sequence_eligible_leads: {
         Args: {
           p_agent_filter?: string
