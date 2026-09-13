@@ -37,6 +37,8 @@ async function tagWriteContext(): Promise<
 function revalidateTags() {
   revalidatePath('/settings')
   revalidatePath('/leads')
+  // El panel "Por etiqueta" de /emails se calcula desde el catálogo.
+  revalidatePath('/emails')
 }
 
 export async function createLeadTag(rawName: string, color: string, rawDescription?: string): Promise<Result> {
@@ -90,7 +92,7 @@ export async function createLeadTag(rawName: string, color: string, rawDescripti
 
 export async function updateLeadTag(
   tagId: string,
-  patch: { name?: string; color?: string; description?: string | null },
+  patch: { name?: string; color?: string; description?: string | null; requiresSequence?: boolean },
 ): Promise<Result> {
   const write = await tagWriteContext()
   if (!write.ok) return write
@@ -116,6 +118,13 @@ export async function updateLeadTag(
     const parsed = DescriptionSchema.safeParse(patch.description ?? undefined)
     if (!parsed.success) return { ok: false, error: `La descripción no puede pasar de ${TAG_DESCRIPTION_MAX} caracteres.` }
     update.description = patch.description?.trim() || null
+  }
+
+  if (patch.requiresSequence !== undefined) {
+    // Marcar la etiqueta NO crea la secuencia: sólo declara que debe existir, y
+    // la pestaña "Por etiqueta" de /emails muestra los idiomas que faltan. Se
+    // separan porque escribir el correo es trabajo de redacción, no un clic.
+    update.requires_sequence = patch.requiresSequence
   }
 
   if (Object.keys(update).length === 0) return { ok: true }
@@ -150,7 +159,18 @@ export async function deleteLeadTag(tagId: string): Promise<Result> {
     .eq('id', tagId)
     .eq('tenant_id', write.tenantId)
 
-  if (error) return { ok: false, error: error.message }
+  if (error) {
+    // 23503 = foreign_key_violation: la etiqueta tiene una secuencia colgada
+    // (trigger_tag_id es `on delete restrict`, migración 117). Borrarla en
+    // cascada se llevaría el correo escrito; desenganchar es la decisión real.
+    if (error.code === '23503') {
+      return {
+        ok: false,
+        error: 'Esta etiqueta tiene una secuencia de email. Bórrala o desactívala primero en Email → Por etiqueta.',
+      }
+    }
+    return { ok: false, error: error.message }
+  }
 
   revalidateTags()
   return { ok: true }

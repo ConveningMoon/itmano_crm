@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Check, X } from 'lucide-react'
+import { Plus, Trash2, Check, X, Mail } from 'lucide-react'
 import {
   tagChipStyle, TAG_COLORS, TAG_NAME_MAX, TAG_DESCRIPTION_MAX, DEFAULT_TAG_COLOR,
   type LeadTag,
@@ -65,6 +65,7 @@ export function TagsSection({ tags, counts }: TagsSectionProps) {
   const [editName, setEditName]   = useState('')
   const [editColor, setEditColor] = useState<string>(DEFAULT_TAG_COLOR)
   const [editDesc, setEditDesc]   = useState('')
+  const [editRequires, setEditRequires] = useState(false)
 
   // Borrado (un paso de confirmación: el conteo es la información que falta)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -85,6 +86,7 @@ export function TagsSection({ tags, counts }: TagsSectionProps) {
     setEditName(tag.name)
     setEditColor(tag.color)
     setEditDesc(tag.description ?? '')
+    setEditRequires(tag.requiresSequence)
   }
 
   return (
@@ -137,6 +139,21 @@ export function TagsSection({ tags, counts }: TagsSectionProps) {
                     style={{ ...INPUT, maxWidth: '520px' }}
                   />
                   <ColorPicker value={editColor} onChange={setEditColor} />
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', maxWidth: '520px' }}>
+                    <input
+                      type="checkbox"
+                      checked={editRequires}
+                      onChange={e => setEditRequires(e.target.checked)}
+                      style={{ marginTop: '2px', accentColor: 'var(--accent-gold)' }}
+                    />
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                      Manda un correo automático al lead
+                      <span style={{ display: 'block', color: 'var(--text-muted)' }}>
+                        Marcarla no escribe el correo: aparece en Email → Por etiqueta, con un
+                        hueco por cada idioma que atiende el equipo.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               ) : (
                 <>
@@ -151,6 +168,17 @@ export function TagsSection({ tags, counts }: TagsSectionProps) {
                   <span style={{ flex: 1, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
                     {tag.description ?? ''}
                   </span>
+                  {tag.requiresSequence && (
+                    <span
+                      title="Al poner esta etiqueta se le envía un correo automático al lead"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                        fontSize: '11px', color: 'var(--accent-gold)', flexShrink: 0,
+                      }}
+                    >
+                      <Mail size={12} /> manda correos
+                    </span>
+                  )}
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {count === 0 ? 'sin leads' : `${count} ${count === 1 ? 'lead' : 'leads'}`}
                   </span>
@@ -162,7 +190,10 @@ export function TagsSection({ tags, counts }: TagsSectionProps) {
                   <>
                     <button
                       onClick={() => run(
-                        () => updateLeadTag(tag.id, { name: editName, color: editColor, description: editDesc }),
+                        () => updateLeadTag(tag.id, {
+                          name: editName, color: editColor, description: editDesc,
+                          requiresSequence: editRequires,
+                        }),
                         () => setEditingId(null),
                       )}
                       disabled={pending}

@@ -8,7 +8,7 @@ import type { LeadTag } from '@/lib/leads/tags'
 // src/app/(dashboard)/settings/tag-actions.ts), como el resto del repo.
 
 const TAG_COLUMNS = columns('lead_tags', [
-  'id', 'name', 'slug', 'color', 'description', 'position',
+  'id', 'name', 'slug', 'color', 'description', 'position', 'requires_sequence',
 ])
 
 // reason: el cliente de Supabase no está tipado con el esquema generado
@@ -22,6 +22,7 @@ function mapTag(r: any): LeadTag {
     color:       r.color as string,
     description: (r.description ?? null) as string | null,
     position:    (r.position ?? 0) as number,
+    requiresSequence: !!r.requires_sequence,
   }
 }
 
@@ -56,6 +57,24 @@ export async function getTagsForLead(leadId: string): Promise<LeadTag[]> {
     .map(mapTag)
 
   return tags.sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+}
+
+// Ids de las etiquetas que HOY disparan un correo: las que tienen al menos una
+// secuencia activa colgada (117). Es distinto de `requires_sequence`, que dice
+// que DEBERÍA tenerla — y la diferencia entre las dos es justo el hueco que
+// /emails muestra. La ficha del lead usa esta lista para avisar antes de
+// etiquetar que se va a mandar un correo real.
+export async function getTagIdsWithSequence(tenantId: string | null): Promise<string[]> {
+  if (!tenantId) return []
+
+  const { data } = await createAdminClient()
+    .from('email_sequences')
+    .select('trigger_tag_id')
+    .eq('tenant_id', tenantId)
+    .eq('active', true)
+    .not('trigger_tag_id', 'is', null)
+
+  return [...new Set(((data ?? []) as any[]).map(r => r.trigger_tag_id as string))]
 }
 
 // Cuántos leads tiene cada etiqueta, para el catálogo de Configuración: borrar

@@ -655,6 +655,7 @@ export type Database = {
           language: string
           name: string
           tenant_id: string
+          trigger_tag_id: string | null
         }
         Insert: {
           activation_type?: string
@@ -666,6 +667,7 @@ export type Database = {
           language?: string
           name: string
           tenant_id: string
+          trigger_tag_id?: string | null
         }
         Update: {
           activation_type?: string
@@ -677,6 +679,7 @@ export type Database = {
           language?: string
           name?: string
           tenant_id?: string
+          trigger_tag_id?: string | null
         }
         Relationships: [
           {
@@ -691,6 +694,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sequences_trigger_tag_id_fkey"
+            columns: ["trigger_tag_id"]
+            isOneToOne: false
+            referencedRelation: "lead_tags"
             referencedColumns: ["id"]
           },
         ]
@@ -1250,6 +1260,7 @@ export type Database = {
           id: string
           name: string
           position: number
+          requires_sequence: boolean
           slug: string
           tenant_id: string
           updated_at: string
@@ -1261,6 +1272,7 @@ export type Database = {
           id?: string
           name: string
           position?: number
+          requires_sequence?: boolean
           slug: string
           tenant_id: string
           updated_at?: string
@@ -1272,6 +1284,7 @@ export type Database = {
           id?: string
           name?: string
           position?: number
+          requires_sequence?: boolean
           slug?: string
           tenant_id?: string
           updated_at?: string

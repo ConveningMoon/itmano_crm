@@ -17,6 +17,10 @@ export interface LeadTag {
   color:       string
   description: string | null
   position:    number
+  // true = esta etiqueta DEBE tener su secuencia de email en cada idioma que
+  // atiende el equipo (117). No dice que la tenga: el hueco entre "debe" y
+  // "tiene" es justo lo que muestra la pestaña "Por etiqueta" de /emails.
+  requiresSequence: boolean
 }
 
 /** Lo mínimo para resolver el filtro de la URL. */

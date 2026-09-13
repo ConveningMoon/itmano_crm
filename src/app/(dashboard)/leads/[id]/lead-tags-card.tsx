@@ -2,12 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, X, Tag as TagIcon } from 'lucide-react'
+import { Plus, X, Mail, Tag as TagIcon } from 'lucide-react'
 import { tagChipStyle, type LeadTag } from '@/lib/leads/tags'
 import { addTagToLead, removeTagFromLead } from './tag-actions'
 
 interface LeadTagsCardProps {
   leadId:  string
+  // Slugs (por id) de las etiquetas que disparan una secuencia de email, para
+  // avisarlo ANTES de poner la etiqueta: es un correo real al lead.
+  emailTagIds: string[]
   // Etiquetas que ya tiene el lead, en orden del catálogo.
   tags:    LeadTag[]
   // Catálogo completo del tenant, para el desplegable de "añadir".
@@ -20,29 +23,35 @@ interface LeadTagsCardProps {
 // Etiquetas del lead. Una etiqueta es lo que una persona decide sobre el lead
 // ("contactado sin respuesta"), a diferencia de la etapa —que mueve el embudo— y
 // de la calidad o la urgencia, que las calcula el scoring.
-export function LeadTagsCard({ leadId, tags, catalog, canEdit }: LeadTagsCardProps) {
+export function LeadTagsCard({ leadId, tags, catalog, canEdit, emailTagIds }: LeadTagsCardProps) {
   const router = useRouter()
   const [open, setOpen]     = useState(false)
   const [error, setError]   = useState<string | null>(null)
+  // Qué pasó con el correo automático de la etiqueta. Se muestra en la tarjeta y
+  // no en un toast porque es información sobre un envío real: si faltaba la
+  // versión en inglés, quien etiquetó tiene que poder leerlo con calma.
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'warn'; message: string } | null>(null)
   const [pending, start]    = useTransition()
 
   const assigned  = new Set(tags.map(t => t.id))
   const available = catalog.filter(t => !assigned.has(t.id))
 
   function add(tagId: string) {
-    setError(null); setOpen(false)
+    setError(null); setNotice(null); setOpen(false)
     start(async () => {
       const res = await addTagToLead(leadId, tagId)
       if (!res.ok) { setError(res.error); return }
+      setNotice(res.notice ?? null)
       router.refresh()
     })
   }
 
   function remove(tagId: string) {
-    setError(null)
+    setError(null); setNotice(null)
     start(async () => {
       const res = await removeTagFromLead(leadId, tagId)
       if (!res.ok) { setError(res.error); return }
+      setNotice(res.notice ?? null)
       router.refresh()
     })
   }
@@ -147,6 +156,17 @@ export function LeadTagsCard({ leadId, tags, catalog, canEdit }: LeadTagsCardPro
                       background: tag.color, flexShrink: 0,
                     }} />
                     <span style={{ flex: 1 }}>{tag.name}</span>
+                    {emailTagIds.includes(tag.id) && (
+                      <span
+                        title="Al poner esta etiqueta se le envía un correo al lead"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          fontSize: '10px', color: 'var(--accent-gold)', flexShrink: 0,
+                        }}
+                      >
+                        <Mail size={11} /> correo
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -154,6 +174,15 @@ export function LeadTagsCard({ leadId, tags, catalog, canEdit }: LeadTagsCardPro
           </div>
         )}
       </div>
+
+      {notice && (
+        <div style={{
+          fontSize: '12px', marginTop: '10px', lineHeight: 1.5,
+          color: notice.kind === 'ok' ? 'var(--accent-green)' : 'var(--accent-gold)',
+        }}>
+          {notice.message}
+        </div>
+      )}
 
       {error && (
         <div style={{ fontSize: '12px', color: 'var(--accent-coral)', marginTop: '10px' }}>{error}</div>

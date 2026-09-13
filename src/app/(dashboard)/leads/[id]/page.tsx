@@ -28,7 +28,7 @@ import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { getBusinessProfile } from '@/lib/data/business-profile'
-import { getTagsForLead, listLeadTags } from '@/lib/data/lead-tags'
+import { getTagIdsWithSequence, getTagsForLead, listLeadTags } from '@/lib/data/lead-tags'
 import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
 
@@ -70,6 +70,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     businessProfile,
     leadTags,
     tagCatalog,
+    emailTagIds,
   ] = await Promise.all([
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
@@ -98,6 +99,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     // resto: cada eslabón encadenado se paga entero al abrir la ficha.
     getTagsForLead(id),
     listLeadTags(leadTenantId),
+    getTagIdsWithSequence(leadTenantId),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -232,6 +234,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       tags={leadTags}
       tagCatalog={tagCatalog}
       canTag={canTag}
+      emailTagIds={emailTagIds}
     />
   )
 }
