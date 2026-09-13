@@ -36,9 +36,13 @@ interface Props {
   activeRunCount: number
   agentId:        string | null
   agents:         Array<{ id: string; name: string }>
+  // Las secuencias disparadas por etiqueta (117) son correos obligatorios: no se
+  // borran, se desactivan o se desmarca la etiqueta en Configuración. El botón
+  // no se muestra en vez de mostrarlo y que la acción lo rechace.
+  isTagSequence?: boolean
 }
 
-export function SequenceDetailActions({ sequenceId, sequenceName, language, description, active, activeRunCount, agentId, agents }: Props) {
+export function SequenceDetailActions({ sequenceId, sequenceName, language, description, active, activeRunCount, agentId, agents, isTagSequence = false }: Props) {
   const router  = useRouter()
   const [mode,    setMode]    = useState<'idle' | 'edit' | 'confirm_delete'>('idle')
   const [name,    setName]    = useState(sequenceName)
@@ -111,17 +115,19 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
           {active ? 'Activa' : 'Inactiva'}
         </button>
 
-        <button
-          onClick={() => setMode('confirm_delete')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-            color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.08)',
-            border: '1px solid rgba(201,123,107,0.25)', borderRadius: '8px', cursor: 'pointer',
-          }}
-        >
-          <Trash2 size={12} /> Eliminar
-        </button>
+        {!isTagSequence && (
+          <button
+            onClick={() => setMode('confirm_delete')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', fontSize: '12px', fontWeight: 500,
+              color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.08)',
+              border: '1px solid rgba(201,123,107,0.25)', borderRadius: '8px', cursor: 'pointer',
+            }}
+          >
+            <Trash2 size={12} /> Eliminar
+          </button>
+        )}
       </div>
 
       {/* Edit modal */}

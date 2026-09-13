@@ -4,6 +4,7 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getLeadsListData } from '@/lib/data/leads'
 import { parseLeadListFilters } from '@/lib/leads/list-filters'
+import { listLeadTags } from '@/lib/data/lead-tags'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
 
@@ -25,15 +26,20 @@ export default async function LeadsPage({
   // Agents + channels son datos de referencia para render/filtros → sólo por tenant.
   // Los canales incluyen los inactivos: un lead viejo puede colgar de uno y aun así
   // debe mostrar su nombre y responder al filtro de fuente.
+  // Catálogo de etiquetas del tenant (116): resuelve el filtro ?tag=<slug> y da
+  // nombre y color a los chips de cada fila, que sólo viajan como ids.
+  const tagsPromise = listLeadTags(tenant_id)
+
   const agentsQ   = supabase.from('agents').select('*').eq('active', true)
   const channelsQ = supabase
     .from('acquisition_channels')
     .select('id, tenant_id, channel_type, name, slug, agent_id, active')
     .order('name')
 
-  const [{ data: rawAgents }, { data: rawChannels }] = await Promise.all([
+  const [{ data: rawAgents }, { data: rawChannels }, tags] = await Promise.all([
     tenant_id ? agentsQ.eq('tenant_id',   tenant_id) : agentsQ,
     tenant_id ? channelsQ.eq('tenant_id', tenant_id) : channelsQ,
+    tagsPromise,
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,8 +54,9 @@ export default async function LeadsPage({
   }))
 
   // Los canales resuelven el filtro de fuente (compuesto: tipo de canal o
-  // traffic_source), así que la lista se pide después de tenerlos.
-  const data = await getLeadsListData(scope, filters, channels)
+  // traffic_source) y las etiquetas el filtro por slug, así que la lista se pide
+  // después de tener los dos.
+  const data = await getLeadsListData(scope, filters, channels, tags)
 
   return (
     <LeadsClient
@@ -63,6 +70,7 @@ export default async function LeadsPage({
       filters={filters}
       agents={(rawAgents ?? []).map(r => mapAgent(r as AgentRow))}
       channels={channels}
+      tags={tags}
       viewerRole={role}
       viewerAgentId={scope.agentId}
     />

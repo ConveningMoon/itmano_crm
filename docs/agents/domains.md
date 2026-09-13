@@ -11,6 +11,20 @@ elegibilidad. El primer email se envía en proceso después de inscribir, no por
 HTTP a la propia aplicación. Si falla, la inscripción permanece y el cron puede
 reintentar.
 
+Una secuencia se activa de tres formas (`email_sequences.activation_type`):
+
+- `form` — el lead envía el formulario de un canal vinculado. Es el único tipo
+  que auto-inscribe, y el guard de `enrollLeadInSequence` es positivo: comprueba
+  que sea `form`, no que no sea otro.
+- `manual` — alguien inscribe leads desde `/emails/[id]`.
+- `tag` — la dispara una etiqueta del lead (ver *Etiquetas de leads*). Es un
+  correo OBLIGATORIO, como los hitos del proceso de compra: no se borra ni admite
+  inscripción manual, y no se puede enganchar a una fuente.
+
+`/emails` separa las tres en pestañas (`?tab=secuencias|etiquetas|cierre`) porque
+las obligatorias no se lanzan, se configuran: su pregunta es si está escrita la
+versión de cada idioma.
+
 La identidad de envío vive en el tenant:
 
 - Esencial y trial: dominio compartido ITMANO con nombre visible del tenant.
@@ -94,6 +108,53 @@ que borrar una fuente o una secuencia limpia sus filas por cascada.
 Fuente inicial: `src/lib/data/folders.ts`, `src/app/(dashboard)/folder-actions.ts`
 y `src/components/dashboard/folders.tsx`.
 
+## Etiquetas de leads
+
+Las etiquetas (migración 116) son lo que una PERSONA decide sobre un lead:
+"contactado sin respuesta", "pre-aprobado", "cliente de otro agente". No
+duplican nada de lo que ya está modelado — `stage` lo mueve el embudo,
+`quality_band` y `urgency` los calcula el scoring, y de dónde vino el lead lo
+dicen `traffic_source` y `acquisition_channel_id`.
+
+- Son del TENANT, no personales como las carpetas de la 115: disparan
+  automatización y sostienen supervisión compartida, así que sus policies sí
+  siguen el patrón `is_super_admin() or tenant_id = ...`. El insert de una
+  asignación exige además que ese tenant sea dueño del lead y de la etiqueta.
+- Etiquetar NO escribe un `lead_event`: el trigger de scoring refresca
+  `last_event_at` en todo insert, y anotar "no contestó" marcaría al lead como
+  recién activo. La fecha y el autor viven en la fila de asignación.
+- No hay acción masiva. Una etiqueta puede mandar correos, así que etiquetar 180
+  leads de un clic serían 180 correos reales. Asignar es por lead y el permiso es
+  el de escritura del lead; el catálogo lo administran owner/super_admin.
+- El `slug` es el identificador estable (viaja en `?tag=` de `/leads`) y
+  renombrar NO lo recalcula. Un slug que ya no existe devuelve lista vacía, no la
+  lista completa.
+- `leads_list.tag_ids` agrega las etiquetas con una subconsulta escalar: los
+  conteos de la cabecera no la pagan y el filtro se aplica sobre lo que ya pasó
+  tenant, agente y etapa.
+- El catálogo por defecto lo crea `seed_default_lead_tags(tenant)`, que también
+  llama `createTenant`. Es configuración de producto, no de un cliente: no
+  incluye ninguna etiqueta de procedencia (eso es `traffic_source`) ni de bloqueo
+  de envíos (eso es `leads.email_blocked`).
+
+`requires_sequence` marca las etiquetas que deben mandar correo. Cuáles son es un
+DATO del tenant, no una lista en el código. Para esas, `email_sequences` lleva
+una secuencia por `(etiqueta, idioma)` con `trigger_tag_id` (`on delete
+restrict`):
+
+- El idioma se resuelve con `resolveLeadEmailLanguage`, la misma regla que los
+  correos de cierre: el del lead si su agente lo atiende, inglés si no. Manda el
+  agente porque firma el correo y recibe la respuesta.
+- Si falta la versión de ese idioma, la etiqueta se pone y no se envía nada.
+  Mandar en otro idioma es peor; el hueco se ve en `/emails?tab=etiquetas`.
+- Quitar la etiqueta cancela la corrida activa (`cancelled_reason =
+  'tag_removed'`).
+- Las guardas del disparo son las de `enrollLeadInSequence` más dos propias:
+  etapa dentro del embudo vivo e idioma disponible.
+
+Fuente inicial: `src/lib/leads/tags.ts`, `src/lib/data/lead-tags.ts`,
+`src/lib/services/enroll-lead-by-tag.ts` y `src/lib/data/tag-sequences.ts`.
+
 ## Archivos iniciales por área
 
 | Área | Fuente inicial |
@@ -104,6 +165,7 @@ y `src/components/dashboard/folders.tsx`.
 | Propiedades | `src/lib/data/properties.ts`, `src/lib/auth/guards.ts` |
 | Newsletters | `src/lib/newsletters/*`, `src/lib/data/newsletters.ts` |
 | Carpetas | `src/lib/data/folders.ts`, `src/app/(dashboard)/folder-actions.ts` |
+| Etiquetas de leads | `src/lib/leads/tags.ts`, `src/lib/data/lead-tags.ts`, `src/lib/services/enroll-lead-by-tag.ts` |
 | Auth y proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs actuales de Supabase SSR |
 | Migraciones/RLS | Última migración, skills Supabase y esquema real sandbox |
 | Landing/legal | `src/app/(marketing)/`, `src/components/motion/README.md` |

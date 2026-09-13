@@ -43,7 +43,9 @@ export interface EmailSequence {
   language:          string
   description:       string | null
   active:            boolean
-  activationType:    'form' | 'manual'
+  activationType:    'form' | 'manual' | 'tag'
+  // Etiqueta que dispara la secuencia (117); null salvo activationType 'tag'.
+  triggerTagId:      string | null
   agentId:           string | null   // organizational owner (null = "Toda la agencia")
   agentName:         string | null   // resolved display
   channels:          SequenceChannel[]
@@ -57,6 +59,14 @@ export interface EmailSequence {
 
 // ─── Data access ──────────────────────────────────────────────────────────────
 
+// Qué secuencias devuelve la lista:
+//   'all'     → todas (analítica: una secuencia de etiqueta también envía).
+//   'channel' → las que NO dispara una etiqueta. Es lo que /emails muestra en su
+//               pestaña de secuencias y lo único enganchable a una fuente: las
+//               de etiqueta tienen su propia pestaña y su propio disparador.
+//   'tag'     → sólo las disparadas por etiqueta.
+export type SequenceKind = 'all' | 'channel' | 'tag'
+
 // tenantId = null → super_admin: no tenant filter, fetches all tenants
 // tenantId = ''   → edge-case: returns empty (no valid tenant)
 // agentId != null → role 'agent': only sequences owned by that agent (excludes the
@@ -64,6 +74,7 @@ export interface EmailSequence {
 export async function listSequences(
   tenantId: string | null,
   agentId: string | null = null,
+  kind: SequenceKind = 'all',
 ): Promise<EmailSequence[]> {
   if (tenantId === '') return []
 
@@ -71,10 +82,12 @@ export async function listSequences(
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, trigger_tag_id, created_at')
     .order('created_at')
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
   if (agentId)  seqQ = seqQ.eq('agent_id', agentId)
+  if (kind === 'channel') seqQ = seqQ.is('trigger_tag_id', null)
+  if (kind === 'tag')     seqQ = seqQ.not('trigger_tag_id', 'is', null)
 
   let stepQ = supabase
     .from('email_sequence_steps')
@@ -177,7 +190,8 @@ export async function listSequences(
       language:          row.language ?? 'es',
       description:       row.description ?? null,
       active:            row.active,
-      activationType:    (row.activation_type ?? 'form') as 'form' | 'manual',
+      activationType:    (row.activation_type ?? 'form') as 'form' | 'manual' | 'tag',
+      triggerTagId:      row.trigger_tag_id ?? null,
       agentId:           row.agent_id ?? null,
       agentName:         row.agent_id ? (agentNameMap.get(row.agent_id) ?? null) : null,
       channels:          channelsBySeq.get(id) ?? [],
@@ -202,7 +216,7 @@ export async function getSequenceWithRuns(
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, trigger_tag_id, created_at')
     .eq('id', sequenceId)
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
   // Agent visibility: a non-owned (or "Toda la agencia") sequence resolves to null → 404.
@@ -313,7 +327,8 @@ export async function getSequenceWithRuns(
     language:          row.language ?? 'es',
     description:       row.description ?? null,
     active:            row.active,
-    activationType:    (row.activation_type ?? 'form') as 'form' | 'manual',
+    activationType:    (row.activation_type ?? 'form') as 'form' | 'manual' | 'tag',
+    triggerTagId:      row.trigger_tag_id ?? null,
     agentId:           row.agent_id ?? null,
     agentName:         agentName,
     channels:          (channelRows ?? []).map(c => {

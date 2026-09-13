@@ -34,6 +34,16 @@ const CANCEL_LABEL: Record<string, string> = {
   lead_closed:      'Lead cerrado',
   manual:           'Manual',
   sequence_deleted: 'Secuencia eliminada',
+  // 117: se le quitó al lead la etiqueta que había disparado la secuencia.
+  tag_removed:      'Etiqueta retirada',
+}
+
+// Cómo se activa la secuencia. 'tag' (117) es un correo obligatorio: no se
+// lanza, se dispara al etiquetar un lead.
+const ACTIVATION_BADGE: Record<'form' | 'manual' | 'tag', { label: string; color: string; bg: string }> = {
+  form:   { label: 'Formulario', color: 'var(--accent-teal)', bg: 'rgba(90,175,160,0.12)' },
+  manual: { label: 'Manual',     color: 'var(--accent-blue)', bg: 'rgba(91,142,201,0.12)' },
+  tag:    { label: 'Etiqueta',   color: 'var(--accent-gold)', bg: 'rgba(201,169,110,0.12)' },
 }
 
 function formatDate(iso: string) {
@@ -154,10 +164,10 @@ export default async function EmailSequenceDetailPage({
             <span style={{
               fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
               letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: sequence.activationType === 'manual' ? 'var(--accent-blue)' : 'var(--accent-teal)',
-              background: sequence.activationType === 'manual' ? 'rgba(91,142,201,0.12)' : 'rgba(90,175,160,0.12)',
+              color:      ACTIVATION_BADGE[sequence.activationType].color,
+              background: ACTIVATION_BADGE[sequence.activationType].bg,
             }}>
-              {sequence.activationType === 'manual' ? 'Manual' : 'Formulario'}
+              {ACTIVATION_BADGE[sequence.activationType].label}
             </span>
             <span style={{
               fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
@@ -190,6 +200,7 @@ export default async function EmailSequenceDetailPage({
           activeRunCount={sequence.activeRunCount}
           agentId={sequence.agentId}
           agents={agents}
+          isTagSequence={sequence.activationType === 'tag'}
         />
       </div>
 
@@ -313,7 +324,9 @@ export default async function EmailSequenceDetailPage({
             <div style={{ fontSize: '12px', marginTop: '4px' }}>
               {sequence.activationType === 'manual'
                 ? 'Agrega leads desde la sección de arriba.'
-                : 'Los runs se crean automáticamente cuando un lead se registra desde un canal vinculado.'}
+                : sequence.activationType === 'tag'
+                  ? 'Los runs se crean cuando alguien le pone la etiqueta a un lead, desde su ficha.'
+                  : 'Los runs se crean automáticamente cuando un lead se registra desde un canal vinculado.'}
             </div>
           </div>
         ) : (

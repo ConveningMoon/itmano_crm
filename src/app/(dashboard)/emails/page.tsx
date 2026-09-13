@@ -6,17 +6,47 @@ import { getAllPurchaseTemplatesByTenant, getPurchaseTemplatesByAgent } from './
 import { PurchaseTemplatesPanel } from './purchase-templates-panel'
 import { getMetricsForSequences } from '@/lib/services/email-metrics'
 import { listFolders } from '@/lib/data/folders'
+import { getTagSequenceCoverage } from '@/lib/data/tag-sequences'
+import { TagSequencesPanel } from './tag-sequences-panel'
 import { SequencesTable } from './sequences-table'
 import { NewFolderButton } from '@/components/dashboard/folders'
+import { Tabs } from '@/components/ui/tabs'
 import { Plus, Mail } from 'lucide-react'
 
-export default async function EmailsPage() {
+// /emails tiene tres clases de correo y antes iban apiladas en una sola página:
+//
+//   · Secuencias — campañas de nutrición que arrancan con un formulario o a mano.
+//   · Por etiqueta (117) — obligatorias: salen al etiquetar un lead.
+//   · De cierre (036/058) — obligatorias: salen en los hitos del proceso.
+//
+// Las dos últimas no se "lanzan", se CONFIGURAN, y su pregunta es siempre la
+// misma: ¿está escrita la versión de cada idioma? Mezclarlas con la lista de
+// campañas hacía que ese hueco se leyera como una fila más.
+//
+// La pestaña viaja en la URL (?tab=) y no en estado del cliente: así el botón
+// "Configurar emails de cierre" de la ficha del lead puede enlazar directo.
+
+type EmailsTab = 'secuencias' | 'etiquetas' | 'cierre'
+
+const TABS: EmailsTab[] = ['secuencias', 'etiquetas', 'cierre']
+
+export default async function EmailsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const rawTab = (await searchParams).tab
+  const tabParam = Array.isArray(rawTab) ? rawTab[0] : rawTab
+  const activeTab: EmailsTab = TABS.includes(tabParam as EmailsTab) ? (tabParam as EmailsTab) : 'secuencias'
+
   const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const [sequences, purchaseByTenant, ownAgentTemplates, folders] = await Promise.all([
-    listSequences(tenant_id, scope.agentId),
+  const [sequences, purchaseByTenant, ownAgentTemplates, folders, tagCoverage] = await Promise.all([
+    // 'channel': las disparadas por etiqueta tienen su propia pestaña. Verlas
+    // aquí invitaría a borrarlas o a engancharlas a una fuente.
+    listSequences(tenant_id, scope.agentId, 'channel'),
     isSuperAdmin ? getAllPurchaseTemplatesByTenant() : Promise.resolve([]),
     // Emails de cierre por agente (058): owner ve todos los agentes del tenant;
     // rol 'agent' solo los suyos (el filtro lo refuerza la propia action).
@@ -26,44 +56,37 @@ export default async function EmailsPage() {
     // No depende de las secuencias: leerla aquí evita sumar sus queries al
     // final de cada render y de cada Server Action de carpetas.
     listFolders('sequence', tenant_id, ctx.user_id),
+    getTagSequenceCoverage(tenant_id),
   ])
 
   // Las mismas métricas de la tarjeta del detalle, para cada fila. Batcheado:
   // una llamada por secuencia serían 3 queries por fila leyendo los mismos datos.
   const metrics = await getMetricsForSequences(sequences.map(s => s.id))
 
-  return (
-    <>
-      <style>{`
-        .seq-row { transition: background 0.1s; }
-        .seq-row:hover { background: var(--bg-elevated) !important; }
-      `}</style>
+  // Huecos por escribir: es el número que hace falta ver sin entrar a la pestaña.
+  const missingTagSequences = tagCoverage.reduce(
+    (n, c) => n + c.slots.filter(s => s.sequence === null).length,
+    0,
+  )
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '2px' }}>
-            Secuencias de Email
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            {sequences.length} {sequences.length === 1 ? 'secuencia' : 'secuencias'}
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <NewFolderButton kind="sequence" />
-          <Link
-            href="/emails/new"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--accent-gold)', color: 'var(--bg-base)',
-              borderRadius: '8px', textDecoration: 'none', border: 'none',
-            }}
-          >
-            <Plus size={14} />
-            Nueva Secuencia
-          </Link>
-        </div>
+  const hasClosingEmails = isSuperAdmin ? purchaseByTenant.length > 0 : ownAgentTemplates.length > 0
+
+  const sequencesTab = (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginBottom: '16px' }}>
+        <NewFolderButton kind="sequence" />
+        <Link
+          href="/emails/new"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '8px 16px', fontSize: '13px', fontWeight: 500,
+            background: 'var(--accent-gold)', color: 'var(--bg-base)',
+            borderRadius: '8px', textDecoration: 'none', border: 'none',
+          }}
+        >
+          <Plus size={14} />
+          Nueva Secuencia
+        </Link>
       </div>
 
       {sequences.length === 0 ? (
@@ -106,54 +129,92 @@ export default async function EmailsPage() {
           folders={folders}
         />
       )}
+    </>
+  )
 
-      {/* Emails de cierre POR AGENTE (058) — super_admin: por tenant → agente;
-          owner: todos los agentes del tenant; agent: solo los suyos. El id ancla
-          el botón "Configurar emails de cierre" del detalle de lead. */}
-      <div id="emails-de-cierre" style={{ scrollMarginTop: '80px' }}>
-        {(isSuperAdmin ? purchaseByTenant.length > 0 : ownAgentTemplates.length > 0) && (
-          <div style={{ marginTop: '40px' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-              Emails de cierre
-            </h2>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Cada agente tiene sus 3 correos de hitos del proceso de compra (inicio, pre-cierre,
-              completado) por cada idioma que atiende. Los idiomas se gestionan en Configuración → Agentes.
-            </p>
-          </div>
-        )}
-        {isSuperAdmin
-          ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, agents }) => (
-              <div key={tid} style={{ marginTop: '32px' }}>
-                <div style={{
-                  display: 'inline-block', marginBottom: '4px',
-                  fontSize: '11px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)',
-                  border: '1px solid rgba(201,169,110,0.2)', borderRadius: '6px', padding: '3px 10px',
-                }}>
-                  {tenant_name}
-                </div>
-                {agents.map(a => (
-                  <PurchaseTemplatesPanel
-                    key={a.agent_id}
-                    templates={a.templates}
-                    agentName={a.agent_name}
-                    accentColor={a.accent_color}
-                    languages={a.languages}
-                    tenantName={tenant_name}
-                  />
-                ))}
+  const closingTab = (
+    <>
+      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 18px', lineHeight: 1.55, maxWidth: '680px' }}>
+        Cada agente tiene sus 3 correos de hitos del proceso de compra (inicio, pre-cierre,
+        completado) por cada idioma que atiende. Los idiomas se gestionan en
+        Configuración → Agentes.
+      </p>
+      {!hasClosingEmails && (
+        <div style={{
+          background: 'var(--bg-surface)', border: '1px dashed var(--border-subtle)',
+          borderRadius: '12px', padding: '40px 32px', textAlign: 'center',
+          fontSize: '13px', color: 'var(--text-muted)',
+        }}>
+          Todavía no hay agentes con idiomas configurados.
+        </div>
+      )}
+      {isSuperAdmin
+        ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, agents }) => (
+            <div key={tid} style={{ marginTop: '8px' }}>
+              <div style={{
+                display: 'inline-block', marginBottom: '4px',
+                fontSize: '11px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
+                color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)',
+                border: '1px solid rgba(201,169,110,0.2)', borderRadius: '6px', padding: '3px 10px',
+              }}>
+                {tenant_name}
               </div>
-            ))
-          : ownAgentTemplates.map(a => (
-              <PurchaseTemplatesPanel
-                key={a.agent_id}
-                templates={a.templates}
-                agentName={a.agent_name}
-                accentColor={a.accent_color}
-                languages={a.languages}
-              />
-            ))}
+              {agents.map(a => (
+                <PurchaseTemplatesPanel
+                  key={a.agent_id}
+                  templates={a.templates}
+                  agentName={a.agent_name}
+                  accentColor={a.accent_color}
+                  languages={a.languages}
+                  tenantName={tenant_name}
+                />
+              ))}
+            </div>
+          ))
+        : ownAgentTemplates.map(a => (
+            <PurchaseTemplatesPanel
+              key={a.agent_id}
+              templates={a.templates}
+              agentName={a.agent_name}
+              accentColor={a.accent_color}
+              languages={a.languages}
+            />
+          ))}
+    </>
+  )
+
+  return (
+    <>
+      <style>{`
+        .seq-row { transition: background 0.1s; }
+        .seq-row:hover { background: var(--bg-elevated) !important; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '2px' }}>
+          Email
+        </h1>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+          Campañas de nutrición y los correos obligatorios que dispara el CRM.
+        </p>
+      </div>
+
+      {/* El id se conserva para los enlaces viejos a /emails#emails-de-cierre. */}
+      <div id="emails-de-cierre" style={{ scrollMarginTop: '80px' }}>
+        <Tabs
+          defaultKey={activeTab}
+          items={[
+            { key: 'secuencias', label: 'Secuencias',   badge: sequences.length },
+            { key: 'etiquetas',  label: 'Por etiqueta', badge: missingTagSequences > 0 ? missingTagSequences : undefined },
+            { key: 'cierre',     label: 'De cierre' },
+          ]}
+          content={{
+            secuencias: sequencesTab,
+            etiquetas:  <TagSequencesPanel coverage={tagCoverage} canManage={!scope.agentId} />,
+            cierre:     closingTab,
+          }}
+        />
       </div>
     </>
   )

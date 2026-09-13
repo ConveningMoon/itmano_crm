@@ -45,12 +45,17 @@ const AGENT: VisibilityScope = { tenantId: 'tenant-aj', agentId: 'agent-dylan' }
 
 const BASE: LeadListFilters = {
   q: '', agentId: 'all', stage: 'all', source: 'all', channelId: 'all',
-  language: 'all', quality: 'all', sort: 'recientes', view: 'table', page: 1,
+  language: 'all', quality: 'all', tag: 'all', sort: 'recientes', view: 'table', page: 1,
 }
 
 const CHANNELS = [
   { id: 'ch-lm-1', channelType: 'lead_magnet' },
   { id: 'ch-ev-1', channelType: 'event' },
+]
+
+const TAGS = [
+  { id: 'tag-csr', slug: 'contactado-sin-respuesta' },
+  { id: 'tag-pre', slug: 'pre-aprobado' },
 ]
 
 function eqCalls(q: RecordedQuery): Array<[string, unknown]> {
@@ -167,6 +172,27 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
     expect(queries.length).toBe(1)
   })
 
+  it('el filtro de etiqueta va como contains sobre tag_ids, con el slug resuelto a id', async () => {
+    await getLeadsListData(OWNER, { ...BASE, tag: 'contactado-sin-respuesta' }, CHANNELS, TAGS)
+
+    const contains = queries.flatMap(q => callsOf(q, 'contains')).map(c => c.args)
+    expect(contains.length).toBeGreaterThan(0)
+    for (const args of contains) {
+      expect(args).toEqual(['tag_ids', ['tag-csr']])
+    }
+  })
+
+  it('una etiqueta que ya no existe devuelve vacío sin consultar (no la lista completa)', async () => {
+    // Un enlace guardado a una etiqueta borrada tiene que dar cero resultados.
+    // Ignorar el slug desconocido mostraría la cartera entera como si no hubiera
+    // filtro puesto — el peor de los dos fallos posibles.
+    const data = await getLeadsListData(OWNER, { ...BASE, tag: 'ya-no-existe' }, CHANNELS, TAGS)
+
+    expect(data.total).toBe(0)
+    expect(data.items).toEqual([])
+    expect(queries.length).toBe(1)
+  })
+
   it('el orden "prioridad" ordena en la base, no en el cliente', async () => {
     await getLeadsListData(OWNER, { ...BASE, sort: 'prioridad' }, CHANNELS)
 
@@ -203,7 +229,7 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
       'id', 'agent_id', 'acquisition_channel_id', 'traffic_source', 'first_name',
       'last_name', 'email', 'phone', 'language', 'current_score', 'created_at',
       'stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score',
-      'budget_amount',
+      'budget_amount', 'tag_ids',
     ])
     for (const c of cols) expect(EXPUESTAS.has(c)).toBe(true)
   })

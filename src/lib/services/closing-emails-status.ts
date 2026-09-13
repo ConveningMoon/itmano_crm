@@ -25,25 +25,10 @@ function isPlaceholder(id: string | null | undefined): boolean {
   return !id || id.startsWith('REPLACE_ME')
 }
 
-// Idioma efectivo del email de cierre para un lead: el idioma del lead si el
-// agente lo tiene registrado; si no, el idioma principal del agente. Si el lead
-// habla un idioma que el agente NO domina, el default es INGLÉS (no español).
-// La misma regla aplica en el gate (startPurchaseProcess) y en el envío real.
-export function resolveClosingLanguage(
-  agentLanguages: string[] | null | undefined,
-  agentPrimary: string,
-  leadLanguage: string | null | undefined,
-): string {
-  const langs = (agentLanguages ?? []).filter(l => VALID_LANGS.includes(l))
-  const lead  = leadLanguage && VALID_LANGS.includes(leadLanguage) ? leadLanguage : null
-  // 1. El lead recibe su idioma si el agente lo tiene configurado.
-  if (lead && langs.includes(lead)) return lead
-  // 2. El agente domina inglés → default inglés para leads fuera de su set.
-  if (langs.includes('en')) return 'en'
-  // 3. Idioma principal del agente como último recurso.
-  if (VALID_LANGS.includes(agentPrimary)) return agentPrimary
-  return langs[0] ?? 'en'
-}
+// El idioma efectivo del correo de cierre se resuelve con la regla compartida
+// (mismo criterio que las secuencias por etiqueta de la 117). Se reexporta con
+// el nombre viejo para no tocar los dos sitios que ya la llamaban así.
+export { resolveLeadEmailLanguage as resolveClosingLanguage } from '@/lib/services/lead-email-language'
 
 // Devuelve los hitos cuyos emails NO están configurados para (agente, idioma).
 // Array vacío = los 3 están listos.

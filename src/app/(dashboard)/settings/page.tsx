@@ -11,6 +11,7 @@ import { PLANS } from '@/lib/plans'
 import { getBusinessProfile } from '@/lib/data/business-profile'
 import { EMPTY_PROFILE } from '@/lib/business/profile'
 import { getFitEvidence } from '@/lib/data/fit-evidence'
+import { countLeadsByTag, listLeadTags } from '@/lib/data/lead-tags'
 import type { FitEvidence } from '@/lib/scoring/calibration'
 import { SettingsClient } from './settings-client'
 
@@ -44,7 +45,12 @@ export default async function SettingsPage() {
     'id', 'name', 'slug', 'primary_color', 'logo_url', 'description',
   ])
 
-  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence] = await Promise.all([
+  // El catálogo de etiquetas sólo lo administra owner/super: para el rol 'agent'
+  // la pestaña no existe, así que tampoco se paga la consulta ni viaja en el
+  // payload RSC (mismo criterio que canSeeBusiness).
+  const canManageTags = ctx.role !== 'agent'
+
+  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoringRules, globalRules, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, leadTags, leadTagCounts] = await Promise.all([
     supabase.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
@@ -58,6 +64,8 @@ export default async function SettingsPage() {
     getSubscription(tenantId),
     isAgentViewer ? Promise.resolve(null) : getAgentAiBreakdown(tenantId),
     wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
+    canManageTags ? listLeadTags(tenantId)    : Promise.resolve([]),
+    canManageTags ? countLeadsByTag(tenantId) : Promise.resolve({}),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
@@ -156,6 +164,8 @@ export default async function SettingsPage() {
         aiLimitSubtitle={aiLimit?.perAgent ? 'de tu parte del límite del equipo' : undefined}
         aiByAgent={aiByAgent}
         subscription={subscription}
+        leadTags={leadTags}
+        leadTagCounts={leadTagCounts}
       />
     </>
   )

@@ -6,6 +6,7 @@ import {
   type ChannelRef, type KanbanColumn, type LeadListFilters, type LeadListItem,
   type LeadSortMode, type LeadsListData,
 } from '@/lib/leads/list-filters'
+import { planTagFilter, type TagRef } from '@/lib/leads/tags'
 import { columns } from '@/lib/supabase/columns'
 import { getAgentActionTypes } from '@/lib/scoring/agent-actions'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
@@ -31,6 +32,9 @@ const LIST_COLUMNS = columns('leads_list', [
   'stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score',
   // Monto declarado — sólo para el orden por valor (migración 088).
   'budget_amount',
+  // Etiquetas del lead (116). La vista las agrega con una subconsulta escalar,
+  // así que pedirlas aquí es lo que evita un N+1 por fila de la tabla.
+  'tag_ids',
 ])
 
 // reason: el cliente de Supabase no está tipado con el esquema generado
@@ -43,6 +47,7 @@ function applyFilters(
   scope: VisibilityScope,
   filters: LeadListFilters,
   channels: ChannelRef[],
+  tags: TagRef[],
 ): any {
   let q = applyVisibilityScope(query, scope)
 
@@ -51,6 +56,11 @@ function applyFilters(
   if (filters.language  !== 'all') q = q.eq('language', filters.language)
   if (filters.quality   !== 'all') q = q.eq('quality_band', filters.quality)
   if (filters.channelId !== 'all') q = q.eq('acquisition_channel_id', filters.channelId)
+
+  // Etiqueta: `contains` sobre el array de la vista. El slug se resolvió a id
+  // antes (planTagFilter); un slug inexistente ya cortó la consulta arriba.
+  const tagPlan = planTagFilter(filters.tag, tags)
+  if (tagPlan.tagId) q = q.contains('tag_ids', [tagPlan.tagId])
 
   if (filters.source !== 'all') {
     const plan = planSourceFilter(filters.source, channels)
@@ -114,6 +124,7 @@ function mapRow(r: any): LeadListItem {
     urgency:              (r.urgency ?? null) as LeadListItem['urgency'],
     urgencyRank:          (r.urgency_rank ?? OUT_OF_QUEUE_RANK) as number,
     budgetAmount:         r.budget_amount === null || r.budget_amount === undefined ? null : Number(r.budget_amount),
+    tagIds:               ((r.tag_ids ?? []) as string[]),
     createdAt:            r.created_at as string,
   }
 }
@@ -127,12 +138,18 @@ export async function getLeadsListData(
   scope: VisibilityScope,
   filters: LeadListFilters,
   channels: ChannelRef[],
+  tags: TagRef[] = [],
 ): Promise<LeadsListData> {
   const supabase = createAdminClient()
 
-  // Kind de fuente que no casa con ningún canal ni traffic_source del tenant:
-  // no hay nada que consultar.
-  if (filters.source !== 'all' && planSourceFilter(filters.source, channels).impossible) {
+  // Ni el kind de fuente casa con algo del tenant, ni el slug de etiqueta existe
+  // en su catálogo: no hay nada que consultar. Un enlace viejo a una etiqueta
+  // borrada cae acá y devuelve una lista vacía, no un error.
+  const impossible =
+    (filters.source !== 'all' && planSourceFilter(filters.source, channels).impossible) ||
+    planTagFilter(filters.tag, tags).impossible
+
+  if (impossible) {
     return {
       items: [],
       kanban: filters.view === 'kanban' ? emptyKanban() : null,
@@ -149,7 +166,7 @@ export async function getLeadsListData(
 
   const countQuery = () => stageFiltered(applyFilters(
     supabase.from('leads_list').select('id', { count: 'exact', head: true }),
-    scope, filters, channels,
+    scope, filters, channels, tags,
   ))
 
   const [totalRes, hotRes, urgentTodayCount] = await Promise.all([
@@ -165,7 +182,7 @@ export async function getLeadsListData(
   const totalPages = Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE))
 
   if (filters.view === 'kanban') {
-    const kanban = await fetchKanbanColumns(supabase, scope, filters, channels)
+    const kanban = await fetchKanbanColumns(supabase, scope, filters, channels, tags)
     return { items: [], kanban, total, highQualityCount, urgentTodayCount, page: 1, totalPages }
   }
 
@@ -177,7 +194,7 @@ export async function getLeadsListData(
   const { data } = await applySort(
     stageFiltered(applyFilters(
       supabase.from('leads_list').select(LIST_COLUMNS),
-      scope, filters, channels,
+      scope, filters, channels, tags,
     )),
     filters.sort,
   ).range(from, from + LEADS_PAGE_SIZE - 1)
@@ -202,6 +219,7 @@ async function fetchKanbanColumns(
   scope: VisibilityScope,
   filters: LeadListFilters,
   channels: ChannelRef[],
+  tags: TagRef[],
 ): Promise<KanbanColumn[]> {
   return Promise.all(KANBAN_COLUMNS.map(async stage => {
     // El filtro de etapa de la barra superior deja fuera al resto de columnas:
@@ -212,7 +230,7 @@ async function fetchKanbanColumns(
 
     const { data, count } = await applyFilters(
       supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
-      scope, filters, channels,
+      scope, filters, channels, tags,
     )
       .eq('stage', stage)
       .order('created_at', { ascending: false })

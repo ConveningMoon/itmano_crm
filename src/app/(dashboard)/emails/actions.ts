@@ -172,6 +172,28 @@ export async function deleteSequence(
   if (denied) return denied
   const supabase = createAdminClient()
 
+  // Las secuencias de etiqueta (117) son obligatorias: existen porque una
+  // etiqueta del catálogo debe mandar correos, así que borrarla dejaría a esa
+  // etiqueta muda sin que nadie lo note. Se desactiva (toggleSequenceActive) o
+  // se desmarca la etiqueta en Configuración; las dos son decisiones visibles.
+  let tagCheckQ = supabase
+    .from('email_sequences')
+    .select('trigger_tag_id, lead_tags (name)')
+    .eq('id', sequenceId)
+  if (ctx.tenant_id) tagCheckQ = tagCheckQ.eq('tenant_id', ctx.tenant_id)
+
+  const { data: seqRow } = await tagCheckQ.maybeSingle()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seqAny = seqRow as any
+  if (seqAny?.trigger_tag_id) {
+    const tag = Array.isArray(seqAny.lead_tags) ? seqAny.lead_tags[0] : seqAny.lead_tags
+    const name = (tag?.name as string | undefined) ?? 'una etiqueta'
+    return {
+      ok: false,
+      error: `Esta secuencia es el correo automático de la etiqueta "${name}" y no se puede borrar. Desactívala, o quita la marca de la etiqueta en Configuración → Etiquetas.`,
+    }
+  }
+
   // 1. Cancel active runs
   await supabase
     .from('lead_sequence_runs')
@@ -531,7 +553,15 @@ export async function addLeadsToSequence(
   const seqRow = seq as any
   if (!seqRow) return { ok: false, error: 'Secuencia no encontrada' }
   if ((seqRow.activation_type as string) !== 'manual') {
-    return { ok: false, error: 'Solo se pueden agregar leads manualmente a secuencias de tipo manual' }
+    return {
+      ok: false,
+      error: (seqRow.activation_type as string) === 'tag'
+        // Inscribir a mano en una secuencia de etiqueta rompería su invariante:
+        // quien está dentro es exactamente quien tiene la etiqueta, y quitarla
+        // cancela la corrida. Se entra etiquetando el lead.
+        ? 'Esta secuencia se dispara con una etiqueta: para inscribir un lead, ponle la etiqueta en su ficha.'
+        : 'Solo se pueden agregar leads manualmente a secuencias de tipo manual',
+    }
   }
   if (!seqRow.active) return { ok: false, error: 'La secuencia está inactiva' }
 

@@ -20,6 +20,7 @@ import type { Agent } from '@/lib/types'
 import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/list-filters'
 import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
 import type { ChannelOption } from './new/page'
+import { tagChipStyle, type LeadTag } from '@/lib/leads/tags'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
 
@@ -211,9 +212,55 @@ interface LeadsClientProps {
   filters:             LeadListFilters
   agents:   Agent[]
   channels: ChannelOption[]
+  // Catálogo de etiquetas del tenant (116): da nombre y color a los `tagIds` de
+  // cada fila y llena el filtro. La fila sólo trae ids.
+  tags:     LeadTag[]
   // Hide the per-agent filter for role 'agent' (they only ever see their own leads).
   viewerRole:     'super_admin' | 'agent_owner' | 'agent'
   viewerAgentId:  string | null
+}
+
+// Etiquetas de una fila. Se muestran dos y el resto se cuenta: con cuatro chips
+// la celda del lead deja de leerse, y el nombre sigue siendo lo primero que hay
+// que ver. El tooltip lista todas.
+function TagChips({ tagIds, catalog, max = 2 }: { tagIds: string[]; catalog: LeadTag[]; max?: number }) {
+  if (tagIds.length === 0) return null
+
+  // El orden del catálogo, no el de asignación: la misma etiqueta tiene que
+  // aparecer en el mismo sitio en todas las filas.
+  const resolved = catalog.filter(t => tagIds.includes(t.id))
+  if (resolved.length === 0) return null
+
+  const shown  = resolved.slice(0, max)
+  const hidden = resolved.length - shown.length
+
+  return (
+    <div
+      style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '3px' }}
+      title={resolved.map(t => t.name).join(' · ')}
+    >
+      {shown.map(t => {
+        const chip = tagChipStyle(t.color)
+        return (
+          <span
+            key={t.id}
+            style={{
+              fontSize: '10px', fontWeight: 500, padding: '1px 6px', borderRadius: '5px',
+              color: chip.color, background: chip.background, border: chip.border,
+              whiteSpace: 'nowrap', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {t.name}
+          </span>
+        )
+      })}
+      {hidden > 0 && (
+        <span style={{ fontSize: '10px', color: 'var(--text-muted)', alignSelf: 'center' }}>
+          +{hidden}
+        </span>
+      )}
+    </div>
+  )
 }
 
 // Chip "Hoy": la IA marcó que la próxima acción de este lead es de hoy.
@@ -232,7 +279,7 @@ function TodayChip() {
 
 export function LeadsClient({
   leads, kanban, total, highQualityCount, urgentTodayCount, page, totalPages,
-  filters, agents, channels, viewerRole, viewerAgentId,
+  filters, agents, channels, tags, viewerRole, viewerAgentId,
 }: LeadsClientProps) {
   const router = useRouter()
   const { navigate, pending: navPending } = useCardNavigation()
@@ -316,8 +363,12 @@ export function LeadsClient({
   const hasFilters = hasActiveLeadFilters(filters)
 
   function clearFilters() {
+    // La lista tiene que quedar igual que hasActiveLeadFilters considera "sin
+    // filtros": `quality` faltaba aquí, así que "Limpiar" dejaba el botón activo
+    // y la lista filtrada por banda de calidad.
     pushFilters({
-      q: '', agentId: 'all', stage: 'all', source: 'all', channelId: 'all', language: 'all',
+      q: '', agentId: 'all', stage: 'all', source: 'all', channelId: 'all',
+      language: 'all', quality: 'all', tag: 'all',
     })
   }
 
@@ -336,7 +387,7 @@ export function LeadsClient({
 
   function exportCsv() {
     if (selectedLeads.length === 0) return
-    const cols = ['Nombre', 'Apellido', 'Email', 'Teléfono', 'Etapa', 'Agente', 'Fuente', 'Score', 'Idioma', 'Fecha']
+    const cols = ['Nombre', 'Apellido', 'Email', 'Teléfono', 'Etapa', 'Agente', 'Fuente', 'Score', 'Idioma', 'Etiquetas', 'Fecha']
     const esc = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = [cols.join(',')]
     for (const l of selectedLeads) {
@@ -347,7 +398,11 @@ export function LeadsClient({
         esc(l.firstName), esc(l.lastName), esc(l.email), esc(l.phone ?? ''),
         esc(STAGE_CONFIG[l.stage]?.label ?? l.stage), esc(agent?.name ?? ''),
         esc(channel?.name ?? src.label), esc(String(l.score ?? '')),
-        esc(l.language.toUpperCase()), esc(new Date(l.createdAt).toISOString().slice(0, 10)),
+        esc(l.language.toUpperCase()),
+        // Las etiquetas van en UNA celda separada por " · ": el CSV lo abre una
+        // persona en Excel, no un importador.
+        esc(tags.filter(t => l.tagIds.includes(t.id)).map(t => t.name).join(' · ')),
+        esc(new Date(l.createdAt).toISOString().slice(0, 10)),
       ].join(','))
     }
     // BOM para que Excel respete los acentos.
@@ -390,6 +445,13 @@ export function LeadsClient({
     { value: 'all', label: 'Toda la calidad' },
     ...QUALITY_BANDS.map(b => ({ value: b, label: QUALITY_CONFIG[b].label })),
   ]
+  // Etiquetas: el valor es el SLUG, que es lo que viaja en la URL. Si el tenant
+  // no tiene catálogo, el filtro no se ofrece (ver más abajo) en vez de mostrar
+  // un desplegable con una sola opción inútil.
+  const tagOptions = [
+    { value: 'all', label: 'Todas las etiquetas' },
+    ...tags.map(t => ({ value: t.slug, label: t.name })),
+  ]
   const languageOptions = [
     { value: 'all', label: 'Todos los idiomas' },
     { value: 'es',  label: '🇪🇸 Español' },
@@ -422,6 +484,10 @@ export function LeadsClient({
   if (filters.quality !== 'all') {
     const opt = qualityOptions.find(o => o.value === filters.quality)
     if (opt) activeChips.push({ label: `Calidad ${opt.label.toLowerCase()}`, onRemove: () => pushFilters({ quality: 'all' }) })
+  }
+  if (filters.tag !== 'all') {
+    const t = tags.find(tg => tg.slug === filters.tag)
+    if (t) activeChips.push({ label: t.name, onRemove: () => pushFilters({ tag: 'all' }) })
   }
   if (filters.q !== '') {
     activeChips.push({ label: `"${filters.q}"`, onRemove: () => pushFilters({ q: '' }) })
@@ -634,6 +700,12 @@ export function LeadsClient({
               <label style={FILTER_LABEL}>Calidad</label>
               <FilterSelect value={filters.quality} onChange={v => pushFilters({ quality: v })} options={qualityOptions} fullWidth />
             </div>
+            {tags.length > 0 && (
+              <div>
+                <label style={FILTER_LABEL}>Etiqueta</label>
+                <FilterSelect value={filters.tag} onChange={v => pushFilters({ tag: v })} options={tagOptions} fullWidth />
+              </div>
+            )}
             <div>
               <label style={FILTER_LABEL}>Idioma</label>
               <FilterSelect value={filters.language} onChange={v => pushFilters({ language: v })} options={languageOptions} fullWidth />
@@ -810,6 +882,7 @@ export function LeadsClient({
                               {lead.urgency === 'hoy' && <TodayChip />}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lead.email}</div>
+                            <TagChips tagIds={lead.tagIds} catalog={tags} />
                           </div>
                         </div>
                       </td>
@@ -997,6 +1070,9 @@ export function LeadsClient({
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                           {agent?.name.split(' ')[0] ?? '—'}
                         </div>
+                        {/* Etiquetas: las mismas dos que la tabla, para que las
+                            dos vistas no digan cosas distintas del mismo lead. */}
+                        <TagChips tagIds={lead.tagIds} catalog={tags} />
                         {/* Row 3: calidad + urgencia — mismo criterio que la tabla,
                             para que las dos vistas no digan cosas distintas del
                             mismo lead. */}

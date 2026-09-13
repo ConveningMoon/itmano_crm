@@ -71,7 +71,10 @@ export async function enrollLeadInSequence(args: {
 
   if (!channel?.email_sequence_id) return { enrolled: false }
 
-  // 1b. Check activation_type — skip if 'manual' (manual sequences require explicit enrollment)
+  // 1b. Sólo se auto-inscribe en secuencias de tipo 'form'. La comprobación es
+  //      POSITIVA a propósito: antes excluía 'manual' por nombre, así que el
+  //      tercer tipo ('tag', migración 117) se habría auto-inscrito por el mero
+  //      hecho de existir si alguien enganchara su secuencia a una fuente.
   const { data: seqMeta } = await db
     .from('email_sequences')
     .select('activation_type')
@@ -79,7 +82,7 @@ export async function enrollLeadInSequence(args: {
     .maybeSingle()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((seqMeta as any)?.activation_type === 'manual') return { enrolled: false }
+  if (((seqMeta as any)?.activation_type ?? 'form') !== 'form') return { enrolled: false }
 
   // 2. Fetch the first active step (lowest step_order)
   const { data: firstStep } = await db

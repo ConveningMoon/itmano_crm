@@ -134,6 +134,14 @@ export async function createTenant(
     console.error(JSON.stringify({ service: 'create-tenant-subscription', tenant_id: id, error: subErr.message }))
   }
 
+  // Catálogo de etiquetas por defecto (116). Best-effort, igual que la
+  // suscripción: si falla, el tenant existe y el catálogo se puede crear a mano
+  // desde Configuración → Etiquetas.
+  const { error: tagsErr } = await supabase.rpc('seed_default_lead_tags', { p_tenant_id: id })
+  if (tagsErr) {
+    console.error(JSON.stringify({ service: 'create-tenant-lead-tags', tenant_id: id, error: tagsErr.message }))
+  }
+
   revalidatePath('/admin')
   return { ok: true, id }
 }
