@@ -38,7 +38,9 @@ export default async function ChannelDetailPage({
   const supabase = createAdminClient()
   const [submissions, sequences, { data: agentRows }, { data: hostedRow }, { data: tenantRow }] = await Promise.all([
     getSubmissionsForChannel(channel.id, tenant_id),
-    listSequences(tenant_id, scope.agentId),
+    // 'channel': una secuencia disparada por etiqueta (117) no se engancha a una
+    // fuente — su disparador es la etiqueta, no el formulario.
+    listSequences(tenant_id, scope.agentId, 'channel'),
     supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
     supabase.from('acquisition_channels').select('hosted_page').eq('id', channel.id).maybeSingle(),
     supabase.from('tenants').select('slug, name, pages_managed_by_itmano').eq('id', channel.tenantId).maybeSingle(),

@@ -30,6 +30,8 @@ import { LeadEmailRepliesList } from './lead-email-replies-list'
 import type { LeadEmailReply } from '@/lib/data/lead-email-replies'
 import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { getLeadSource } from '@/lib/leads/source'
+import type { LeadTag } from '@/lib/leads/tags'
+import { LeadTagsCard } from './lead-tags-card'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,11 +136,18 @@ interface LeadDetailProps {
   potentialValue: LeadPotentialValue | null
   emailSending?: EmailSendingInfo
   aiFit?: { enabled: boolean; briefing: AiFitBriefing | null; at: string | null }
+  // Etiquetas del lead + catálogo del tenant (116). `canTag` es el permiso de
+  // escritura del lead, no el de administrar el catálogo.
+  tags: LeadTag[]
+  tagCatalog: LeadTag[]
+  canTag: boolean
+  // Etiquetas que hoy disparan una secuencia de email (117).
+  emailTagIds: string[]
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, opportunities, priority, potentialValue, emailSending, aiFit }: LeadDetailProps) {
+export function LeadDetailClient({ lead, agent, agents, channels, events, submissions, emailReplies, purchaseProcess, manualActions, statusHistory, scoreBreakdown, opportunities, priority, potentialValue, emailSending, aiFit, tags, tagCatalog, canTag, emailTagIds }: LeadDetailProps) {
   const router = useRouter()
 
   const [currentStage, setCurrentStage] = useState<Stage>(lead.stage)
@@ -339,6 +348,18 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               </div>
             ))}
           </div>
+
+          {/* Etiquetas: lo que una persona decidió sobre el lead. Va justo debajo
+              de la información y antes de prioridad porque es lo que el agente
+              lee y cambia más seguido — y desde la 117, lo que dispara los
+              correos obligatorios de seguimiento. */}
+          <LeadTagsCard
+            leadId={lead.id}
+            tags={tags}
+            catalog={tagCatalog}
+            canEdit={canTag}
+            emailTagIds={emailTagIds}
+          />
 
           {/* Card 2: Prioridad — reemplaza "Temperatura del lead" y "Desglose del
               score". El agente no trabaja con fit/engagement/manual: trabaja con
@@ -783,7 +804,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   </p>
                   <button
                     type="button"
-                    onClick={() => router.push('/emails#emails-de-cierre')}
+                    onClick={() => router.push('/emails?tab=cierre')}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: '6px',
                       padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px',

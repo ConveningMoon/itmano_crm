@@ -20,6 +20,8 @@ import { ScoringSection } from './scoring-section'
 import { CalibrationPanel } from './calibration-panel'
 import type { FitEvidence } from '@/lib/scoring/calibration'
 import { BusinessProfileSection } from './business-profile-section'
+import { TagsSection } from './tags-section'
+import type { LeadTag } from '@/lib/leads/tags'
 import type { BusinessProfile } from '@/lib/business/profile'
 import { Tabs } from '@/components/ui/tabs'
 
@@ -1427,7 +1429,7 @@ function AccountSection({ userEmail, userRole, onGoToAgents, canManage }: {
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
-type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'scoring' | 'ia' | 'cuenta'
+type Tab = 'perfil' | 'negocio' | 'agentes' | 'email' | 'etiquetas' | 'scoring' | 'ia' | 'cuenta'
 
 // El modelo de scoring lo administra ITMANO, así que su pestaña solo existe para
 // super_admin. Dejarla visible en modo lectura era peor que quitarla: una sección
@@ -1442,6 +1444,10 @@ function tabsForRole(role: TenantRole): Array<{ value: Tab; label: string }> {
     ...(role !== 'agent' ? [{ value: 'negocio' as Tab, label: 'Tu negocio' }] : []),
     { value: 'agentes',  label: 'Agentes' },
     { value: 'email',    label: 'Email' },
+    // El catálogo de etiquetas es el vocabulario del equipo y engancha las
+    // secuencias obligatorias: lo administran owner/super. Un agente aplica
+    // etiquetas desde la ficha del lead, no las crea.
+    ...(role !== 'agent' ? [{ value: 'etiquetas' as Tab, label: 'Etiquetas' }] : []),
     ...(role === 'super_admin' ? [{ value: 'scoring' as Tab, label: 'Scoring' }] : []),
     { value: 'ia',       label: 'Uso de IA' },
     { value: 'cuenta',   label: 'Cuenta y acceso' },
@@ -1477,12 +1483,16 @@ interface Props {
   aiLimitSubtitle?: string
   aiByAgent: AgentAiBreakdown | null
   subscription: TenantSubscription | null
+  // Catálogo de etiquetas del tenant + cuántos leads usa cada una (116).
+  leadTags: LeadTag[]
+  leadTagCounts: Record<string, number>
 }
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, businessProfile, scoringRules, recommendedRules,
   canEditScoring, fitEvidence, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
+  leadTags, leadTagCounts,
 }: Props) {
   const searchParams = useSearchParams()
   // La lista depende del rol, así que un `?tab=scoring` de un enlace viejo (o
@@ -1515,6 +1525,7 @@ export function SettingsClient({
           />
         ),
         email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} />,
+        etiquetas: <TagsSection tags={leadTags} counts={leadTagCounts} />,
         negocio: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <BusinessProfileSection profile={businessProfile} />
