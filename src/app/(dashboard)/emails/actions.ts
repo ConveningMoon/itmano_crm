@@ -8,6 +8,11 @@ import { requireWriteAccess } from '@/lib/auth/guards'
 import { scopeFor } from '@/lib/auth/visibility'
 import { getEligibleLeadsForSequence, type EligibleLeadsResult } from '@/lib/data/leads'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
+import { columns } from '@/lib/supabase/columns'
+import {
+  parseEmailImport,
+  type ImportSkip,
+} from '@/lib/email-sequence-import'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { EmailContentSchema } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
@@ -251,6 +256,12 @@ const StepSchema = z.discriminatedUnion('mode', [
 
 export type StepInput = z.infer<typeof StepSchema>
 
+export interface ImportSequenceStepsResult {
+  imported:  number
+  skipped:   ImportSkip[]
+  reordered: boolean
+}
+
 function stepColumns(data: StepInput) {
   return data.mode === 'crm'
     ? {
@@ -267,6 +278,77 @@ function stepColumns(data: StepInput) {
       }
 }
 
+const ImportRpcResultSchema = z.object({
+  imported:  z.number().int().min(0),
+  reordered: z.boolean(),
+  skipped:   z.array(z.object({
+    send_at_hours: z.number().int().min(0),
+    subject:       z.string(),
+    reason:        z.string(),
+  })),
+})
+
+export async function importTagSequenceSteps(
+  sequenceId: string,
+  rawJson: string,
+): Promise<{ ok: true; result: ImportSequenceStepsResult } | { ok: false; error: string }> {
+  if (!z.string().uuid().safeParse(sequenceId).success) {
+    return { ok: false, error: 'Secuencia inválida.' }
+  }
+
+  const parsed = parseEmailImport(rawJson)
+  if (!parsed.ok) return parsed
+  if (parsed.emails.length === 0) {
+    return { ok: false, error: 'No quedó ningún email válido para importar.' }
+  }
+
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const supabase = createAdminClient()
+  let sequenceQuery = supabase
+    .from('email_sequences')
+    .select(columns('email_sequences', ['id', 'tenant_id', 'activation_type']))
+    .eq('id', sequenceId)
+  if (ctx.tenant_id) sequenceQuery = sequenceQuery.eq('tenant_id', ctx.tenant_id)
+
+  const { data: sequence } = await sequenceQuery.maybeSingle()
+  const row = sequence as { tenant_id: string; activation_type: string } | null
+  if (!row || row.activation_type !== 'tag') {
+    return { ok: false, error: 'La secuencia por etiqueta no existe o no está disponible.' }
+  }
+
+  const { data, error } = await supabase.rpc('import_tag_sequence_steps', {
+    p_sequence_id: sequenceId,
+    p_tenant_id:   row.tenant_id,
+    p_steps:       parsed.emails,
+  })
+
+  if (error) return { ok: false, error: error.message }
+  const rpcResult = ImportRpcResultSchema.safeParse(data)
+  if (!rpcResult.success) {
+    return { ok: false, error: 'La base devolvió un resultado inesperado al importar.' }
+  }
+
+  revalidateEmails()
+  return {
+    ok: true,
+    result: {
+      imported: rpcResult.data.imported,
+      reordered: rpcResult.data.reordered,
+      skipped: [
+        ...parsed.skipped,
+        ...rpcResult.data.skipped.map(item => ({
+          sendAtHours: item.send_at_hours,
+          subject:     item.subject,
+          reason:      item.reason,
+        })),
+      ],
+    },
+  }
+}
+
 export async function addStep(
   sequenceId: string,
   fields: StepInput,
@@ -280,17 +362,20 @@ export async function addStep(
   const supabase = createAdminClient()
 
   // Verify sequence belongs to tenant
-  let seqQ = supabase.from('email_sequences').select('id, tenant_id').eq('id', sequenceId)
+  let seqQ = supabase
+    .from('email_sequences')
+    .select(columns('email_sequences', ['id', 'tenant_id', 'activation_type']))
+    .eq('id', sequenceId)
   if (ctx.tenant_id) seqQ = seqQ.eq('tenant_id', ctx.tenant_id)
   const { data: seq } = await seqQ.single()
   if (!seq) return { ok: false, error: 'Secuencia no encontrada' }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tenantId = (seq as any).tenant_id as string
+  const sequence = seq as unknown as { tenant_id: string; activation_type: string }
+  const tenantId = sequence.tenant_id
 
   // Get next step_order
   const { data: existingSteps } = await supabase
     .from('email_sequence_steps')
-    .select('step_order')
+    .select(columns('email_sequence_steps', ['step_order']))
     .eq('sequence_id', sequenceId)
     .order('step_order', { ascending: false })
     .limit(1)
@@ -298,6 +383,10 @@ export async function addStep(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const maxOrder = (existingSteps as any[])?.[0]?.step_order ?? -1
   const stepOrder = maxOrder + 1
+
+  if (sequence.activation_type === 'tag' && stepOrder > 0 && parsed.data.delayHours < 1) {
+    return { ok: false, error: 'Entre dos emails de una secuencia por etiqueta debe haber al menos 1 hora.' }
+  }
 
   const { error } = await supabase.from('email_sequence_steps').insert({
     sequence_id: sequenceId,
@@ -324,6 +413,26 @@ export async function updateStep(
   const denied = requireWriteAccess(ctx)
   if (denied) return denied
   const supabase = createAdminClient()
+
+  let stepQuery = supabase
+    .from('email_sequence_steps')
+    .select(columns('email_sequence_steps', ['sequence_id', 'step_order']))
+    .eq('id', stepId)
+  if (ctx.tenant_id) stepQuery = stepQuery.eq('tenant_id', ctx.tenant_id)
+  const { data: step } = await stepQuery.maybeSingle()
+  const stepRow = step as { sequence_id: string; step_order: number } | null
+  if (!stepRow) return { ok: false, error: 'Paso no encontrado' }
+
+  let sequenceQuery = supabase
+    .from('email_sequences')
+    .select(columns('email_sequences', ['activation_type']))
+    .eq('id', stepRow.sequence_id)
+  if (ctx.tenant_id) sequenceQuery = sequenceQuery.eq('tenant_id', ctx.tenant_id)
+  const { data: sequence } = await sequenceQuery.maybeSingle()
+  const activationType = (sequence as { activation_type: string } | null)?.activation_type
+  if (activationType === 'tag' && stepRow.step_order > 0 && parsed.data.delayHours < 1) {
+    return { ok: false, error: 'Entre dos emails de una secuencia por etiqueta debe haber al menos 1 hora.' }
+  }
 
   let q = supabase
     .from('email_sequence_steps')
