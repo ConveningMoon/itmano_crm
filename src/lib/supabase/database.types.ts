@@ -2518,15 +2518,11 @@ export type Database = {
         }[]
       }
       get_my_tenant_id: { Args: never; Returns: string }
-      is_super_admin: { Args: never; Returns: boolean }
       import_tag_sequence_steps: {
-        Args: {
-          p_sequence_id: string
-          p_steps: Json
-          p_tenant_id: string
-        }
+        Args: { p_sequence_id: string; p_steps: Json; p_tenant_id: string }
         Returns: Json
       }
+      is_super_admin: { Args: never; Returns: boolean }
       lead_analytics_stats: {
         Args: { p_agent_id?: string; p_months?: number; p_tenant_id?: string }
         Returns: Json
