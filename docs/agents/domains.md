@@ -35,10 +35,13 @@ Todos los envíos leen `tenants.email_from_address`. No introduzcas remitentes d
 A&J en código. Antes de cambiar envíos, revisa guards de `email_blocked`,
 cancelación de secuencias, unsubscribe y reputación del dominio.
 
-Las secuencias por etiqueta pueden importar contenido externo con el contrato
-JSON de `src/lib/email-sequence-import.ts`. `send_at_hours` siempre representa
-horas acumuladas desde que se aplica la etiqueta; la base lo convierte a
-`delay_hours` relativo. Una secuencia con runs conserva su `step_order`
+Las secuencias por etiqueta se crean automáticamente para cada combinación de
+etiqueta obligatoria e idioma atendido; no dependen de que alguien pulse un alta
+manual. La pestaña importa todo el catálogo en un único JSON identificado por
+`tag_slug + language`, según el contrato de `src/lib/email-sequence-import.ts`.
+`send_at_hours` representa horas acumuladas desde que se aplica la etiqueta y
+la base lo convierte a `delay_hours` relativo. Las restricciones horarias son
+independientes por combinación. Una secuencia con runs conserva su `step_order`
 histórico y sólo admite por importación horarios posteriores al último paso.
 
 No expongas rutas públicas de smoke test que acepten destinatario o HTML
@@ -145,8 +148,8 @@ dicen `traffic_source` y `acquisition_channel_id`.
 
 `requires_sequence` marca las etiquetas que deben mandar correo. Cuáles son es un
 DATO del tenant, no una lista en el código. Para esas, `email_sequences` lleva
-una secuencia por `(etiqueta, idioma)` con `trigger_tag_id` (`on delete
-restrict`):
+una secuencia creada automáticamente por `(etiqueta, idioma)` con
+`trigger_tag_id` (`on delete restrict`):
 
 - El idioma se resuelve con `resolveLeadEmailLanguage`, la misma regla que los
   correos de cierre: el del lead si su agente lo atiende, inglés si no. Manda el

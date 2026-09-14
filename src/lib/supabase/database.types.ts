@@ -2517,7 +2517,15 @@ export type Database = {
           stage_changed: boolean
         }[]
       }
+      ensure_tag_email_sequences: {
+        Args: { p_tenant_id: string }
+        Returns: number
+      }
       get_my_tenant_id: { Args: never; Returns: string }
+      import_all_tag_sequence_steps: {
+        Args: { p_sequences: Json; p_tenant_id: string }
+        Returns: Json
+      }
       import_tag_sequence_steps: {
         Args: { p_sequence_id: string; p_steps: Json; p_tenant_id: string }
         Returns: Json
