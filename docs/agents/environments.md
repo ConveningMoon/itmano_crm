@@ -8,19 +8,22 @@
 | Producción | `kvmjlrvlnhiarrqxulkr` | Clientes y operaciones reales |
 
 El sandbox es el destino predeterminado de agentes, desarrollo y suites remotas.
-El MCP persistente está acotado por URL a ese proyecto. La autenticación es OAuth
-local a cada computadora; no se versionan tokens.
+Hay dos MCP persistentes, `supabase_sandbox` y `supabase_production`, cada uno
+acotado por URL a su proyecto. La autenticación es OAuth local a cada
+computadora, se hace una sola vez y sus tokens no se versionan.
 
 Codex fija explícitamente en `.codex/config.toml` los scopes aceptados por el
 resource metadata del MCP. El authorization server general de Supabase anuncia
 otros scopes que su registro dinámico rechaza; sin esa lista, `codex mcp login
-supabase_sandbox` falla antes de abrir el consentimiento. No reemplaces OAuth
+de Supabase falla antes de abrir el consentimiento. No reemplaces OAuth
 por un PAT persistente ni elimines los scopes sin verificar el login completo.
 
-Producción sólo se conecta cuando la pregunta exige evidencia real o al aplicar
-una migración ya probada. Para lectura, usa una conexión temporal con
-`project_ref`, `read_only=true` y sólo `database`, `debugging`, `development` o
-`docs` según sea necesario. Toda escritura requiere autorización explícita.
+Producción puede consultarse directamente mediante su MCP persistente. No uses
+esa conexión como destino de desarrollo. Una migración pasa a producción sólo
+después de aplicar exactamente el mismo archivo en sandbox y completar allí las
+pruebas y advisors pertinentes; cumplido ese gate no hace falta pedir otra
+autorización. Los `DROP`, `TRUNCATE`, borrados masivos y demás cambios difíciles
+de recuperar conservan la confirmación explícita del contrato operativo.
 
 ## Desarrollo local
 
@@ -63,7 +66,8 @@ commits.
 4. Ejecuta advisors y las suites remotas pertinentes.
 5. Regenera `src/lib/supabase/database.types.ts` desde el proyecto que ya tenga
    el esquema nuevo.
-6. Solicita autorización antes de aplicar en producción.
+6. Aplica el mismo archivo en producción sin otra confirmación cuando todos los
+   gates anteriores hayan pasado.
 
 No reescribas una migración que ya pudo aplicarse. Añade una migración correctiva.
 La 108 introdujo leads de demo en producción con direcciones de proveedores

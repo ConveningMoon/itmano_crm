@@ -23,3 +23,23 @@ scopes = [
   "storage:read",
   "storage:write",
 ]
+
+[mcp_servers.supabase_production]
+url = "https://mcp.supabase.com/mcp?project_ref=kvmjlrvlnhiarrqxulkr&features=database%2Cdebugging%2Cdevelopment%2Cdocs"
+required = false
+default_tools_approval_mode = "writes"
+scopes = [
+  "organizations:read",
+  "projects:read",
+  "projects:write",
+  "database:write",
+  "database:read",
+  "analytics:read",
+  "secrets:read",
+  "edge_functions:read",
+  "edge_functions:write",
+  "environment:read",
+  "environment:write",
+  "storage:read",
+  "storage:write",
+]
