@@ -301,6 +301,8 @@ export default async function EmailSequenceDetailPage({
           language={(['es', 'en', 'pt'].includes(sequence.language) ? sequence.language : 'es') as 'es' | 'en' | 'pt'}
           tenantName={sequence.tenantName ?? undefined}
           agentName={sequence.agentName ?? undefined}
+          sequenceName={sequence.name}
+          isTagSequence={sequence.activationType === 'tag'}
           channelType={sequence.channels[0]?.channelType ?? null}
           channelName={sequence.channels[0]?.name ?? null}
         />

@@ -35,6 +35,12 @@ Todos los envíos leen `tenants.email_from_address`. No introduzcas remitentes d
 A&J en código. Antes de cambiar envíos, revisa guards de `email_blocked`,
 cancelación de secuencias, unsubscribe y reputación del dominio.
 
+Las secuencias por etiqueta pueden importar contenido externo con el contrato
+JSON de `src/lib/email-sequence-import.ts`. `send_at_hours` siempre representa
+horas acumuladas desde que se aplica la etiqueta; la base lo convierte a
+`delay_hours` relativo. Una secuencia con runs conserva su `step_order`
+histórico y sólo admite por importación horarios posteriores al último paso.
+
 No expongas rutas públicas de smoke test que acepten destinatario o HTML
 arbitrarios. Usa una herramienta local o administrativa con allowlist, auditoría
 y rate limit.

@@ -16,6 +16,7 @@ import {
   type ComposerValue,
 } from '@/components/dashboard/email-composer'
 import { parseEmailContent } from '@/lib/email-content'
+import { TagSequenceImportTools } from './tag-sequence-import-tools'
 
 const INPUT: React.CSSProperties = {
   width: '100%',
@@ -61,6 +62,8 @@ interface Props {
   language?:    'es' | 'en' | 'pt'
   tenantName?:  string
   agentName?:   string
+  sequenceName?: string
+  isTagSequence?: boolean
   // Canal asociado — condiciona el bootstrap con IA de secuencias vacías.
   channelType?: string | null
   channelName?: string | null
@@ -69,6 +72,7 @@ interface Props {
 export function StepManager({
   sequenceId, steps: initialSteps, stepMetrics,
   language = 'es', tenantName, agentName,
+  sequenceName = '', isTagSequence = false,
   channelType = null, channelName = null,
 }: Props) {
   const router   = useRouter()
@@ -120,6 +124,12 @@ export function StepManager({
 
   // Construye el payload de la action según el modo; null + error visible si falta algo.
   function buildStepInput(): StepInput | null {
+    const targetStep = target ? steps.find(step => step.id === target) : null
+    const needsInterval = isTagSequence && (mode === 'add' ? steps.length > 0 : (targetStep?.stepOrder ?? 0) > 0)
+    if (needsInterval && form.delayHours < 1) {
+      setError('Entre dos emails de una secuencia por etiqueta debe haber al menos 1 hora.')
+      return null
+    }
     if (form.contentMode === 'template') {
       if (!form.resendTemplateId.trim()) { setError('El Template ID es obligatorio'); return null }
       return { mode: 'template', delayHours: form.delayHours, resendTemplateId: form.resendTemplateId }
@@ -180,18 +190,27 @@ export function StepManager({
             <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Pasos de la secuencia</span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>{steps.length} {steps.length === 1 ? 'email' : 'emails'}</span>
           </div>
-          <button
-            onClick={openAdd}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '6px 12px', fontSize: '12px', fontWeight: 500,
-              background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
-              border: '1px solid rgba(201,169,110,0.2)', borderRadius: '8px', cursor: 'pointer',
-            }}
-          >
-            <Plus size={12} />
-            Agregar paso
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+            {isTagSequence && (
+              <TagSequenceImportTools
+                sequenceId={sequenceId}
+                sequenceName={sequenceName}
+                language={language}
+              />
+            )}
+            <button
+              onClick={openAdd}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '5px',
+                padding: '6px 12px', fontSize: '12px', fontWeight: 500,
+                background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
+                border: '1px solid rgba(201,169,110,0.2)', borderRadius: '8px', cursor: 'pointer',
+              }}
+            >
+              <Plus size={12} />
+              Agregar paso
+            </button>
+          </div>
         </div>
 
         {/* Steps list */}
@@ -200,20 +219,24 @@ export function StepManager({
             <Mail size={20} style={{ marginBottom: '8px', opacity: 0.4 }} color="var(--text-muted)" />
             <div>Sin pasos configurados todavía.</div>
             <div style={{ fontSize: '12px', marginTop: '4px' }}>
-              Genera los 3 correos de la secuencia con IA, o agrega los pasos uno por uno.
+              {isTagSequence
+                ? 'Importa un JSON creado con tu IA o agrega los pasos uno por uno.'
+                : 'Genera los 3 correos de la secuencia con IA, o agrega los pasos uno por uno.'}
             </div>
-            <button
-              onClick={() => setBootstrapOpen(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '14px',
-                padding: '8px 18px', fontSize: '13px', fontWeight: 500,
-                background: 'var(--accent-gold)', color: 'var(--bg-base)',
-                border: 'none', borderRadius: '8px', cursor: 'pointer',
-              }}
-            >
-              <Sparkles size={13} />
-              Crear los 3 correos con IA
-            </button>
+            {!isTagSequence && (
+              <button
+                onClick={() => setBootstrapOpen(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '14px',
+                  padding: '8px 18px', fontSize: '13px', fontWeight: 500,
+                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                  border: 'none', borderRadius: '8px', cursor: 'pointer',
+                }}
+              >
+                <Sparkles size={13} />
+                Crear los 3 correos con IA
+              </button>
+            )}
           </div>
         ) : (
           steps.map((step, idx) => (
@@ -334,9 +357,12 @@ export function StepManager({
                 </label>
                 <input
                   type="number"
-                  min={0}
+                  min={isTagSequence && (mode === 'add' ? steps.length > 0 : (steps.find(step => step.id === target)?.stepOrder ?? 0) > 0) ? 1 : 0}
                   value={form.delayHours}
-                  onChange={e => setForm(f => ({ ...f, delayHours: Math.max(0, parseInt(e.target.value) || 0) }))}
+                  onChange={e => {
+                    const minDelay = isTagSequence && (mode === 'add' ? steps.length > 0 : (steps.find(step => step.id === target)?.stepOrder ?? 0) > 0) ? 1 : 0
+                    setForm(f => ({ ...f, delayHours: Math.max(minDelay, parseInt(e.target.value) || 0) }))
+                  }}
                   className="sm-input"
                   style={INPUT}
                 />
@@ -445,7 +471,7 @@ export function StepManager({
       </ModalShell>
 
       {/* Bootstrap con IA — solo secuencias vacías */}
-      {steps.length === 0 && (
+      {steps.length === 0 && !isTagSequence && (
         <SequenceBootstrapModal
           open={bootstrapOpen}
           onClose={() => setBootstrapOpen(false)}
