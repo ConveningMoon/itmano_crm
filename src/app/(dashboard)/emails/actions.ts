@@ -10,7 +10,7 @@ import { getEligibleLeadsForSequence, type EligibleLeadsResult } from '@/lib/dat
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 import { columns } from '@/lib/supabase/columns'
 import {
-  parseEmailImport,
+  parseAllTagSequenceImport,
   type ImportSkip,
 } from '@/lib/email-sequence-import'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
@@ -256,10 +256,10 @@ const StepSchema = z.discriminatedUnion('mode', [
 
 export type StepInput = z.infer<typeof StepSchema>
 
-export interface ImportSequenceStepsResult {
-  imported:  number
-  skipped:   ImportSkip[]
-  reordered: boolean
+export interface ImportAllTagSequencesResult {
+  imported: number
+  sequences: number
+  skipped: Array<ImportSkip & { tagSlug: string; language: string }>
 }
 
 function stepColumns(data: StepInput) {
@@ -278,73 +278,55 @@ function stepColumns(data: StepInput) {
       }
 }
 
-const ImportRpcResultSchema = z.object({
-  imported:  z.number().int().min(0),
-  reordered: z.boolean(),
-  skipped:   z.array(z.object({
-    send_at_hours: z.number().int().min(0),
-    subject:       z.string(),
-    reason:        z.string(),
+const ImportAllRpcResultSchema = z.object({
+  sequences: z.array(z.object({
+    tag_slug: z.string(),
+    language: z.string(),
+    imported: z.number().int().min(0),
+    reordered: z.boolean(),
+    skipped: z.array(z.object({
+      send_at_hours: z.number().int().min(0),
+      subject: z.string(),
+      reason: z.string(),
+    })),
   })),
 })
 
-export async function importTagSequenceSteps(
-  sequenceId: string,
+export async function importAllTagSequenceSteps(
   rawJson: string,
-): Promise<{ ok: true; result: ImportSequenceStepsResult } | { ok: false; error: string }> {
-  if (!z.string().uuid().safeParse(sequenceId).success) {
-    return { ok: false, error: 'Secuencia inválida.' }
-  }
-
-  const parsed = parseEmailImport(rawJson)
+): Promise<{ ok: true; result: ImportAllTagSequencesResult } | { ok: false; error: string }> {
+  const parsed = parseAllTagSequenceImport(rawJson)
   if (!parsed.ok) return parsed
-  if (parsed.emails.length === 0) {
-    return { ok: false, error: 'No quedó ningún email válido para importar.' }
-  }
 
   const ctx = await getCurrentTenantContext()
   const denied = requireWriteAccess(ctx)
   if (denied) return denied
+  if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant para importar sus emails.' }
 
-  const supabase = createAdminClient()
-  let sequenceQuery = supabase
-    .from('email_sequences')
-    .select(columns('email_sequences', ['id', 'tenant_id', 'activation_type']))
-    .eq('id', sequenceId)
-  if (ctx.tenant_id) sequenceQuery = sequenceQuery.eq('tenant_id', ctx.tenant_id)
-
-  const { data: sequence } = await sequenceQuery.maybeSingle()
-  const row = sequence as { tenant_id: string; activation_type: string } | null
-  if (!row || row.activation_type !== 'tag') {
-    return { ok: false, error: 'La secuencia por etiqueta no existe o no está disponible.' }
-  }
-
-  const { data, error } = await supabase.rpc('import_tag_sequence_steps', {
-    p_sequence_id: sequenceId,
-    p_tenant_id:   row.tenant_id,
-    p_steps:       parsed.emails,
+  const { data, error } = await createAdminClient().rpc('import_all_tag_sequence_steps', {
+    p_tenant_id: ctx.tenant_id,
+    p_sequences: parsed.sequences,
   })
-
   if (error) return { ok: false, error: error.message }
-  const rpcResult = ImportRpcResultSchema.safeParse(data)
-  if (!rpcResult.success) {
-    return { ok: false, error: 'La base devolvió un resultado inesperado al importar.' }
-  }
+
+  const rpc = ImportAllRpcResultSchema.safeParse(data)
+  if (!rpc.success) return { ok: false, error: 'La base devolvió un resultado inesperado al importar.' }
+
+  const databaseSkips = rpc.data.sequences.flatMap(sequence => sequence.skipped.map(item => ({
+    tagSlug: sequence.tag_slug,
+    language: sequence.language,
+    sendAtHours: item.send_at_hours,
+    subject: item.subject,
+    reason: item.reason,
+  })))
 
   revalidateEmails()
   return {
     ok: true,
     result: {
-      imported: rpcResult.data.imported,
-      reordered: rpcResult.data.reordered,
-      skipped: [
-        ...parsed.skipped,
-        ...rpcResult.data.skipped.map(item => ({
-          sendAtHours: item.send_at_hours,
-          subject:     item.subject,
-          reason:      item.reason,
-        })),
-      ],
+      imported: rpc.data.sequences.reduce((sum, sequence) => sum + sequence.imported, 0),
+      sequences: rpc.data.sequences.length,
+      skipped: [...parsed.skipped, ...databaseSkips],
     },
   }
 }

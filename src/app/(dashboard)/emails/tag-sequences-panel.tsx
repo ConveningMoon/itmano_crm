@@ -1,14 +1,12 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { AlertTriangle, Check, Plus, Pause } from 'lucide-react'
+import { AlertTriangle, Check, Pause } from 'lucide-react'
 import { LANGUAGE_CONFIG } from '@/lib/config'
 import type { Language } from '@/lib/types'
 import { tagChipStyle } from '@/lib/leads/tags'
 import type { TagSequenceCoverage } from '@/lib/data/tag-sequences'
-import { createTagSequence } from './tag-sequence-actions'
+import { TagSequencesImportTools } from './tag-sequences-import-tools'
 
 interface TagSequencesPanelProps {
   coverage: TagSequenceCoverage[]
@@ -26,24 +24,6 @@ function langLabel(code: string): string {
 // que sin esta vista nadie se enteraría de que los leads en inglés no reciben
 // nada.
 export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProps) {
-  const router = useRouter()
-  const [pending, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-  const [creating, setCreating] = useState<string | null>(null)
-
-  function create(tagId: string, language: string) {
-    setError(null)
-    setCreating(`${tagId}|${language}`)
-    start(async () => {
-      const res = await createTagSequence(tagId, language)
-      setCreating(null)
-      if (!res.ok) { setError(res.error); return }
-      // Se abre directo: una secuencia recién creada no tiene pasos, y lo
-      // siguiente que hay que hacer es escribir el primer correo.
-      router.push(`/emails/${res.id}`)
-    })
-  }
-
   const missing = coverage.reduce(
     (n, c) => n + c.slots.filter(s => s.sequence === null).length,
     0,
@@ -69,6 +49,7 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
   return (
     <div>
       <div style={{ marginBottom: '18px' }}>
+        {canManage && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}><TagSequencesImportTools coverage={coverage} /></div>}
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55, maxWidth: '680px' }}>
           Estos correos no se mandan a una lista: salen solos cuando alguien pone la
           etiqueta a un lead. Hace falta una versión por cada idioma que atiende el
@@ -173,23 +154,7 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
                         <span style={{ flex: 1, fontSize: '12px', color: 'var(--accent-gold)' }}>
                           Sin escribir — estos leads no reciben nada
                         </span>
-                        {canManage && (
-                          <button
-                            onClick={() => create(tag.id, slot.language)}
-                            disabled={pending}
-                            style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '5px',
-                              padding: '5px 11px', fontSize: '12px', fontWeight: 500,
-                              background: 'transparent', borderRadius: '7px', flexShrink: 0,
-                              border: '1px dashed var(--border-subtle)',
-                              color: 'var(--text-muted)',
-                              cursor: pending ? 'default' : 'pointer',
-                            }}
-                          >
-                            <Plus size={12} />
-                            {creating === `${tag.id}|${slot.language}` ? 'Creando…' : 'Escribir'}
-                          </button>
-                        )}
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Se creará automáticamente</span>
                       </>
                     )}
                   </div>
@@ -200,9 +165,6 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
         })}
       </div>
 
-      {error && (
-        <div style={{ fontSize: '12px', color: 'var(--accent-coral)', marginTop: '14px' }}>{error}</div>
-      )}
     </div>
   )
 }

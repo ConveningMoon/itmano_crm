@@ -16,7 +16,6 @@ import {
   type ComposerValue,
 } from '@/components/dashboard/email-composer'
 import { parseEmailContent } from '@/lib/email-content'
-import { TagSequenceImportTools } from './tag-sequence-import-tools'
 
 const INPUT: React.CSSProperties = {
   width: '100%',
@@ -62,7 +61,6 @@ interface Props {
   language?:    'es' | 'en' | 'pt'
   tenantName?:  string
   agentName?:   string
-  sequenceName?: string
   isTagSequence?: boolean
   // Canal asociado — condiciona el bootstrap con IA de secuencias vacías.
   channelType?: string | null
@@ -72,7 +70,7 @@ interface Props {
 export function StepManager({
   sequenceId, steps: initialSteps, stepMetrics,
   language = 'es', tenantName, agentName,
-  sequenceName = '', isTagSequence = false,
+  isTagSequence = false,
   channelType = null, channelName = null,
 }: Props) {
   const router   = useRouter()
@@ -191,13 +189,6 @@ export function StepManager({
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>{steps.length} {steps.length === 1 ? 'email' : 'emails'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
-            {isTagSequence && (
-              <TagSequenceImportTools
-                sequenceId={sequenceId}
-                sequenceName={sequenceName}
-                language={language}
-              />
-            )}
             <button
               onClick={openAdd}
               style={{

@@ -47,15 +47,17 @@ Hay dos proyectos y producción contiene datos de clientes:
 | Sandbox | `xpaixcowvyksgluazwzn` | Desarrollo, pruebas y primera aplicación de migraciones |
 | Producción | `kvmjlrvlnhiarrqxulkr` | Datos reales; acceso excepcional |
 
-- Usa el MCP `supabase-sandbox` configurado en el proyecto. Está acotado al
-  sandbox y sus escrituras requieren aprobación del cliente MCP.
+- Usa los MCP persistentes `supabase_sandbox` y `supabase_production`
+  configurados en el proyecto. Cada uno está acotado por URL a su `project_ref`;
+  la autenticación OAuth se realiza una sola vez por computadora y sus tokens
+  nunca se versionan.
 - Para cualquier tarea Supabase, carga las skills `supabase` y, antes de escribir
   SQL, `supabase-postgres-best-practices`.
-- No mantengas un MCP de producción habilitado de forma permanente. Si una tarea
-  necesita evidencia real, crea una conexión temporal acotada a producción,
-  `read_only=true` y sólo los feature groups necesarios; elimínala al terminar.
 - Toda migración se prueba primero en sandbox. Antes de cualquier escritura en
-  producción, detente, describe el efecto y pide autorización explícita.
+  producción, verifica que la misma migración pasó sandbox, las pruebas
+  pertinentes y advisors. Cumplidas esas condiciones, aplícala a producción sin
+  pedir otra autorización. Los cambios destructivos siguen sujetos a la regla
+  de confirmación específica de este archivo.
 - No infieras el estado actual de una base sólo desde migraciones o documentos:
   verifícalo con el MCP correspondiente.
 
