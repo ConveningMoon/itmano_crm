@@ -5,6 +5,7 @@ import { columns } from '@/lib/supabase/columns'
 import { getEditionById } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
+import { getSubscription } from '@/lib/data/subscriptions'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
@@ -26,7 +27,6 @@ import { EditionEditor } from './edition-editor'
 export const maxDuration = 300
 
 const TENANT_COLUMNS       = columns('tenants', ['slug', 'name'])
-const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
 // `cover_photo_url`: la foto que acompaña a la firma de la persona (113). El
 // editor la muestra en el círculo del preview, igual que la página pública.
 const AGENT_OPTION_COLUMNS = columns('agents', ['id', 'name', 'cover_photo_url'])
@@ -39,14 +39,15 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
 
   const db = createAdminClient()
 
-  const { data: subRow } = await db
-    .from('subscriptions').select(SUBSCRIPTION_COLUMNS).eq('tenant_id', tenantId).maybeSingle()
-  // reason: el cliente de Supabase no está tipado en este repo.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
+  // El plan (lectura cacheada que ya hace el shell) y la edición no dependen
+  // uno del otro: van en paralelo y la guarda se evalúa con ambos resueltos.
+  const [subscription, edition] = await Promise.all([
+    getSubscription(tenantId),
+    getEditionById(id, tenantId),
+  ])
+  const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
-  const edition = await getEditionById(id, tenantId)
   if (!edition) notFound()
 
   const canEdit = ctx.role !== 'agent' || edition.createdByUserId === ctx.user_id

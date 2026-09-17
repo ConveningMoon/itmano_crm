@@ -169,38 +169,64 @@ export async function getLeadsListData(
     scope, filters, channels, tags,
   ))
 
-  const [totalRes, hotRes, urgentTodayCount] = await Promise.all([
-    countQuery(),
-    // "Alta" es la banda del modelo, no un umbral de score: se autoajusta a la
-    // cartera del tenant (quintiles) en vez de fijar un 70 que no significa nada.
-    countQuery().eq('quality_band', 'alta'),
+  // "Alta" es la banda del modelo, no un umbral de score: se autoajusta a la
+  // cartera del tenant (quintiles) en vez de fijar un 70 que no significa nada.
+  const hotCount = () => countQuery().eq('quality_band', 'alta')
+
+  if (filters.view === 'kanban') {
+    const [totalRes, hotRes, urgentTodayCount, kanban] = await Promise.all([
+      countQuery(),
+      hotCount(),
+      getUrgentTodayCount(scope),
+      fetchKanbanColumns(supabase, scope, filters, channels, tags),
+    ])
+    const total = (totalRes.count ?? 0) as number
+    return {
+      items: [], kanban, total,
+      highQualityCount: (hotRes.count ?? 0) as number,
+      urgentTodayCount, page: 1,
+      totalPages: Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)),
+    }
+  }
+
+  // La página y el total salen de la MISMA consulta (count: 'exact'), en paralelo
+  // con los contadores. Antes el total se pedía primero sólo para acotar la
+  // página, y eso serializaba la lista detrás de una ola entera de round-trips.
+  const pageQuery = (page: number) => {
+    const from = (page - 1) * LEADS_PAGE_SIZE
+    return applySort(
+      stageFiltered(applyFilters(
+        supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
+        scope, filters, channels, tags,
+      )),
+      filters.sort,
+    ).range(from, from + LEADS_PAGE_SIZE - 1)
+  }
+
+  const requestedPage = Math.max(1, filters.page)
+  const [firstRes, hotRes, urgentTodayCount] = await Promise.all([
+    pageQuery(requestedPage),
+    hotCount(),
     getUrgentTodayCount(scope),
   ])
 
-  const total      = (totalRes.count ?? 0) as number
+  let listRes = firstRes
+  // Fuera de rango, PostgREST responde 416 sin Content-Range y el count llega
+  // null: ahí el total real se pide aparte. Es el único caso que paga consultas
+  // extra (un link viejo o una URL editada a mano).
+  const total = firstRes.count !== null || requestedPage === 1
+    ? (firstRes.count ?? 0) as number
+    : ((await countQuery()).count ?? 0) as number
   const highQualityCount = (hotRes.count ?? 0) as number
   const totalPages = Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE))
 
-  if (filters.view === 'kanban') {
-    const kanban = await fetchKanbanColumns(supabase, scope, filters, channels, tags)
-    return { items: [], kanban, total, highQualityCount, urgentTodayCount, page: 1, totalPages }
-  }
-
-  // Una URL con `page` fuera de rango (link viejo o editado a mano) cae a la
-  // última página real en vez de mostrar una tabla vacía.
-  const page = Math.min(Math.max(1, filters.page), totalPages)
-  const from = (page - 1) * LEADS_PAGE_SIZE
-
-  const { data } = await applySort(
-    stageFiltered(applyFilters(
-      supabase.from('leads_list').select(LIST_COLUMNS),
-      scope, filters, channels, tags,
-    )),
-    filters.sort,
-  ).range(from, from + LEADS_PAGE_SIZE - 1)
+  // Una `page` fuera de rango cae a la última página real en vez de mostrar una
+  // tabla vacía.
+  const page = Math.min(requestedPage, totalPages)
+  if (page !== requestedPage) listRes = await pageQuery(page)
 
   return {
-    items: (data ?? []).map(mapRow),
+    items: (listRes.data ?? []).map(mapRow),
     kanban: null,
     total,
     highQualityCount,

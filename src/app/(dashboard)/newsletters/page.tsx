@@ -5,6 +5,7 @@ import { getEditionsForTenant } from '@/lib/data/newsletters'
 import { getNewsletterStats, SIN_DATOS as ESTADISTICAS_VACIAS } from '@/lib/data/newsletter-stats'
 import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { canUseNewsletters } from '@/lib/access/newsletters'
+import { getSubscription } from '@/lib/data/subscriptions'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
 
@@ -13,7 +14,6 @@ import { EditionsList } from './editions-list'
 // exista desde la primera visita y el formulario público responda sin que el
 // usuario haya hecho nada.
 
-const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
 const TENANT_COLUMNS = columns('tenants', ['slug'])
 const SEQUENCE_STEP_COLUMNS = columns('email_sequence_steps', ['id'])
 
@@ -25,16 +25,11 @@ export default async function NewslettersPage() {
   // super_admin en modo hub (sin tenant seleccionado) no tiene subscripción
   // que leer — canUseNewsletters ya lo deja pasar siempre por rol, así que el
   // plan por defecto aquí nunca lo bloquea a él, solo a un tenant real.
+  // getSubscription es la misma lectura cacheada que hace el shell: aquí no
+  // añade un round-trip.
   let plan: SubscriptionPlan = 'esencial'
   if (tenant_id) {
-    const { data: subRow } = await db
-      .from('subscriptions')
-      .select(SUBSCRIPTION_COLUMNS)
-      .eq('tenant_id', tenant_id)
-      .maybeSingle()
-    // reason: el cliente de Supabase no está tipado en este repo.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
+    plan = (await getSubscription(tenant_id))?.plan ?? 'esencial'
   }
 
   if (!canUseNewsletters({ role }, plan)) {

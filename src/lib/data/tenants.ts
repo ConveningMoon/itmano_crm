@@ -1,6 +1,7 @@
 import 'server-only'
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 
 export interface SwitcherTenant {
   id: string
@@ -27,21 +28,36 @@ export interface TenantBranding {
   logoUrl: string | null
 }
 
-// Branding del tenant activo para el shell (logo del sidebar). Una sola fila,
-// deduplicada por request.
-export const getTenantBranding = cache(async function getTenantBranding(
+export interface TenantShellRow {
+  name:                 string
+  logo_url:             string | null
+  ai_monthly_limit_usd: number | string | null
+  ai_unlimited:         boolean | null
+}
+
+// La fila del tenant que el shell necesita en CADA página: el branding del
+// sidebar y el límite de IA del topbar. Antes eran dos lecturas de la misma fila
+// por request; una sola, deduplicada con cache(), sirve a ambos.
+const TENANT_SHELL_COLUMNS = columns('tenants', ['name', 'logo_url', 'ai_monthly_limit_usd', 'ai_unlimited'])
+
+export const getTenantShellRow = cache(async function getTenantShellRow(
   tenantId: string,
-): Promise<TenantBranding | null> {
+): Promise<TenantShellRow | null> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('tenants')
-    .select('name, logo_url')
+    .select(TENANT_SHELL_COLUMNS)
     .eq('id', tenantId)
     .maybeSingle()
-  if (!data) return null
-  const t = data as { name: string; logo_url: string | null }
-  return { name: t.name, logoUrl: t.logo_url ?? null }
+  return (data as TenantShellRow | null) ?? null
 })
+
+// Branding del tenant activo para el shell (logo del sidebar).
+export async function getTenantBranding(tenantId: string): Promise<TenantBranding | null> {
+  const t = await getTenantShellRow(tenantId)
+  if (!t) return null
+  return { name: t.name, logoUrl: t.logo_url ?? null }
+}
 
 export interface TenantWithOwner {
   id:           string
