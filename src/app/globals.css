@@ -208,6 +208,30 @@ body {
   to { background-position-x: -20%; }
 }
 
+/* Spinner de carga compartido: navegación pendiente del nav (useLinkStatus) y
+   botones que esperan una consulta. Tamaño fijo y visibilidad por opacidad, para
+   que aparecer no desplace el layout. */
+.loading-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-gold);
+  animation: loading-spin 0.7s linear infinite;
+}
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+.nav-pending-hint {
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+.nav-pending-hint[data-pending='true'] {
+  opacity: 1;
+}
+
 /* Interactive surfaces */
 .card-interactive {
   transition:

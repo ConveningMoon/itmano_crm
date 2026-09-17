@@ -17,6 +17,10 @@ Configuración específica de Claude Code:
   sandbox descrito en `AGENTS.md` y `docs/agents/environments.md`.
 - Si el plugin global `supabase` también está conectado, no lo uses para
   escribir: no está acotado a un `project_ref`.
+- Cumple siempre "Estados de carga obligatorios" de `AGENTS.md`: cualquier
+  pantalla, sección, filtro o acción que consulte la base de datos se entrega
+  con su skeleton, spinner o estado pendiente en el mismo cambio. Revisa también
+  que no introduzca consultas en serie evitables.
 - Las skills oficiales de Supabase viven en `.claude/skills/` y su procedencia
   está fijada en `skills-lock.json`.
 - Graphify debe estar instalado globalmente en la misma versión que declara

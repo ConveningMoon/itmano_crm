@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import {
   Flame, Mail, Trash2, CalendarPlus, FileText,
   TrendingUp, UserPlus, Bell, type LucideIcon,
@@ -206,9 +207,13 @@ function FilterChip({ label, href, active }: { label: string; href: string; acti
         border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
         backgroundColor: active ? 'var(--accent-gold)' : 'var(--bg-surface)',
         color: active ? '#0B0C0E' : 'var(--text-secondary)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
       }}
     >
       {label}
+      {!active && <LinkPendingSpinner />}
     </Link>
   )
 }
