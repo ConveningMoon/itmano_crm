@@ -2544,6 +2544,7 @@ export type Database = {
           p_action_types?: string[]
           p_agent_id?: string
           p_days?: number
+          p_include_manual_rules?: boolean
           p_tenant_id?: string
         }
         Returns: Json
@@ -2580,7 +2581,22 @@ export type Database = {
         }
         Returns: Json
       }
+      sequence_email_metrics: {
+        Args: { p_sequence_ids?: string[]; p_tenant_id?: string }
+        Returns: Json
+      }
+      tenant_channel_metrics: {
+        Args: { p_tenant_id: string; p_window_days?: number }
+        Returns: Json
+      }
       tenant_hub_stats: { Args: { p_days?: number }; Returns: Json }
+      tenant_owner_emails: {
+        Args: never
+        Returns: {
+          email: string
+          tenant_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
