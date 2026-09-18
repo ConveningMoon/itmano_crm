@@ -23,6 +23,17 @@ export async function getTenantsForSwitcher(): Promise<SwitcherTenant[]> {
   }))
 }
 
+/**
+ * id → nombre de todos los tenants, deduplicado por request. Lo piden varias
+ * vistas globales del super_admin (notificaciones, actividad, uso de IA) en
+ * la misma página: antes cada una hacía su propia lectura de `tenants`.
+ */
+export const getTenantNames = cache(async function getTenantNames(): Promise<Map<string, string>> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('tenants').select('id, name')
+  return new Map(((data ?? []) as { id: string; name: string }[]).map(t => [t.id, t.name]))
+})
+
 export interface TenantBranding {
   name:    string
   logoUrl: string | null
@@ -102,20 +113,22 @@ export interface TenantWithOwner {
 /**
  * Lists every tenant with its provisioned owner's email (super_admin view).
  *
- * The owner email lives on auth.users (not user_profiles), so we join through
- * user_profiles (role = 'agent_owner') and resolve each id via the admin API.
- * One owner per tenant today; getUserById per owner is bounded by tenant count.
- * Uses the admin client (service_role) — the only server-side path that can read
- * auth.users and bypass the SELECT-only user_profiles RLS.
+ * The owner email lives on auth.users (not user_profiles): the RPC
+ * tenant_owner_emails joins user_profiles (role = 'agent_owner') with
+ * auth.users in one query. It is security definer and executable only by
+ * service_role, so this admin-client path is the only one that can call it.
  */
 export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   const supabase = createAdminClient()
 
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
+  // El email del owner sale de la RPC tenant_owner_emails (security definer,
+  // sólo service_role): una consulta para todos los tenants, en la misma ola.
+  // Antes era una llamada al Auth Admin API por tenant, en serie.
   const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }, { data: subRows }] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited, ai_lead_scoring_enabled, pages_managed_by_itmano, resend_account, sending_domain, resend_domain_id, domain_status, domain_records').order('created_at'),
-    supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
+    supabase.rpc('tenant_owner_emails'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
     supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, degraded_at, paddle_price_id, billing_exempt'),
   ])
@@ -137,10 +150,10 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     usedByTenant.set(u.tenant_id, (usedByTenant.get(u.tenant_id) ?? 0) + Number(u.cost_usd))
   }
 
-  // tenant_id → owner auth user id (one owner per tenant by current rule)
-  const ownerByTenant = new Map<string, string>()
-  for (const o of (ownerRows ?? []) as { id: string; tenant_id: string | null }[]) {
-    if (o.tenant_id) ownerByTenant.set(o.tenant_id, o.id)
+  // tenant_id → owner email (one owner per tenant by current rule)
+  const ownerEmailByTenant = new Map<string, string>()
+  for (const o of (ownerRows ?? []) as { tenant_id: string; email: string | null }[]) {
+    if (o.tenant_id && o.email) ownerEmailByTenant.set(o.tenant_id, o.email)
   }
 
   const result: TenantWithOwner[] = []
@@ -153,12 +166,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     domain_status: string | null; domain_records: any[] | null
   }[]) {
-    let ownerEmail: string | null = null
-    const ownerId = ownerByTenant.get(t.id)
-    if (ownerId) {
-      const { data } = await supabase.auth.admin.getUserById(ownerId)
-      ownerEmail = data?.user?.email ?? null
-    }
+    const ownerEmail = ownerEmailByTenant.get(t.id) ?? null
     result.push({
       id:           t.id,
       name:         t.name,

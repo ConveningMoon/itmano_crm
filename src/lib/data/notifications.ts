@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getTenantNames } from '@/lib/data/tenants'
 
 // Notifications are the single source of truth for the bell AND the Telegram
 // channel — Telegram is just an outbound fan-out of the same rows. The bell/page
@@ -54,16 +55,14 @@ export async function getNotifications(
   if (opts?.agentId) q = q.eq('agent_id', opts.agentId)
   if (opts?.limit)   q = q.limit(opts.limit)
 
-  const { data, error } = await q
+  // Tenant names only matter for the super_admin multi-tenant view; se piden
+  // en paralelo y deduplicados con el resto de la página (getTenantNames).
+  const [{ data, error }, tenantNameMap] = await Promise.all([
+    q,
+    tenantId === null ? getTenantNames() : Promise.resolve(new Map<string, string>()),
+  ])
   if (error || !data) return []
-
-  // Tenant names only matter for the super_admin multi-tenant view
-  let tenantNames: Record<string, string> = {}
-  if (tenantId === null) {
-    const { data: tenants } = await supabase.from('tenants').select('id, name')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tenantNames = Object.fromEntries((tenants ?? []).map((t: any) => [t.id, t.name]))
-  }
+  const tenantNames: Record<string, string> = Object.fromEntries(tenantNameMap)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data as any[]).map(r => ({
