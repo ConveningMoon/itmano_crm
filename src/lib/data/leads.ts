@@ -8,7 +8,7 @@ import {
 } from '@/lib/leads/list-filters'
 import { planTagFilter, type TagRef } from '@/lib/leads/tags'
 import { columns } from '@/lib/supabase/columns'
-import { getAgentActionTypes } from '@/lib/scoring/agent-actions'
+import { FIXED_AGENT_ACTION_TYPES } from '@/lib/scoring/agent-actions'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
 import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Language } from '@/lib/types'
@@ -480,24 +480,43 @@ export async function getLeadPriorityPosition(
   leadId: string,
   scope: VisibilityScope,
 ): Promise<LeadPriorityPosition | null> {
-  const supabase = createAdminClient()
+  const axes = await getLeadPriorityAxes(leadId, scope)
+  return getLeadPriorityPositionFor(axes, scope)
+}
 
+/** Los ejes del lead tal como los expone la vista (primer paso de la posición). */
+export interface LeadPriorityAxes {
+  stage: Stage | null; quality_band: QualityBand | null
+  urgency: Urgency | null; urgency_rank: number; quality_score: number | null
+}
+
+// Partido en dos a propósito: la ficha del lead pide los ejes en la MISMA ola
+// que el resto de sus lecturas y deja para la ola siguiente sólo los dos
+// counts del ranking, junto con lo que sí depende de esa ola (autores de
+// eventos). Junto era una ola entera más por cada apertura de la ficha.
+export async function getLeadPriorityAxes(
+  leadId: string,
+  scope: VisibilityScope,
+): Promise<LeadPriorityAxes | null> {
+  const supabase = createAdminClient()
   const { data: row } = await applyVisibilityScope(
     supabase.from('leads_list')
       .select(columns('leads_list', ['stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score']))
       .eq('id', leadId),
     scope,
   ).maybeSingle()
-  if (!row) return null
-
   // `as unknown` primero: con la lista de columnas armada por `columns()` el
   // cliente sin tipar no puede inferir la fila y la da por GenericStringError.
   // La garantía real está en la lista, que sí se valida contra el esquema.
-  const lead = row as unknown as {
-    stage: Stage | null; quality_band: QualityBand | null
-    urgency: Urgency | null; urgency_rank: number; quality_score: number | null
-  }
-  if (!lead.stage) return null
+  return (row as unknown as LeadPriorityAxes | null) ?? null
+}
+
+export async function getLeadPriorityPositionFor(
+  lead: LeadPriorityAxes | null,
+  scope: VisibilityScope,
+): Promise<LeadPriorityPosition | null> {
+  if (!lead || !lead.stage) return null
+  const supabase = createAdminClient()
 
   // Fuera de la cola (En proceso / Cerrado / Perdido): se devuelven los ejes pero
   // sin posición. Un lead que el agente ya sacó del embudo no compite por la
@@ -693,13 +712,16 @@ export async function getResponseTimeStats(
   days = 90,
 ): Promise<ResponseTimeStats> {
   const supabase = createAdminClient()
-  const actionTypes = await getAgentActionTypes(supabase, scope.tenantId)
 
+  // Los tipos fijos van desde aquí y las reglas manuales activas del tenant las
+  // une la propia RPC (p_include_manual_rules): antes se leían primero en
+  // lead_score_rules y esta consulta esperaba a esa lectura.
   const { data, error } = await supabase.rpc('lead_response_time_stats', {
-    p_tenant_id:    scope.tenantId,
-    p_agent_id:     scope.agentId,
-    p_action_types: actionTypes,
-    p_days:         days,
+    p_tenant_id:            scope.tenantId,
+    p_agent_id:             scope.agentId,
+    p_action_types:         [...FIXED_AGENT_ACTION_TYPES],
+    p_days:                 days,
+    p_include_manual_rules: true,
   })
   if (error || !data) return emptyResponseTime()
 
