@@ -19,10 +19,9 @@ código y decidir si lo que queda es pagar planes.
    Desde París, el edge usado fue `cdg1`. Con la conexión ya abierta, un HTML
    estático servido por la CDN tardó ~135 ms y `/api/health`, con una sola
    consulta, 456–664 ms. En frío llegó a 1.45 s. Ese medio segundo lo paga
-   cualquier página antes de su propio trabajo. Si los usuarios reales están en
-   la costa este de EE. UU. (A&J opera en Virginia Beach/Norfolk según su
-   contenido), la región óptima sería `iad1` + `us-east-1`, no `sfo1` +
-   `us-west-1`.
+   cualquier página antes de su propio trabajo. Los usuarios son de **EE. UU. y
+   España**, así que `sfo1` + `us-west-1` es la peor esquina posible para los
+   dos grupos: ver "Región para EE. UU. y España".
 3. **Cada página hacía consultas repetidas y en cascada.** El shell repetía la
    fila de `tenants` y hasta tres veces la de `subscriptions` por request.
    Además, `/leads`, `/emails`, `/sources`, `/newsletters` y `/analytics`
@@ -195,10 +194,10 @@ nuevos y el spinner del nav en el preview de Vercel de esta rama.
    10 GB. Revisar si `itmano-crm-sandbox` necesita construir cada push; si no,
    limitar su rama o usar `git.deploymentEnabled`/`ignoreCommand`. Borrar
    deployments es irreversible: confirmar antes.
-2. **Región.** Confirmar dónde están los usuarios reales. Si son de la costa
-   este de EE. UU., planear mover Supabase a `us-east-1` y la función a `iad1`,
-   siempre juntos. Mover Supabase implica un proyecto nuevo y migración de
-   datos: es un proyecto aparte, con ventana de mantenimiento.
+2. **Región.** Mover Supabase a `us-east-1` y las funciones a `iad1`, siempre
+   juntos (ver "Región para EE. UU. y España"). Mover Supabase implica un
+   proyecto nuevo y migración de datos: es un proyecto aparte, con ventana de
+   mantenimiento.
 3. **Observabilidad.** Activar Speed Insights o Web Analytics en Vercel para
    tener TTFB/LCP reales por región antes y después.
 
@@ -253,6 +252,42 @@ nuevos y el spinner del nav en el preview de Vercel de esta rama.
     `is_super_admin`), `search_path` mutable en 3 funciones y leaked password
     protection. Hay que confirmar que los hallazgos son idénticos en producción.
 
+## Región para EE. UU. y España
+
+Los usuarios están en dos continentes, así que no existe una región que deje a
+todos cerca. La regla que decide es otra: **el cómputo debe vivir pegado a la
+base de datos**. Una página del dashboard hace entre 6 y 20 consultas; si la
+función estuviera en Madrid y Postgres en Virginia, cada consulta cruzaría el
+Atlántico y sería mucho peor que un único cruce por navegación.
+
+De ahí se sigue:
+
+1. **Una sola región para función y base, y que sea el punto medio:**
+   `iad1` (Washington) + Supabase `us-east-1`. Orden de magnitud de ida y vuelta
+   de red: costa este ~10–40 ms, costa oeste ~60–80 ms, España ~90–110 ms. Hoy,
+   con `sfo1` + `us-west-1`, España paga ~150–170 ms y la costa este ~70 ms. El
+   cambio mejora a los dos grupos a la vez; nadie empeora.
+2. **Repartir funciones por región no sirve** mientras la base esté en un solo
+   sitio: una función en Europa seguiría cruzando el Atlántico en cada consulta.
+   Además el plan Hobby permite una sola región (lo dice la propia pantalla de
+   Vercel).
+3. **Réplicas de lectura de Supabase**: existen desde el plan Pro y exigen un
+   compute add-on, y son de **solo lectura** — las escrituras siguen yendo al
+   primario. Una réplica en `eu-west` sólo tendría sentido si España creciera
+   mucho y el trabajo fuera mayormente de lectura, y obligaría a separar
+   lecturas de escrituras en el código. No es para ahora.
+4. **Lo que sí compensa la distancia es reducir viajes:** menos olas de
+   consultas por página (fase 2), shell cacheable y prefetchable (PPR), y
+   contenido público servido por la CDN. Las páginas alojadas (`/web`, `/nl`,
+   `/hp`) ya usan ISR y se sirven desde el edge más cercano: eso ya funciona
+   bien para España.
+
+Plan sugerido: primero fase 2 (menos viajes y shell en streaming), medir, y
+después ejecutar la mudanza de región como proyecto propio con ventana de
+mantenimiento. Mover Supabase de región implica crear un proyecto nuevo en
+`us-east-1`, migrar datos y storage, rotar variables de entorno y reapuntar
+dominios de envío; no es un cambio de una casilla.
+
 ## Decisión sobre planes
 
 | Opción | ¿Acelera el CRM? | Cuándo pagarla |
@@ -260,7 +295,8 @@ nuevos y el spinner del nav en el preview de Vercel de esta rama.
 | Supabase Pro (micro compute) | No de forma perceptible: la base usa 19 MB y responde en ms | Por backups diarios, sin pausa por inactividad y más conexiones, no por velocidad |
 | Supabase compute mayor | No | Sólo si crecen los datos o la CPU |
 | Vercel Pro | Poco en latencia. Resuelve el límite de storage y da más herramientas (retención, varias regiones, observabilidad) | Si tras la retención el storage sigue sobre el límite, o si hacen falta varias regiones o métricas. Confirmar en la documentación actual qué incluye Pro en cold starts antes de asumir mejoras |
-| Mover región a la de los usuarios | **Sí**: es la mayor ganancia disponible si los usuarios no están en la costa oeste | Siempre que se confirme dónde están los usuarios |
+| Mover a `iad1` + `us-east-1` | **Sí**: es la mayor ganancia disponible; mejora a la vez a EE. UU. y a España | Tras la fase 2, como proyecto con ventana de mantenimiento |
+| Réplica de lectura en Europa | Sólo si España crece y el trabajo es de lectura | Requiere Supabase Pro + compute add-on y separar lecturas de escrituras en código |
 
 Método de medición para la fase 2: repetir la traza (`SUPABASE_TRACE=1`) antes
 y después de cada cambio, y medir TTFB de producción con conexión reutilizada
