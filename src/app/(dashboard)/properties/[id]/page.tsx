@@ -25,11 +25,17 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const { id } = await params
   const ctx = await requireTenantContext()
 
-  const p = await getPropertyById(id, ctx.tenant_id)
-  if (!p) notFound()
-
+  // La propiedad y la fila del tenant van juntas: requireTenantContext ya
+  // garantiza el tenant, y una propiedad de otro tenant no resuelve (404), así
+  // que leer el tenant del contexto en paralelo no espera nada ni filtra de más.
   const db = createAdminClient()
-  const { data: tenantRow } = await db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', p.tenantId).maybeSingle()
+  const [p, { data: tenantRow }] = await Promise.all([
+    getPropertyById(id, ctx.tenant_id),
+    ctx.tenant_id
+      ? db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', ctx.tenant_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  if (!p) notFound()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
   // La marca es del tenant (migración 091): aplica a todas sus propiedades,

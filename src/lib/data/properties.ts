@@ -108,6 +108,16 @@ function mapRow(r: any, tenantName: string | null, agentName: string | null): Pr
   }
 }
 
+// El nombre del agente creador y el del tenant (super_admin) vienen embebidos
+// por FK en el mismo viaje: antes eran una o dos consultas más, en serie,
+// después de la lista, en cada carga de /properties y del detalle.
+const PROPERTY_SELECT = '*, agents(name), tenants(name)'
+
+function embeddedName(rel: unknown): string | null {
+  const r = Array.isArray(rel) ? rel[0] : rel
+  return (r as { name?: string } | null | undefined)?.name ?? null
+}
+
 export async function getProperties(
   tenantId: string | null,
   opts: { status?: PropertyStatus } = {},
@@ -115,46 +125,18 @@ export async function getProperties(
   const db = createAdminClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q = (db.from('properties') as any).select('*')
+  let q = (db.from('properties') as any).select(PROPERTY_SELECT)
   if (tenantId) q = q.eq('tenant_id', tenantId)
   if (opts.status) q = q.eq('status', opts.status)
 
   const { data: rows, error } = await q.order('created_at', { ascending: false })
   if (error || !rows) return []
 
-  // Batch-resolve agent names
-  const agentIds = [...new Set<string>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (rows as any[]).map((r: any) => r.created_by_agent_id).filter(Boolean)
-  )]
-  const agentMap = new Map<string, string>()
-  if (agentIds.length > 0) {
-    const { data: agents } = await db
-      .from('agents')
-      .select('id, name')
-      .in('id', agentIds)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const a of (agents ?? []) as any[]) agentMap.set(a.id as string, a.name as string)
-  }
-
-  // Batch-resolve tenant names (super_admin only — tenantId is null)
-  const tenantMap = new Map<string, string>()
-  if (!tenantId && (rows as unknown[]).length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tids = [...new Set<string>((rows as any[]).map((r: any) => r.tenant_id as string))]
-    const { data: tenants } = await db
-      .from('tenants')
-      .select('id, name')
-      .in('id', tids)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const t of (tenants ?? []) as any[]) tenantMap.set(t.id as string, t.name as string)
-  }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (rows as any[]).map((r: any): Property => mapRow(
     r,
-    tenantMap.get(r.tenant_id as string) ?? null,
-    agentMap.get(r.created_by_agent_id as string) ?? null,
+    tenantId ? null : embeddedName(r.tenants),
+    r.created_by_agent_id ? embeddedName(r.agents) : null,
   ))
 }
 
@@ -163,18 +145,12 @@ export async function getPropertyById(id: string, tenantId: string | null): Prom
   const db = createAdminClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q = (db.from('properties') as any).select('*').eq('id', id)
+  let q = (db.from('properties') as any).select(PROPERTY_SELECT).eq('id', id)
   if (tenantId) q = q.eq('tenant_id', tenantId)
   const { data: row } = await q.maybeSingle()
   if (!row) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = row as any
-  let agentName: string | null = null
-  if (r.created_by_agent_id) {
-    const { data: agent } = await db.from('agents').select('name').eq('id', r.created_by_agent_id).maybeSingle()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    agentName = ((agent as any)?.name as string | undefined) ?? null
-  }
-  return mapRow(r, null, agentName)
+  return mapRow(r, null, r.created_by_agent_id ? embeddedName(r.agents) : null)
 }
