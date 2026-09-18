@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
@@ -134,8 +135,7 @@ export function Sidebar({ role, userEmail, hubMode = false, brand = null, planLa
         </div>
 
         <form action={signOut} style={{ padding: '0 12px 12px' }}>
-          <button
-            type="submit"
+          <PendingSubmitButton
             className="signout-btn"
             style={{
               display: 'flex',
@@ -154,7 +154,7 @@ export function Sidebar({ role, userEmail, hubMode = false, brand = null, planLa
           >
             <LogOut size={14} strokeWidth={1.6} />
             <span>Cerrar sesión</span>
-          </button>
+          </PendingSubmitButton>
         </form>
       </div>
     </aside>

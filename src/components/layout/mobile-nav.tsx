@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, m } from 'motion/react'
 import { Menu, X, LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
+import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
@@ -159,8 +160,7 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
               </div>
             </div>
             <form action={signOut} style={{ padding: '0 12px 14px' }}>
-              <button
-                type="submit"
+              <PendingSubmitButton
                 className="mnav-signout"
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
@@ -171,7 +171,7 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
               >
                 <LogOut size={15} strokeWidth={1.6} />
                 <span>Cerrar sesión</span>
-              </button>
+              </PendingSubmitButton>
             </form>
           </div>
         </m.aside>
