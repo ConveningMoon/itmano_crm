@@ -59,6 +59,13 @@ export interface EmailSequence {
 
 // ─── Data access ──────────────────────────────────────────────────────────────
 
+// PostgREST devuelve una relación to-one embebida como objeto (o como arreglo
+// de uno en algunas versiones): se normaliza a un solo nombre.
+function embeddedName(rel: unknown): string | null {
+  const r = Array.isArray(rel) ? rel[0] : rel
+  return (r as { name?: string } | null | undefined)?.name ?? null
+}
+
 // Qué secuencias devuelve la lista:
 //   'all'     → todas (analítica: una secuencia de etiqueta también envía).
 //   'channel' → las que NO dispara una etiqueta. Es lo que /emails muestra en su
@@ -80,9 +87,12 @@ export async function listSequences(
 
   const supabase = createAdminClient()
 
+  // El nombre del agente dueño y el del tenant (super_admin) vienen embebidos
+  // por FK en el mismo viaje: antes eran dos consultas más, en serie, después
+  // de esta ola.
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, trigger_tag_id, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, trigger_tag_id, created_at, agents(name), tenants(name)')
     .order('created_at')
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
   if (agentId)  seqQ = seqQ.eq('agent_id', agentId)
@@ -113,20 +123,6 @@ export async function listSequences(
     { data: runRows },
     { data: channelRows },
   ] = await Promise.all([seqQ, stepQ, runQ, channelQ])
-
-  // For super_admin: look up tenant names
-  const tenantNameMap = new Map<string, string>()
-  if (!tenantId && seqRows && seqRows.length > 0) {
-    const tids = [...new Set((seqRows as { tenant_id: string }[]).map(s => s.tenant_id))]
-    const { data: tenants } = await supabase
-      .from('tenants')
-      .select('id, name')
-      .in('id', tids)
-    for (const t of tenants ?? []) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tenantNameMap.set((t as any).id, (t as any).name)
-    }
-  }
 
   const stepsBySeq = new Map<string, SequenceStep[]>()
   for (const s of stepRows ?? []) {
@@ -166,16 +162,6 @@ export async function listSequences(
     channelsBySeq.get(sid)!.push({ id: row.id, name: row.name, slug: row.slug, channelType: row.channel_type })
   }
 
-  // Resolve sequence agent names in one batch.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agentIds = [...new Set((seqRows ?? []).map((s: any) => s.agent_id).filter(Boolean))] as string[]
-  const agentNameMap = new Map<string, string>()
-  if (agentIds.length > 0) {
-    const { data: ag } = await supabase.from('agents').select('id, name').in('id', agentIds)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const a of (ag ?? []) as any[]) agentNameMap.set(a.id, a.name)
-  }
-
   return (seqRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row    = s as any
@@ -185,7 +171,7 @@ export async function listSequences(
     return {
       id,
       tenantId:          row.tenant_id,
-      tenantName:        tenantNameMap.get(row.tenant_id) ?? null,
+      tenantName:        tenantId ? null : (embeddedName(row.tenants) ?? null),
       name:              row.name,
       language:          row.language ?? 'es',
       description:       row.description ?? null,
@@ -193,7 +179,7 @@ export async function listSequences(
       activationType:    (row.activation_type ?? 'form') as 'form' | 'manual' | 'tag',
       triggerTagId:      row.trigger_tag_id ?? null,
       agentId:           row.agent_id ?? null,
-      agentName:         row.agent_id ? (agentNameMap.get(row.agent_id) ?? null) : null,
+      agentName:         row.agent_id ? (embeddedName(row.agents) ?? null) : null,
       channels:          channelsBySeq.get(id) ?? [],
       steps,
       stepCount:         steps.length,
@@ -216,7 +202,7 @@ export async function getSequenceWithRuns(
 
   let seqQ = supabase
     .from('email_sequences')
-    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, trigger_tag_id, created_at')
+    .select('id, tenant_id, name, language, description, active, activation_type, agent_id, trigger_tag_id, created_at, agents(name), tenants(name)')
     .eq('id', sequenceId)
   if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
   // Agent visibility: a non-owned (or "Toda la agencia") sequence resolves to null → 404.
@@ -260,25 +246,9 @@ export async function getSequenceWithRuns(
   const row = seqRow as any
   const id  = row.id as string
 
-  // Tenant name for super_admin
-  let tenantName: string | null = null
-  if (!tenantId) {
-    const { data: t } = await supabase
-      .from('tenants')
-      .select('name')
-      .eq('id', row.tenant_id)
-      .single()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tenantName = (t as any)?.name ?? null
-  }
-
-  // Sequence agent name (null = whole agency)
-  let agentName: string | null = null
-  if (row.agent_id) {
-    const { data: a } = await supabase.from('agents').select('name').eq('id', row.agent_id).maybeSingle()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    agentName = (a as any)?.name ?? null
-  }
+  // Nombres embebidos por FK en la misma consulta (ver listSequences).
+  const tenantName: string | null = tenantId ? null : (embeddedName(row.tenants) ?? null)
+  const agentName:  string | null = row.agent_id ? (embeddedName(row.agents) ?? null) : null
 
   const steps: SequenceStep[] = (stepRows ?? []).map(s => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

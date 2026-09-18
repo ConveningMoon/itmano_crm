@@ -60,27 +60,58 @@ export async function getMissingClosingEmails(
   return MILESTONES.filter(m => !ready.has(m))
 }
 
+export interface ClosingEmailAgent {
+  id:           string
+  name:         string
+  accent_color: string
+  languages:    string[] | null
+}
+
+export interface ClosingEmailTemplateRow {
+  id:                 string
+  agent_id:           string
+  milestone:          ClosingMilestone
+  language:           'es' | 'en' | 'pt'
+  resend_template_id: string
+  subject:            string | null
+  body_json:          unknown
+}
+
+const TEMPLATE_COLS = 'id, agent_id, milestone, language, resend_template_id, subject, body_json'
+
 // Provisión perezosa e idempotente: garantiza que exista una fila por
 // (agente activo × idioma registrado × hito) del tenant. Se llama al cargar
 // la página /emails y al cambiar los idiomas de un agente — así agregar un
 // idioma en Configuración hace aparecer sus 3 correos vacíos al instante.
+//
+// Devuelve lo que leyó para decidir (agentes activos y filas), porque su único
+// lector de página, getPurchaseTemplatesByAgent, pedía exactamente esas dos
+// tablas otra vez justo después: dos round-trips repetidos en cada carga de
+// /emails. Sólo cuando faltaban filas se vuelven a leer las plantillas.
 export async function ensurePurchaseTemplateRows(
   db: ReturnType<typeof createAdminClient>,
   tenantId: string,
-): Promise<void> {
-  const [{ data: agents }, { data: existing }] = await Promise.all([
-    db.from('agents').select('id, languages').eq('tenant_id', tenantId).eq('active', true),
-    db.from('purchase_email_templates').select('agent_id, milestone, language').eq('tenant_id', tenantId),
+): Promise<{ agents: ClosingEmailAgent[]; templates: ClosingEmailTemplateRow[] }> {
+  const readTemplates = () =>
+    db.from('purchase_email_templates').select(TEMPLATE_COLS).eq('tenant_id', tenantId)
+
+  const [{ data: agentRows }, { data: existingRows }] = await Promise.all([
+    db.from('agents')
+      .select('id, name, accent_color, languages')
+      .eq('tenant_id', tenantId)
+      .eq('active', true)
+      .order('name'),
+    readTemplates(),
   ])
 
-  const have = new Set(
-    ((existing ?? []) as { agent_id: string; milestone: string; language: string }[])
-      .map(r => `${r.agent_id}|${r.milestone}|${r.language}`)
-  )
+  const agents   = (agentRows ?? []) as ClosingEmailAgent[]
+  let   existing = (existingRows ?? []) as ClosingEmailTemplateRow[]
+
+  const have = new Set(existing.map(r => `${r.agent_id}|${r.milestone}|${r.language}`))
 
   const missing: { tenant_id: string; agent_id: string; milestone: string; language: string; resend_template_id: string }[] = []
-  for (const a of (agents ?? []) as { id: string; languages: string[] | null }[]) {
-    const langs = (a.languages ?? []).filter(l => (VALID_LANGS as readonly string[]).includes(l))
+  for (const a of agents) {
+    const langs = (a.languages ?? []).filter(l => VALID_LANGS.includes(l))
     for (const lang of langs) {
       for (const m of MILESTONES) {
         if (!have.has(`${a.id}|${m}|${lang}`)) {
@@ -90,12 +121,17 @@ export async function ensurePurchaseTemplateRows(
     }
   }
 
-  if (missing.length === 0) return
-
-  const { error } = await db
-    .from('purchase_email_templates')
-    .upsert(missing, { onConflict: 'tenant_id,agent_id,milestone,language', ignoreDuplicates: true })
-  if (error) {
-    console.error(JSON.stringify({ service: 'closing-emails-ensure', tenant_id: tenantId, error: error.message }))
+  if (missing.length > 0) {
+    const { error } = await db
+      .from('purchase_email_templates')
+      .upsert(missing, { onConflict: 'tenant_id,agent_id,milestone,language', ignoreDuplicates: true })
+    if (error) {
+      console.error(JSON.stringify({ service: 'closing-emails-ensure', tenant_id: tenantId, error: error.message }))
+    } else {
+      const { data: refreshed } = await readTemplates()
+      existing = (refreshed ?? existingRows ?? []) as ClosingEmailTemplateRow[]
+    }
   }
+
+  return { agents, templates: existing }
 }
