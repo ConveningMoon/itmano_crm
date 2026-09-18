@@ -7,12 +7,12 @@ import { columns } from '@/lib/supabase/columns'
 // `aggregateStats` es pura a propósito: no toca la base, así que se prueba
 // con datos de mentira sin mocks. `getNewsletterStats` sólo lee y delega.
 //
-// Recibe `channelId` ya resuelto en vez de resolverlo por dentro: su único
-// llamador (newsletters/page.tsx) ya corre `ensureNewsletterChannel` una línea
-// antes para preparar la página, y ese helper ESCRIBE (puede crear el canal).
-// Un getter que escribe es una sorpresa; repetir la resolución aquí además
-// duplicaba la lectura. Devolver `SIN_DATOS` sigue siendo el llamador quien
-// decide — ver newsletters/page.tsx.
+// No necesita el id del canal: los suscriptores se resuelven por el TIPO de
+// canal (`channel_type = 'newsletter'`, único por tenant desde la 110) con un
+// join dentro de la misma consulta. Así la página puede pedir estas
+// estadísticas en la misma ola que `ensureNewsletterChannel`, en vez de
+// esperar a que ese helper (que además puede escribir) devuelva el id. Si el
+// canal no existe todavía, no hay suscriptores: sale en cero, sin caso aparte.
 
 export interface EditionStats {
   views:       number
@@ -86,6 +86,7 @@ export function aggregateStats(
 const STATS_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'status'])
 const STATS_VIEW_COLUMNS    = columns('channel_page_views', ['edition_id'])
 const STATS_LEAD_COLUMNS    = columns('leads', ['metadata'])
+const STATS_LEAD_SELECT     = `${STATS_LEAD_COLUMNS}, acquisition_channels!inner(channel_type, archived_at)`
 
 /**
  * Estadísticas en cero. Exportada para que el llamador la use cuando el canal
@@ -116,17 +117,19 @@ function editionIdFromMetadata(metadata: unknown): string | null {
 }
 
 /**
- * Estadísticas de la newsletter del tenant. `channelId` es el canal implícito
- * ya resuelto (`ensureNewsletterChannel`) — este getter sólo lee, nunca crea
- * nada.
+ * Estadísticas de la newsletter del tenant. Este getter sólo lee, nunca crea
+ * nada: el canal implícito lo prepara `ensureNewsletterChannel` por su lado.
  */
-export async function getNewsletterStats(tenantId: string, channelId: string): Promise<NewsletterStats> {
+export async function getNewsletterStats(tenantId: string): Promise<NewsletterStats> {
   const db = createAdminClient()
 
   const [{ data: editionRows }, { data: viewRows }, { data: leadRows }] = await Promise.all([
     db.from('newsletter_editions').select(STATS_EDITION_COLUMNS).eq('tenant_id', tenantId),
     db.from('channel_page_views').select(STATS_VIEW_COLUMNS).eq('tenant_id', tenantId).not('edition_id', 'is', null),
-    db.from('leads').select(STATS_LEAD_COLUMNS).eq('tenant_id', tenantId).eq('acquisition_channel_id', channelId),
+    db.from('leads').select(STATS_LEAD_SELECT)
+      .eq('tenant_id', tenantId)
+      .eq('acquisition_channels.channel_type', 'newsletter')
+      .is('acquisition_channels.archived_at', null),
   ])
 
   // reason: el cliente de Supabase no está tipado en este repo; columns() ya

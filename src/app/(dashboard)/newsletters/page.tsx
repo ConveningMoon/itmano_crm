@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { columns } from '@/lib/supabase/columns'
 import { getEditionsForTenant } from '@/lib/data/newsletters'
-import { getNewsletterStats, SIN_DATOS as ESTADISTICAS_VACIAS } from '@/lib/data/newsletter-stats'
+import { getNewsletterStats, SIN_DATOS } from '@/lib/data/newsletter-stats'
 import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { getSubscription } from '@/lib/data/subscriptions'
@@ -25,12 +25,19 @@ export default async function NewslettersPage() {
   // super_admin en modo hub (sin tenant seleccionado) no tiene subscripción
   // que leer — canUseNewsletters ya lo deja pasar siempre por rol, así que el
   // plan por defecto aquí nunca lo bloquea a él, solo a un tenant real.
-  // getSubscription es la misma lectura cacheada que hace el shell: aquí no
-  // añade un round-trip.
-  let plan: SubscriptionPlan = 'esencial'
-  if (tenant_id) {
-    plan = (await getSubscription(tenant_id))?.plan ?? 'esencial'
-  }
+  //
+  // getSubscription es la misma lectura cacheada que hace el shell, pero
+  // esperarla ANTES de lanzar las lecturas de la página las dejaba en una ola
+  // posterior a la del shell. Van todas juntas y el plan se comprueba después:
+  // si no alcanza, lo leído (todo acotado al tenant) se descarta.
+  const [subscription, canal, editions, stats, { data: tenantRow }] = await Promise.all([
+    tenant_id ? getSubscription(tenant_id) : Promise.resolve(null),
+    tenant_id ? ensureNewsletterChannel(db, tenant_id) : Promise.resolve({ error: 'sin tenant' } as const),
+    tenant_id ? getEditionsForTenant(tenant_id) : Promise.resolve([]),
+    tenant_id ? getNewsletterStats(tenant_id) : Promise.resolve(null),
+    tenant_id ? db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle() : Promise.resolve({ data: null }),
+  ])
+  const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
 
   if (!canUseNewsletters({ role }, plan)) {
     return (
@@ -69,25 +76,17 @@ export default async function NewslettersPage() {
     )
   }
 
-  // Prepara la newsletter ANTES de leer: así existe desde la primera visita y
-  // el formulario público responde sin que el usuario haya hecho nada.
-  const canal = await ensureNewsletterChannel(db, tenant_id)
+  // El canal implícito ya se preparó arriba, en la misma ola que las lecturas.
+  // La secuencia sólo se crea si el canal no la tiene todavía, y sus pasos se
+  // leen después porque sí dependen de su id.
   const sequenceId = 'error' in canal
     ? null
     : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
 
-  // getNewsletterStats sólo lee: si el canal no se pudo resolver (`canal`
-  // trae `error`), las estadísticas van en cero sin llamarla — nada que
-  // agregar sin un channel_id real.
-  const [editions, stats, { data: tenantRow }, { data: stepRows }] = await Promise.all([
-    getEditionsForTenant(tenant_id),
-    'error' in canal ? Promise.resolve(ESTADISTICAS_VACIAS) : getNewsletterStats(tenant_id, canal.id),
-    db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle(),
-    sequenceId
-      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS)
-          .eq('tenant_id', tenant_id).eq('sequence_id', sequenceId)
-      : Promise.resolve({ data: null }),
-  ])
+  const { data: stepRows } = sequenceId
+    ? await db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS)
+        .eq('tenant_id', tenant_id).eq('sequence_id', sequenceId)
+    : { data: null }
   // reason: el cliente de Supabase no está tipado en este repo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
@@ -96,7 +95,7 @@ export default async function NewslettersPage() {
   return (
     <EditionsList
       editions={editions}
-      stats={{ totals: stats.totals, byEdition: Object.fromEntries(stats.byEdition) }}
+      stats={{ totals: (stats ?? SIN_DATOS).totals, byEdition: Object.fromEntries((stats ?? SIN_DATOS).byEdition) }}
       tenantSlug={tenantSlug}
       sequenceId={sequenceId}
       sequenceEmpty={sequenceEmpty}
