@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 
@@ -26,6 +27,8 @@ export interface AcquisitionChannel {
   pageUrl: string | null
   /** hosted_page.enabled — la página del constructor está publicada. */
   hostedPageEnabled: boolean
+  /** Configuración cruda de la página alojada (la parsea parseHostedPage). */
+  hostedPage: unknown
   createdAt: string
   archivedAt: string | null
 }
@@ -69,6 +72,79 @@ export interface ChannelLead {
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+// Sólo los canales con un formulario detrás se administran aquí. 'manual' y
+// 'manychat_flow' quedan fuera de TODA la página (incluido "Todos"): las filas
+// viejas siguen en la base, sólo invisibles. Sin cambio de CHECK ni migración.
+const MANAGEABLE_TYPES = ['lead_magnet', 'event', 'contact_form']
+
+type RawMetrics = Record<string, {
+  leads_total: number
+  leads_in_window: number
+  submissions_total: number
+  submissions_in_window: number
+  page_views_in_window: number
+  conversion_rate: number | null
+  avg_temp_score: number | null
+} | undefined>
+
+/**
+ * Métricas de TODOS los canales de un tenant, agregadas en Postgres
+ * (`tenant_channel_metrics`). Cacheada por request: /sources las pide para los
+ * canales activos y los archivados, y antes eran dos RPC distintas que además
+ * esperaban a la lista de canales. Con el tenant como entrada viajan en la
+ * misma ola que la lista.
+ */
+const getTenantChannelMetrics = cache(async function getTenantChannelMetrics(
+  tenantId: string,
+  windowDays: number,
+): Promise<RawMetrics> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.rpc('tenant_channel_metrics', {
+    p_tenant_id:   tenantId,
+    p_window_days: windowDays,
+  })
+  return (data ?? {}) as RawMetrics
+})
+
+/** Nombres de los agentes de un tenant, para el badge de cada canal. */
+const getAgentNames = cache(async function getAgentNames(tenantId: string): Promise<Map<string, string>> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('agents').select('id, name').eq('tenant_id', tenantId)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return new Map(((data ?? []) as any[]).map(a => [a.id as string, a.name as string]))
+})
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toChannel(c: any, agentNameMap: Map<string, string>, m: RawMetrics[string]): ChannelWithMetrics {
+  return {
+    id:              c.id,
+    tenantId:        c.tenant_id,
+    publicId:        c.public_id,
+    channelType:     c.channel_type as ChannelType,
+    name:            c.name,
+    slug:            c.slug,
+    active:          c.active,
+    emailSequenceId: c.email_sequence_id,
+    agentId:         c.agent_id ?? null,
+    agentName:       c.agent_id ? (agentNameMap.get(c.agent_id) ?? null) : null,
+    metadata:        c.metadata ?? {},
+    pageUrl:         channelPageUrl(c.metadata),
+    hostedPageEnabled: c.hosted_page?.enabled === true,
+    hostedPage:      c.hosted_page ?? null,
+    createdAt:       c.created_at,
+    archivedAt:      c.archived_at,
+    metrics: {
+      leadsTotal:          m?.leads_total ?? 0,
+      leadsInWindow:       m?.leads_in_window ?? 0,
+      submissionsTotal:    m?.submissions_total ?? 0,
+      submissionsInWindow: m?.submissions_in_window ?? 0,
+      pageViewsInWindow:   m?.page_views_in_window ?? 0,
+      conversionRate:      m?.conversion_rate ?? null,
+      avgTempScore:        m?.avg_temp_score ?? null,
+    },
+  }
+}
+
 // tenantId = null → super_admin: no tenant filter, fetches all tenants
 // tenantId = ''   → invalid/missing tenant: returns empty
 // agentId  != null → role 'agent': only channels owned by that agent (excludes the
@@ -102,11 +178,8 @@ async function fetchChannelsWithMetrics(
 
   let channelQ = supabase
     .from('acquisition_channels')
-    // Only channels with a form behind them are manageable here. 'manual' and
-    // 'manychat_flow' are excluded from the WHOLE page (incl. "Todos") — legacy rows
-    // stay in the DB, just invisible. No CHECK change, no lead migration.
     .select('*')
-    .in('channel_type', ['lead_magnet', 'event', 'contact_form'])
+    .in('channel_type', MANAGEABLE_TYPES)
     .order('created_at', { ascending: false })
   channelQ = archived
     ? channelQ.not('archived_at', 'is', null)
@@ -115,87 +188,80 @@ async function fetchChannelsWithMetrics(
   // Agent visibility: own channels only (excludes "Toda la agencia" / null agent_id).
   if (agentId) channelQ = channelQ.eq('agent_id', agentId)
 
-  const { data: channels, error } = await channelQ
+  // Con tenant, las tres lecturas son independientes y van juntas: los canales,
+  // sus métricas (por tenant, no por ids) y los nombres de agente. Antes iban
+  // en tres olas: canales → agentes → métricas.
+  if (tenantId) {
+    const [{ data: channels, error }, metrics, agentNameMap] = await Promise.all([
+      channelQ,
+      getTenantChannelMetrics(tenantId, windowDays),
+      getAgentNames(tenantId),
+    ])
+    if (error || !channels) return []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (channels as any[]).map(c => toChannel(c, agentNameMap, metrics[c.id as string]))
+  }
 
+  // super_admin sin tenant: no hay un tenant al que pedirle métricas ni
+  // agentes de antemano, así que se resuelven por ids después de los canales.
+  const { data: channels, error } = await channelQ
   if (error || !channels || channels.length === 0) return []
 
   const channelIds = channels.map((c: { id: string }) => c.id) // reason: Supabase returns untyped rows
-
-  // Resolve owning-agent names in one batch (for the "Toda la agencia"/agent badge).
   const agentIds = [...new Set(
     channels.map((c: { agent_id: string | null }) => c.agent_id).filter((id): id is string => !!id)
   )]
-  const agentNameMap = new Map<string, string>()
-  if (agentIds.length > 0) {
-    const { data: agentRows } = await supabase.from('agents').select('id, name').in('id', agentIds)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const a of (agentRows ?? []) as any[]) agentNameMap.set(a.id, a.name)
-  }
 
-  // Las métricas las agrega Postgres (`channel_metrics`, migración 075). Antes
-  // esta función traía TODOS los leads de estos canales —sin filtro de fecha— y
-  // los recorría una vez por canal para contarlos en memoria: O(canales × leads)
-  // sobre filas que ya venían enteras por la red.
-  const { data: metricsRaw } = await supabase.rpc('channel_metrics', {
-    p_channel_ids:  channelIds,
-    p_window_days:  windowDays,
-  })
-  const metricsById = (metricsRaw ?? {}) as Record<string, {
-    leads_total: number
-    leads_in_window: number
-    submissions_total: number
-    submissions_in_window: number
-    page_views_in_window: number
-    conversion_rate: number | null
-    avg_temp_score: number | null
-  } | undefined>
+  const [{ data: agentRows }, { data: metricsRaw }] = await Promise.all([
+    agentIds.length > 0
+      ? supabase.from('agents').select('id, name').in('id', agentIds)
+      : Promise.resolve({ data: [] }),
+    supabase.rpc('channel_metrics', { p_channel_ids: channelIds, p_window_days: windowDays }),
+  ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agentNameMap = new Map(((agentRows ?? []) as any[]).map(a => [a.id as string, a.name as string]))
+  const metrics = (metricsRaw ?? {}) as RawMetrics
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return channels.map((c: any) => { // reason: Supabase returns untyped rows
-    const m = metricsById[c.id as string]
-    const leadsInWindow     = m?.leads_in_window ?? 0
-    const pageViewsInWindow = m?.page_views_in_window ?? 0
-    const conversionRate    = m?.conversion_rate ?? null
-    const avgTempScore      = m?.avg_temp_score ?? null
-    const totalLeadsCount   = m?.leads_total ?? 0
-
-    return {
-      id:              c.id,
-      tenantId:        c.tenant_id,
-      publicId:        c.public_id,
-      channelType:     c.channel_type as ChannelType,
-      name:            c.name,
-      slug:            c.slug,
-      active:          c.active,
-      emailSequenceId: c.email_sequence_id,
-      agentId:         c.agent_id ?? null,
-      agentName:       c.agent_id ? (agentNameMap.get(c.agent_id) ?? null) : null,
-      metadata:        c.metadata ?? {},
-      pageUrl:         channelPageUrl(c.metadata),
-      hostedPageEnabled: c.hosted_page?.enabled === true,
-      createdAt:       c.created_at,
-      archivedAt:      c.archived_at,
-      metrics: {
-        leadsTotal:       totalLeadsCount,
-        leadsInWindow,
-        submissionsTotal:    m?.submissions_total ?? 0,
-        submissionsInWindow: m?.submissions_in_window ?? 0,
-        pageViewsInWindow,
-        conversionRate,
-        avgTempScore,
-      },
-    } satisfies ChannelWithMetrics
-  })
+  return (channels as any[]).map(c => toChannel(c, agentNameMap, metrics[c.id as string]))
 }
 
+/**
+ * Un canal por slug, con sus métricas. Con tenant es una sola ola: la fila del
+ * canal, las métricas del tenant y los nombres de agente viajan juntos. Antes
+ * pedía la lista entera de canales del tenant (y sus métricas) para quedarse
+ * con uno.
+ */
 export async function getChannelBySlug(
   tenantId: string | null,
   slug: string,
   windowDays = 30,
   agentId: string | null = null,
 ): Promise<ChannelWithMetrics | null> {
-  const all = await getChannelsWithMetrics(tenantId, windowDays, agentId)
-  return all.find(c => c.slug === slug) ?? null
+  if (!tenantId) {
+    const all = await getChannelsWithMetrics(tenantId, windowDays, agentId)
+    return all.find(c => c.slug === slug) ?? null
+  }
+
+  const supabase = createAdminClient()
+  let channelQ = supabase
+    .from('acquisition_channels')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('slug', slug)
+    .in('channel_type', MANAGEABLE_TYPES)
+    .is('archived_at', null)
+  if (agentId) channelQ = channelQ.eq('agent_id', agentId)
+
+  const [{ data: channel }, metrics, agentNameMap] = await Promise.all([
+    channelQ.maybeSingle(),
+    getTenantChannelMetrics(tenantId, windowDays),
+    getAgentNames(tenantId),
+  ])
+  if (!channel) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const c = channel as any
+  return toChannel(c, agentNameMap, metrics[c.id as string])
 }
 
 export async function getChannelLeads(

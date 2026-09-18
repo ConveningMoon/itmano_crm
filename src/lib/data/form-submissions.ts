@@ -73,18 +73,38 @@ export async function getSubmissionsForLead(
 }
 
 // Submissions for a channel, newest first, joined to the lead.
-// tenantId = null → super_admin (no tenant filter); otherwise scope to tenant.
 export async function getSubmissionsForChannel(
   channelId: string,
   tenantId: string | null
 ): Promise<SubmissionRow[]> {
+  return fetchChannelSubmissions({ channelId }, tenantId)
+}
+
+// Los mismos envíos, resolviendo el canal por su slug dentro de la consulta
+// (join !inner). Existe para que /sources/[slug] no tenga que esperar la fila
+// del canal antes de pedir sus envíos: las dos lecturas van en la misma ola.
+export async function getSubmissionsForChannelSlug(
+  slug: string,
+  tenantId: string | null
+): Promise<SubmissionRow[]> {
+  return fetchChannelSubmissions({ slug }, tenantId)
+}
+
+async function fetchChannelSubmissions(
+  by: { channelId: string } | { slug: string },
+  tenantId: string | null
+): Promise<SubmissionRow[]> {
   const supabase = createAdminClient()
 
+  const withChannel = 'slug' in by
   let q = supabase
     .from('form_submissions')
-    .select('id, channel_id, lead_id, answers, responded, responded_at, submitted_at, leads(first_name, last_name, email, phone, current_score, stage)')
-    .eq('channel_id', channelId)
+    .select(
+      'id, channel_id, lead_id, answers, responded, responded_at, submitted_at, leads(first_name, last_name, email, phone, current_score, stage)'
+      + (withChannel ? ', acquisition_channels!inner(slug)' : ''),
+    )
     .order('submitted_at', { ascending: false })
+  q = 'channelId' in by ? q.eq('channel_id', by.channelId) : q.eq('acquisition_channels.slug', by.slug)
   if (tenantId) q = q.eq('tenant_id', tenantId)
 
   const { data, error } = await q
