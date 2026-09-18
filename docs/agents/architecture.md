@@ -46,6 +46,32 @@ Los guards de rol y tenant viven en `src/lib/auth/guards.ts` y
 - No importes `recharts` desde un Server Component; usa wrappers cliente en
   `analytics/charts/`.
 
+## Rendimiento de lecturas
+
+Cada round-trip a Supabase cuesta decenas de milisegundos en producción y el
+usuario paga entero cada eslabón en serie. Reglas fijadas por la auditoría de
+rendimiento (`docs/performance/`):
+
+- Una página lee en UNA ola: todo lo que sólo depende del contexto (tenant, rol,
+  id de la URL) va en el mismo `Promise.all`. Una segunda ola sólo se acepta
+  cuando depende de verdad del resultado de la primera. La visibilidad de una
+  fila se comprueba sobre la fila, después de leer; lo leído para un request
+  que termina en 404 se descarta sin salir del servidor.
+- Lo que varias superficies leen por request va a un getter con `cache()` en
+  `src/lib/data/*` (`getTenantShellRow`, `getSubscription`, `getTenantNames`,
+  `getShellData`); nadie repite la consulta.
+- Los nombres de agente o tenant se piden embebidos por FK en la misma consulta
+  (`agents(name)`, `tenants(name)`), no con una lectura posterior por ids.
+- Una agregación que encadenaba varias lecturas va a una RPC por tenant
+  (`sequence_email_metrics`, `tenant_channel_metrics`), `stable`, con
+  `search_path` vacío y ejecutable sólo por `service_role`.
+- El layout de `(dashboard)` sólo espera al contexto. Todo lo que lee de la base
+  (logo, plan, no leídas, límite de IA, switcher, banner) llega por streaming
+  desde `src/components/layout/shell-slots.tsx` dentro de `<Suspense>`, con
+  fallbacks del mismo tamaño. No añadas lecturas al layout fuera de ese patrón.
+- Mide con `SUPABASE_TRACE=1` antes y después de tocar una página: compara
+  consultas y olas, no milisegundos.
+
 ## Perfil de negocio
 
 El perfil del mercado vive en columnas nullable de `tenants` y se administra en

@@ -302,3 +302,424 @@ Método de medición para la fase 2: repetir la traza (`SUPABASE_TRACE=1`) antes
 y después de cada cambio, y medir TTFB de producción con conexión reutilizada
 (`curl` con varias URLs en una sola invocación) para separar TLS, frío y
 caliente.
+
+---
+
+# Fase 2 (Claude Fable 5.1, High) — 2026-09-18
+
+Rama: `perf/auditoria-rendimiento` (misma rama; el PR de la fase 1 no se
+había mergeado). Alcance: validar la fase 1, eliminar cascadas por página,
+streaming del shell, consolidación de políticas RLS, estados de carga,
+diagnóstico de plataforma y preparación de la fase 3.
+
+## Validación de la fase 1
+
+- El diff de la fase 1 se revisó completo. `getTenantShellRow`,
+  `getTenantAccessFor` sobre `getSubscription` (sigue fallando en abierto y
+  registrando el error en `getSubscription`), la paginación de
+  `getLeadsListData` con `count: 'exact'` y el 416 fuera de rango, `needsRefs`
+  en `/leads`, newsletters y los indicadores de carga están bien y sin
+  regresiones. Las trazas se reprodujeron con los mismos números.
+- `React.cache()` en Next 16.3 deduplica por request entre layout, página y
+  slots del mismo árbol RSC (se comprobó en las trazas: `subscriptions` y la
+  fila de `tenants` aparecen una vez aunque las piden shell, `ai-limit` y
+  páginas). Dentro de una Server Action el scope es el request de la action,
+  independiente del render: un getter cacheado llamado desde una action se
+  ejecuta una vez por action, no comparte con la página.
+- **Hallazgo nuevo (el más importante de la fase):** el deployment de
+  producción vigente (`dpl_H71xSsiLs3RdsXbv2vgR54u9obo3`, commit `a27c73c`)
+  corre en **`iad1`** (Washington), no en `sfo1`. Lo dice el propio deployment
+  (`regions: ["iad1"]`) y cada respuesta autenticada (`x-vercel-id:
+  fra1::iad1::…`). Supabase está en `us-west-1`, así que HOY cada consulta
+  cruza EE. UU. de costa a costa (~60–70 ms de ida y vuelta) y una página de 2
+  olas paga eso dos veces antes de su propio trabajo. La captura del panel
+  muestra `sfo1` marcado, pero con el aviso "A new Deployment is required":
+  Dylan cambió la región después del último deploy de `main` y todavía no se
+  ha desplegado. El siguiente deploy a producción (por ejemplo, el merge de
+  esta rama) dejará la función en `sfo1`, pegada a la base, hasta que se haga
+  la mudanza conjunta a `iad1` + `us-east-1`.
+
+### TTFB real en producción (rutas autenticadas)
+
+Medido desde el navegador de esta sesión (edge `fra1`, Fráncfort), como
+super_admin actuando como Tenant Test, con `fetch` RSC y conexión ya abierta.
+Dos peticiones seguidas por ruta; se lista la segunda (caliente). Todas
+`x-vercel-cache: MISS` (dinámicas). Función en `iad1`, base en `us-west-1`.
+
+| Ruta | TTFB 2.ª petición | 1.ª petición |
+|---|---|---|
+| `/dashboard` | 944 ms | 1 826 ms |
+| `/leads` | 2 000 ms | 1 819 ms |
+| `/emails` | 1 676 ms | 1 572 ms |
+| `/properties` | 799 ms | 702 ms |
+| `/sources` | 1 164 ms | 4 245 ms |
+| `/analytics` | 1 254 ms | 851 ms |
+| `/settings` | 932 ms | 1 017 ms |
+| `/newsletters` | 1 404 ms | 1 256 ms |
+| `/notifications` | 740 ms | 1 140 ms |
+| `/activity` | 707 ms | 878 ms |
+| `/admin` | 1 690 ms | 2 447 ms |
+
+Esto es la línea base ANTES de desplegar la fase 2 y antes de que la función
+vuelva a `sfo1`. Hay que repetir la misma medición tras el deploy (ver prompt
+de la fase 3).
+
+## Cascadas por página: antes y después
+
+Trazas con `SUPABASE_TRACE=1` contra sandbox, `agent_owner` de Tenant Test
+(super_admin para `/admin`), segunda carga de cada ruta. "Antes" es el estado
+al terminar la fase 1.
+
+| Ruta | Antes: queries / olas | Después: queries / olas |
+|---|---|---|
+| `/dashboard` | 9 / 2 | 9 / 2 |
+| `/leads` | 11 / 2 | 11 / 2 |
+| `/emails` | 20 / 5 | **18 / 2** |
+| `/emails/[id]` | 12 / 4 | **11 / 2** |
+| `/analytics/emails` | N+1 por secuencia | **7 / 2** |
+| `/properties` | 7 / 3 | **6 / 2** |
+| `/properties/[id]` | 8 / 4 | **7 / 2** |
+| `/sources` | 14 / 4 | **15 / 2** |
+| `/sources/[slug]` | 15 / 4 | **15 / 2** |
+| `/analytics` | 15 / 3 | **15 / 2** |
+| `/settings` | 20 / 3 | **17 / 2** |
+| `/newsletters` | 12 / 4 | **12 / 3** |
+| `/notifications` | 6 / 2 | 6 / 2 |
+| `/activity` | 6 / 2 | 6 / 2 |
+| `/leads/[id]` | 22 / 4 | **22 / 3** |
+| `/admin` (super_admin) | 18 / 3–4 | **14 / 2** |
+
+La ola 1 sigue siendo `user_profiles` (contexto) en todas; la ola 2 es el
+shell y la página juntos. Ninguna página cambió lo que muestra.
+
+### Qué se implementó
+
+**Base de datos** (`20260918140000_perf_rpc_metrics_owner_emails.sql`):
+
+- `sequence_email_metrics(p_tenant_id, p_sequence_ids)`: métricas de envío por
+  secuencia y por paso, más el total, en una consulta. Sustituye la cadena
+  runs → envíos → eventos del código y el N+1 de `/analytics/emails`. Misma
+  definición (evento igual o posterior al primer envío del lead). Probada con
+  fixtures temporales en sandbox (click 50 %, reply 0 % con evento anterior al
+  envío, desglose por paso) y borradas después.
+- `tenant_channel_metrics(p_tenant_id, p_window_days)`: envoltorio de
+  `channel_metrics` por tenant, para no esperar a los canales.
+- `tenant_owner_emails()`: `security definer`, sólo `service_role`; sustituye
+  la llamada al Auth Admin API por tenant en serie del centro de control.
+- `lead_response_time_stats(..., p_include_manual_rules)`: une las reglas
+  manuales activas por dentro; los tipos fijos siguen en
+  `src/lib/scoring/agent-actions.ts`. La firma cambia (drop + create).
+
+**Código** (un commit por dominio):
+
+- `perf(emails)`: métricas por RPC en la misma ola que la lista;
+  `ensurePurchaseTemplateRows` devuelve lo que lee (agentes y plantillas) en
+  vez de que `getPurchaseTemplatesByAgent` lo relea; `getTagSequenceCoverage`
+  en una ola (pasos y corridas por tenant); nombres de agente y tenant
+  embebidos por FK en `listSequences` y `getSequenceWithRuns`; el super_admin
+  lee los tenants en paralelo. `email-metrics-group.ts` y su test se eliminan
+  (ya no hay agrupación en JS).
+- `perf(sources)`: `channels.ts` lee canales, métricas por tenant y nombres de
+  agente juntos (`getTenantChannelMetrics` y `getAgentNames` cacheados);
+  `getChannelBySlug` resuelve el canal por slug y `getSubmissionsForChannelSlug`
+  sus envíos por join; `/sources` deja de esperar a los canales para leer la
+  fila del tenant.
+- `perf(leads)`: la ficha del lead lanza todo en una ola (sólo necesita el id y
+  el tenant del contexto) y comprueba la visibilidad sobre la fila antes de
+  devolver nada; `getLeadPriorityPosition` se parte en ejes + ranking.
+- `perf(properties)`: `agents(name)` y `tenants(name)` embebidos; el detalle
+  lee la fila del tenant en paralelo.
+- `perf(newsletters)`: estadísticas por tipo de canal (join), plan comprobado
+  tras la ola, no antes.
+- `perf(settings)`: `getScoreRulesBundle` (globales + efectivas de una
+  consulta), owners dentro del `Promise.all`, `getAgentAiBreakdown` con los
+  getters cacheados.
+- `perf(admin)`: RPC de owners, `getTenantNames` cacheado en notificaciones,
+  actividad y uso de IA.
+- `perf(shell)`: el layout de `(dashboard)` sólo espera al contexto. Logo,
+  plan, no leídas, límite de IA, switcher y banner son Server Components dentro
+  de `<Suspense>` (`shell-slots.tsx`) que leen de `getShellData` (una ola,
+  deduplicada con `cache()`). En una carga dura el HTML sale con 6 boundaries
+  y sus skeletons (verificado en el HTML: el sidebar llega en el byte ~3 000 y
+  el contenido de la página en el ~62 000). La validación de la cookie de
+  tenant del super_admin arranca en paralelo con el perfil.
+- `feat(ui)`: `PendingSubmitButton` (`useFormStatus`) para los tres
+  formularios de Server Components sin estado pendiente: cerrar sesión (sidebar
+  y drawer) y "Entrar al CRM" del centro de control. El resto de acciones de UI
+  (modales, importaciones, generación con IA, filtros, paginación) ya tenía
+  `useTransition` o estado propio; se recorrieron todas.
+
+**RLS** (`20260918140100_perf_rls_single_policy_per_action.sql`): una
+política permisiva por acción en `agent_email_drafts`, `lead_sequence_runs`,
+`lead_score_rules` (la de escritura del super_admin era `for all` y se parte
+en insert/update/delete), `newsletter_editions` y `properties` (la política
+del tenant pasa a `to authenticated`: para `anon` nunca dejaba pasar filas).
+Funciones envueltas en `(select …)`.
+
+### Qué se descartó y por qué
+
+- Mover los pasos de la newsletter a la misma ola con un embed anidado
+  (`email_sequence_steps → email_sequences → acquisition_channels`): funciona
+  en PostgREST pero no se pudo validar con datos (el sandbox no tiene pasos en
+  la secuencia de newsletter). Queda como una ola de una consulta.
+- Un RPC para el ranking del lead (`getLeadPriorityPosition`): serían 2 olas
+  → 2 olas igual, porque los autores de los eventos también dependen de la
+  primera ola. No compensa.
+- Cambiar el orden de los agentes del dashboard para deduplicar con un getter
+  compartido: cambia el orden visible; no se tocó.
+- Resolver las reglas manuales del tiempo de respuesta en SQL sin parámetro:
+  duplicaría la lista fija de `agent-actions.ts`. Se pasó por parámetro.
+
+### Verificación
+
+- `npm run lint` 0 errores (1 warning preexistente en `scripts/`),
+  `npx tsc --noEmit` ✓, `npm run test:unit` 101 archivos / 1 112 tests ✓,
+  `npm run check:agents` ✓, `npm run build` ✓.
+- Sandbox: `npm run check:db-targets` ✓, `npm run test:rls` 19 archivos /
+  110 tests ✓ tras la consolidación; advisors de performance sin avisos de
+  políticas (sólo `unused_index`, que no se toca); advisors de seguridad
+  iguales que antes (ver "Pendiente").
+- Producción: ambas migraciones aplicadas tras el gate; advisors de
+  performance sólo `unused_index`; las cuatro funciones devuelven datos
+  (26 secuencias, 2 owners, 12 canales del primer tenant, 23 leads medibles) y
+  las 13 políticas resultantes coinciden con sandbox.
+- Navegador (dev server local con la traza, sesión del `agent_owner` de
+  sandbox): dashboard y leads renderizan con el shell nuevo, logo, plan, badge
+  de IA y contador de no leídas; sin errores de consola propios (el único 400
+  es el logo del tenant por `next/image` contra una IP privada de la red
+  local, preexistente). El drawer móvil no se verificó visualmente.
+
+### Advertencia de esta sesión
+
+`next dev` escribe en su log la línea de request de `/api/dev/login` con el
+secreto en la URL, y ese log se leyó en la sesión. El secreto sólo sirve en
+`localhost` contra sandbox, pero conviene rotar `DEV_LOGIN_SECRET` en
+`.env.development.local` de las dos computadoras. Para entrar al dev server
+desde el navegador sin exponerlo se usó un redirector local: un `node` en
+`127.0.0.1:3199` que responde 302 al dev-login leyendo el secreto del
+entorno (ver el prompt de la fase 3 para reproducirlo).
+
+## Auth: ola 1 (`user_profiles`) y Custom Access Token Hook
+
+Análisis; no implementado. Requiere el visto bueno de Dylan.
+
+- Qué es: un hook (función SQL `public.custom_access_token_hook(event jsonb)`
+  ejecutable sólo por `supabase_auth_admin`) que corre cada vez que Auth emite
+  un access token, incluidos los refrescos, y puede añadir claims a
+  `app_metadata` (nunca `user_metadata`, que edita el usuario). Con
+  `tenant_id` y `role` en el JWT, `getCurrentTenantContext` los leería del
+  token ya verificado en local y la ola 1 desaparecería de todas las páginas.
+- Frescura: los claims se recalculan al emitir el token, así que un cambio de
+  rol o de tenant tarda hasta la vida del access token (1 h por defecto,
+  configurable a minutos) en verse. Hoy el rol se revalida contra
+  `user_profiles` en cada request. La mitigación razonable: usar los claims para
+  las LECTURAS (layout y páginas) y seguir revalidando en las mutaciones
+  (`guards.ts`, Server Actions), que ya hacen sus propias comprobaciones.
+- Revocación: quitar un acceso hoy es inmediato (sin perfil → `/login`). Con
+  claims, hay que forzar el cierre de sesión al deprovisionar (signOut global
+  desde el admin) y bajar la vida del token a ~10–15 min.
+- super_admin con tenant seleccionado: no cambia. El tenant "actuado" sale de
+  la cookie validada contra `tenants`, no del perfil; ahora esa validación ya
+  corre en paralelo con el perfil.
+- Coste: migración (función + grants), activar el hook en el panel de Auth en
+  los dos proyectos, cambio en `tenant-context.ts`, tests de auth nuevos y un
+  plan de rollback (desactivar el hook y volver a leer el perfil). ~1 día.
+- Beneficio: una consulta menos por request (la única que va antes de todo).
+  Con la función pegada a la base (sfo1 hoy, iad1 después) vale ~5–15 ms por
+  página; con la función lejos de la base valía ~65 ms. Es más útil cuanto
+  peor esté la región, así que **primero alinear región, después decidir**.
+
+## Cache Components / PPR: resultado del spike
+
+Se activó `cacheComponents: true` en local y se corrió `next build` dos veces:
+
+1. Tal cual: el build falla en 22 archivos por `export const dynamic /
+   revalidate / runtime` (2 páginas del dashboard, 6 páginas alojadas con ISR,
+   13 route handlers de la API de agentes, `/api/studio/render`). Es mecánico:
+   los `revalidate` de `/web`, `/nl`, `/hp` pasan a `use cache` +
+   `cacheLife`, y sus `revalidatePath` a `cacheTag`/`updateTag`.
+2. Quitando esas 24 líneas: compila y tipa, pero el prerender falla en la
+   primera página del dashboard que toca (`/studio`, `/analytics/emails`, y
+   seguiría con todas): el layout de `(dashboard)` lee cookies en su nivel
+   superior (`getCurrentTenantContext`) y el nav depende del rol, así que no
+   hay shell estático posible sin reestructurar: el contexto tiene que leerse
+   dentro de un `<Suspense>` y el nav pasar a renderizarse detrás de él (o
+   `export const instant = false` en las 24 páginas para adoptar por partes,
+   que es lo que recomienda la guía). Además los route handlers de la API de
+   agentes leen `request.headers` durante el prerender y hay que marcarlos
+   dinámicos con `connection()`.
+
+Coste estimado: 2–4 días de trabajo en una rama propia, con el codemod
+`cache-components-instant-false` como punto de partida y adopción ruta por
+ruta, más pruebas de las páginas alojadas (que hoy usan ISR y funcionan
+bien). Beneficio: en una carga dura el HTML del shell y del skeleton saldría
+del CDN (~135 ms desde España frente a ~1 s hoy) y, con `partialPrefetching`,
+la navegación mostraría el skeleton de destino al instante. Es la palanca que
+más compensa la distancia a España, pero no es urgente hasta alinear región
+y medir. **No activar en producción sin aprobación.** Todo se revirtió;
+nada de esto está en la rama.
+
+## Plataforma: diagnóstico y pasos para Dylan (no ejecutados)
+
+### Deployments y storage
+
+- Proyecto `itmano-crm`: 20 deployments entre el 6 y el 18 de septiembre
+  (todos los pushes de ramas + `main`), 7 funciones cada uno. Proyecto
+  `itmano-crm-sandbox`: exactamente los mismos 20 (mismo repo, cada push se
+  construye dos veces y `main` se despliega como "producción" también ahí).
+  Ambos en el equipo Hobby con otros 4 proyectos que comparten límites.
+- Functions Storage 26.88 GB de 10 GB. Vercel lo mide en GB-mes sobre los
+  deployments retenidos; se reduce con retención más corta y con menos
+  deployments. Fuente: <https://vercel.com/docs/deployment-storage>.
+- Retención en Hobby: por defecto 30 días para preview, producción, cancelados
+  y errados; siempre se conservan los últimos 3 deployments del proyecto y los
+  últimos 3 de producción en estado Ready, y el último preview de cada rama
+  activa. Se configura en Project → Settings → Security → Deployment Retention
+  Policy. Lo borrado queda restaurable 30 días. Fuente:
+  <https://vercel.com/docs/deployment-retention>.
+
+Pasos concretos (dashboard, ambos proyectos):
+
+1. `itmano-crm` → Settings → Security → Deployment Retention Policy: Preview y
+   Canceled/Errored a **1 día**; Production al mínimo que permita rollback
+   cómodo (**7 días**; los últimos 3 de producción se conservan igual).
+2. `itmano-crm-sandbox` → lo mismo, con Production a **1 día**.
+3. Parar el doble build. `vercel.json` es compartido por los dos proyectos, así
+   que `git.deploymentEnabled` no sirve para diferenciarlos; usar el **Ignored
+   Build Step** de cada proyecto (Settings → Git → Ignored Build Step, opción
+   "Custom"):
+   - `itmano-crm` (sólo `main`): `[ "$VERCEL_GIT_COMMIT_REF" != "main" ] && exit 0 || exit 1`
+   - `itmano-crm-sandbox` (sólo ramas): `[ "$VERCEL_GIT_COMMIT_REF" = "main" ] && exit 0 || exit 1`
+   Con eso cada push construye una vez. Los previews de PR siguen existiendo,
+   en el proyecto sandbox (con datos de sandbox), que es lo que se quiere.
+4. Esperar 48 h (el job de borrado corre en ese plazo) y comprobar Usage →
+   Deployment Storage. No borrar deployments a mano salvo que siga por encima.
+
+### Qué cambia de verdad con Vercel Pro y Supabase Pro (fuentes vigentes)
+
+Vercel (<https://vercel.com/docs/fluid-compute>,
+<https://vercel.com/docs/functions/configuring-functions/region>,
+<https://vercel.com/docs/limits>, <https://vercel.com/docs/limits/fair-use-guidelines>):
+
+- Cold starts: el bytecode caching de Fluid Compute y el pre-warming de
+  producción aplican a todos los planes; Pro **no** compra menos cold start.
+  Pro añade CPU "Performance" opcional (más rápido por invocación, más caro).
+- Regiones: Hobby 1 región; Pro hasta 5 (la página de Fluid dice "up to 3":
+  la de regiones, más reciente, dice 5). Con Postgres en un solo sitio, varias
+  regiones no ayudan (ver "Región").
+- Límites: Hobby incluye 4 h de CPU activa, 1 M de invocaciones, 10 GB de
+  Fast Origin Transfer y 100 GB de transferencia al mes; Pro cobra por uso
+  con crédito incluido (invocaciones 0,60 $/M, CPU desde 0,128 $/h, storage
+  0,10 $/GB-mes). Retención en Pro: 180 días preview, 1 año producción por
+  defecto (configurable), y conserva los últimos 10/20.
+- Logs de runtime: 1 h en Hobby, 1 día en Pro, 3 días en Enterprise.
+- **Uso comercial**: la política de uso justo de Vercel dice que "Hobby teams
+  are restricted to non-commercial personal use only" y define comercial como
+  cualquier deployment con cobro a visitantes o a clientes. ITMANO CRM cobra
+  suscripciones (Paddle). Independientemente del rendimiento, el proyecto
+  debería estar en Pro por cumplimiento; es la razón más sólida para pagar.
+
+Supabase (<https://supabase.com/docs/guides/platform/compute-and-disk>,
+<https://supabase.com/docs/guides/platform/manage-your-usage/compute>,
+<https://supabase.com/docs/guides/platform/read-replicas>):
+
+- Free = Nano: CPU compartida, hasta 0,5 GB de RAM, 60 conexiones directas,
+  200 por pooler; con ráfagas limitadas por presupuesto de IO y "subject to
+  change". Pro = 25 $/mes con 10 $ de crédito de cómputo, que cubre Micro
+  (1 GB, 60 conexiones, 200 pooler; 0,01344 $/h). En organizaciones de pago,
+  Nano se factura como Micro.
+- Con 19 MB de datos y consultas de milisegundos, Micro no acelera la
+  navegación; da RAM, backups diarios, sin pausa por inactividad y soporte.
+  La velocidad la decide la región.
+- Read replicas: sólo lectura, endpoints propios, pensadas para escala o
+  distribución geográfica; obligan a separar lecturas de escrituras. No ahora.
+- Mover de región = proyecto nuevo + backup/restore (ver plan).
+
+### Región: qué hacer y en qué orden
+
+1. **Ahora (sin coste, con el próximo deploy):** la función pasa a `sfo1`
+   (ya está marcada en el panel). Pegada a `us-west-1`, cada consulta baja de
+   ~65 ms a ~2 ms. Es la mejora más grande y más barata disponible hoy y no
+   requiere nada más que desplegar. Medir el TTFB de la tabla de arriba después.
+2. **Después, como proyecto:** mudanza conjunta a `iad1` + `us-east-1` (mejora
+   a la vez a la costa este y a España; ver "Región para EE. UU. y España").
+
+### Plan de mudanza a `iad1` + `us-east-1` (sólo plan)
+
+Fuente del procedimiento:
+<https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore>.
+
+0. Preparación (sin ventana): crear el proyecto nuevo en `us-east-1` (Pro,
+   Micro), misma versión de Postgres; activar en él las extensiones que use el
+   actual (`vault`, `pg_net`, `pgcrypto`, las que liste `list_extensions`);
+   configurar Auth igual (proveedores, URLs de redirección, plantillas de
+   correo, Magic Link, JWT con clave ES256 → el JWKS cambia: las sesiones
+   actuales dejarán de validar y todos volverán a entrar por Magic Link);
+   crear los 4 buckets de Storage con las mismas políticas; recrear
+   `DEV_LOGIN_ALLOWED_SUPABASE_REF` sólo en sandbox (no aplica a producción).
+1. Ensayo completo contra sandbox: dump → restore en un proyecto temporal,
+   correr `test:schema` (paridad), `test:rls` y `test:scoring` contra él.
+2. Ventana de mantenimiento (estimación 60–90 min con 19 MB; lo que manda es
+   Storage y las comprobaciones): anunciar; pausar crons externos
+   (score-decay en Vercel, los que disparen secuencias), pausar el webhook de
+   Paddle (o aceptar que Paddle reintenta durante horas: lo hace) y el
+   inbound de Resend (reintenta 72 h).
+3. Base: `supabase db dump --db-url <viejo> -f roles.sql --role-only`,
+   `… -f schema.sql`, `… -f data.sql --use-copy --data-only -x
+   storage.buckets_vectors -x storage.vector_indexes`; restaurar con
+   `psql --single-transaction --variable ON_ERROR_STOP=1 --file roles.sql
+   --file schema.sql --command 'SET session_replication_role = replica'
+   --file data.sql --dbname <nuevo>`. Los usuarios de Auth viajan en el dump
+   (`auth.users`, mismos ids, así que `user_profiles.id` y `agents.user_id`
+   siguen válidos). Recuperar la clave raíz de Vault del proyecto viejo ANTES
+   de pausarlo si hay secretos en Vault (el de Telegram lo usa).
+4. Storage: copiar objetos de los 4 buckets con el script de la guía (lista
+   por bucket y sube al nuevo). Las URLs públicas cambian de host: reescribir
+   `tenants.logo_url`, `properties.image_url/gallery/floor_plans/detail_pdf_url`,
+   `newsletter_editions.cover_image_url`, `studio_images.*` y
+   `agents.cover/avatar` con un `update … set col = replace(col, '<viejo>',
+   '<nuevo>')`, y añadir el host nuevo a `images.remotePatterns` (sale del
+   env, así que basta con la variable).
+5. Vercel (`itmano-crm`): Settings → Functions → Region `iad1`; variables
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY` (y `PARITY_*` si existen) al proyecto nuevo;
+   redeploy de `main`. Actualizar `.env.local` de los clones y `.mcp.json` /
+   `.codex/config.toml` / `AGENTS.md` con el `project_ref` nuevo (y el guard
+   `check-agent-config.mjs`).
+6. Terceros: Paddle y Resend apuntan a `app.itmano.com`, que no cambia; sólo
+   hay que reactivar lo pausado. Los dominios de envío de Resend no dependen
+   de Supabase. El cron de decay en `vercel.json` no cambia.
+7. Comprobación: login por Magic Link, `/dashboard`, `/leads`, subir una foto
+   de propiedad, `test:schema` y `test:rls` contra el nuevo, `get_advisors`.
+   Repetir la tabla de TTFB.
+8. Vuelta atrás: mientras el proyecto viejo no se pause ni se borre, volver es
+   restaurar las variables anteriores y la región `sfo1` y redeploy (minutos).
+   Conservar el proyecto viejo pausado 30 días; después borrarlo (confirmar).
+   Riesgo principal: escrituras que entren entre el dump y el cambio de
+   variables (leads por intake, webhooks): por eso se pausan los crons y se
+   hace el corte con la app en mantenimiento, o se repite un dump de datos
+   incremental de `leads`, `lead_events`, `form_submissions` y
+   `channel_page_views` justo antes de cambiar variables.
+
+## Pendiente para la fase 3
+
+Está desarrollado en `docs/performance/2026-09-prompt-fase-3-cuenta-b.md`.
+Resumen priorizado:
+
+1. Desplegar (merge de esta rama) y repetir la medición de TTFB en producción
+   con la función ya en `sfo1`.
+2. Retención e Ignored Build Step en Vercel (Dylan; pasos arriba).
+3. Decidir Vercel Pro (cumplimiento comercial) y la mudanza de región.
+4. Adopción incremental de Cache Components en rama propia (con aprobación).
+5. Custom Access Token Hook (con aprobación; después de la región).
+6. Avisos de seguridad de advisors: `search_path` mutable en
+   `normalize_agent_languages`, `agent_api_base64url`,
+   `touch_newsletter_edition`; `get_my_tenant_id` / `is_super_admin` /
+   `recompute_lead_score` como `security definer` ejecutables por
+   `anon`/`authenticated` (revocar y comprobar que las políticas siguen
+   funcionando: las políticas se evalúan como el dueño de la función, no
+   necesitan el grant); leaked password protection (irrelevante con Magic
+   Link, pero activarlo no cuesta). Iguales en sandbox y producción.
+7. `/newsletters` (pasos en una ola) y `/leads/[id]` (22 consultas: dedupe de
+   `tenants`×2 y `acquisition_channels`) si se quiere apurar.
+8. Verificar el drawer móvil y los skeletons en el preview de Vercel.
