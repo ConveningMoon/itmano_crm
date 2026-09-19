@@ -1,7 +1,8 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getTenantRow } from '@/lib/data/tenants'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getPropertyById } from '@/lib/data/properties'
 import { PropertyPageOptions } from './property-page-options'
@@ -28,12 +29,10 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   // La propiedad y la fila del tenant van juntas: requireTenantContext ya
   // garantiza el tenant, y una propiedad de otro tenant no resuelve (404), así
   // que leer el tenant del contexto en paralelo no espera nada ni filtra de más.
-  const db = createAdminClient()
-  const [p, { data: tenantRow }] = await Promise.all([
+  const [p, tenantRow] = await Promise.all([
     getPropertyById(id, ctx.tenant_id),
-    ctx.tenant_id
-      ? db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', ctx.tenant_id).maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    ctx.tenant_id ? getTenantRow(ctx.tenant_id) : Promise.resolve(null),
   ])
   if (!p) notFound()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,8 +117,9 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Fotos</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
             {gallery.map(url => (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img key={url} src={url} alt="" style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+              <div key={url} style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                <Image src={url} alt="" fill sizes="(max-width: 768px) 50vw, 200px" style={{ objectFit: 'cover' }} />
+              </div>
             ))}
           </div>
         </div>
@@ -157,8 +157,8 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {p.imageUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={p.imageUrl} alt={p.address} style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '10px', border: '1px solid var(--border-subtle)' }} />
+           
+          <Image src={p.imageUrl} alt={p.address} width={120} height={90} sizes="120px" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '10px', border: '1px solid var(--border-subtle)' }} />
         )}
         <div style={{ flex: 1, minWidth: '240px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

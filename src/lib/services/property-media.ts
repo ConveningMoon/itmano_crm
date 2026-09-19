@@ -27,11 +27,25 @@ export const EXT_BY_TYPE: Record<string, string> = {
 export const MEDIA_BUCKET = 'property-media'
 
 // Mirrors the team's batch_to_webp.py defaults: quality 82, method/effort 6,
-// EXIF-based auto-rotation, animated GIFs preserved as animated WebP. No
-// forced resize (same as running that script with no --max-width/--max-height).
+// EXIF-based auto-rotation, animated GIFs preserved as animated WebP.
+//
+// Y un techo de resolución. Una foto de móvil moderno llega a 4000 px de ancho
+// y se guardaba entera: la ficha pública mide 1080 px de ancho, así que nadie
+// veía jamás ese detalle y el visitante se descargaba el triple de bytes. 2560
+// cubre una pantalla retina a ancho completo con margen. `withoutEnlargement`
+// deja intactas las que ya son más chicas, y `fit: 'inside'` conserva la
+// proporción sin recortar: la foto que sube el agente es la que se ve.
+export const MAX_IMAGE_DIMENSION = 2560
+
 export async function convertImageToWebp(bytes: Buffer): Promise<Buffer> {
   return sharp(bytes, { animated: true })
     .rotate() // auto-orients from EXIF, then strips the orientation tag
+    .resize({
+      width: MAX_IMAGE_DIMENSION,
+      height: MAX_IMAGE_DIMENSION,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
     .webp({ quality: 82, effort: 6 })
     .toBuffer()
 }
