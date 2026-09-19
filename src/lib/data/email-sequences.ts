@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,6 +58,47 @@ export interface EmailSequence {
   createdAt:         string
 }
 
+// ─── Lecturas compartidas ─────────────────────────────────────────────────────
+//
+// Los pasos activos y las corridas de un tenant los necesitan DOS superficies
+// de la misma página (/emails): la lista de secuencias y el panel de cobertura
+// por etiqueta. Cada una los pedía por su cuenta con filtros distintos, así
+// que eran cuatro round-trips por las mismas dos tablas. Aquí se leen una vez
+// por request (cache()) y cada llamador filtra en memoria: son filas de un id
+// y un estado, y el tenant más grande tiene decenas de secuencias.
+
+export interface StepRow {
+  id: string; sequence_id: string; step_order: number; delay_hours: number
+  subject: string | null; resend_template_id: string | null; body_json: unknown; active: boolean
+}
+export interface RunRow { sequence_id: string; status: string }
+
+/** Pasos ACTIVOS del tenant, ordenados. tenantId null = super_admin (todos). */
+export const getActiveStepsFor = cache(async function getActiveStepsFor(
+  tenantId: string | null,
+): Promise<StepRow[]> {
+  const supabase = createAdminClient()
+  let q = supabase
+    .from('email_sequence_steps')
+    .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, body_json, active')
+    .eq('active', true)
+    .order('step_order')
+  if (tenantId) q = q.eq('tenant_id', tenantId)
+  const { data } = await q
+  return (data ?? []) as unknown as StepRow[]
+})
+
+/** Corridas del tenant (sequence_id + status). tenantId null = todos. */
+export const getSequenceRunsFor = cache(async function getSequenceRunsFor(
+  tenantId: string | null,
+): Promise<RunRow[]> {
+  const supabase = createAdminClient()
+  let q = supabase.from('lead_sequence_runs').select('sequence_id, status')
+  if (tenantId) q = q.eq('tenant_id', tenantId)
+  const { data } = await q
+  return (data ?? []) as unknown as RunRow[]
+})
+
 // ─── Data access ──────────────────────────────────────────────────────────────
 
 // PostgREST devuelve una relación to-one embebida como objeto (o como arreglo
@@ -99,30 +141,25 @@ export async function listSequences(
   if (kind === 'channel') seqQ = seqQ.is('trigger_tag_id', null)
   if (kind === 'tag')     seqQ = seqQ.not('trigger_tag_id', 'is', null)
 
-  let stepQ = supabase
-    .from('email_sequence_steps')
-    .select('id, sequence_id, step_order, delay_hours, subject, resend_template_id, body_json, active')
-    .eq('active', true)
-    .order('step_order')
-  if (tenantId) stepQ = stepQ.eq('tenant_id', tenantId)
-
-  let runQ = supabase
-    .from('lead_sequence_runs')
-    .select('sequence_id, status')
-  if (tenantId) runQ = runQ.eq('tenant_id', tenantId)
-
   let channelQ = supabase
     .from('acquisition_channels')
     .select('id, name, slug, channel_type, email_sequence_id')
     .not('email_sequence_id', 'is', null)
   if (tenantId) channelQ = channelQ.eq('tenant_id', tenantId)
 
+  // Pasos y corridas salen de los getters compartidos: en /emails el panel de
+  // cobertura por etiqueta pide exactamente lo mismo.
   const [
     { data: seqRows },
-    { data: stepRows },
-    { data: runRows },
+    stepRows,
+    runRows,
     { data: channelRows },
-  ] = await Promise.all([seqQ, stepQ, runQ, channelQ])
+  ] = await Promise.all([
+    seqQ,
+    getActiveStepsFor(tenantId),
+    getSequenceRunsFor(tenantId),
+    channelQ,
+  ])
 
   const stepsBySeq = new Map<string, SequenceStep[]>()
   for (const s of stepRows ?? []) {

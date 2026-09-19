@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { getActiveStepsFor, getSequenceRunsFor } from '@/lib/data/email-sequences'
 import type { LeadTag } from '@/lib/leads/tags'
 
 // Cobertura de las secuencias disparadas por etiqueta (117).
@@ -71,8 +72,9 @@ export async function getTagSequenceCoverage(tenantId: string | null): Promise<T
   // Una sola ola. Los pasos y las corridas se leen por tenant y se cruzan en
   // memoria con las secuencias de etiqueta: pedirlos por ids de secuencia
   // obligaba a esperar la lista primero, y eso era una ola entera más en cada
-  // carga de /emails. Son filas pequeñas (un id por fila).
-  const [{ data: tagRows }, { data: seqRows }, { data: agentRows }, { data: stepRows }, { data: runRows }] = await Promise.all([
+  // carga de /emails. Y salen de los getters compartidos con listSequences,
+  // que en esta misma página pide exactamente esas dos tablas.
+  const [{ data: tagRows }, { data: seqRows }, { data: agentRows }, stepRows, runRows] = await Promise.all([
     supabase
       .from('lead_tags')
       .select('id, name, slug, color, description, position, requires_sequence')
@@ -89,16 +91,8 @@ export async function getTagSequenceCoverage(tenantId: string | null): Promise<T
       .select('language, languages')
       .eq('tenant_id', tenantId)
       .eq('active', true),
-    supabase
-      .from('email_sequence_steps')
-      .select('sequence_id')
-      .eq('tenant_id', tenantId)
-      .eq('active', true),
-    supabase
-      .from('lead_sequence_runs')
-      .select('sequence_id')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'active'),
+    getActiveStepsFor(tenantId),
+    getSequenceRunsFor(tenantId),
   ])
 
   const languages = languagesOf((agentRows ?? []) as any[])
@@ -106,13 +100,15 @@ export async function getTagSequenceCoverage(tenantId: string | null): Promise<T
   const seqIds    = new Set(sequences.map(s => s.id as string))
 
   const stepCount = new Map<string, number>()
-  for (const r of (stepRows ?? []) as any[]) {
+  for (const r of stepRows) {
     if (!seqIds.has(r.sequence_id)) continue
     stepCount.set(r.sequence_id, (stepCount.get(r.sequence_id) ?? 0) + 1)
   }
   const runCount = new Map<string, number>()
-  for (const r of (runRows ?? []) as any[]) {
-    if (!seqIds.has(r.sequence_id)) continue
+  for (const r of runRows) {
+    // El getter compartido trae todas las corridas del tenant; aquí sólo
+    // cuentan las activas de una secuencia de etiqueta.
+    if (r.status !== 'active' || !seqIds.has(r.sequence_id)) continue
     runCount.set(r.sequence_id, (runCount.get(r.sequence_id) ?? 0) + 1)
   }
 
