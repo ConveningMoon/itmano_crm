@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/data/channels'
+import { getTenantRow } from '@/lib/data/tenants'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient } from './sources-client'
@@ -56,12 +57,8 @@ export default async function SourcesPage({
     needsTenantPicker
       ? supabase.from('tenants').select(columns('tenants', ['id', 'name'])).order('name')
       : Promise.resolve({ data: [] }),
-    tenant_id
-      ? supabase
-          .from('tenants')
-          .select(columns('tenants', ['id', 'slug', 'pages_managed_by_itmano']))
-          .eq('id', tenant_id)
-      : Promise.resolve({ data: null }),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    tenant_id ? getTenantRow(tenant_id) : Promise.resolve(null),
     agentsQ,
   ])
 
@@ -70,22 +67,24 @@ export default async function SourcesPage({
   // página depende de si ITMANO administra a ese tenant. Sin tenant en el
   // contexto (super_admin sin selección) se resuelve por los tenants de las
   // tarjetas, que sólo se conocen después de leerlas.
-  let tenantPageRows = tenantPagesResult.data
+  type TenantPageRow = { id: string; slug: string | null; pages_managed_by_itmano: boolean | null }
+  let tenantPageRows: TenantPageRow[] = tenantPagesResult ? [tenantPagesResult] : []
   if (!tenant_id) {
     const tenantIds = [...new Set([...channels, ...archivedChannels].map(c => c.tenantId))]
-    tenantPageRows = tenantIds.length > 0
-      ? (await supabase
+    const { data } = tenantIds.length > 0
+      ? await supabase
           .from('tenants')
           .select(columns('tenants', ['id', 'slug', 'pages_managed_by_itmano']))
-          .in('id', tenantIds)).data
-      : []
+          .in('id', tenantIds)
+      : { data: null }
+    tenantPageRows = (data ?? []) as unknown as TenantPageRow[]
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenants = (tenantPickerResult.data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
   const tenantPages: Record<string, { slug: string; managedByItmano: boolean }> = Object.fromEntries(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (tenantPageRows ?? []).map((t: any) => [
+    tenantPageRows.map((t: any) => [
       t.id as string,
       { slug: (t.slug as string) ?? '', managedByItmano: t.pages_managed_by_itmano === true },
     ]),

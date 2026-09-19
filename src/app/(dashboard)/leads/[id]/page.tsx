@@ -27,7 +27,8 @@ import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
-import { getBusinessProfile } from '@/lib/data/business-profile'
+import { mapBusinessProfile } from '@/lib/data/business-profile'
+import { getTenantRow } from '@/lib/data/tenants'
 import { getTagIdsWithSequence, getTagsForLead, listLeadTags } from '@/lib/data/lead-tags'
 import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
@@ -74,10 +75,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     scoreRules,
     statusHistory,
     emailReplies,
-    { data: tenantRow },
+    tenantRow,
     tenantAccess,
     priorityAxes,
-    businessProfile,
     leadTags,
     tagCatalog,
     emailTagIds,
@@ -93,20 +93,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     getGlobalScoreRules(),
     getLeadStatusHistory(id, leadTenantId),
     getLeadEmailReplies(id, leadTenantId),
-    // Identidad de envío + flag de análisis con IA salen de la MISMA fila de
-    // `tenants`; eran dos queries separadas a la misma fila.
-    supabase
-      .from('tenants')
-      .select('name, slug, email_from_address, resend_account, domain_status, sending_domain, ai_lead_scoring_enabled')
-      .eq('id', leadTenantId)
-      .maybeSingle(),
+    // Identidad de envío, flag de análisis con IA y perfil de negocio salen de
+    // la MISMA fila de `tenants`, que además comparte con el shell: eran tres
+    // queries a la misma fila. El perfil se deriva con mapBusinessProfile.
+    getTenantRow(leadTenantId),
     getTenantAccessFor(leadTenantId),
     // Los tres ejes ahora; la posicion en la cola (dos counts sobre indice) en
     // la ola siguiente, junto con los autores de los eventos.
     getLeadPriorityAxes(id, scope),
-    // Comisión y moneda de la agencia — sin esto el monto del lead es un número
-    // sin significado para quien lo mira.
-    getBusinessProfile(leadTenantId),
     // Etiquetas (116): las del lead y el catálogo del tenant para el
     // desplegable.
     getTagsForLead(id),
@@ -135,6 +129,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       points:       r.points,
       isDisqualify: r.sideEffect === 'force_perdido',
     }))
+
+  // La fila del tenant sirve a tres cosas: identidad de envío, flag de IA y
+  // perfil de negocio. Se lee una vez y se deriva aquí, antes de usarla.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tRow = tenantRow as any
+  const businessProfile = mapBusinessProfile(tRow)
 
   const lead           = mapLead(rawLead as LeadRow)
   // Quién puede etiquetar = quién puede escribir el lead. Se calcula con el
@@ -187,8 +187,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // el envío ya sale por el dominio compartido y el badge no puede seguir
   // mostrando el dominio propio del tenant — le mentiría al usuario justo
   // cuando más necesita saber la verdad.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tRow = tenantRow as any
   const identity = tRow
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? resolveSenderIdentity(tRow as any, { customDomainAllowed: tenantAccess.customDomainAllowed })

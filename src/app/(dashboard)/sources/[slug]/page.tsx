@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelBySlug } from '@/lib/data/channels'
+import { getTenantRow } from '@/lib/data/tenants'
 import { getSubmissionsForChannelSlug } from '@/lib/data/form-submissions'
 import { listSequences } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
@@ -38,7 +39,7 @@ export default async function ChannelDetailPage({
   //
   // Agent: only their own channel resolves; a non-owned/null channel → 404.
   const supabase = createAdminClient()
-  const [channel, submissions, sequences, { data: agentRows }, { data: tenantRow }] = await Promise.all([
+  const [channel, submissions, sequences, { data: agentRows }, tenantRow] = await Promise.all([
     getChannelBySlug(tenant_id, slug, 30, scope.agentId),
     getSubmissionsForChannelSlug(slug, tenant_id),
     // 'channel': una secuencia disparada por etiqueta (117) no se engancha a una
@@ -47,9 +48,8 @@ export default async function ChannelDetailPage({
     tenant_id
       ? supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', tenant_id).order('name')
       : Promise.resolve({ data: [] }),
-    tenant_id
-      ? supabase.from('tenants').select('slug, name, pages_managed_by_itmano').eq('id', tenant_id).maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    tenant_id ? getTenantRow(tenant_id) : Promise.resolve(null),
   ])
   if (!channel) notFound()
   const hostedRow = { hosted_page: channel.hostedPage }

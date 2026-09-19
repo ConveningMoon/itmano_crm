@@ -6,6 +6,7 @@ import { getNewsletterStats, SIN_DATOS } from '@/lib/data/newsletter-stats'
 import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { getSubscription } from '@/lib/data/subscriptions'
+import { getTenantRow } from '@/lib/data/tenants'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
 
@@ -14,8 +15,11 @@ import { EditionsList } from './editions-list'
 // exista desde la primera visita y el formulario público responda sin que el
 // usuario haya hecho nada.
 
-const TENANT_COLUMNS = columns('tenants', ['slug'])
-const SEQUENCE_STEP_COLUMNS = columns('email_sequence_steps', ['id'])
+// Los pasos se resuelven por el TIPO de canal, no por el id de la secuencia:
+// así viajan en la misma ola que todo lo demás en vez de esperar a que
+// ensureNewsletterChannel devuelva su id. Si el canal (o la secuencia) se crea
+// en esta misma visita, no hay pasos todavía y el resultado vacío es correcto.
+const SEQUENCE_STEP_SELECT = `${columns('email_sequence_steps', ['id'])}, email_sequences!inner(id, acquisition_channels!inner(channel_type, archived_at))`
 
 export default async function NewslettersPage() {
   const ctx = await requireTenantContext()
@@ -30,12 +34,19 @@ export default async function NewslettersPage() {
   // esperarla ANTES de lanzar las lecturas de la página las dejaba en una ola
   // posterior a la del shell. Van todas juntas y el plan se comprueba después:
   // si no alcanza, lo leído (todo acotado al tenant) se descarta.
-  const [subscription, canal, editions, stats, { data: tenantRow }] = await Promise.all([
+  const [subscription, canal, editions, stats, tenantRow, { data: stepRows }] = await Promise.all([
     tenant_id ? getSubscription(tenant_id) : Promise.resolve(null),
     tenant_id ? ensureNewsletterChannel(db, tenant_id) : Promise.resolve({ error: 'sin tenant' } as const),
     tenant_id ? getEditionsForTenant(tenant_id) : Promise.resolve([]),
     tenant_id ? getNewsletterStats(tenant_id) : Promise.resolve(null),
-    tenant_id ? db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle() : Promise.resolve({ data: null }),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    tenant_id ? getTenantRow(tenant_id) : Promise.resolve(null),
+    tenant_id
+      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_SELECT)
+          .eq('tenant_id', tenant_id)
+          .eq('email_sequences.acquisition_channels.channel_type', 'newsletter')
+          .is('email_sequences.acquisition_channels.archived_at', null)
+      : Promise.resolve({ data: null }),
   ])
   const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
 
@@ -76,17 +87,13 @@ export default async function NewslettersPage() {
     )
   }
 
-  // El canal implícito ya se preparó arriba, en la misma ola que las lecturas.
-  // La secuencia sólo se crea si el canal no la tiene todavía, y sus pasos se
-  // leen después porque sí dependen de su id.
+  // El canal implícito ya se preparó arriba, en la misma ola que las lecturas,
+  // igual que el conteo de pasos. La secuencia sólo se crea aquí si el canal no
+  // la tiene todavía: en ese caso nace vacía y el aviso de abajo es correcto.
   const sequenceId = 'error' in canal
     ? null
     : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
 
-  const { data: stepRows } = sequenceId
-    ? await db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS)
-        .eq('tenant_id', tenant_id).eq('sequence_id', sequenceId)
-    : { data: null }
   // reason: el cliente de Supabase no está tipado en este repo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''

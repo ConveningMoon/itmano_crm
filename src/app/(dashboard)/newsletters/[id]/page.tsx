@@ -6,6 +6,7 @@ import { getEditionById } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { getSubscription } from '@/lib/data/subscriptions'
+import { getTenantRow } from '@/lib/data/tenants'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
@@ -26,7 +27,6 @@ import { EditionEditor } from './edition-editor'
 // límite de plataforma ya se pagó, y `recordAiUsage` nunca llega a correr.
 export const maxDuration = 300
 
-const TENANT_COLUMNS       = columns('tenants', ['slug', 'name'])
 // `cover_photo_url`: la foto que acompaña a la firma de la persona (113). El
 // editor la muestra en el círculo del preview, igual que la página pública.
 const AGENT_OPTION_COLUMNS = columns('agents', ['id', 'name', 'cover_photo_url'])
@@ -52,9 +52,10 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
 
   const canEdit = ctx.role !== 'agent' || edition.createdByUserId === ctx.user_id
 
-  const [studioImages, { data: tenantRow }, { data: agentRows }] = await Promise.all([
+  const [studioImages, tenantRow, { data: agentRows }] = await Promise.all([
     getStudioImages(tenantId),
-    db.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).maybeSingle(),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    getTenantRow(tenantId),
     db.from('agents').select(AGENT_OPTION_COLUMNS)
       .eq('tenant_id', tenantId).eq('active', true).order('name'),
   ])

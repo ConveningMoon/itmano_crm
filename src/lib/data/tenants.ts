@@ -39,29 +39,81 @@ export interface TenantBranding {
   logoUrl: string | null
 }
 
-export interface TenantShellRow {
-  name:                 string
-  logo_url:             string | null
-  ai_monthly_limit_usd: number | string | null
-  ai_unlimited:         boolean | null
+/**
+ * Las columnas de `tenants` que una página del CRM puede necesitar de SU
+ * tenant. No están aquí `domain_records` (jsonb de registros DNS, sólo lo mira
+ * el panel de dominio del centro de control, que lee todos los tenants) ni
+ * `created_at`.
+ *
+ * Existe una sola lista porque hasta la fase 2 la MISMA fila se leía dos o
+ * tres veces por página con columnas distintas: el shell (branding + límite de
+ * IA), el perfil de negocio y la página de turno (slug, marca de páginas
+ * gestionadas, identidad de envío). Eran round-trips idénticos en todo salvo
+ * en la lista de columnas.
+ */
+export const TENANT_ROW_COLUMNS = columns('tenants', [
+  'id', 'name', 'slug', 'logo_url', 'primary_color', 'description',
+  'email_from_address', 'resend_account', 'sending_domain', 'domain_status',
+  'ai_monthly_limit_usd', 'ai_unlimited', 'ai_lead_scoring_enabled',
+  'pages_managed_by_itmano', 'newsletter_source_domains',
+  'currency', 'commission_model', 'commission_buy', 'commission_sell',
+  'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
+  'public_site_url', 'newsletter_canonical_template',
+])
+
+export interface TenantRow {
+  id:                       string
+  name:                     string
+  slug:                     string
+  logo_url:                 string | null
+  primary_color:            string | null
+  description:              string | null
+  email_from_address:       string | null
+  resend_account:           string | null
+  sending_domain:           string | null
+  domain_status:            string | null
+  ai_monthly_limit_usd:     number | string | null
+  ai_unlimited:             boolean | null
+  ai_lead_scoring_enabled:  boolean | null
+  pages_managed_by_itmano:  boolean | null
+  newsletter_source_domains: unknown
+  currency:                 string | null
+  commission_model:         string | null
+  commission_buy:           number | string | null
+  commission_sell:          number | string | null
+  budget_entry_max:         number | string | null
+  budget_premium_min:       number | string | null
+  primary_areas:            string[] | null
+  secondary_areas:          string[] | null
+  public_site_url:          string | null
+  newsletter_canonical_template: string | null
 }
 
-// La fila del tenant que el shell necesita en CADA página: el branding del
-// sidebar y el límite de IA del topbar. Antes eran dos lecturas de la misma fila
-// por request; una sola, deduplicada con cache(), sirve a ambos.
-const TENANT_SHELL_COLUMNS = columns('tenants', ['name', 'logo_url', 'ai_monthly_limit_usd', 'ai_unlimited'])
-
-export const getTenantShellRow = cache(async function getTenantShellRow(
+/**
+ * La fila del tenant, UNA vez por request (React cache()).
+ *
+ * Todo lo que el CRM necesita de `tenants` para el tenant activo sale de aquí:
+ * el shell, el perfil de negocio y las páginas. Deduplicar es seguro porque
+ * nadie escribe `tenants` a través de este getter — los escritores (acciones
+ * de settings y del centro de control) van directo a la tabla y revalidan la
+ * ruta, lo que descarta este cache con el render.
+ */
+export const getTenantRow = cache(async function getTenantRow(
   tenantId: string,
-): Promise<TenantShellRow | null> {
+): Promise<TenantRow | null> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('tenants')
-    .select(TENANT_SHELL_COLUMNS)
+    .select(TENANT_ROW_COLUMNS)
     .eq('id', tenantId)
     .maybeSingle()
-  return (data as TenantShellRow | null) ?? null
+  return (data as unknown as TenantRow | null) ?? null
 })
+
+export type TenantShellRow = TenantRow
+
+/** Alias histórico: el shell sólo usa cuatro columnas de la misma fila. */
+export const getTenantShellRow = getTenantRow
 
 // Branding del tenant activo para el shell (logo del sidebar).
 export async function getTenantBranding(tenantId: string): Promise<TenantBranding | null> {

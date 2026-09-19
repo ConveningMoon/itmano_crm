@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { columns } from '@/lib/supabase/columns'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getScoreRulesBundle } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
+import { getTenantRow } from '@/lib/data/tenants'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
 import { getBusinessProfile } from '@/lib/data/business-profile'
@@ -41,10 +41,6 @@ export default async function SettingsPage() {
   // que no existe para él.
   const canSeeBusiness = ctx.role !== 'agent'
 
-  const TENANT_COLUMNS = columns('tenants', [
-    'id', 'name', 'slug', 'primary_color', 'logo_url', 'description',
-  ])
-
   // El catálogo de etiquetas sólo lo administra owner/super: para el rol 'agent'
   // la pestaña no existe, así que tampoco se paga la consulta ni viaja en el
   // payload RSC (mismo criterio que canSeeBusiness).
@@ -53,8 +49,9 @@ export default async function SettingsPage() {
   // Una sola ola. Las reglas globales y las efectivas salen de la misma
   // consulta (getScoreRulesBundle) y la lista de owners va aquí y no en un
   // await suelto más abajo, que era una ola entera más por su cuenta.
-  const [{ data: tenantRow }, { data: rawAgents }, businessProfile, scoreRules, { data: ownerProfiles }, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, leadTags, leadTagCounts] = await Promise.all([
-    supabase.from('tenants').select(TENANT_COLUMNS).eq('id', tenantId).single(),
+  const [tenantRow, { data: rawAgents }, businessProfile, scoreRules, { data: ownerProfiles }, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, leadTags, leadTagCounts] = await Promise.all([
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    getTenantRow(tenantId),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
     getScoreRulesBundle(tenantId),
