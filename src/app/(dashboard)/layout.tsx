@@ -6,6 +6,7 @@ import {
   SubscriptionBannerSlot, TenantSwitcherSlot, TopbarPillFallback, UnreadBadgeSlot,
 } from '@/components/layout/shell-slots'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
+import { getShellData } from '@/lib/data/shell'
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +30,18 @@ export default async function DashboardLayout({
   // El email sale del claim del JWT que ya validó getCurrentTenantContext;
   // pedirlo otra vez al servidor de auth era un round-trip entero.
   const userEmail = ctx.email
+
+  // Dispara la ola del shell AQUÍ, sin esperarla. Los slots comparten esta
+  // misma promesa porque getShellData está en cache(); sin este disparo React
+  // no llega a renderizarlos hasta después del árbol de la página, y sus
+  // consultas salían una ola entera por detrás de las de la página.
+  //
+  // El `.catch` vacío no traga nada: cada slot vuelve a esperar la MISMA
+  // promesa y recibe el rechazo ahí, donde su error boundary lo ve. Sólo evita
+  // que Node la marque como rechazo no manejado durante el hueco en que nadie
+  // la está esperando todavía.
+  const shellData = getShellData(ctx)
+  shellData.catch(() => {})
 
   const brand = (
     <Suspense fallback={<BrandFallback />}>

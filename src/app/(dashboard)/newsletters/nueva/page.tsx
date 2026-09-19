@@ -35,16 +35,19 @@ export default async function NewEditionPage() {
   if (!ctx.tenant_id) redirect('/newsletters')
   const tenantId = ctx.tenant_id
 
-  // Misma lectura cacheada que hace el shell: no añade un round-trip.
-  const plan: SubscriptionPlan = (await getSubscription(tenantId))?.plan ?? 'esencial'
-  if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
-
-  const [studioImages, sourceDomains] = await Promise.all([
+  // El plan es la misma lectura cacheada que hace el shell, pero esperarlo
+  // ANTES de lanzar el resto dejaba esas dos lecturas en una ola posterior.
+  // Van juntas y la guarda se evalúa después: si no alcanza, lo leído (todo
+  // acotado al tenant) se descarta sin llegar al cliente.
+  const [subscription, studioImages, sourceDomains] = await Promise.all([
+    getSubscription(tenantId),
     getStudioImages(tenantId),
     // Vacío = este tenant nunca ha generado; el panel lo explica y se preparan
     // solas en esa primera generación (ai/source-catalog.ts).
     getSourceDomainsFor(tenantId),
   ])
+  const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
+  if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
   return (
     <div style={{ maxWidth: '560px' }}>
