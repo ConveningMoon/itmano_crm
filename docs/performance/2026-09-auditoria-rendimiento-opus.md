@@ -723,3 +723,193 @@ Resumen priorizado:
 7. `/newsletters` (pasos en una ola) y `/leads/[id]` (22 consultas: dedupe de
    `tenants`×2 y `acquisition_channels`) si se quiere apurar.
 8. Verificar el drawer móvil y los skeletons en el preview de Vercel.
+
+---
+
+# Fase 3 (Claude Opus 5, High) — 2026-09-19
+
+Rama: `perf/auditoria-rendimiento` (la misma; el PR de las fases 1 y 2 sigue
+sin mergear). Alcance: cerrar las cascadas que quedaban, quitar las lecturas
+repetidas de la misma fila, atacar el peso que paga el navegador (imágenes y
+bundle de gráficos), cerrar los avisos de seguridad que se pueden cerrar, y
+dejar por escrito qué queda en manos de Dylan.
+
+## Estado final de las cascadas
+
+Trazas con `SUPABASE_TRACE=1` contra sandbox, segunda carga de cada ruta,
+`agent_owner` de Tenant Test (super_admin en `/admin` y `/solicitudes`).
+"Fase 1" es el estado al terminar la primera auditoría.
+
+| Ruta | Fase 1 | Fase 2 | Fase 3 |
+|---|---|---|---|
+| `/dashboard` | 9 / 2 | 9 / 2 | 9 / 2 |
+| `/leads` | 11 / 2 | 11 / 2 | 11 / 2 |
+| `/leads/new` | — | 8 / 4 | **8 / 2** |
+| `/leads/[id]` | 22 / 4 | 22 / 3 | **20 / 3** |
+| `/emails` | 20 / 5 | 18 / 2 | **16 / 2** |
+| `/emails/new` | — | 6 / 2 | 6 / 2 |
+| `/emails/[id]` | 12 / 4 | 11 / 2 | 11 / 2 |
+| `/analytics` | 15 / 3 | 15 / 2 | 15 / 2 |
+| `/analytics/emails` | N+1 | 7 / 2 | 7 / 2 |
+| `/properties` | 7 / 3 | 6 / 2 | 6 / 2 |
+| `/properties/[id]` | 8 / 4 | 7 / 2 | **6 / 2** |
+| `/sources` | 14 / 4 | 15 / 2 | **13 / 2** |
+| `/sources/[slug]` | 15 / 4 | 15 / 2 | **14 / 2** |
+| `/settings` | 20 / 3 | 17 / 2 | **15 / 2** |
+| `/newsletters` | 12 / 4 | 12 / 3 | **11 / 2** |
+| `/newsletters/nueva` | — | 7 / 3 | **6 / 2** |
+| `/notifications` | 6 / 2 | 6 / 2 | 6 / 2 |
+| `/activity` | 6 / 2 | 6 / 2 | 6 / 2 |
+| `/solicitudes` | — | 5 / 2 | 4 / 2 |
+| `/admin` | 18 / 4 | 14 / 2 | 14 / 2 |
+
+**Todas las rutas del CRM están en dos olas**: la del contexto
+(`user_profiles`) y una segunda donde caben el shell y la página enteros. La
+única excepción es `/leads/[id]`, con una tercera de dos `count` para la
+posición del lead en la cola, que por definición necesita los ejes del lead
+antes de poder contar quién va por delante.
+
+## Qué se implementó
+
+### El shell ya no va por detrás de la página
+
+Al pasar el shell a `<Suspense>` en la fase 2, React dejaba de llegar a esos
+componentes hasta después de recorrer el árbol de la página, así que sus
+consultas salían una ola entera por detrás. El layout ahora **dispara**
+`getShellData(ctx)` sin esperarlo y los slots comparten esa promesa
+(`cache()`): el shell vuelve a viajar en la misma ola que la página y sigue
+sin bloquear el pintado. Se vio en `/leads/[id]`, que había pasado de 3 a 4
+olas y volvió a 3.
+
+### Una sola lectura de la fila del tenant (`getTenantRow`)
+
+La misma fila de `tenants` se leía dos o tres veces por página con columnas
+distintas: el shell (branding y límite de IA), `getBusinessProfile` y la
+página de turno (slug, marca de páginas gestionadas, identidad de envío).
+Ahora hay un único getter cacheado con las 25 columnas que el CRM usa de su
+tenant (queda fuera `domain_records`, jsonb que sólo mira el centro de
+control) y todo lo demás deriva de él. `/settings` 17→15, `/sources` 15→13,
+`/leads/[id]` 21→20, `/sources/[slug]` 15→14, `/newsletters` 12→11,
+`/properties/[id]` 7→6.
+
+### Cierres de cascada
+
+- `/leads/new`: la fila del agente vinculado al login iba en un `await` suelto
+  al final. 4 olas → 2.
+- `/newsletters/nueva`: el plan se esperaba antes de lanzar las lecturas. 3 → 2.
+- `/newsletters`: el conteo de pasos de la secuencia se resuelve por el TIPO de
+  canal con un join anidado, así que ya no espera al id. 3 → 2.
+- `/studio`: los diseños (globales) esperaban a las lecturas del tenant. 
+- `/emails`: la lista de secuencias y el panel de cobertura por etiqueta pedían
+  `email_sequence_steps` y `lead_sequence_runs` por separado. Dos getters
+  cacheados por tenant y cada uno filtra en memoria. 18 → 16.
+
+### Imágenes: lo que más pesaba para el navegador
+
+Las fotos se guardaban en WebP pero **a resolución completa** (434 objetos en
+producción, 440 kB de media, la mayor 2,4 MB) y todas las superficies las
+descargaban enteras para pintarlas a 160 o 240 px.
+
+- La ficha pública de propiedad, el catálogo del CRM y su detalle pasan a
+  `next/image` con el `sizes` real de cada hueco. Medido en local sobre la
+  ficha de Tenant Test: las miniaturas piden `w=384` y sirven 256×170 para un
+  contenedor de 237 px, donde antes bajaban el original (797 kB la portada, 66
+  y 146 kB las demás). Una ficha con seis fotos pasa de ~1,5 MB a ~250 kB.
+- La subida recorta a 2560 px de lado máximo (`fit: inside`,
+  `withoutEnlargement`), que es lo más grande que cualquiera de esas pantallas
+  puede mostrar. Las fotos que ya están subidas no cambian; las nuevas pesan
+  menos sin consumir cuota de Image Optimization.
+- El logo del tenant en las páginas públicas también pasa por el optimizador:
+  se pintaba a 36 px de alto descargando el PNG original.
+
+### Bundle: recharts fuera de la primera pintura
+
+Los cinco gráficos de `/analytics` y del centro de control traen el paquete de
+cliente más grande del CRM (~110 kB gzip) y estaban en el bundle inicial, para
+dibujos que van por debajo de los KPIs y las tablas. Ahora se cargan con
+`next/dynamic` y `ssr: false`, con un skeleton de la misma altura que el
+gráfico. Los números salen con el primer HTML y el dibujo entra encima sin
+mover nada. Verificado en navegador.
+
+### Seguridad de la base
+
+Migración `20260919120000_sec_search_path_funciones_trigger.sql`, aplicada en
+sandbox y producción: `set search_path = ''` en
+`normalize_agent_languages`, `touch_newsletter_edition` y
+`agent_api_base64url`. El aviso `function_search_path_mutable` desaparece en
+los dos proyectos.
+
+**Hallazgo que corrige el prompt de la fase 2:** ese prompt afirmaba que se
+podía revocar el `execute` de `get_my_tenant_id()` e `is_super_admin()` a
+`anon`/`authenticated` porque "las políticas se evalúan como el dueño". **Es
+falso.** Se probó en sandbox: al revocarlo, `test:rls` pasó de 110/110 a **63
+fallos**, con la lectura de cada tabla denegada. En Postgres las expresiones
+de una política RLS se evalúan con los privilegios del rol que consulta, así
+que ese `execute` es lo que sostiene toda la aislación por tenant. Los grants
+se restauraron de inmediato y se verificó 110/110 otra vez. Queda escrito en
+la migración para que nadie lo intente de nuevo.
+
+Lo que filtran esas dos funciones por `/rpc/` es el tenant propio y si uno es
+super_admin: justo lo que el propio usuario ya sabe de sí mismo. Cerrar el
+endpoint sin perder RLS exigiría moverlas a un esquema no expuesto y recrear
+todas las políticas que las nombran.
+
+### Dos arreglos de verificación
+
+- `docs/agent-api/openapi.json` y `src/lib/agent-api/openapi.generated.json`
+  se fuerzan a LF en `.gitattributes`. En Windows git los entregaba con CRLF y
+  su test de contrato fallaba **siempre**, dando un rojo permanente que tapaba
+  cualquier fallo real.
+- El mismo contrato se regeneró: sus ejemplos salen de datos vivos del tenant
+  demo y el decay había movido la `quality_band` de dos leads. **Ese test es
+  frágil por diseño** (compara byte a byte contra datos que cambian solos);
+  conviene estabilizar los ejemplos como ya se hace con `token.expires_at`.
+
+## Verificación
+
+- `npm run lint` 0 errores (1 warning preexistente en `scripts/`),
+  `npx tsc --noEmit` ✓, `npm run test:unit` 101 archivos / 1 112 tests ✓,
+  `npm run check:agents` ✓, `npm run build` ✓.
+- Sandbox: `test:rls` 110/110 ✓ (dos veces: antes y después de la migración),
+  `test:scoring` 88/88 ✓, `test:agent-api` 68/68 ✓ tras el arreglo de LF.
+  Advisors: performance sólo `unused_index`; seguridad sin
+  `function_search_path_mutable`.
+- Producción: migración aplicada tras el gate; las seis funciones nuevas o
+  recreadas tienen `search_path` fijo; advisors iguales a sandbox.
+- Navegador (dev server local): ficha pública de propiedad con la galería
+  optimizada, `/properties` y `/properties/[id]` del CRM, `/analytics` con los
+  gráficos diferidos, y el **drawer móvil** con el shell nuevo (logo, plan,
+  cerrar sesión) — que era el pendiente visual de la fase 2.
+
+## Lo que NO se pudo verificar en local
+
+El DNS de la máquina de desarrollo resuelve el host de Supabase a una IP
+privada (`198.18.1.63`), así que `next/image` rechaza esas URLs con 400 en
+local. Se verificó activando `images.dangerouslyAllowLocalIP` de forma
+temporal y **se revirtió**; en producción el host resuelve a IP pública y no
+hace falta. Es también la explicación del 400 del logo del tenant que aparecía
+en la consola del dev server durante la fase 2.
+
+## Pendiente
+
+Lo que queda son decisiones y ajustes de panel, no código. Está en la lista
+que se entregó a Dylan al cerrar la fase 3, y lo esencial es:
+
+1. **Desplegar.** Mergear esta rama es lo que mueve la función de `iad1` a
+   `sfo1` (la región ya está marcada en el panel, a falta de un deploy) y
+   pone en producción todo lo anterior. Después, repetir la tabla de TTFB de
+   la fase 2 con el mismo método.
+2. **Vercel: retención de deployments e Ignored Build Step** (pasos exactos en
+   la sección de la fase 2). Es lo único que baja los 26,88 GB de Functions
+   Storage sobre un límite de 10 GB.
+3. **Vercel Pro** por cumplimiento: el plan Hobby es sólo para uso no
+   comercial y el CRM cobra suscripciones.
+4. **Supabase Pro** no acelera nada hoy (19 MB, consultas de milisegundos); se
+   compra por backups diarios y por no pausarse, no por velocidad.
+5. **Mudanza a `iad1` + `us-east-1`** cuando haya ventana: es la única palanca
+   grande que queda para España.
+6. Opcionales con aprobación: Cache Components (2–4 días, gran ganancia para
+   España) y el Custom Access Token Hook (quita la ola 1; decidir después de
+   la región).
+7. Estabilizar los ejemplos del contrato OpenAPI para que su test deje de
+   depender del decay.

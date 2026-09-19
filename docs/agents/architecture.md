@@ -58,13 +58,20 @@ rendimiento (`docs/performance/`):
   fila se comprueba sobre la fila, después de leer; lo leído para un request
   que termina en 404 se descarta sin salir del servidor.
 - Lo que varias superficies leen por request va a un getter con `cache()` en
-  `src/lib/data/*` (`getTenantShellRow`, `getSubscription`, `getTenantNames`,
-  `getShellData`); nadie repite la consulta.
+  `src/lib/data/*` (`getTenantRow`, `getSubscription`, `getTenantNames`,
+  `getShellData`, `getActiveStepsFor`, `getSequenceRunsFor`); nadie repite la
+  consulta. La fila del tenant se lee UNA vez con `getTenantRow`: el branding
+  del shell, el perfil de negocio y el slug de la página salen todos de ella.
+- Una imagen se pinta con `next/image` y su `sizes` real. Un `<img>` con una
+  URL de Storage descarga el original: 440 kB de media para pintar 240 px.
 - Los nombres de agente o tenant se piden embebidos por FK en la misma consulta
   (`agents(name)`, `tenants(name)`), no con una lectura posterior por ids.
 - Una agregación que encadenaba varias lecturas va a una RPC por tenant
   (`sequence_email_metrics`, `tenant_channel_metrics`), `stable`, con
   `search_path` vacío y ejecutable sólo por `service_role`.
+- El layout de `(dashboard)` dispara `getShellData(ctx)` sin esperarlo y sólo
+  espera al contexto. Sin ese disparo React no llega a los slots hasta después
+  del árbol de la página y el shell sale una ola por detrás.
 - El layout de `(dashboard)` sólo espera al contexto. Todo lo que lee de la base
   (logo, plan, no leídas, límite de IA, switcher, banner) llega por streaming
   desde `src/components/layout/shell-slots.tsx` dentro de `<Suspense>`, con
