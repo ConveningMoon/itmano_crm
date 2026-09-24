@@ -524,6 +524,7 @@ export type Database = {
           created_at: string
           id: string
           lead_id: string
+          open_house_email_id: string | null
           resend_email_id: string
           resend_template_id: string | null
           send_type: string
@@ -537,6 +538,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id: string
+          open_house_email_id?: string | null
           resend_email_id: string
           resend_template_id?: string | null
           send_type?: string
@@ -550,6 +552,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id?: string
+          open_house_email_id?: string | null
           resend_email_id?: string
           resend_template_id?: string | null
           send_type?: string
@@ -572,6 +575,13 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_sends_open_house_email_id_fkey"
+            columns: ["open_house_email_id"]
+            isOneToOne: false
+            referencedRelation: "open_house_emails"
             referencedColumns: ["id"]
           },
           {
@@ -1666,6 +1676,359 @@ export type Database = {
           },
         ]
       }
+      open_house_email_contents: {
+        Row: {
+          body_json: Json | null
+          email_id: string
+          language: string
+          resend_template_id: string | null
+          subject: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          body_json?: Json | null
+          email_id: string
+          language: string
+          resend_template_id?: string | null
+          subject?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          body_json?: Json | null
+          email_id?: string
+          language?: string
+          resend_template_id?: string | null
+          subject?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_house_email_contents_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "open_house_emails"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_email_contents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_house_email_recipients: {
+        Row: {
+          attempts: number
+          email_id: string
+          language: string | null
+          last_error: string | null
+          lead_id: string
+          resend_email_id: string | null
+          sent_at: string | null
+          skip_reason: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          attempts?: number
+          email_id: string
+          language?: string | null
+          last_error?: string | null
+          lead_id: string
+          resend_email_id?: string | null
+          sent_at?: string | null
+          skip_reason?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          attempts?: number
+          email_id?: string
+          language?: string | null
+          last_error?: string | null
+          lead_id?: string
+          resend_email_id?: string | null
+          sent_at?: string | null
+          skip_reason?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_house_email_recipients_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "open_house_emails"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_email_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_email_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_email_recipients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_house_emails: {
+        Row: {
+          attempts: number
+          created_at: string
+          failed_count: number
+          finished_at: string | null
+          id: string
+          kind: string
+          last_error: string | null
+          open_house_id: string
+          recipients_frozen_at: string | null
+          revision: number
+          scheduled_at: string
+          sent_count: number
+          skipped_count: number
+          started_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          failed_count?: number
+          finished_at?: string | null
+          id?: string
+          kind: string
+          last_error?: string | null
+          open_house_id: string
+          recipients_frozen_at?: string | null
+          revision?: number
+          scheduled_at: string
+          sent_count?: number
+          skipped_count?: number
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          failed_count?: number
+          finished_at?: string | null
+          id?: string
+          kind?: string
+          last_error?: string | null
+          open_house_id?: string
+          recipients_frozen_at?: string | null
+          revision?: number
+          scheduled_at?: string
+          sent_count?: number
+          skipped_count?: number
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_house_emails_open_house_id_fkey"
+            columns: ["open_house_id"]
+            isOneToOne: false
+            referencedRelation: "open_houses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_emails_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_house_rsvps: {
+        Row: {
+          attended: boolean | null
+          created_at: string
+          guests: number
+          id: string
+          lead_id: string
+          open_house_id: string
+          response: string
+          source: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          attended?: boolean | null
+          created_at?: string
+          guests?: number
+          id?: string
+          lead_id: string
+          open_house_id: string
+          response: string
+          source: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          attended?: boolean | null
+          created_at?: string
+          guests?: number
+          id?: string
+          lead_id?: string
+          open_house_id?: string
+          response?: string
+          source?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_house_rsvps_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_rsvps_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_rsvps_open_house_id_fkey"
+            columns: ["open_house_id"]
+            isOneToOne: false
+            referencedRelation: "open_houses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_house_rsvps_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_houses: {
+        Row: {
+          audience_match: string
+          audience_tag_ids: string[]
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_user_id: string | null
+          confirmed_at: string | null
+          confirmed_by_user_id: string | null
+          created_at: string
+          created_by_agent_id: string | null
+          created_by_user_id: string | null
+          ends_at: string
+          id: string
+          languages: string[]
+          property_id: string
+          public_notes: string | null
+          revision: number
+          rsvp_enabled: boolean
+          starts_at: string
+          status: string
+          tenant_id: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          audience_match?: string
+          audience_tag_ids?: string[]
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
+          confirmed_at?: string | null
+          confirmed_by_user_id?: string | null
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          ends_at: string
+          id?: string
+          languages: string[]
+          property_id: string
+          public_notes?: string | null
+          revision?: number
+          rsvp_enabled?: boolean
+          starts_at: string
+          status?: string
+          tenant_id: string
+          timezone: string
+          updated_at?: string
+        }
+        Update: {
+          audience_match?: string
+          audience_tag_ids?: string[]
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
+          confirmed_at?: string | null
+          confirmed_by_user_id?: string | null
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          ends_at?: string
+          id?: string
+          languages?: string[]
+          property_id?: string
+          public_notes?: string | null
+          revision?: number
+          rsvp_enabled?: boolean
+          starts_at?: string
+          status?: string
+          tenant_id?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_houses_created_by_agent_id_fkey"
+            columns: ["created_by_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_houses_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_houses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       paddle_webhook_events: {
         Row: {
           created_at: string
@@ -2544,6 +2907,7 @@ export type Database = {
           p_action_types?: string[]
           p_agent_id?: string
           p_days?: number
+          p_include_manual_rules?: boolean
           p_tenant_id?: string
         }
         Returns: Json
@@ -2580,7 +2944,22 @@ export type Database = {
         }
         Returns: Json
       }
+      sequence_email_metrics: {
+        Args: { p_sequence_ids?: string[]; p_tenant_id?: string }
+        Returns: Json
+      }
+      tenant_channel_metrics: {
+        Args: { p_tenant_id: string; p_window_days?: number }
+        Returns: Json
+      }
       tenant_hub_stats: { Args: { p_days?: number }; Returns: Json }
+      tenant_owner_emails: {
+        Args: never
+        Returns: {
+          email: string
+          tenant_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

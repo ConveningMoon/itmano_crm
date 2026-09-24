@@ -105,10 +105,13 @@ interface Props {
   // Contexto para que la vista previa muestre la FIRMA REAL del agente que
   // firmaría el envío: por lead (one-off), por secuencia (steps) o por agente
   // (emails de cierre).
-  previewContext?: { leadId?: string; sequenceId?: string; agentId?: string }
+  previewContext?: { leadId?: string; sequenceId?: string; agentId?: string; openHouseId?: string }
+  // Variables disponibles. Por defecto las de siempre; los correos de open
+  // house suman las del evento (fecha, dirección, enlaces).
+  mergeTags?: readonly { tag: string; label: string }[]
 }
 
-export function EmailComposer({ value, onChange, locale = 'es', ai, previewContext }: Props) {
+export function EmailComposer({ value, onChange, locale = 'es', ai, previewContext, mergeTags = MERGE_TAGS }: Props) {
   const [previewHtml, setPreviewHtml]   = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, startPreview]      = useTransition()
@@ -157,6 +160,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
         leadId:     previewContext?.leadId,
         sequenceId: previewContext?.sequenceId,
         agentId:    previewContext?.agentId,
+        openHouseId: previewContext?.openHouseId,
       })
       if (!res.ok) { setPreviewError(res.error); return }
       setPreviewHtml(res.html)
@@ -311,7 +315,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
       {/* Merge tags */}
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Insertar variable:</span>
-        {MERGE_TAGS.map(t => (
+        {mergeTags.map(t => (
           <button
             key={t.tag}
             type="button"

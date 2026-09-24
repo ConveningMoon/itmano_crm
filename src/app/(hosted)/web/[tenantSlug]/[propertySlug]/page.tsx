@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getPublicTenant, getPublishedProperty, getPublishedPropertyPaths } from '../shared'
 import { PublicPropertyView } from './public-property-view'
+import { getPublicOpenHouseForProperty } from '@/lib/data/open-houses'
 
 // Detalle público de una propiedad publicada — properties.itmano.com/<t>/<slug>.
 
@@ -35,6 +36,7 @@ export default async function PublicPropertyDetailPage({ params }: { params: Par
   if (!tenant) notFound()
   const property = await getPublishedProperty(tenant.id, propertySlug)
   if (!property) notFound()
+  const openHouse = await getPublicOpenHouseForProperty(property.id, tenant.id)
 
-  return <PublicPropertyView tenant={tenant} property={property} />
+  return <PublicPropertyView tenant={tenant} property={property} openHouse={openHouse} />
 }

@@ -11,6 +11,8 @@ import {
   embedAspectRatio, PLACEMENT_LABEL, PROVIDER_LABEL,
   type EmbedPlacement, type PropertyEmbed,
 } from '@/lib/services/property-embeds'
+import type { PublicOpenHouse } from '@/lib/data/open-houses'
+import { OpenHouseBanner } from './open-house-banner'
 
 // Detalle público de una propiedad — tema claro editorial (misma dirección que
 // el catálogo). Galería en mosaico (portada 2×2 + "+N más") con lightbox, y
@@ -39,10 +41,12 @@ const WRAP: React.CSSProperties = { maxWidth: '1080px', marginLeft: 'auto', marg
 const DISPLAY: React.CSSProperties = { fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.05 }
 
 export function PublicPropertyView({
-  tenant, property,
+  tenant, property, openHouse = null,
 }: {
   tenant: PublicTenant
   property: PublicProperty
+  // Próximo open house confirmado (o uno cancelado cuya fecha no pasó).
+  openHouse?: PublicOpenHouse | null
 }) {
   const P = pal(tenant.primary_color || '#C9A96E')
 
@@ -222,6 +226,17 @@ export function PublicPropertyView({
             {PROPERTY_STATUS_LABEL[property.status] ?? property.status}
           </span>
         </m.div>
+
+        {/* Open house — cuenta regresiva y RSVP */}
+        {openHouse && (
+          <OpenHouseBanner
+            openHouse={openHouse}
+            lang={lang}
+            P={P}
+            propertyTitle={property.name ?? property.address}
+            location={location}
+          />
+        )}
 
         {/* Specs */}
         {specs.length > 0 && (

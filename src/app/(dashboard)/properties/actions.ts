@@ -24,6 +24,7 @@ const httpUrl = z
 
 // kebab-case: lowercase alphanumerics separated by single hyphens.
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const RESERVED_PROPERTY_SLUGS = new Set(['rsvp'])
 
 const PropertySchema = z
   .object({
@@ -48,6 +49,9 @@ const PropertySchema = z
       .trim()
       .max(120)
       .refine((s) => s === '' || SLUG_RE.test(s), 'Slug inválido: usa minúsculas, números y guiones')
+      // /web/<tenant>/rsvp/<token> es la página del RSVP de open houses: una
+      // propiedad con ese slug quedaría inalcanzable.
+      .refine((s) => !RESERVED_PROPERTY_SLUGS.has(s), 'Ese slug está reservado; elige otro')
       .optional()
       .nullable(),
     neighborhood:   z.string().trim().max(200).optional().nullable(),

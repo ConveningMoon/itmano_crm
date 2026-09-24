@@ -8,10 +8,15 @@ import { PropertyPageOptions } from './property-page-options'
 import { PropertyDetailTabs } from './property-detail-tabs'
 import { EditPropertyButton } from './edit-property-button'
 import { LANGUAGE_CONFIG } from '@/lib/config'
+import { lastOpenHouseTimezone, listPropertyOpenHouses, listTenantTags } from '@/lib/data/open-houses'
+import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
+import { DEFAULT_AUDIENCE_TAG_SLUGS } from '@/lib/open-houses/model'
+import { OpenHouseTab } from './open-houses/open-house-tab'
 
 // Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
 // del formulario, con botón Editar que abre el formulario completo COMO MODAL
-// en esta misma página) + tab Página (catálogo alojado / embebible / solicitar).
+// en esta misma página) + tab Página (catálogo alojado / embebible / solicitar)
+// + tab Open house (open-houses/).
 
 const TYPE_LABEL: Record<string, string> = {
   residential: 'Residencial', condo: 'Condominio', townhouse: 'Townhouse',
@@ -21,15 +26,27 @@ const STATUS_LABEL: Record<string, string> = {
   available: 'Disponible', in_process: 'En proceso', sold: 'Vendida',
 }
 
-export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PropertyDetailPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string }>
+}) {
   const { id } = await params
+  const { tab } = await searchParams
   const ctx = await requireTenantContext()
 
   const p = await getPropertyById(id, ctx.tenant_id)
   if (!p) notFound()
 
   const db = createAdminClient()
-  const { data: tenantRow } = await db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', p.tenantId).maybeSingle()
+  const [{ data: tenantRow }, openHouses, tags, sender, defaultTimezone] = await Promise.all([
+    db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', p.tenantId).maybeSingle(),
+    listPropertyOpenHouses(p.id, p.tenantId),
+    listTenantTags(p.tenantId),
+    resolveOpenHouseSender(db, p.tenantId),
+    lastOpenHouseTimezone(p.tenantId),
+  ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
   // La marca es del tenant (migración 091): aplica a todas sus propiedades,
@@ -140,6 +157,18 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>El tenant no tiene slug configurado.</div>
   )
 
+  const openHouseTab = (
+    <OpenHouseTab
+      propertyId={p.id}
+      openHouses={openHouses}
+      tags={tags}
+      defaultTagIds={tags.filter(t => (DEFAULT_AUDIENCE_TAG_SLUGS as readonly string[]).includes(t.slug)).map(t => t.id)}
+      contentLanguages={p.contentLanguages}
+      blockedReason={sender.ok ? null : sender.error}
+      defaultTimezone={defaultTimezone}
+    />
+  )
+
   return (
     <>
       <div style={{ marginBottom: '20px' }}>
@@ -182,7 +211,13 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      <PropertyDetailTabs descripcion={descripcionTab} pagina={paginaTab} />
+      <PropertyDetailTabs
+        descripcion={descripcionTab}
+        pagina={paginaTab}
+        openHouse={openHouseTab}
+        openHouseCount={openHouses.filter(o => o.displayState === 'scheduled' || o.displayState === 'draft').length}
+        initialTab={tab === 'openhouse' ? 'openhouse' : undefined}
+      />
     </>
   )
 }

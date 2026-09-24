@@ -9,6 +9,7 @@ const VIA_LABELS: Record<string, string> = {
   contact_form: 'formulario de contacto',
   manual:       'registro manual',
   import:       'importación',
+  open_house:   'RSVP de open house',
 }
 
 // Emits the lifecycle event `lead_created` (points 0 — it is a log entry, NOT a

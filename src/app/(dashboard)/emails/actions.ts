@@ -16,6 +16,7 @@ import {
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { EmailContentSchema } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
+import { openHousePreviewVars } from '@/lib/services/open-house-preview'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -535,6 +536,9 @@ const PreviewSchema = z.object({
   leadId:     z.string().optional(),
   sequenceId: z.string().optional(),
   agentId:    z.string().optional(),
+  // Correos de open house: las variables del evento (fecha, dirección,
+  // enlaces) salen de ese open house en vez de quedar literales.
+  openHouseId: z.string().uuid().optional(),
 })
 
 export async function previewEmailHtml(
@@ -592,14 +596,26 @@ export async function previewEmailHtml(
     }
   }
 
+  const openHouseVars = parsed.data.openHouseId
+    ? await openHousePreviewVars(supabase, {
+        openHouseId: parsed.data.openHouseId,
+        tenantId:    ctx.tenant_id,
+        language:    parsed.data.locale,
+        agentName,
+        agentEmail:  'agente@ejemplo.com',
+      })
+    : null
+
   const rendered = renderEmail({
     subject: parsed.data.subject,
     content: parsed.data.content,
-    vars: {
-      customer_name: 'María',
-      agent_name:    agentName,
-      agent_email:   'agente@ejemplo.com',
-    },
+    vars: openHouseVars
+      ? { customer_name: 'María', agent_name: agentName, agent_email: 'agente@ejemplo.com', ...openHouseVars }
+      : {
+          customer_name: 'María',
+          agent_name:    agentName,
+          agent_email:   'agente@ejemplo.com',
+        },
     signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.en,
     unsubscribeUrl: '#',
     locale:         parsed.data.locale as EmailLocale,

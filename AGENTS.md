@@ -73,7 +73,9 @@ Google AI, Resend, Telegram y Paddle.
 - No uses el límite `ai_monthly_limit_usd` como garantía de gasto local: los
   eventos se registran en sandbox, mientras el proveedor factura la cuenta real.
 - No envíes correos ni notificaciones reales como efecto secundario de una prueba
-  salvo autorización y destinatario explícitos.
+  salvo autorización y destinatario explícitos. Fuera de producción, Resend
+  simula los envíos salvo a `@resend.dev` o `EMAIL_TEST_ALLOWLIST`
+  (`src/lib/email/send-guard.ts`); no lo desactives para probar.
 - Los leads de demo deben usar dominios reservados como `example.com`.
 
 ## Git entre Windows, Mac y dos agentes
@@ -137,7 +139,7 @@ npm run build
 ```
 
 Las suites remotas (`test:schema`, `test:rls`, `test:scoring`,
-`test:ai-limits`, `test:sources`) comparten fixtures y se ejecutan de una en una
+`test:ai-limits`, `test:sources`, `test:open-houses`) comparten fixtures y se ejecutan de una en una
 contra sandbox. `npm run check:db-targets` debe pasar antes. No ejecutes dos
 suites remotas o builds con fixtures en paralelo.
 
