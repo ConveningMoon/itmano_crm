@@ -8,10 +8,14 @@ seguir las rutas de contexto en `docs/agents/`.
 
 Configuración específica de Claude Code:
 
-- El MCP persistente del proyecto es `supabase-sandbox`; autentícalo mediante
-  OAuth con `/mcp`. No requiere ni debe usar un PAT en `settings.json`.
-- No importes o recrees un MCP permanente de producción. Cuando una tarea lo
-  requiera, usa una conexión temporal, acotada, read-only y con autorización.
+- Claude Code usa dos MCP de Supabase: `supabase-sandbox` y uno de producción,
+  cada uno acotado por URL a su `project_ref`. Autentícalos mediante OAuth con
+  `/mcp`, una vez por computadora. No requieren ni deben usar un PAT en
+  `settings.json`.
+- El agente tiene acceso a ambas bases y aplica las migraciones por sí mismo:
+  primero en sandbox y, sólo si allí pasan las pruebas y advisors, el mismo
+  archivo en producción, sin pedir otra autorización. Los cambios destructivos
+  siguen la regla de confirmación de `AGENTS.md`.
 - Las skills oficiales de Supabase viven en `.claude/skills/` y su procedencia
   está fijada en `skills-lock.json`.
 - Graphify debe estar instalado globalmente en la misma versión que declara

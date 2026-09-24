@@ -45,10 +45,11 @@ Hay dos proyectos y producción contiene datos de clientes:
 | Entorno | `project_ref` | Uso |
 |---|---|---|
 | Sandbox | `xpaixcowvyksgluazwzn` | Desarrollo, pruebas y primera aplicación de migraciones |
-| Producción | `kvmjlrvlnhiarrqxulkr` | Datos reales; acceso excepcional |
+| Producción | `kvmjlrvlnhiarrqxulkr` | Datos reales; migraciones ya probadas y consultas |
 
-- Usa los MCP persistentes `supabase_sandbox` y `supabase_production`
-  configurados en el proyecto. Cada uno está acotado por URL a su `project_ref`;
+- Los agentes tienen acceso a ambas bases mediante MCP persistentes:
+  `supabase_sandbox` y `supabase_production` en Codex, y los equivalentes de
+  Claude Code (ver `CLAUDE.md`). Cada uno está acotado por URL a su `project_ref`;
   la autenticación OAuth se realiza una sola vez por computadora y sus tokens
   nunca se versionan.
 - Para cualquier tarea Supabase, carga las skills `supabase` y, antes de escribir
