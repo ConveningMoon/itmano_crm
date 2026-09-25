@@ -1,6 +1,7 @@
 import 'server-only'
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 
 export interface SwitcherTenant {
   id: string
@@ -22,26 +23,104 @@ export async function getTenantsForSwitcher(): Promise<SwitcherTenant[]> {
   }))
 }
 
+/**
+ * id → nombre de todos los tenants, deduplicado por request. Lo piden varias
+ * vistas globales del super_admin (notificaciones, actividad, uso de IA) en
+ * la misma página: antes cada una hacía su propia lectura de `tenants`.
+ */
+export const getTenantNames = cache(async function getTenantNames(): Promise<Map<string, string>> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('tenants').select('id, name')
+  return new Map(((data ?? []) as { id: string; name: string }[]).map(t => [t.id, t.name]))
+})
+
 export interface TenantBranding {
   name:    string
   logoUrl: string | null
 }
 
-// Branding del tenant activo para el shell (logo del sidebar). Una sola fila,
-// deduplicada por request.
-export const getTenantBranding = cache(async function getTenantBranding(
+/**
+ * Las columnas de `tenants` que una página del CRM puede necesitar de SU
+ * tenant. No están aquí `domain_records` (jsonb de registros DNS, sólo lo mira
+ * el panel de dominio del centro de control, que lee todos los tenants) ni
+ * `created_at`.
+ *
+ * Existe una sola lista porque hasta la fase 2 la MISMA fila se leía dos o
+ * tres veces por página con columnas distintas: el shell (branding + límite de
+ * IA), el perfil de negocio y la página de turno (slug, marca de páginas
+ * gestionadas, identidad de envío). Eran round-trips idénticos en todo salvo
+ * en la lista de columnas.
+ */
+export const TENANT_ROW_COLUMNS = columns('tenants', [
+  'id', 'name', 'slug', 'logo_url', 'primary_color', 'description',
+  'email_from_address', 'resend_account', 'sending_domain', 'domain_status',
+  'ai_monthly_limit_usd', 'ai_unlimited', 'ai_lead_scoring_enabled',
+  'pages_managed_by_itmano', 'newsletter_source_domains',
+  'currency', 'commission_model', 'commission_buy', 'commission_sell',
+  'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
+  'public_site_url', 'newsletter_canonical_template',
+])
+
+export interface TenantRow {
+  id:                       string
+  name:                     string
+  slug:                     string
+  logo_url:                 string | null
+  primary_color:            string | null
+  description:              string | null
+  email_from_address:       string | null
+  resend_account:           string | null
+  sending_domain:           string | null
+  domain_status:            string | null
+  ai_monthly_limit_usd:     number | string | null
+  ai_unlimited:             boolean | null
+  ai_lead_scoring_enabled:  boolean | null
+  pages_managed_by_itmano:  boolean | null
+  newsletter_source_domains: unknown
+  currency:                 string | null
+  commission_model:         string | null
+  commission_buy:           number | string | null
+  commission_sell:          number | string | null
+  budget_entry_max:         number | string | null
+  budget_premium_min:       number | string | null
+  primary_areas:            string[] | null
+  secondary_areas:          string[] | null
+  public_site_url:          string | null
+  newsletter_canonical_template: string | null
+}
+
+/**
+ * La fila del tenant, UNA vez por request (React cache()).
+ *
+ * Todo lo que el CRM necesita de `tenants` para el tenant activo sale de aquí:
+ * el shell, el perfil de negocio y las páginas. Deduplicar es seguro porque
+ * nadie escribe `tenants` a través de este getter — los escritores (acciones
+ * de settings y del centro de control) van directo a la tabla y revalidan la
+ * ruta, lo que descarta este cache con el render.
+ */
+export const getTenantRow = cache(async function getTenantRow(
   tenantId: string,
-): Promise<TenantBranding | null> {
+): Promise<TenantRow | null> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('tenants')
-    .select('name, logo_url')
+    .select(TENANT_ROW_COLUMNS)
     .eq('id', tenantId)
     .maybeSingle()
-  if (!data) return null
-  const t = data as { name: string; logo_url: string | null }
-  return { name: t.name, logoUrl: t.logo_url ?? null }
+  return (data as unknown as TenantRow | null) ?? null
 })
+
+export type TenantShellRow = TenantRow
+
+/** Alias histórico: el shell sólo usa cuatro columnas de la misma fila. */
+export const getTenantShellRow = getTenantRow
+
+// Branding del tenant activo para el shell (logo del sidebar).
+export async function getTenantBranding(tenantId: string): Promise<TenantBranding | null> {
+  const t = await getTenantShellRow(tenantId)
+  if (!t) return null
+  return { name: t.name, logoUrl: t.logo_url ?? null }
+}
 
 export interface TenantWithOwner {
   id:           string
@@ -86,20 +165,22 @@ export interface TenantWithOwner {
 /**
  * Lists every tenant with its provisioned owner's email (super_admin view).
  *
- * The owner email lives on auth.users (not user_profiles), so we join through
- * user_profiles (role = 'agent_owner') and resolve each id via the admin API.
- * One owner per tenant today; getUserById per owner is bounded by tenant count.
- * Uses the admin client (service_role) — the only server-side path that can read
- * auth.users and bypass the SELECT-only user_profiles RLS.
+ * The owner email lives on auth.users (not user_profiles): the RPC
+ * tenant_owner_emails joins user_profiles (role = 'agent_owner') with
+ * auth.users in one query. It is security definer and executable only by
+ * service_role, so this admin-client path is the only one that can call it.
  */
 export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
   const supabase = createAdminClient()
 
   const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
 
+  // El email del owner sale de la RPC tenant_owner_emails (security definer,
+  // sólo service_role): una consulta para todos los tenants, en la misma ola.
+  // Antes era una llamada al Auth Admin API por tenant, en serie.
   const [{ data: tenantRows }, { data: ownerRows }, { data: usageRows }, { data: subRows }] = await Promise.all([
     supabase.from('tenants').select('id, name, slug, primary_color, logo_url, ai_monthly_limit_usd, ai_unlimited, ai_lead_scoring_enabled, pages_managed_by_itmano, resend_account, sending_domain, resend_domain_id, domain_status, domain_records').order('created_at'),
-    supabase.from('user_profiles').select('id, tenant_id').eq('role', 'agent_owner'),
+    supabase.rpc('tenant_owner_emails'),
     supabase.from('ai_usage_events').select('tenant_id, cost_usd').gte('created_at', monthStart),
     supabase.from('subscriptions').select('tenant_id, plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, degraded_at, paddle_price_id, billing_exempt'),
   ])
@@ -121,10 +202,10 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     usedByTenant.set(u.tenant_id, (usedByTenant.get(u.tenant_id) ?? 0) + Number(u.cost_usd))
   }
 
-  // tenant_id → owner auth user id (one owner per tenant by current rule)
-  const ownerByTenant = new Map<string, string>()
-  for (const o of (ownerRows ?? []) as { id: string; tenant_id: string | null }[]) {
-    if (o.tenant_id) ownerByTenant.set(o.tenant_id, o.id)
+  // tenant_id → owner email (one owner per tenant by current rule)
+  const ownerEmailByTenant = new Map<string, string>()
+  for (const o of (ownerRows ?? []) as { tenant_id: string; email: string | null }[]) {
+    if (o.tenant_id && o.email) ownerEmailByTenant.set(o.tenant_id, o.email)
   }
 
   const result: TenantWithOwner[] = []
@@ -137,12 +218,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     domain_status: string | null; domain_records: any[] | null
   }[]) {
-    let ownerEmail: string | null = null
-    const ownerId = ownerByTenant.get(t.id)
-    if (ownerId) {
-      const { data } = await supabase.auth.admin.getUserById(ownerId)
-      ownerEmail = data?.user?.email ?? null
-    }
+    const ownerEmail = ownerEmailByTenant.get(t.id) ?? null
     result.push({
       id:           t.id,
       name:         t.name,

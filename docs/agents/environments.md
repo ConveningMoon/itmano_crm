@@ -49,9 +49,23 @@ para activar quintiles, etapas y series temporales. Sus emails usan
 Cambiar Supabase a sandbox no neutraliza automáticamente otras credenciales:
 
 - Anthropic y Google AI pueden facturar consumo real.
-- Resend puede enviar correo real.
+- Resend puede enviar correo real, salvo lo que detiene el guard de abajo.
 - Telegram puede publicar en chats reales.
 - Paddle puede operar contra su entorno configurado.
+
+### Guard de envíos de Resend
+
+`resendForAccount` instala `src/lib/email/send-guard.ts` sobre cada cliente: si
+`NEXT_PUBLIC_SUPABASE_URL` no apunta al proyecto de PRODUCCIÓN, los correos se
+SIMULAN (id `simulated_…`, sin llamar a Resend) salvo que todos sus
+destinatarios sean `@resend.dev` o estén en `EMAIL_TEST_ALLOWLIST` (emails o
+`@dominio` separados por comas). Falla cerrado: un entorno mal configurado
+simula en vez de enviar. Para probar entregas y webhooks reales usa
+`delivered@resend.dev`, `bounced@resend.dev` y `complained@resend.dev`.
+
+Los enlaces de baja y de RSVP necesitan `UNSUBSCRIBE_SECRET`, y
+`/api/cron/*` necesita `CRON_SECRET`. En local pon valores propios (nunca los de
+producción) en `.env.development.local`.
 
 Antes de una prueba, comprueba el destino de cada proveedor. Para trabajo que no
 necesita esos servicios, elimina o deja vacías sus variables en el archivo local

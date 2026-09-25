@@ -21,13 +21,14 @@ import { getSubmissionsForLead } from '@/lib/data/form-submissions'
 import { getLeadStatusHistory } from '@/lib/data/lead-status-history'
 import { getLeadEmailReplies } from '@/lib/data/lead-email-replies'
 import { getGlobalScoreRules } from '@/lib/data/score-rules'
-import { getLeadPriorityPosition } from '@/lib/data/leads'
+import { getLeadPriorityAxes, getLeadPriorityPositionFor } from '@/lib/data/leads'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { opportunitiesFor } from '@/lib/scoring/opportunities'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
-import { getBusinessProfile } from '@/lib/data/business-profile'
+import { mapBusinessProfile } from '@/lib/data/business-profile'
+import { getTenantRow } from '@/lib/data/tenants'
 import { getTagIdsWithSequence, getTagsForLead, listLeadTags } from '@/lib/data/lead-tags'
 import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
@@ -39,23 +40,33 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const scope = scopeFor(ctx)
   const supabase = createAdminClient()
 
-  // Load the lead first and enforce visibility — an agent (or wrong-tenant viewer)
-  // hitting a lead they don't own by URL gets a 404, not the record.
-  const { data: rawLead } = await supabase.from('leads').select('*').eq('id', id).single()
+  // Todo lo que cuelga del lead sólo necesita su id (viene en la URL) y el
+  // tenant del contexto, no la fila del lead: así la fila y el resto viajan en
+  // UNA ola. La visibilidad se sigue comprobando sobre la fila antes de
+  // devolver nada — un agente (o un tenant ajeno) que llega por URL a un lead
+  // que no le toca recibe 404, y lo leído para ese request se descarta sin
+  // salir del servidor. Cada lectura va además acotada por tenant_id.
+  //
+  // requireTenantContext garantiza tenant; si no lo hubiera (super_admin en
+  // hub, hoy inalcanzable aquí) la fila del lead se lee primero para saberlo.
+  let leadTenantId = tenant_id
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (!isRowVisible(scope, rawLead as any)) notFound()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leadTenantId = (rawLead as any).tenant_id as string
+  let preLead: any = null
+  if (!leadTenantId) {
+    const { data } = await supabase.from('leads').select('*').eq('id', id).single()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!isRowVisible(scope, data as any)) notFound()
+    preLead = data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    leadTenantId = (data as any).tenant_id as string
+  }
 
   // Profile activity feed: an 'agent' only sees system + their own events.
-  let eventsQ = supabase.from('lead_events').select('*').eq('lead_id', id).order('created_at', { ascending: false })
+  let eventsQ = supabase.from('lead_events').select('*').eq('lead_id', id).eq('tenant_id', leadTenantId).order('created_at', { ascending: false })
   if (role === 'agent') eventsQ = eventsQ.or(`actor_user_id.is.null,actor_user_id.eq.${user_id}`)
 
-  // Una sola ola para todo lo que cuelga del lead. Las lecturas del tenant y del
-  // acceso de facturación entran acá también: antes iban en dos awaits sueltos al
-  // final del archivo, encadenados detrás de esta ola y de la de autores, y sobre
-  // una base remota cada eslabón de esa cadena se paga entero al abrir el lead.
   const [
+    { data: rawLead },
     { data: rawAgents },
     { data: rawEvents },
     { data: rawProcess },
@@ -64,42 +75,48 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     scoreRules,
     statusHistory,
     emailReplies,
-    { data: tenantRow },
+    tenantRow,
     tenantAccess,
-    priority,
-    businessProfile,
+    priorityAxes,
     leadTags,
     tagCatalog,
     emailTagIds,
   ] = await Promise.all([
+    preLead
+      ? Promise.resolve({ data: preLead })
+      : supabase.from('leads').select('*').eq('id', id).eq('tenant_id', leadTenantId).single(),
     supabase.from('agents').select('*').eq('tenant_id', leadTenantId),
     eventsQ,
-    supabase.from('purchase_processes').select('*').eq('lead_id', id).maybeSingle(),
+    supabase.from('purchase_processes').select('*').eq('lead_id', id).eq('tenant_id', leadTenantId).maybeSingle(),
     supabase.from('acquisition_channels').select('id, tenant_id, channel_type, name, slug, agent_id').eq('tenant_id', leadTenantId).eq('active', true).order('name'),
-    getSubmissionsForLead(id, tenant_id),
+    getSubmissionsForLead(id, leadTenantId),
     getGlobalScoreRules(),
-    getLeadStatusHistory(id, tenant_id),
-    getLeadEmailReplies(id, tenant_id),
-    // Identidad de envío + flag de análisis con IA salen de la MISMA fila de
-    // `tenants`; eran dos queries separadas a la misma fila.
-    supabase
-      .from('tenants')
-      .select('name, slug, email_from_address, resend_account, domain_status, sending_domain, ai_lead_scoring_enabled')
-      .eq('id', leadTenantId)
-      .maybeSingle(),
+    getLeadStatusHistory(id, leadTenantId),
+    getLeadEmailReplies(id, leadTenantId),
+    // Identidad de envío, flag de análisis con IA y perfil de negocio salen de
+    // la MISMA fila de `tenants`, que además comparte con el shell: eran tres
+    // queries a la misma fila. El perfil se deriva con mapBusinessProfile.
+    getTenantRow(leadTenantId),
     getTenantAccessFor(leadTenantId),
-    // Los tres ejes + la posicion en la cola. El ranking se resuelve con counts
-    // sobre indice dentro de Postgres, nunca trayendo la cartera a memoria.
-    getLeadPriorityPosition(id, scope),
-    // Comisión y moneda de la agencia — sin esto el monto del lead es un número
-    // sin significado para quien lo mira.
-    getBusinessProfile(leadTenantId),
+    // Los tres ejes ahora; la posicion en la cola (dos counts sobre indice) en
+    // la ola siguiente, junto con los autores de los eventos.
+    getLeadPriorityAxes(id, scope),
     // Etiquetas (116): las del lead y el catálogo del tenant para el
-    // desplegable. Van en esta ola y no en un await suelto por lo mismo que el
-    // resto: cada eslabón encadenado se paga entero al abrir la ficha.
+    // desplegable.
     getTagsForLead(id),
     listLeadTags(leadTenantId),
     getTagIdsWithSequence(leadTenantId),
+  ])
+
+  // La comprobación de visibilidad va ANTES de usar cualquier otra lectura.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!isRowVisible(scope, rawLead as any)) notFound()
+
+  // Segunda ola: lo único que depende de la primera. El ranking usa los ejes
+  // recién leídos y los autores salen de los eventos.
+  const [priority, actorNames] = await Promise.all([
+    getLeadPriorityPositionFor(priorityAxes, scope),
+    resolveActorNames((rawEvents ?? []).map(r => (r as LeadEventRow).actor_user_id ?? null)),
   ])
 
   // Manual agent actions = active manual scoring rules (driven by Settings → Scoring).
@@ -113,6 +130,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       isDisqualify: r.sideEffect === 'force_perdido',
     }))
 
+  // La fila del tenant sirve a tres cosas: identidad de envío, flag de IA y
+  // perfil de negocio. Se lee una vez y se deriva aquí, antes de usarla.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tRow = tenantRow as any
+  const businessProfile = mapBusinessProfile(tRow)
+
   const lead           = mapLead(rawLead as LeadRow)
   // Quién puede etiquetar = quién puede escribir el lead. Se calcula con el
   // MISMO guard que la acción (assertCanWriteLead) en vez de deducirlo del rol:
@@ -120,8 +143,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const canTag         = assertCanWriteLead(ctx, rawLead as any) === null
   const agents         = (rawAgents  ?? []).map(r => mapAgent(r as AgentRow))
-  // Resolve event authors in one batch (no N+1) and attach the display label.
-  const actorNames     = await resolveActorNames((rawEvents ?? []).map(r => (r as LeadEventRow).actor_user_id ?? null))
+  // Event authors were resolved in one batch above (no N+1); attach the label.
   const events         = (rawEvents  ?? []).map(r => {
     const e = mapLeadEvent(r as LeadEventRow)
     return { ...e, author: authorOf(e.actorUserId ?? null, actorNames) }
@@ -165,8 +187,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   // el envío ya sale por el dominio compartido y el badge no puede seguir
   // mostrando el dominio propio del tenant — le mentiría al usuario justo
   // cuando más necesita saber la verdad.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tRow = tenantRow as any
   const identity = tRow
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? resolveSenderIdentity(tRow as any, { customDomainAllowed: tenantAccess.customDomainAllowed })

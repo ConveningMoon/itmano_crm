@@ -97,27 +97,35 @@ export default async function EmailSequenceDetailPage({
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
 
+  const supabase = createAdminClient()
+
+  // Una sola ola para lo que no depende de la secuencia: la secuencia con sus
+  // runs, los agentes del tenant y las métricas por paso (RPC por tenant e id,
+  // que la tarjeta de métricas comparte por cache()). Antes los agentes y las
+  // métricas esperaban a la secuencia sólo para leer su tenant_id, que ya
+  // está en el contexto: requireTenantContext lo garantiza.
+  //
   // Agent: a sequence they don't own (or "Toda la agencia") resolves to null → 404.
-  const sequence = await getSequenceWithRuns(tenant_id, id, scope.agentId)
+  const [sequence, { data: agentRows }, stepMetrics] = await Promise.all([
+    getSequenceWithRuns(tenant_id, id, scope.agentId),
+    tenant_id
+      ? supabase.from('agents').select('id, name').eq('tenant_id', tenant_id).eq('active', true).order('name')
+      : Promise.resolve({ data: [] }),
+    getStepMetrics(tenant_id, id),
+  ])
   if (!sequence) notFound()
 
-  const supabase = createAdminClient()
   const isManual = sequence.activationType === 'manual'
 
-  // Una sola ola: agentes del tenant, métricas por paso y —solo en secuencias
-  // manuales— la primera página de leads elegibles. Nada de esto depende de nada
-  // más que de `sequence`, así que encadenarlo con await solo sumaba latencia.
+  // Sólo las secuencias manuales tienen picker: la primera página de leads
+  // elegibles depende del tipo de activación, así que se lee después.
   //
   // El anti-join contra los runs activos lo resuelve Postgres dentro de
   // sequence_eligible_leads, así que la página ya no trae la lista completa de
   // leads para descartarla en JS. La búsqueda posterior vuelve al servidor desde
   // el picker. Los agentes se leen UNA vez y sirven a los dos consumidores: el
   // selector de propietario de la secuencia y el picker manual.
-  const [{ data: agentRows }, stepMetrics, eligible] = await Promise.all([
-    supabase.from('agents').select('id, name').eq('tenant_id', sequence.tenantId).eq('active', true).order('name'),
-    getStepMetrics(sequence.id),
-    isManual ? getEligibleLeadsForSequence(sequence.id, scope, { limit: 50 }) : null,
-  ])
+  const eligible = isManual ? await getEligibleLeadsForSequence(sequence.id, scope, { limit: 50 }) : null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentRows ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string }))

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 import { sendPurchaseEmail } from '@/lib/services/send-purchase-email'
+import { dispatchDueOpenHouseEmails } from '@/lib/services/open-house-dispatch'
+
+// Presupuesto de la etapa de open houses (~30 lotes de 100 correos).
+const OPEN_HOUSE_BUDGET_MS = 45_000
 
 interface DryRunDetail {
   run_id:        string
@@ -26,6 +30,16 @@ export async function POST(request: NextRequest) {
   const leadId  = searchParams.get('lead_id')  ?? null   // optional: limit to one lead's runs
 
   const db = createAdminClient()
+
+  // ── Stage 0: correos de open house vencidos ────────────────────────────────
+  // Va primero y no después de las secuencias porque Stage 1 retorna temprano
+  // cuando no hay corridas: al final, un anuncio programado podría no salir
+  // nunca. El tope de tiempo deja margen a las secuencias dentro del límite de
+  // la función; lo que no alcance, lo retoma la siguiente ejecución. Ni
+  // dry_run (sería un envío real) ni una corrida acotada a un lead despachan.
+  const openHouses = dryRun || leadId
+    ? { processed: 0, sent: 0 }
+    : await dispatchDueOpenHouseEmails(db, { deadline: Date.now() + OPEN_HOUSE_BUDGET_MS })
 
   // ── Stage 1: fetch eligible run IDs ────────────────────────────────────────
   // Eligibility lives here in the caller; processSequenceRun processes whatever
@@ -52,6 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true, dry_run: dryRun,
       processed: 0, sent: 0, completed: 0, paused: 0,
+      open_houses: openHouses,
       ts: new Date().toISOString(),
       ...(dryRun && { runs: [] }),
     })
@@ -140,6 +155,7 @@ export async function POST(request: NextRequest) {
     completed,
     paused,
     pre_close_sent: preCloseSent,
+    open_houses:    openHouses,
     ts:             new Date().toISOString(),
     ...(dryRun && { runs: dryRunDetails }),
   })

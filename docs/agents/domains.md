@@ -164,6 +164,64 @@ una secuencia creada automáticamente por `(etiqueta, idioma)` con
 Fuente inicial: `src/lib/leads/tags.ts`, `src/lib/data/lead-tags.ts`,
 `src/lib/services/enroll-lead-by-tag.ts` y `src/lib/data/tag-sequences.ts`.
 
+## Open houses
+
+Un open house es un evento con fecha que vive en una propiedad y se repite (la
+misma casa se abre varios sábados), por eso tiene tabla propia
+(`open_houses`, migración `open_houses`) y no es una fuente. Es el PRIMER envío
+masivo del producto: todo lo demás sale lead por lead.
+
+- Sólo lo usan tenants cuyos correos salen de su PROPIO dominio verificado
+  (`resolveOpenHouseSender` → `usesSharedDomain`). Un anuncio desde el dominio
+  compartido de ITMANO pondría en riesgo la entrega de todos los tenants. Se
+  vuelve a comprobar en cada envío: un tenant que se degrada después de
+  programar no manda nada.
+- Cualquier rol crea un open house (las propiedades son visibles para todo el
+  equipo); lo gestiona quien lo creó, el owner o ITMANO.
+- Estados: `draft` → `scheduled` → `cancelled`. "Terminado" se deriva de
+  `ends_at`. Un borrador no es público ni envía nada; se borra. Uno confirmado
+  se reprograma o se cancela, nunca se edita en silencio.
+- La audiencia del anuncio son leads con las etiquetas elegidas (`any`/`all`).
+  Una lista vacía no selecciona a nadie. Los slugs preseleccionados
+  (`pre-aprobado`, `contactado-sin-respuesta`) son del catálogo por defecto del
+  producto; si el tenant los cambió, no se preselecciona nada.
+- Hasta 3 idiomas (los de un lead: es, en, pt), cada correo con su versión por
+  idioma: contenido del CRM (composer, con IA) o template de Resend. El lead
+  recibe el suyo con `resolveLeadEmailLanguage`; sin versión, no recibe nada.
+- Correos: `announcement` (a la audiencia), `reminder` (sólo a quien
+  confirmó), `update` y `cancellation` (sólo a quien recibió el anuncio o
+  respondió; nunca gente nueva). Reprogramar o cancelar DESPUÉS del anuncio
+  exige escribir el aviso; antes, no se avisa a nadie. No se permite un cambio
+  mientras algo se está enviando o hay un aviso pendiente (`planReschedule`,
+  `planCancel`).
+- Conflictos de agenda: un `EXCLUDE` impide dos open houses vivos solapados en
+  la misma propiedad; el anuncio sale antes del inicio, el recordatorio
+  después del anuncio y antes del inicio; una hora que no existe por cambio de
+  horario se rechaza. Todo en `src/lib/open-houses/schedule.ts`.
+- Envío: el anuncio "al confirmar" sale en proceso con `after()`; lo
+  programado lo despacha la etapa 0 del orquestador horario
+  (`dispatchDueOpenHouseEmails`, tope de 45 s por ejecución). Claim optimista,
+  destinatarios congelados con PK `(email_id, lead_id)`, lotes de 100 por la
+  API batch de Resend con `Idempotency-Key`, y un 429 o una excepción dejan el
+  correo `pending` con el error visible. Cada envío escribe `email_sends`
+  (`send_type = 'open_house'`) para que rebotes y bajas bloqueen al lead.
+- No se escribe `lead_event` por envío (marcaría a cientos de leads como
+  activos). Lo que puntúa es CONFIRMAR asistencia: `event_submission` (+20) una
+  vez por open house (`dedup_key = open_house_rsvp:<id>`).
+- RSVP: el enlace del correo abre `/web/<tenant>/rsvp/<token>` (firmado con
+  `UNSUBSCRIBE_SECRET` y prefijo propio) y responde con un botón, nunca con el
+  GET — los escáneres de enlaces visitan cada URL. La web usa
+  `POST /api/open-houses/<id>/rsvp` (CORS abierto, honeypot); un email nuevo
+  crea el lead para el agente del open house. `rsvp` es slug de propiedad
+  reservado.
+- Web: la ficha alojada (y su iframe) muestra la cuenta regresiva sola. La web
+  propia lee `open_houses` con `anon` por columnas (`PUBLIC_OPEN_HOUSE_COLUMNS`,
+  atado al GRANT por test) y sólo ve confirmados o cancelados de propiedades
+  publicadas. El prompt para esa web lo genera `integration-prompt.ts`.
+
+Fuente inicial: `src/lib/open-houses/*`, `src/lib/services/open-house-*.ts`,
+`src/lib/data/open-houses.ts` y `src/app/(dashboard)/properties/open-house-actions.ts`.
+
 ## Archivos iniciales por área
 
 | Área | Fuente inicial |
@@ -175,6 +233,7 @@ Fuente inicial: `src/lib/leads/tags.ts`, `src/lib/data/lead-tags.ts`,
 | Newsletters | `src/lib/newsletters/*`, `src/lib/data/newsletters.ts` |
 | Carpetas | `src/lib/data/folders.ts`, `src/app/(dashboard)/folder-actions.ts` |
 | Etiquetas de leads | `src/lib/leads/tags.ts`, `src/lib/data/lead-tags.ts`, `src/lib/services/enroll-lead-by-tag.ts` |
+| Open houses | `src/lib/open-houses/*`, `src/lib/services/open-house-dispatch.ts`, `src/app/(dashboard)/properties/open-house-actions.ts` |
 | Auth y proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs actuales de Supabase SSR |
 | Migraciones/RLS | Última migración, skills Supabase y esquema real sandbox |
 | Landing/legal | `src/app/(marketing)/`, `src/components/motion/README.md` |

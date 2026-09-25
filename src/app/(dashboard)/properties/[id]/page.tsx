@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
+import { getTenantRow } from '@/lib/data/tenants'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getPropertyById } from '@/lib/data/properties'
@@ -8,10 +10,15 @@ import { PropertyPageOptions } from './property-page-options'
 import { PropertyDetailTabs } from './property-detail-tabs'
 import { EditPropertyButton } from './edit-property-button'
 import { LANGUAGE_CONFIG } from '@/lib/config'
+import { lastOpenHouseTimezone, listPropertyOpenHouses, listTenantTags } from '@/lib/data/open-houses'
+import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
+import { DEFAULT_AUDIENCE_TAG_SLUGS } from '@/lib/open-houses/model'
+import { OpenHouseTab } from './open-houses/open-house-tab'
 
 // Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
 // del formulario, con botón Editar que abre el formulario completo COMO MODAL
-// en esta misma página) + tab Página (catálogo alojado / embebible / solicitar).
+// en esta misma página) + tab Página (catálogo alojado / embebible / solicitar)
+// + tab Open house (open-houses/).
 
 const TYPE_LABEL: Record<string, string> = {
   residential: 'Residencial', condo: 'Condominio', townhouse: 'Townhouse',
@@ -21,15 +28,32 @@ const STATUS_LABEL: Record<string, string> = {
   available: 'Disponible', in_process: 'En proceso', sold: 'Vendida',
 }
 
-export default async function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PropertyDetailPage({
+  params, searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string }>
+}) {
   const { id } = await params
+  const { tab } = await searchParams
   const ctx = await requireTenantContext()
 
-  const p = await getPropertyById(id, ctx.tenant_id)
+  // La propiedad y la fila del tenant van juntas: requireTenantContext ya
+  // garantiza el tenant, y una propiedad de otro tenant no resuelve (404), así
+  // que leer el tenant del contexto en paralelo no espera nada ni filtra de más.
+  // Los datos del tab Open house viajan en la misma ola: dependen sólo del id
+  // de la propiedad y del tenant del contexto, no de la fila de la propiedad.
+  const tenantId = ctx.tenant_id
+  const [p, tenantRow, openHouses, tags, sender, defaultTimezone] = await Promise.all([
+    getPropertyById(id, tenantId),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    tenantId ? getTenantRow(tenantId) : Promise.resolve(null),
+    tenantId ? listPropertyOpenHouses(id, tenantId) : Promise.resolve([]),
+    tenantId ? listTenantTags(tenantId) : Promise.resolve([]),
+    tenantId ? resolveOpenHouseSender(createAdminClient(), tenantId) : Promise.resolve({ ok: false as const, error: 'Selecciona un equipo.' }),
+    tenantId ? lastOpenHouseTimezone(tenantId) : Promise.resolve(null),
+  ])
   if (!p) notFound()
-
-  const db = createAdminClient()
-  const { data: tenantRow } = await db.from('tenants').select('slug, pages_managed_by_itmano').eq('id', p.tenantId).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
   // La marca es del tenant (migración 091): aplica a todas sus propiedades,
@@ -112,8 +136,9 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Fotos</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
             {gallery.map(url => (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img key={url} src={url} alt="" style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
+              <div key={url} style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+                <Image src={url} alt="" fill sizes="(max-width: 768px) 50vw, 200px" style={{ objectFit: 'cover' }} />
+              </div>
             ))}
           </div>
         </div>
@@ -140,6 +165,18 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>El tenant no tiene slug configurado.</div>
   )
 
+  const openHouseTab = (
+    <OpenHouseTab
+      propertyId={p.id}
+      openHouses={openHouses}
+      tags={tags}
+      defaultTagIds={tags.filter(t => (DEFAULT_AUDIENCE_TAG_SLUGS as readonly string[]).includes(t.slug)).map(t => t.id)}
+      contentLanguages={p.contentLanguages}
+      blockedReason={sender.ok ? null : sender.error}
+      defaultTimezone={defaultTimezone}
+    />
+  )
+
   return (
     <>
       <div style={{ marginBottom: '20px' }}>
@@ -151,8 +188,8 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {p.imageUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={p.imageUrl} alt={p.address} style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '10px', border: '1px solid var(--border-subtle)' }} />
+           
+          <Image src={p.imageUrl} alt={p.address} width={120} height={90} sizes="120px" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '10px', border: '1px solid var(--border-subtle)' }} />
         )}
         <div style={{ flex: 1, minWidth: '240px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -182,7 +219,13 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      <PropertyDetailTabs descripcion={descripcionTab} pagina={paginaTab} />
+      <PropertyDetailTabs
+        descripcion={descripcionTab}
+        pagina={paginaTab}
+        openHouse={openHouseTab}
+        openHouseCount={openHouses.filter(o => o.displayState === 'scheduled' || o.displayState === 'draft').length}
+        initialTab={tab === 'openhouse' ? 'openhouse' : undefined}
+      />
     </>
   )
 }

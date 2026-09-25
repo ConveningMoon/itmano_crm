@@ -8,10 +8,11 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { QUALITY_BANDS, QUALITY_CONFIG } from '@/lib/scoring/priority'
 import { getLeadSource } from '@/lib/leads/source'
-import { LeadsDonutChart } from './charts/leads-donut-chart'
-import { LeadsByAgentChart } from './charts/leads-by-agent-chart'
-import { LeadsOverTimeChart } from './charts/leads-over-time-chart'
-import { StageDistributionChart } from './charts/stage-distribution-chart'
+// Los cuatro salen de ./charts/lazy: recharts se carga aparte del HTML de la
+// página, que así no espera al paquete de cliente más grande del CRM.
+import {
+  LeadsDonutChart, LeadsByAgentChart, LeadsOverTimeChart, StageDistributionChart,
+} from './charts/lazy'
 import { Users, Inbox, TrendingUp, Activity, GitBranch, Mail } from 'lucide-react'
 import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'

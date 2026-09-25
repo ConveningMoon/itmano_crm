@@ -34,13 +34,21 @@ if (!claude.includes('@AGENTS.md')) {
 
 const claudeMcp = readFileSync('.mcp.json', 'utf8')
 const codexMcp = readFileSync('.codex/config.toml', 'utf8')
-const persistentMcp = [claudeMcp, codexMcp].join('\n')
 
-if (persistentMcp.includes('kvmjlrvlnhiarrqxulkr')) {
-  errors.push('La configuración persistente de agentes no puede incluir producción')
-}
-if (!persistentMcp.includes('xpaixcowvyksgluazwzn')) {
-  errors.push('Falta el project_ref del sandbox en la configuración persistente')
+// Sandbox y producción son MCP persistentes en ambos agentes (AGENTS.md), pero
+// cada uno acotado por URL a su project_ref: un MCP de Supabase sin project_ref
+// puede operar sobre cualquier proyecto de la organización.
+for (const [agent, config] of [['Claude (.mcp.json)', claudeMcp], ['Codex (.codex/config.toml)', codexMcp]]) {
+  if (!config.includes('project_ref=xpaixcowvyksgluazwzn')) {
+    errors.push(`Falta el MCP sandbox acotado por project_ref en ${agent}`)
+  }
+  if (!config.includes('project_ref=kvmjlrvlnhiarrqxulkr')) {
+    errors.push(`Falta el MCP de producción acotado por project_ref en ${agent}`)
+  }
+  const supabaseMcpUrls = config.match(/https:\/\/mcp\.supabase\.com\/mcp[^"\s]*/g) ?? []
+  if (supabaseMcpUrls.some(url => !url.includes('project_ref='))) {
+    errors.push(`${agent} declara un MCP de Supabase sin project_ref`)
+  }
 }
 
 const requiredCodexMcpScopes = [

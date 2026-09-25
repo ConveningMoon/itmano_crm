@@ -16,15 +16,23 @@ export default async function StudioPage() {
   const ctx = await getCurrentTenantContext()
   if (!canUseStudio(ctx)) return <StudioTeaser />
 
+  // Los diseños son globales (no dependen del tenant), así que van en la misma
+  // ola que el resto en vez de esperar a que termine.
   const tenantId = ctx.tenant_id
-  const [images, properties, agents, brand] = tenantId
-    ? await Promise.all([
-        getStudioImages(tenantId), getPropertyOptions(tenantId),
-        getAgentOptions(tenantId), getStudioBrand(tenantId, null),
-      ])
-    : [[], [], [], null]
-
-  const templates = await listTemplates()
+  const [[images, properties, agents, brand], templates] = await Promise.all([
+    tenantId
+      ? Promise.all([
+          getStudioImages(tenantId), getPropertyOptions(tenantId),
+          getAgentOptions(tenantId), getStudioBrand(tenantId, null),
+        ])
+      : Promise.resolve([[], [], [], null] as [
+          Awaited<ReturnType<typeof getStudioImages>>,
+          Awaited<ReturnType<typeof getPropertyOptions>>,
+          Awaited<ReturnType<typeof getAgentOptions>>,
+          Awaited<ReturnType<typeof getStudioBrand>> | null,
+        ]),
+    listTemplates(),
+  ])
 
   return (
     <>

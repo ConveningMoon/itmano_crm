@@ -31,6 +31,10 @@ export type EmailAiPurpose =
   | 'purchase_pre_close'
   | 'purchase_completed'
   | 'one_off'
+  | 'open_house_announcement'
+  | 'open_house_reminder'
+  | 'open_house_update'
+  | 'open_house_cancellation'
 
 export interface EmailAiInput {
   purpose:   EmailAiPurpose
@@ -86,6 +90,23 @@ const PURPOSE_LABEL: Record<EmailAiPurpose, string> = {
   purchase_pre_close:   'A friendly reminder shortly before the closing date',
   purchase_completed:   'The home purchase was completed — warm congratulations',
   one_off:              'A personal one-off email to a specific person',
+  open_house_announcement: 'An invitation to an open house of a specific property, sent to leads the agent already knows',
+  open_house_reminder:     'A short reminder for someone who already confirmed they will attend an open house',
+  open_house_update:       'A notice that an open house the recipient was invited to has a NEW date or time',
+  open_house_cancellation: 'A notice that an open house the recipient was invited to has been CANCELLED',
+}
+
+// Correos de open house: los datos del evento los pone el CRM al enviar. La IA
+// escribe los marcadores tal cual y no inventa fechas, horas ni direcciones.
+const OPEN_HOUSE_RULES: string[] = [
+  '- The event details are filled in by the system. Use these placeholders LITERALLY where relevant (keep the double braces): {{property_name}}, {{property_address}}, {{open_house_date}}, {{open_house_time}}, {{open_house_notes}}.',
+  '- NEVER invent a date, time, address, price or any property detail. Refer to them only through the placeholders.',
+]
+const OPEN_HOUSE_RSVP_RULE =
+  '- To confirm attendance, put {{rsvp_url}} alone on its own line (no text on that line). You may also mention {{calendar_url}} to add it to their calendar.'
+
+function isOpenHousePurpose(p: EmailAiPurpose): boolean {
+  return p.startsWith('open_house_')
 }
 
 // Regla de idioma para la IA. Cualquier idioma soportado es válido; el idioma es
@@ -133,6 +154,8 @@ function buildPrompt(input: EmailAiInput): string {
     '- Greet the person naturally using {{customer_name}}. You may use {{agent_name}} if it reads naturally, but usually not needed.',
     '- Do NOT write a signature or sign-off name at the end — it is appended automatically.',
     '- Do NOT mention unsubscribing.',
+    ...(isOpenHousePurpose(input.purpose) ? OPEN_HOUSE_RULES : []),
+    ...(isOpenHousePurpose(input.purpose) && input.purpose !== 'open_house_cancellation' ? [OPEN_HOUSE_RSVP_RULE] : []),
     '',
     'Call the compose_email tool with the subject and body.',
   ].join('\n')

@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import type { TenantOverview } from '@/lib/data/super-admin'
 import { enterTenant } from './actions'
+import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { TenantDomainManager } from './tenant-domain-manager'
 
 function relativeTime(iso: string): string {
@@ -98,9 +99,11 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
       />
 
       <form action={enterTenant.bind(null, tenant.id)} style={{ marginTop: '4px' }}>
-        <button
-          type="submit"
+        {/* La action valida el tenant, escribe la cookie y redirige: sin
+            estado pendiente el botón parecía muerto durante ese viaje. */}
+        <PendingSubmitButton
           className="btn-cta"
+          pendingLabel="Entrando…"
           style={{
             width: '100%',
             padding: '9px 16px',
@@ -111,10 +114,11 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
             color: 'var(--bg-base)',
             border: 'none',
             cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           }}
         >
           {isActive ? 'Continuar en el CRM' : 'Entrar al CRM'}
-        </button>
+        </PendingSubmitButton>
       </form>
     </div>
   )

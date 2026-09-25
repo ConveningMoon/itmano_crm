@@ -61,3 +61,16 @@ export function resolveSenderIdentity(
   const useCustom = t.domain_status === 'verified' && !!t.email_from_address
   return { account, from: useCustom ? (t.email_from_address as string) : shared }
 }
+
+/**
+ * true si la identidad sale del dominio COMPARTIDO de ITMANO. Los envíos
+ * masivos (open houses) no se permiten desde ahí: un anuncio mal dirigido
+ * afectaría la entrega de todos los tenants que lo comparten. Se decide sobre
+ * la identidad ya resuelta —no sobre el plan ni sobre domain_status sueltos—
+ * para que la regla sea exactamente "el correo saldría de tu dominio".
+ */
+export function usesSharedDomain(identity: SenderIdentity): boolean {
+  const m = /<([^>]+)>/.exec(identity.from)
+  const address = (m ? m[1] : identity.from).trim().toLowerCase()
+  return address.endsWith(`@${ITMANO_SHARED_DOMAIN}`)
+}

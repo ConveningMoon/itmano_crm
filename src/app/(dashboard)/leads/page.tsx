@@ -36,27 +36,26 @@ export default async function LeadsPage({
     .select('id, tenant_id, channel_type, name, slug, agent_id, active')
     .order('name')
 
-  const [{ data: rawAgents }, { data: rawChannels }, tags] = await Promise.all([
+  const refsPromise = Promise.all([
     tenant_id ? agentsQ.eq('tenant_id',   tenant_id) : agentsQ,
     tenant_id ? channelsQ.eq('tenant_id', tenant_id) : channelsQ,
     tagsPromise,
   ])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channels: ChannelOption[] = (rawChannels ?? []).map((r: any) => ({
-    id:          r.id as string,
-    tenantId:    r.tenant_id as string,
-    channelType: r.channel_type as string,
-    name:        r.name as string,
-    slug:        r.slug as string,
-    agentId:     (r.agent_id ?? null) as string | null,
-    active:      (r.active ?? true) as boolean,
-  }))
-
   // Los canales resuelven el filtro de fuente (compuesto: tipo de canal o
-  // traffic_source) y las etiquetas el filtro por slug, así que la lista se pide
-  // después de tener los dos.
-  const data = await getLeadsListData(scope, filters, channels, tags)
+  // traffic_source) y las etiquetas el filtro por slug. Sólo con uno de esos
+  // filtros activo hace falta esperarlos antes de pedir la lista; sin ellos,
+  // esperar el catálogo añadía una ola entera de round-trips a cada carga.
+  const needsRefs = filters.source !== 'all' || filters.tag !== 'all'
+  const refs = needsRefs ? await refsPromise : null
+  const [[{ data: rawAgents }, { data: rawChannels }, tags], data] = await Promise.all([
+    refs ?? refsPromise,
+    refs
+      ? getLeadsListData(scope, filters, toChannelOptions(refs[1].data), refs[2])
+      : getLeadsListData(scope, filters, [], []),
+  ])
+
+  const channels = toChannelOptions(rawChannels)
 
   return (
     <LeadsClient
@@ -75,4 +74,18 @@ export default async function LeadsPage({
       viewerAgentId={scope.agentId}
     />
   )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toChannelOptions(rawChannels: any[] | null): ChannelOption[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (rawChannels ?? []).map((r: any) => ({
+    id:          r.id as string,
+    tenantId:    r.tenant_id as string,
+    channelType: r.channel_type as string,
+    name:        r.name as string,
+    slug:        r.slug as string,
+    agentId:     (r.agent_id ?? null) as string | null,
+    active:      (r.active ?? true) as boolean,
+  }))
 }

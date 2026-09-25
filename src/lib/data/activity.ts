@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
+import { getTenantNames } from '@/lib/data/tenants'
 import type { ActivityViewer } from '@/lib/activity/visibility'
 
 // Recent activity feed — sourced from lead_events (same source the dashboard
@@ -47,16 +48,14 @@ async function fetchActivity(
   }
   q = q.range(offset, offset + limit - 1)
 
-  const { data, error } = await q
+  // Tenant names only matter for the super_admin multi-tenant view; en
+  // paralelo con los eventos y deduplicados por request (getTenantNames).
+  const [{ data, error }, tenantNameMap] = await Promise.all([
+    q,
+    tenantId === null ? getTenantNames() : Promise.resolve(new Map<string, string>()),
+  ])
   if (error || !data) return []
-
-  // Tenant names only matter for the super_admin multi-tenant view
-  let tenantNames: Record<string, string> = {}
-  if (tenantId === null) {
-    const { data: tenants } = await supabase.from('tenants').select('id, name')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tenantNames = Object.fromEntries((tenants ?? []).map((t: any) => [t.id, t.name]))
-  }
+  const tenantNames: Record<string, string> = Object.fromEntries(tenantNameMap)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = data as any[]

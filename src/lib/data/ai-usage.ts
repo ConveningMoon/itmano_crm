@@ -1,6 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { discretionaryLimitUsd } from '@/lib/services/ai-budget'
+import { getSubscription } from '@/lib/data/subscriptions'
+import { getTenantShellRow, getTenantNames } from '@/lib/data/tenants'
 
 // Agregaciones de uso de IA para los dashboards:
 //   - Configuración → "Uso de IA" (scoped a un tenant)
@@ -84,16 +86,13 @@ export async function getAiUsageSummary(
   if (tenantId) q = q.eq('tenant_id', tenantId)
   if (opts?.agentId) q = q.eq('agent_id', opts.agentId)
 
-  const { data } = await q
+  // Nombres de tenant para la vista global (y para la columna de recientes),
+  // en paralelo con los eventos y deduplicados por request (getTenantNames).
+  const [{ data }, tenantName] = await Promise.all([
+    q,
+    tenantId ? Promise.resolve(new Map<string, string>()) : getTenantNames(),
+  ])
   const rows = (data ?? []) as EventRow[]
-
-  // Nombres de tenant para la vista global (y para la columna de recientes).
-  const tenantName = new Map<string, string>()
-  if (!tenantId) {
-    const { data: tenants } = await supabase.from('tenants').select('id, name')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const t of (tenants ?? []) as any[]) tenantName.set(t.id as string, t.name as string)
-  }
 
   const cutoff30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
 
@@ -180,25 +179,24 @@ function monthStartIso(): string {
 export async function getAgentAiBreakdown(tenantId: string): Promise<AgentAiBreakdown> {
   const supabase = createAdminClient()
 
-  const [{ data: agents }, { data: events }, { data: tenant }, { data: sub }] = await Promise.all([
+  // La fila del tenant y la suscripción salen de los getters cacheados que el
+  // shell ya pidió en este mismo request: cero round-trips extra.
+  const [{ data: agents }, { data: events }, tenant, sub] = await Promise.all([
     supabase.from('agents').select('id, name, accent_color, user_id').eq('tenant_id', tenantId).order('name'),
     supabase
       .from('ai_usage_events')
       .select('agent_id, cost_usd, input_tokens, output_tokens')
       .eq('tenant_id', tenantId)
       .gte('created_at', monthStartIso()),
-    supabase.from('tenants').select('ai_monthly_limit_usd, ai_unlimited').eq('id', tenantId).maybeSingle(),
-    supabase.from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle(),
+    getTenantShellRow(tenantId),
+    getSubscription(tenantId),
   ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agentRows = (agents ?? []) as any[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const t = tenant as any
-  const unlimited = (t?.ai_unlimited as boolean) ?? false
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isPartner = ((sub as any)?.plan as string | undefined) === 'partner'
-  const limitUsd  = Number(t?.ai_monthly_limit_usd ?? 10)
+  const unlimited = tenant?.ai_unlimited ?? false
+  const isPartner = sub?.plan === 'partner'
+  const limitUsd  = Number(tenant?.ai_monthly_limit_usd ?? 10)
 
   const splitApplies = isPartner && !unlimited && agentRows.length > 0 && limitUsd > 0
   // Lo mismo que reparte getAgentAiShare (ai-limit.ts): el tramo DISCRECIONAL,
@@ -275,16 +273,12 @@ export async function getLeadFitUsage(tenantId: string | null): Promise<LeadFitU
     .eq('feature', 'lead_fit')
     .order('created_at', { ascending: false })
   if (tenantId) q = q.eq('tenant_id', tenantId)
-  const { data } = await q
+  const [{ data }, tenantName] = await Promise.all([
+    q,
+    tenantId ? Promise.resolve(new Map<string, string>()) : getTenantNames(),
+  ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = (data ?? []) as any[]
-
-  const tenantName = new Map<string, string>()
-  if (!tenantId) {
-    const { data: tenants } = await supabase.from('tenants').select('id, name')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const t of (tenants ?? []) as any[]) tenantName.set(t.id as string, t.name as string)
-  }
 
   const cutoff30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
   let totalCost = 0
@@ -343,18 +337,14 @@ export async function getAiDailyUsage(days = 30): Promise<AiDailySeries> {
   const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000)
   const cutoffIso = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), cutoff.getUTCDate())).toISOString()
 
-  const [{ data: events }, { data: tenants }] = await Promise.all([
+  const [{ data: events }, tenantName] = await Promise.all([
     supabase
       .from('ai_usage_events')
       .select('tenant_id, cost_usd, created_at')
       .gte('created_at', cutoffIso)
       .order('created_at'),
-    supabase.from('tenants').select('id, name'),
+    getTenantNames(),
   ])
-
-  const tenantName = new Map<string, string>()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const t of (tenants ?? []) as any[]) tenantName.set(t.id as string, t.name as string)
 
   // Días continuos (con ceros) para que el eje no salte fechas sin uso.
   const byDay = new Map<string, AiDailyPoint>()

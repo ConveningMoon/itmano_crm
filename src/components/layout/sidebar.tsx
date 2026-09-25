@@ -1,18 +1,21 @@
+import type { ReactNode } from 'react'
 import { LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
-import { BrandLogo } from './brand-logo'
+import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
+// El logo y el plan dependen de la base y llegan como ReactNode desde el
+// layout, cada uno dentro de su <Suspense>: el nav se pinta en cuanto se
+// conoce el rol y esas dos piezas se rellenan por streaming en su sitio.
+export function Sidebar({ role, userEmail, hubMode = false, brand = null, planLabel = null }: {
   role: TenantRole
   userEmail: string
   hubMode?: boolean
-  logoUrl?: string | null
-  tenantName?: string | null
-  // Nombre de la suscripción del tenant (p. ej. "Plan Growth"); null en hub.
-  planLabel?: string | null
+  brand?: ReactNode
+  // Nombre de la suscripción del tenant (p. ej. "Plan Growth"); nada en hub.
+  planLabel?: ReactNode
 }) {
   // Admin console is super_admin-only — hidden from the nav for everyone else.
   const items = navItemsForRole(role, { hubMode })
@@ -45,7 +48,7 @@ export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tena
           alignItems: 'flex-start',
         }}
       >
-        <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
+        {brand}
         <div
           style={{
             fontSize: '10px',
@@ -127,17 +130,12 @@ export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tena
             >
               {ROLE_LABELS[role]}
             </div>
-            {planLabel && (
-              <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
-                {planLabel}
-              </div>
-            )}
+            {planLabel}
           </div>
         </div>
 
         <form action={signOut} style={{ padding: '0 12px 12px' }}>
-          <button
-            type="submit"
+          <PendingSubmitButton
             className="signout-btn"
             style={{
               display: 'flex',
@@ -156,7 +154,7 @@ export function Sidebar({ role, userEmail, hubMode = false, logoUrl = null, tena
           >
             <LogOut size={14} strokeWidth={1.6} />
             <span>Cerrar sesión</span>
-          </button>
+          </PendingSubmitButton>
         </form>
       </div>
     </aside>

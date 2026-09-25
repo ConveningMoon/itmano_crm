@@ -31,11 +31,10 @@ export type AgentPurchaseTemplates = {
   templates:    PurchaseTemplateRow[]
 }
 
-const TEMPLATE_COLS = 'id, agent_id, milestone, language, resend_template_id, subject, body_json'
-
 // Agrupa los correos de un tenant por agente. `agentId` restringe a un solo
 // agente (rol 'agent'). Garantiza primero que existan las filas (provisión
-// perezosa — un idioma recién agregado aparece con sus 3 correos vacíos).
+// perezosa — un idioma recién agregado aparece con sus 3 correos vacíos) y
+// reutiliza lo que esa provisión ya leyó: agentes activos y plantillas.
 export async function getPurchaseTemplatesByAgent(
   tenantId: string,
   opts?: { agentId?: string | null },
@@ -50,30 +49,16 @@ export async function getPurchaseTemplatesByAgent(
   }
 
   const db = createAdminClient()
-  await ensurePurchaseTemplateRows(db, tenantId)
+  const { agents, templates } = await ensurePurchaseTemplateRows(db, tenantId)
 
-  let agentsQ = db
-    .from('agents')
-    .select('id, name, accent_color, languages')
-    .eq('tenant_id', tenantId)
-    .eq('active', true)
-    .order('name')
-  if (opts?.agentId) agentsQ = agentsQ.eq('id', opts.agentId)
-
-  const [{ data: agents }, { data: rows }] = await Promise.all([
-    agentsQ,
-    db.from('purchase_email_templates').select(TEMPLATE_COLS).eq('tenant_id', tenantId),
-  ])
-
-  const templates = (rows ?? []) as PurchaseTemplateRow[]
-  return ((agents ?? []) as { id: string; name: string; accent_color: string; languages: string[] | null }[])
-    .map(a => ({
-      agent_id:     a.id,
-      agent_name:   a.name,
-      accent_color: a.accent_color,
-      languages:    a.languages ?? [],
-      templates:    templates.filter(t => t.agent_id === a.id),
-    }))
+  const visible = opts?.agentId ? agents.filter(a => a.id === opts.agentId) : agents
+  return visible.map(a => ({
+    agent_id:     a.id,
+    agent_name:   a.name,
+    accent_color: a.accent_color,
+    languages:    a.languages ?? [],
+    templates:    (templates as PurchaseTemplateRow[]).filter(t => t.agent_id === a.id),
+  }))
 }
 
 export type PurchaseTemplateByTenant = {
@@ -90,13 +75,13 @@ export async function getAllPurchaseTemplatesByTenant(): Promise<PurchaseTemplat
   const db = createAdminClient()
   const { data: tenants } = await db.from('tenants').select('id, name').order('name')
 
+  // Un tenant no depende de otro: todos a la vez en vez de en serie.
+  const rows = (tenants ?? []) as { id: string; name: string }[]
+  const perTenant = await Promise.all(rows.map(t => getPurchaseTemplatesByAgent(t.id)))
   const result: PurchaseTemplateByTenant[] = []
-  for (const t of (tenants ?? []) as { id: string; name: string }[]) {
-    const agents = await getPurchaseTemplatesByAgent(t.id)
-    if (agents.length > 0) {
-      result.push({ tenant_id: t.id, tenant_name: t.name, agents })
-    }
-  }
+  rows.forEach((t, i) => {
+    if (perTenant[i].length > 0) result.push({ tenant_id: t.id, tenant_name: t.name, agents: perTenant[i] })
+  })
   return result
 }
 

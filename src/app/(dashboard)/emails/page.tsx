@@ -43,7 +43,7 @@ export default async function EmailsPage({
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const [sequences, purchaseByTenant, ownAgentTemplates, folders, tagCoverage] = await Promise.all([
+  const [sequences, purchaseByTenant, ownAgentTemplates, folders, tagCoverage, metrics] = await Promise.all([
     // 'channel': las disparadas por etiqueta tienen su propia pestaña. Verlas
     // aquí invitaría a borrarlas o a engancharlas a una fuente.
     listSequences(tenant_id, scope.agentId, 'channel'),
@@ -57,11 +57,10 @@ export default async function EmailsPage({
     // final de cada render y de cada Server Action de carpetas.
     listFolders('sequence', tenant_id, ctx.user_id),
     getTagSequenceCoverage(tenant_id),
+    // Las mismas métricas de la tarjeta del detalle, para cada fila. Una sola
+    // RPC por tenant, en la misma ola que la lista: no necesita los ids antes.
+    getMetricsForSequences(tenant_id),
   ])
-
-  // Las mismas métricas de la tarjeta del detalle, para cada fila. Batcheado:
-  // una llamada por secuencia serían 3 queries por fila leyendo los mismos datos.
-  const metrics = await getMetricsForSequences(sequences.map(s => s.id))
 
   // Huecos por escribir: es el número que hace falta ver sin entrar a la pestaña.
   const missingTagSequences = tagCoverage.reduce(

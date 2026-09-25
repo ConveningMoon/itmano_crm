@@ -8,7 +8,7 @@ import {
 } from '@/lib/leads/list-filters'
 import { planTagFilter, type TagRef } from '@/lib/leads/tags'
 import { columns } from '@/lib/supabase/columns'
-import { getAgentActionTypes } from '@/lib/scoring/agent-actions'
+import { FIXED_AGENT_ACTION_TYPES } from '@/lib/scoring/agent-actions'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
 import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Language } from '@/lib/types'
@@ -169,38 +169,64 @@ export async function getLeadsListData(
     scope, filters, channels, tags,
   ))
 
-  const [totalRes, hotRes, urgentTodayCount] = await Promise.all([
-    countQuery(),
-    // "Alta" es la banda del modelo, no un umbral de score: se autoajusta a la
-    // cartera del tenant (quintiles) en vez de fijar un 70 que no significa nada.
-    countQuery().eq('quality_band', 'alta'),
+  // "Alta" es la banda del modelo, no un umbral de score: se autoajusta a la
+  // cartera del tenant (quintiles) en vez de fijar un 70 que no significa nada.
+  const hotCount = () => countQuery().eq('quality_band', 'alta')
+
+  if (filters.view === 'kanban') {
+    const [totalRes, hotRes, urgentTodayCount, kanban] = await Promise.all([
+      countQuery(),
+      hotCount(),
+      getUrgentTodayCount(scope),
+      fetchKanbanColumns(supabase, scope, filters, channels, tags),
+    ])
+    const total = (totalRes.count ?? 0) as number
+    return {
+      items: [], kanban, total,
+      highQualityCount: (hotRes.count ?? 0) as number,
+      urgentTodayCount, page: 1,
+      totalPages: Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE)),
+    }
+  }
+
+  // La página y el total salen de la MISMA consulta (count: 'exact'), en paralelo
+  // con los contadores. Antes el total se pedía primero sólo para acotar la
+  // página, y eso serializaba la lista detrás de una ola entera de round-trips.
+  const pageQuery = (page: number) => {
+    const from = (page - 1) * LEADS_PAGE_SIZE
+    return applySort(
+      stageFiltered(applyFilters(
+        supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
+        scope, filters, channels, tags,
+      )),
+      filters.sort,
+    ).range(from, from + LEADS_PAGE_SIZE - 1)
+  }
+
+  const requestedPage = Math.max(1, filters.page)
+  const [firstRes, hotRes, urgentTodayCount] = await Promise.all([
+    pageQuery(requestedPage),
+    hotCount(),
     getUrgentTodayCount(scope),
   ])
 
-  const total      = (totalRes.count ?? 0) as number
+  let listRes = firstRes
+  // Fuera de rango, PostgREST responde 416 sin Content-Range y el count llega
+  // null: ahí el total real se pide aparte. Es el único caso que paga consultas
+  // extra (un link viejo o una URL editada a mano).
+  const total = firstRes.count !== null || requestedPage === 1
+    ? (firstRes.count ?? 0) as number
+    : ((await countQuery()).count ?? 0) as number
   const highQualityCount = (hotRes.count ?? 0) as number
   const totalPages = Math.max(1, Math.ceil(total / LEADS_PAGE_SIZE))
 
-  if (filters.view === 'kanban') {
-    const kanban = await fetchKanbanColumns(supabase, scope, filters, channels, tags)
-    return { items: [], kanban, total, highQualityCount, urgentTodayCount, page: 1, totalPages }
-  }
-
-  // Una URL con `page` fuera de rango (link viejo o editado a mano) cae a la
-  // última página real en vez de mostrar una tabla vacía.
-  const page = Math.min(Math.max(1, filters.page), totalPages)
-  const from = (page - 1) * LEADS_PAGE_SIZE
-
-  const { data } = await applySort(
-    stageFiltered(applyFilters(
-      supabase.from('leads_list').select(LIST_COLUMNS),
-      scope, filters, channels, tags,
-    )),
-    filters.sort,
-  ).range(from, from + LEADS_PAGE_SIZE - 1)
+  // Una `page` fuera de rango cae a la última página real en vez de mostrar una
+  // tabla vacía.
+  const page = Math.min(requestedPage, totalPages)
+  if (page !== requestedPage) listRes = await pageQuery(page)
 
   return {
-    items: (data ?? []).map(mapRow),
+    items: (listRes.data ?? []).map(mapRow),
     kanban: null,
     total,
     highQualityCount,
@@ -454,24 +480,43 @@ export async function getLeadPriorityPosition(
   leadId: string,
   scope: VisibilityScope,
 ): Promise<LeadPriorityPosition | null> {
-  const supabase = createAdminClient()
+  const axes = await getLeadPriorityAxes(leadId, scope)
+  return getLeadPriorityPositionFor(axes, scope)
+}
 
+/** Los ejes del lead tal como los expone la vista (primer paso de la posición). */
+export interface LeadPriorityAxes {
+  stage: Stage | null; quality_band: QualityBand | null
+  urgency: Urgency | null; urgency_rank: number; quality_score: number | null
+}
+
+// Partido en dos a propósito: la ficha del lead pide los ejes en la MISMA ola
+// que el resto de sus lecturas y deja para la ola siguiente sólo los dos
+// counts del ranking, junto con lo que sí depende de esa ola (autores de
+// eventos). Junto era una ola entera más por cada apertura de la ficha.
+export async function getLeadPriorityAxes(
+  leadId: string,
+  scope: VisibilityScope,
+): Promise<LeadPriorityAxes | null> {
+  const supabase = createAdminClient()
   const { data: row } = await applyVisibilityScope(
     supabase.from('leads_list')
       .select(columns('leads_list', ['stage', 'quality_band', 'urgency', 'urgency_rank', 'quality_score']))
       .eq('id', leadId),
     scope,
   ).maybeSingle()
-  if (!row) return null
-
   // `as unknown` primero: con la lista de columnas armada por `columns()` el
   // cliente sin tipar no puede inferir la fila y la da por GenericStringError.
   // La garantía real está en la lista, que sí se valida contra el esquema.
-  const lead = row as unknown as {
-    stage: Stage | null; quality_band: QualityBand | null
-    urgency: Urgency | null; urgency_rank: number; quality_score: number | null
-  }
-  if (!lead.stage) return null
+  return (row as unknown as LeadPriorityAxes | null) ?? null
+}
+
+export async function getLeadPriorityPositionFor(
+  lead: LeadPriorityAxes | null,
+  scope: VisibilityScope,
+): Promise<LeadPriorityPosition | null> {
+  if (!lead || !lead.stage) return null
+  const supabase = createAdminClient()
 
   // Fuera de la cola (En proceso / Cerrado / Perdido): se devuelven los ejes pero
   // sin posición. Un lead que el agente ya sacó del embudo no compite por la
@@ -667,13 +712,16 @@ export async function getResponseTimeStats(
   days = 90,
 ): Promise<ResponseTimeStats> {
   const supabase = createAdminClient()
-  const actionTypes = await getAgentActionTypes(supabase, scope.tenantId)
 
+  // Los tipos fijos van desde aquí y las reglas manuales activas del tenant las
+  // une la propia RPC (p_include_manual_rules): antes se leían primero en
+  // lead_score_rules y esta consulta esperaba a esa lectura.
   const { data, error } = await supabase.rpc('lead_response_time_stats', {
-    p_tenant_id:    scope.tenantId,
-    p_agent_id:     scope.agentId,
-    p_action_types: actionTypes,
-    p_days:         days,
+    p_tenant_id:            scope.tenantId,
+    p_agent_id:             scope.agentId,
+    p_action_types:         [...FIXED_AGENT_ACTION_TYPES],
+    p_days:                 days,
+    p_include_manual_rules: true,
   })
   if (error || !data) return emptyResponseTime()
 

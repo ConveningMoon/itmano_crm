@@ -41,12 +41,18 @@ export default async function NewLeadPage() {
     channelsQ = channelsQ.eq('tenant_id', ctx.tenant_id)
   }
 
-  const [{ data: rawAgents }, { data: rawChannels }, { data: rawTenants }] = await Promise.all([
+  // La fila del agente vinculado a este login no depende de las demás: iba en
+  // un await suelto al final y eso era una ola entera más en cada apertura del
+  // formulario. No se deriva de `rawAgents` porque esa lista filtra por activos
+  // y el agente vinculado podría estar desactivado.
+  const [{ data: rawAgents }, { data: rawChannels }, { data: rawTenants }, { data: myAgentRow }] = await Promise.all([
     agentsQ,
     channelsQ,
     needsTenantPicker
       ? supabase.from('tenants').select('id, name').order('name')
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    // The agent record linked to this login (if any) — used to auto-attribute imports.
+    supabase.from('agents').select('id').eq('user_id', ctx.user_id).maybeSingle(),
   ])
 
   const agents   = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
@@ -63,9 +69,6 @@ export default async function NewLeadPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenants = (rawTenants ?? []).map((r: any) => ({ id: r.id as string, name: r.name as string })) as TenantOption[]
 
-  // The agent record linked to this login (if any) — used to auto-attribute imports.
-  const { data: myAgentRow } = await supabase
-    .from('agents').select('id').eq('user_id', ctx.user_id).maybeSingle()
   const myAgentId = (myAgentRow as { id: string } | null)?.id ?? null
 
   return (

@@ -1,5 +1,6 @@
 import 'server-only'
 import { Resend } from 'resend'
+import { emailAllowed, sendGuardFromEnv, simulatedId, type SendGuard } from '@/lib/email/send-guard'
 
 if (!process.env.RESEND_API_KEY) {
   throw new Error('RESEND_API_KEY is not set')
@@ -42,8 +43,43 @@ export function resendForAccount(account: string | null | undefined): Resend {
     }
   }
   const client = new Resend(key)
+  installSendGuard(client, sendGuardFromEnv(process.env))
   clients.set(acc, client)
   return client
+}
+
+// Fuera de producción, los envíos a destinatarios no permitidos se simulan
+// (ver src/lib/email/send-guard.ts). Se instala sobre la instancia —no en cada
+// servicio— para que ningún camino de envío nuevo pueda olvidarse del guard.
+function installSendGuard(client: Resend, guard: SendGuard): void {
+  if (!guard.restricted) return
+
+  const send = client.emails.send.bind(client.emails)
+  client.emails.send = (async (payload: Parameters<typeof send>[0], options?: Parameters<typeof send>[1]) => {
+    if (emailAllowed(guard, payload)) return send(payload, options)
+    console.warn(JSON.stringify({ service: 'resend', warning: 'send_simulated_outside_production' }))
+    return { data: { id: simulatedId() }, error: null, headers: null }
+  }) as typeof client.emails.send
+
+  const batchSend = client.batch.send.bind(client.batch)
+  client.batch.send = (async (payload: Parameters<typeof batchSend>[0], options?: Parameters<typeof batchSend>[1]) => {
+    const allowed = payload.map(email => emailAllowed(guard, email))
+    if (allowed.every(Boolean)) return batchSend(payload, options)
+
+    // Los permitidos salen de verdad; el resto recibe un id sintético EN SU
+    // POSICIÓN, porque el llamador empareja ids y destinatarios por índice.
+    const real = payload.filter((_, i) => allowed[i])
+    let realIds: { id: string }[] = []
+    if (real.length > 0) {
+      const res = await batchSend(real, options)
+      if (res.error) return res
+      realIds = res.data?.data ?? []
+    }
+    console.warn(JSON.stringify({ service: 'resend', warning: 'batch_simulated_outside_production', simulated: allowed.filter(a => !a).length }))
+    let cursor = 0
+    const data = allowed.map(ok => (ok ? realIds[cursor++] : undefined) ?? { id: simulatedId() })
+    return { data: { data }, error: null, headers: null }
+  }) as typeof client.batch.send
 }
 
 /**

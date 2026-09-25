@@ -59,12 +59,14 @@ function ruleKey(category: string, dimension: string, matchValue: string | null)
   return `${category}|${dimension}|${matchValue ?? ''}`
 }
 
-// Reglas efectivas de un tenant: las globales, con el override del tenant
-// aplicado (puntos + activación) cuando existe. Se conserva el id GLOBAL y la
-// identidad de la regla; el override por tenant lo escribe updateScoreRules
-// (owner) — recompute_lead_score ya prefiere la regla del tenant sobre la
-// global (migración 029). Para super_admin, sin overrides, es igual a la global.
-export async function getEffectiveScoreRules(tenantId: string): Promise<ScoreRule[]> {
+/**
+ * Las reglas globales y las efectivas del tenant, de UNA consulta: la de las
+ * efectivas ya traía las globales (tenant_id null) junto a los overrides.
+ * /settings necesita las dos listas y antes las pedía por separado.
+ */
+export async function getScoreRulesBundle(
+  tenantId: string,
+): Promise<{ global: ScoreRule[]; effective: ScoreRule[] }> {
   const db = createAdminClient()
   const { data } = await db
     .from('lead_score_rules')
@@ -77,11 +79,21 @@ export async function getEffectiveScoreRules(tenantId: string): Promise<ScoreRul
     if (r.tenant_id === tenantId) overrides.set(ruleKey(r.category, r.dimension, r.match_value), r)
   }
 
-  return rows
-    .filter(r => r.tenant_id === null)
-    .map(g => {
-      const base = mapRule(g)
-      const o = overrides.get(ruleKey(g.category, g.dimension, g.match_value))
-      return o ? { ...base, points: o.points, isActive: o.is_active } : base
-    })
+  const globalRows = rows.filter(r => r.tenant_id === null)
+  const global = globalRows.map(mapRule)
+  const effective = globalRows.map(g => {
+    const base = mapRule(g)
+    const o = overrides.get(ruleKey(g.category, g.dimension, g.match_value))
+    return o ? { ...base, points: o.points, isActive: o.is_active } : base
+  })
+  return { global, effective }
+}
+
+// Reglas efectivas de un tenant: las globales, con el override del tenant
+// aplicado (puntos + activación) cuando existe. Se conserva el id GLOBAL y la
+// identidad de la regla; el override por tenant lo escribe updateScoreRules
+// (owner) — recompute_lead_score ya prefiere la regla del tenant sobre la
+// global (migración 029). Para super_admin, sin overrides, es igual a la global.
+export async function getEffectiveScoreRules(tenantId: string): Promise<ScoreRule[]> {
+  return (await getScoreRulesBundle(tenantId)).effective
 }

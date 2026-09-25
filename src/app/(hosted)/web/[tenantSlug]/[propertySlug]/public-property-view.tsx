@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { m } from 'motion/react'
 import { ArrowLeft, BedDouble, Bath, Maximize, Car, Ruler, CalendarDays, ChevronLeft, ChevronRight, X, FileText, MapPin } from 'lucide-react'
 import type { PublicProperty, PublicTenant } from '../shared'
@@ -11,6 +12,8 @@ import {
   embedAspectRatio, PLACEMENT_LABEL, PROVIDER_LABEL,
   type EmbedPlacement, type PropertyEmbed,
 } from '@/lib/services/property-embeds'
+import type { PublicOpenHouse } from '@/lib/data/open-houses'
+import { OpenHouseBanner } from './open-house-banner'
 
 // Detalle público de una propiedad — tema claro editorial (misma dirección que
 // el catálogo). Galería en mosaico (portada 2×2 + "+N más") con lightbox, y
@@ -35,14 +38,26 @@ function pal(accent: string) {
 }
 type Pal = ReturnType<typeof pal>
 
+// `sizes` le dice al navegador (y al optimizador) qué ancho REAL ocupa cada
+// imagen, que es lo que decide qué variante se descarga. Sin esto next/image
+// asume el ancho de la ventana y una miniatura de 250 px se bajaría como si
+// fuera a pantalla completa. Los valores salen del layout de abajo: el
+// contenedor mide 1080 px, el mosaico es de 4 columnas y los planos van en una
+// rejilla de mínimo 220 px.
+const HERO_SIZES  = '(max-width: 1080px) 100vw, 1080px'
+const THUMB_SIZES = '(max-width: 1080px) 25vw, 270px'
+const PLAN_SIZES  = '(max-width: 640px) 50vw, 250px'
+
 const WRAP: React.CSSProperties = { maxWidth: '1080px', marginLeft: 'auto', marginRight: 'auto', paddingLeft: '24px', paddingRight: '24px' }
 const DISPLAY: React.CSSProperties = { fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.05 }
 
 export function PublicPropertyView({
-  tenant, property,
+  tenant, property, openHouse = null,
 }: {
   tenant: PublicTenant
   property: PublicProperty
+  // Próximo open house confirmado (o uno cancelado cuya fecha no pasó).
+  openHouse?: PublicOpenHouse | null
 }) {
   const P = pal(tenant.primary_color || '#C9A96E')
 
@@ -115,8 +130,8 @@ export function PublicPropertyView({
         <div style={{ ...WRAP, padding: '15px 24px', display: 'flex', justifyContent: 'center' }}>
           <Link href={`/web/${tenant.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
             {tenant.logo_url ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={tenant.logo_url} alt={tenant.name} style={{ height: '36px', width: 'auto', display: 'block' }} />
+              // 36 px de alto: el original subido puede ser de 320 px o más.
+              <Image src={tenant.logo_url} alt={tenant.name} width={144} height={36} sizes="144px" style={{ height: '36px', width: 'auto', display: 'block' }} />
             ) : (
               <span style={{ width: '36px', height: '36px', borderRadius: '9px', background: `${P.accent}22`, border: `1px solid ${P.accent}66`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 800, color: P.accent }}>
                 {tenant.name.trim().slice(0, 1).toUpperCase()}
@@ -134,14 +149,21 @@ export function PublicPropertyView({
 
         {/* Galería */}
         {photos.length === 1 && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            className="ppv-hero"
-            src={photos[0]}
-            alt={property.name ?? property.address}
-            onClick={() => setBox({ list: photos, i: 0 })}
-            style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: '18px', display: 'block', marginBottom: '30px' }}
-          />
+          <div
+            className="ppv-tile"
+            style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', borderRadius: '18px', overflow: 'hidden', marginBottom: '30px', background: P.paperAlt }}
+          >
+            <Image
+              className="ppv-hero"
+              src={photos[0]}
+              alt={property.name ?? property.address}
+              fill
+              priority
+              sizes={HERO_SIZES}
+              onClick={() => setBox({ list: photos, i: 0 })}
+              style={{ objectFit: 'cover' }}
+            />
+          </div>
         )}
         {photos.length >= 2 && (() => {
           const shown  = photos.slice(0, 13)
@@ -155,27 +177,30 @@ export function PublicPropertyView({
               gridTemplateRows: `repeat(${rows}, 1fr)`,
               aspectRatio: `4 / ${rows}`,
             }}>
-              <div className="ppv-tile" style={{ gridColumn: '1 / span 2', gridRow: '1 / span 2', overflow: 'hidden', borderRadius: '16px', background: P.paperAlt }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+              <div className="ppv-tile" style={{ position: 'relative', gridColumn: '1 / span 2', gridRow: '1 / span 2', overflow: 'hidden', borderRadius: '16px', background: P.paperAlt }}>
+                <Image
                   className="ppv-hero"
                   src={photos[0]}
                   alt={property.name ?? property.address}
+                  fill
+                  priority
+                  sizes={HERO_SIZES}
                   onClick={() => setBox({ list: photos, i: 0 })}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  style={{ objectFit: 'cover' }}
                 />
               </div>
               {thumbs.map((url, idx) => {
                 const overlay = idx === thumbs.length - 1 && extra > 0
                 return (
                   <div key={url} className="ppv-tile" style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', background: P.paperAlt }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       className="ppv-thumb"
                       src={url}
                       alt=""
+                      fill
+                      sizes={THUMB_SIZES}
                       onClick={() => setBox({ list: photos, i: idx + 1 })}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      style={{ objectFit: 'cover' }}
                     />
                     {overlay && (
                       <div
@@ -222,6 +247,17 @@ export function PublicPropertyView({
             {PROPERTY_STATUS_LABEL[property.status] ?? property.status}
           </span>
         </m.div>
+
+        {/* Open house — cuenta regresiva y RSVP */}
+        {openHouse && (
+          <OpenHouseBanner
+            openHouse={openHouse}
+            lang={lang}
+            P={P}
+            propertyTitle={property.name ?? property.address}
+            location={location}
+          />
+        )}
 
         {/* Specs */}
         {specs.length > 0 && (
@@ -298,14 +334,15 @@ export function PublicPropertyView({
             <SectionTitle P={P}>Planos</SectionTitle>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
               {floorPlans.map((url, idx) => (
-                <div key={url} className="ppv-tile" style={{ borderRadius: '14px', overflow: 'hidden', border: `1px solid ${P.line}`, background: '#fff' }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                <div key={url} className="ppv-tile" style={{ position: 'relative', aspectRatio: '4 / 3', borderRadius: '14px', overflow: 'hidden', border: `1px solid ${P.line}`, background: '#fff' }}>
+                  <Image
                     className="ppv-thumb"
                     src={url}
                     alt={`Plano ${idx + 1}`}
+                    fill
+                    sizes={PLAN_SIZES}
                     onClick={() => setBox({ list: floorPlans, i: idx })}
-                    style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }}
+                    style={{ objectFit: 'cover' }}
                   />
                 </div>
               ))}
@@ -338,12 +375,14 @@ export function PublicPropertyView({
               <button onClick={e => { e.stopPropagation(); move(1) }} aria-label="Siguiente" className="ppv-navbtn" style={lightboxBtn('right')}><ChevronRight size={26} /></button>
             </>
           )}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={box.list[box.i]}
             alt=""
+            width={1920}
+            height={1440}
+            sizes="92vw"
             onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '92vw', maxHeight: '86vh', objectFit: 'contain', borderRadius: '10px', display: 'block' }}
+            style={{ width: 'auto', height: 'auto', maxWidth: '92vw', maxHeight: '86vh', objectFit: 'contain', borderRadius: '10px', display: 'block' }}
           />
           {box.list.length > 1 && (
             <div style={{ position: 'absolute', bottom: '22px', left: '50%', transform: 'translateX(-50%)', fontSize: '13px', color: 'rgba(255,255,255,0.75)', letterSpacing: '0.04em' }}>

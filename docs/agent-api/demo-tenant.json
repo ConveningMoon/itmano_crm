@@ -221,7 +221,7 @@
       "language": "es",
       "notes": null,
       "stage": "en_proceso",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": null,
       "owner": "demo-agent-05",
       "score": {
@@ -246,7 +246,7 @@
       "language": "en",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "media",
+      "quality_band": "baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-04",
       "score": {
@@ -371,7 +371,7 @@
       "language": "es",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "alta",
+      "quality_band": "media_alta",
       "urgency": "sin_apuro",
       "owner": "demo-agent-04",
       "score": {
@@ -396,7 +396,7 @@
       "language": "es",
       "notes": null,
       "stage": "perdido",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": null,
       "owner": "demo-agent-03",
       "score": {
@@ -446,7 +446,7 @@
       "language": "es",
       "notes": null,
       "stage": "nuevo",
-      "quality_band": "media",
+      "quality_band": "media_baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-01",
       "score": {
@@ -496,7 +496,7 @@
       "language": "en",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "media_baja",
+      "quality_band": "baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-04",
       "score": {
@@ -521,7 +521,7 @@
       "language": "es",
       "notes": null,
       "stage": "nuevo",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": "sin_apuro",
       "owner": "demo-agent-03",
       "score": {
@@ -571,7 +571,7 @@
       "language": "es",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": "sin_apuro",
       "owner": "demo-agent-01",
       "score": {
@@ -596,7 +596,7 @@
       "language": "en",
       "notes": null,
       "stage": "cerrado",
-      "quality_band": "media",
+      "quality_band": "baja",
       "urgency": null,
       "owner": "demo-agent-05",
       "score": {
@@ -621,7 +621,7 @@
       "language": "es",
       "notes": null,
       "stage": "en_proceso",
-      "quality_band": "alta",
+      "quality_band": "media_alta",
       "urgency": null,
       "owner": "demo-agent-04",
       "score": {
@@ -646,7 +646,7 @@
       "language": "en",
       "notes": null,
       "stage": "nuevo",
-      "quality_band": "media",
+      "quality_band": "media_baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-03",
       "score": {
@@ -696,8 +696,8 @@
       "language": "en",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "alta",
-      "urgency": "esta_semana",
+      "quality_band": "media_alta",
+      "urgency": "sin_apuro",
       "owner": "demo-agent-01",
       "score": {
         "total": 63,
@@ -846,7 +846,7 @@
       "language": "en",
       "notes": null,
       "stage": "nuevo",
-      "quality_band": "media",
+      "quality_band": "baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-05",
       "score": {
@@ -971,7 +971,7 @@
       "language": "en",
       "notes": null,
       "stage": "nuevo",
-      "quality_band": "media_baja",
+      "quality_band": "baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-05",
       "score": {
@@ -996,7 +996,7 @@
       "language": "en",
       "notes": null,
       "stage": "cerrado",
-      "quality_band": "media_baja",
+      "quality_band": "baja",
       "urgency": null,
       "owner": "demo-agent-04",
       "score": {
@@ -1046,7 +1046,7 @@
       "language": "en",
       "notes": null,
       "stage": "perdido",
-      "quality_band": "media_baja",
+      "quality_band": "baja",
       "urgency": null,
       "owner": "demo-agent-02",
       "score": {
@@ -1096,7 +1096,7 @@
       "language": "es",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": "sin_apuro",
       "owner": "demo-agent-05",
       "score": {
@@ -1121,7 +1121,7 @@
       "language": "es",
       "notes": null,
       "stage": "cerrado",
-      "quality_band": "media",
+      "quality_band": "media_baja",
       "urgency": null,
       "owner": "demo-agent-04",
       "score": {
@@ -1196,7 +1196,7 @@
       "language": "en",
       "notes": null,
       "stage": "en_proceso",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": null,
       "owner": "demo-agent-01",
       "score": {
@@ -1246,7 +1246,7 @@
       "language": "en",
       "notes": null,
       "stage": "perdido",
-      "quality_band": "media_alta",
+      "quality_band": "media",
       "urgency": null,
       "owner": "demo-agent-04",
       "score": {
@@ -1271,7 +1271,7 @@
       "language": "es",
       "notes": null,
       "stage": "en_proceso",
-      "quality_band": "media_baja",
+      "quality_band": "baja",
       "urgency": null,
       "owner": "demo-agent-03",
       "score": {
@@ -1393,7 +1393,7 @@
       "language": "en",
       "notes": null,
       "stage": "perdido",
-      "quality_band": "media_baja",
+      "quality_band": "baja",
       "urgency": null,
       "owner": "demo-agent-04",
       "score": {
@@ -1418,7 +1418,7 @@
       "language": "es",
       "notes": null,
       "stage": "nutricion",
-      "quality_band": "media",
+      "quality_band": "media_baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-02",
       "score": {
@@ -1468,7 +1468,7 @@
       "language": "es",
       "notes": null,
       "stage": "en_proceso",
-      "quality_band": "media",
+      "quality_band": "media_baja",
       "urgency": null,
       "owner": "demo-agent-05",
       "score": {
@@ -1618,7 +1618,7 @@
       "language": "en",
       "notes": null,
       "stage": "nuevo",
-      "quality_band": "media",
+      "quality_band": "media_baja",
       "urgency": "sin_apuro",
       "owner": "demo-agent-04",
       "score": {

@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { supabaseTraceFetch } from './trace'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
@@ -8,6 +9,7 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: supabaseTraceFetch('server') },
       cookies: {
         getAll() {
           return cookieStore.getAll()

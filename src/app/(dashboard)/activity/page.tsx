@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import { ArrowLeft } from 'lucide-react'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getAllActivity } from '@/lib/data/activity'
@@ -64,12 +65,13 @@ export default async function ActivityPage({
           <Link
             href={`/activity?count=${count + PAGE}`}
             style={{
-              display: 'inline-block', fontSize: '13px', fontWeight: 500,
+              display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500,
               color: 'var(--text-secondary)', textDecoration: 'none',
               border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '8px 18px',
             }}
           >
             Cargar más
+            <LinkPendingSpinner />
           </Link>
         </div>
       )}

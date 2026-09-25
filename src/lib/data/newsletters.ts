@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
+import { getTenantRow } from '@/lib/data/tenants'
 import {
   parseNewsletterContent, parseNewsletterSources,
   type NewsletterContent, type NewsletterSource,
@@ -121,8 +122,6 @@ export async function getEditionById(id: string, tenantId: string): Promise<News
   return data ? mapEdition(data) : null
 }
 
-const SOURCE_DOMAINS_COLUMNS = columns('tenants', ['newsletter_source_domains'])
-
 /**
  * La allowlist de fuentes del tenant, YA NORMALIZADA.
  *
@@ -139,14 +138,7 @@ const SOURCE_DOMAINS_COLUMNS = columns('tenants', ['newsletter_source_domains'])
  * calcula sobre lo que el usuario acaba de escribir.
  */
 export async function getSourceDomainsFor(tenantId: string): Promise<string[]> {
-  const db = createAdminClient()
-  const { data } = await db
-    .from('tenants')
-    .select(SOURCE_DOMAINS_COLUMNS)
-    .eq('id', tenantId)
-    .maybeSingle()
-  // reason: el cliente de Supabase no está tipado en este repo; columns() ya
-  // validó la lista contra el esquema.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return parseSourceDomains((data as any)?.newsletter_source_domains).domains
+  // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+  const row = await getTenantRow(tenantId)
+  return parseSourceDomains(row?.newsletter_source_domains).domains
 }
