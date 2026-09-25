@@ -63,6 +63,13 @@ Con `tenants.ai_lead_scoring_enabled`, `src/lib/services/ai-lead-fit.ts` usa IA
 para interpretar respuestas en buckets válidos y producir un briefing. La IA no
 decide puntos: Postgres valora los buckets mediante reglas.
 
+El contexto que recibe la IA debe cubrir todo lo que el agente ve en la ficha:
+formularios, `lead_events`, etiquetas (no escriben eventos, ver migración 116),
+RSVPs y asistencia a open houses, correos escritos por el lead, notas,
+prestamista, presupuesto, procedencia, proceso de compra y secuencias activas.
+Las secciones se formatean en `src/lib/services/lead-fit-context.ts`; si una
+feature nueva guarda hechos del lead fuera de `lead_events`, agrégala ahí.
+
 El flujo es best-effort y debe cerrarse sin romper intake cuando está desactivado,
 falta una key o se agotó el presupuesto. Ejecutarlo en pruebas consume dinero
 real; aplica la regla de aviso previo de `AGENTS.md`.
