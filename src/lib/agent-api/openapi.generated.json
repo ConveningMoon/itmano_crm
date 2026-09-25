@@ -1455,7 +1455,7 @@
                       "language": "es",
                       "notes": null,
                       "stage": "en_proceso",
-                      "quality_band": "media_alta",
+                      "quality_band": "media",
                       "urgency": null,
                       "owner": "demo-agent-05",
                       "score": {
@@ -1480,7 +1480,7 @@
                       "language": "en",
                       "notes": null,
                       "stage": "nutricion",
-                      "quality_band": "media",
+                      "quality_band": "baja",
                       "urgency": "sin_apuro",
                       "owner": "demo-agent-04",
                       "score": {
@@ -2174,7 +2174,7 @@
                   "language": "es",
                   "notes": null,
                   "stage": "en_proceso",
-                  "quality_band": "media_alta",
+                  "quality_band": "media",
                   "urgency": null,
                   "owner": "demo-agent-05",
                   "score": {
@@ -2797,7 +2797,7 @@
                   "language": "es",
                   "notes": null,
                   "stage": "en_proceso",
-                  "quality_band": "media_alta",
+                  "quality_band": "media",
                   "urgency": null,
                   "owner": "demo-agent-05",
                   "score": {
@@ -3381,7 +3381,7 @@
                   "language": "es",
                   "notes": null,
                   "stage": "en_proceso",
-                  "quality_band": "media_alta",
+                  "quality_band": "media",
                   "urgency": null,
                   "owner": "demo-agent-05",
                   "score": {

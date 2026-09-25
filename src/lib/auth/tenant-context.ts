@@ -38,6 +38,13 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
   // (claves asimétricas ES256), así que la identidad se resuelve sin ida y vuelta
   // al servidor de auth. Es igual de confiable que getUser() —la firma se valida,
   // no se confía en la cookie— y ahorra un round-trip en CADA página y action.
+  // La cookie de tenant seleccionado (super_admin) se valida contra `tenants`.
+  // Arranca YA, en paralelo con el perfil: sólo hace red si la cookie existe,
+  // y esperar a conocer el rol para lanzarla era una ola entera más en cada
+  // request del super_admin actuando como tenant. Si el rol resulta no ser
+  // super_admin la respuesta se ignora, como siempre.
+  const selectedPromise = getSelectedTenant()
+
   const { data: claims, error: authError } = await supabase.auth.getClaims()
 
   if (authError || !claims) {
@@ -91,7 +98,7 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
   let tenant_id = profile.tenant_id ?? null
   let acting_as_tenant = false
   if (role === 'super_admin') {
-    const selected = await getSelectedTenant()
+    const selected = await selectedPromise
     if (selected) {
       tenant_id = selected.id
       acting_as_tenant = true

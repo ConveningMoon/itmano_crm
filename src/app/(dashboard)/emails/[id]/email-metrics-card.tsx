@@ -6,8 +6,8 @@ interface Props {
   tenantId:   string
 }
 
-export async function EmailMetricsCard({ sequenceId }: Props) {
-  const m = await getSequenceMetrics(sequenceId)
+export async function EmailMetricsCard({ sequenceId, tenantId }: Props) {
+  const m = await getSequenceMetrics(tenantId, sequenceId)
 
   const stats = [
     {

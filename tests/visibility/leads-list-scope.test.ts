@@ -19,6 +19,13 @@ function fakeQuery(record: RecordedQuery): unknown {
       if (typeof prop !== 'string') return undefined
       // Thenable: `await query` resuelve como lo haría PostgREST.
       if (prop === 'then') {
+        // Un .range() que empieza más allá del total responde 416 sin
+        // Content-Range: sin filas y con count null, como PostgREST real.
+        const range = record.calls.find(c => c.method === 'range')
+        if (range && (range.args[0] as number) >= mockCount && mockCount > 0) {
+          return (resolve: (v: unknown) => void) =>
+            resolve({ data: null, count: null, error: { code: 'PGRST103', message: 'Requested range not satisfiable' } })
+        }
         return (resolve: (v: unknown) => void) => resolve({ data: mockRows, count: mockCount, error: null })
       }
       return (...args: unknown[]) => { record.calls.push({ method: prop, args }); return q }
@@ -126,12 +133,25 @@ describe('getLeadsListData — paginación y filtros en la query', () => {
     expect(ranges).toEqual([[40, 59]])
   })
 
+  it('la lista y el total salen de la misma consulta, sin esperar un conteo previo', async () => {
+    mockCount = 100
+    const data = await getLeadsListData(OWNER, { ...BASE, page: 3 }, CHANNELS)
+
+    const listQueries = queries.filter(q => callsOf(q, 'range').length > 0)
+    expect(listQueries).toHaveLength(1)
+    expect(callsOf(listQueries[0], 'select')[0].args[1]).toEqual({ count: 'exact' })
+    expect(data.total).toBe(100)
+  })
+
   it('una página fuera de rango cae a la última real', async () => {
     mockCount = 25  // 2 páginas
     const data = await getLeadsListData(OWNER, { ...BASE, page: 99 }, CHANNELS)
 
+    // Primero se pide la página 99 (con su count, en paralelo a los contadores).
+    // El 416 obliga a contar aparte y a repetir la consulta con la última página.
     expect(data.page).toBe(2)
-    expect(queries.flatMap(q => callsOf(q, 'range')).map(c => c.args)).toEqual([[20, 39]])
+    expect(data.total).toBe(25)
+    expect(queries.flatMap(q => callsOf(q, 'range')).map(c => c.args)).toEqual([[1960, 1979], [20, 39]])
   })
 
   it('la búsqueda va como ilike sobre search_text, en minúsculas y escapada', async () => {

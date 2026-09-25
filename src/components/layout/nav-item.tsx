@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { m } from 'motion/react'
+import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import {
   LayoutDashboard,
   Users,
@@ -129,6 +130,10 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
       )}
       {Icon && <Icon size={16} strokeWidth={1.6} />}
       <span style={{ flex: 1 }}>{label}</span>
+      {/* Señal inmediata del clic: con prefetch por intención, un toque en móvil
+          o un clic sin hover previo llega sin nada precargado y el loading.tsx
+          de la ruta no aparece hasta que responde el servidor. */}
+      <LinkPendingSpinner />
       {badge !== undefined && (
         <span
           style={{

@@ -94,8 +94,8 @@ export function PublicCatalog({ tenant, properties }: { tenant: PublicTenant; pr
         <div style={{ ...WRAP, padding: '15px 24px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <Link href={`/web/${tenant.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
             {tenant.logo_url ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={tenant.logo_url} alt={tenant.name} style={{ height: '36px', width: 'auto', display: 'block' }} />
+              // 36 px de alto: el original subido puede ser de 320 px o más.
+              <Image src={tenant.logo_url} alt={tenant.name} width={144} height={36} sizes="144px" style={{ height: '36px', width: 'auto', display: 'block' }} />
             ) : (
               <span style={{ width: '36px', height: '36px', borderRadius: '9px', background: `${P.accent}22`, border: `1px solid ${P.accent}66`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 800, color: P.accent }}>
                 {tenant.name.trim().slice(0, 1).toUpperCase()}

@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 import { useState } from 'react'
 import { Building2, Plus, ExternalLink, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyStatus } from '@/lib/data/properties'
@@ -214,22 +216,29 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
               >
                 {/* Cover preview — bleeds over the card padding to the rounded top edge */}
                 {prop.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    className="prop-cover"
-                    src={prop.imageUrl}
-                    alt={`Portada de ${prop.address}`}
-                    loading="lazy"
+                  // La portada mide 160 px de alto en una tarjeta de ~300 px de
+                  // ancho: `sizes` es lo que hace que se baje esa variante y no
+                  // la foto original de varios cientos de kB.
+                  <div
                     style={{
+                      position: 'relative',
                       margin: '-20px -20px 0',
                       width: 'calc(100% + 40px)',
                       height: '160px',
-                      objectFit: 'cover',
                       borderRadius: '11px 11px 0 0',
                       borderBottom: '1px solid var(--border-subtle)',
-                      display: 'block',
+                      overflow: 'hidden',
                     }}
-                  />
+                  >
+                    <Image
+                      className="prop-cover"
+                      src={prop.imageUrl}
+                      alt={`Portada de ${prop.address}`}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 340px"
+                      style={{ objectFit: 'cover' }}
+                    />
+                  </div>
                 ) : (
                   <div
                     style={{

@@ -9,11 +9,19 @@ export const getSubscription = cache(async function getSubscription(
   tenantId: string,
 ): Promise<TenantSubscription | null> {
   const supabase = createAdminClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
     .select('plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, cancel_at, paddle_price_id, paddle_customer_id, billing_exempt, degraded_at')
     .eq('tenant_id', tenantId)
     .maybeSingle()
+  // getTenantAccessFor y el límite de IA leen de aquí y fallan en abierto: este
+  // log es la única señal de que el enforcement quedó desactivado.
+  if (error) {
+    console.error(JSON.stringify({
+      service: 'tenant-access', tenant_id: tenantId,
+      error: error.message, fallback: 'full_access',
+    }))
+  }
   if (!data) return null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = data as any

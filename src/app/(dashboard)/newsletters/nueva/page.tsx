@@ -1,10 +1,9 @@
 import { redirect } from 'next/navigation'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { columns } from '@/lib/supabase/columns'
 import { getSourceDomainsFor } from '@/lib/data/newsletters'
 import { getStudioImages } from '@/lib/data/studio'
 import { canUseNewsletters } from '@/lib/access/newsletters'
+import { getSubscription } from '@/lib/data/subscriptions'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
 
@@ -31,27 +30,24 @@ import { NewEditionForm } from './new-edition-form'
 // la action, no a la que tenía el botón.
 export const maxDuration = 300
 
-const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
-
 export default async function NewEditionPage() {
   const ctx = await requireTenantContext()
   if (!ctx.tenant_id) redirect('/newsletters')
   const tenantId = ctx.tenant_id
 
-  const db = createAdminClient()
-  const { data: subRow } = await db
-    .from('subscriptions').select(SUBSCRIPTION_COLUMNS).eq('tenant_id', tenantId).maybeSingle()
-  // reason: el cliente de Supabase no está tipado en este repo.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
-  if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
-
-  const [studioImages, sourceDomains] = await Promise.all([
+  // El plan es la misma lectura cacheada que hace el shell, pero esperarlo
+  // ANTES de lanzar el resto dejaba esas dos lecturas en una ola posterior.
+  // Van juntas y la guarda se evalúa después: si no alcanza, lo leído (todo
+  // acotado al tenant) se descarta sin llegar al cliente.
+  const [subscription, studioImages, sourceDomains] = await Promise.all([
+    getSubscription(tenantId),
     getStudioImages(tenantId),
     // Vacío = este tenant nunca ha generado; el panel lo explica y se preparan
     // solas en esa primera generación (ai/source-catalog.ts).
     getSourceDomainsFor(tenantId),
   ])
+  const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
+  if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
   return (
     <div style={{ maxWidth: '560px' }}>

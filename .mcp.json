@@ -1,8 +1,12 @@
 {
   "mcpServers": {
-    "supabase-sandbox": {
+    "supabase_sandbox": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=xpaixcowvyksgluazwzn&features=database%2Cdebugging%2Cdevelopment%2Cdocs"
+    },
+    "supabase_production": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=kvmjlrvlnhiarrqxulkr&features=database%2Cdebugging%2Cdevelopment%2Cdocs"
     }
   }
 }

@@ -1,13 +1,14 @@
 import 'server-only'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getTenantRow } from '@/lib/data/tenants'
 import { columns } from '@/lib/supabase/columns'
 import {
   CURRENCIES, COMMISSION_MODELS, EMPTY_PROFILE, type BusinessProfile,
 } from '@/lib/business/profile'
 import { parseCanonicalTemplate } from '@/lib/newsletters/canonical'
 
-const PROFILE_COLUMNS = columns('tenants', [
+export const BUSINESS_PROFILE_COLUMNS = columns('tenants', [
   'currency', 'commission_model', 'commission_buy', 'commission_sell',
   'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
   'public_site_url', 'newsletter_canonical_template',
@@ -71,17 +72,22 @@ export const BusinessProfileSchema = z.object({
 export type BusinessProfileInput = z.input<typeof BusinessProfileSchema>
 
 export async function getBusinessProfile(tenantId: string): Promise<BusinessProfile> {
-  const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('tenants')
-    .select(PROFILE_COLUMNS)
-    .eq('id', tenantId)
-    .maybeSingle()
+  // Misma fila (y mismo round-trip) que el shell y la página: getTenantRow la
+  // trae entera una vez por request.
+  return mapBusinessProfile(await getTenantRow(tenantId))
+}
 
-  if (error || !data) return EMPTY_PROFILE
-
+/**
+ * El perfil a partir de una fila de `tenants` que YA se leyó con
+ * `BUSINESS_PROFILE_COLUMNS` incluidas. Existe para que una página que
+ * necesita otras columnas de la misma fila (la ficha del lead, que lee la
+ * identidad de envío) no pague una segunda consulta a la misma fila.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar
+export function mapBusinessProfile(row: any): BusinessProfile {
+  if (!row) return EMPTY_PROFILE
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar
-  const r = data as any
+  const r = row as any
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
   return {
     currency:         (r.currency ?? null) as BusinessProfile['currency'],

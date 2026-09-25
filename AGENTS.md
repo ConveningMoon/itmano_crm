@@ -45,7 +45,7 @@ Hay dos proyectos y producción contiene datos de clientes:
 | Entorno | `project_ref` | Uso |
 |---|---|---|
 | Sandbox | `xpaixcowvyksgluazwzn` | Desarrollo, pruebas y primera aplicación de migraciones |
-| Producción | `kvmjlrvlnhiarrqxulkr` | Datos reales; acceso excepcional |
+| Producción | `kvmjlrvlnhiarrqxulkr` | Datos reales; migraciones ya probadas y consultas |
 
 - Usa los MCP persistentes `supabase_sandbox` y `supabase_production`
   configurados en el proyecto. Cada uno está acotado por URL a su `project_ref`;
@@ -125,6 +125,27 @@ Detalles y protocolo de handoff: `docs/agents/workflow.md`.
 - Toda lista de columnas de `.select()` se construye con `columns()` de
   `src/lib/supabase/columns.ts`.
 - No uses AOS, jQuery ni librerías que muten el DOM; rompen el contrato SSR.
+
+## Estados de carga obligatorios
+
+Todo proceso que espere a la base de datos o a un servicio externo debe mostrar
+feedback visual desde el primer instante. Aplica en el mismo cambio que crea o
+modifica la consulta:
+
+- Toda ruta nueva de `(dashboard)` lleva su `loading.tsx` con skeletons de la
+  forma real de la página (`Skeleton` y `page-skeleton.tsx`), nunca un spinner
+  a pantalla completa.
+- Una sección lenta dentro de una página va en `<Suspense>` con fallback propio,
+  para no bloquear el resto.
+- Filtros, orden y paginación que vuelven a consultar sin cambiar de ruta usan
+  `useTransition` y muestran `RefreshingPill`; links que navegan a vistas
+  dinámicas sin `loading.tsx` propio usan `LinkPendingSpinner`
+  (`src/components/ui/loading-indicator.tsx`).
+- Botones que disparan Server Actions se deshabilitan y muestran su estado
+  pendiente (`useTransition`/`useFormStatus`) hasta que termina la acción.
+- Consultas independientes van en `Promise.all`; lecturas compartidas entre
+  layout y página usan los getters con `cache()` en vez de repetir la query.
+  Para medir cascadas, `SUPABASE_TRACE=1` registra cada round-trip.
 
 ## Verificación
 

@@ -1,13 +1,12 @@
+import { Suspense } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
-import { SubscriptionBanner } from '@/components/dashboard/subscription-banner'
+import {
+  AiLimitSlot, BrandFallback, BrandSlot, PlanLabelFallback, PlanLabelSlot,
+  SubscriptionBannerSlot, TenantSwitcherSlot, TopbarPillFallback, UnreadBadgeSlot,
+} from '@/components/layout/shell-slots'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { getUnreadCount } from '@/lib/data/notifications'
-import { getTenantsForSwitcher, getTenantBranding } from '@/lib/data/tenants'
-import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
-import { getSubscription } from '@/lib/data/subscriptions'
-import { planBadgeLabel } from '@/lib/subscriptions'
-import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { getShellData } from '@/lib/data/shell'
 
 export default async function DashboardLayout({
   children,
@@ -20,33 +19,40 @@ export default async function DashboardLayout({
   // Centro de control + Notificaciones (el resto redirigiría al hub).
   const hubMode = ctx.role === 'super_admin' && !ctx.tenant_id
 
-  // TODO lo que el shell necesita sale de UNA sola ola de queries. Antes iba
-  // encadenado con await y cada pieza esperaba a la anterior: sobre una base de
-  // datos remota eso son ~8 idas y vueltas en serie que el usuario paga enteras
-  // en cada carga dura. Ninguna depende del resultado de otra, así que la única
-  // razón para serializarlas era la forma del código.
-  const [unreadCount, switcherTenants, branding, aiLimit, subscription, access] = await Promise.all([
-    getUnreadCount(ctx.tenant_id, ctx.role === 'agent' ? ctx.agent_id : null),
-    // Switcher del topbar: solo el super_admin carga la lista de tenants.
-    ctx.role === 'super_admin' ? getTenantsForSwitcher() : null,
-    // Branding del tenant activo (logo del sidebar). En modo hub no hay tenant —
-    // el shell muestra el wordmark de ITMANO.
-    ctx.tenant_id ? getTenantBranding(ctx.tenant_id) : null,
-    // Indicador del límite mensual de IA (topbar) — solo con tenant activo. Para
-    // un rol 'agent' en plan Partner el porcentaje es el de SU parte del límite.
-    getAiLimitIndicatorFor(ctx),
-    // Suscripción del tenant → label bajo el nombre del usuario en el sidebar.
-    ctx.tenant_id ? getSubscription(ctx.tenant_id) : null,
-    // Banner de estado de suscripción — solo con tenant activo. El super_admin
-    // en modo hub (sin tenant_id) no tiene una fila de `subscriptions` que leer;
-    // pedir el acceso con un tenant nulo rompería el panel de administración.
-    ctx.tenant_id ? getTenantAccessFor(ctx.tenant_id) : null,
-  ])
-
-  const planLabel = planBadgeLabel(subscription)
-  // El email sale del claim del JWT que ya validó getCurrentTenantContext; pedirlo
-  // otra vez al servidor de auth era un round-trip entero por el pie del sidebar.
+  // El shell sólo espera al contexto (rol, tenant, email). Todo lo demás que
+  // lee de la base —logo, plan, contador de no leídas, límite de IA, switcher
+  // de tenant y banner de suscripción— va dentro de un <Suspense> propio y
+  // llega por streaming. Sigue siendo UNA ola de consultas (getShellData la
+  // deduplica), pero ya no bloquea: el nav y el loading.tsx de la página se
+  // pintan de inmediato, y en una carga dura el HTML del shell sale antes de
+  // que la base responda.
+  //
+  // El email sale del claim del JWT que ya validó getCurrentTenantContext;
+  // pedirlo otra vez al servidor de auth era un round-trip entero.
   const userEmail = ctx.email
+
+  // Dispara la ola del shell AQUÍ, sin esperarla. Los slots comparten esta
+  // misma promesa porque getShellData está en cache(); sin este disparo React
+  // no llega a renderizarlos hasta después del árbol de la página, y sus
+  // consultas salían una ola entera por detrás de las de la página.
+  //
+  // El `.catch` vacío no traga nada: cada slot vuelve a esperar la MISMA
+  // promesa y recibe el rechazo ahí, donde su error boundary lo ve. Sólo evita
+  // que Node la marque como rechazo no manejado durante el hueco en que nadie
+  // la está esperando todavía.
+  const shellData = getShellData(ctx)
+  shellData.catch(() => {})
+
+  const brand = (
+    <Suspense fallback={<BrandFallback />}>
+      <BrandSlot ctx={ctx} hubMode={hubMode} />
+    </Suspense>
+  )
+  const planLabel = ctx.tenant_id ? (
+    <Suspense fallback={<PlanLabelFallback />}>
+      <PlanLabelSlot ctx={ctx} />
+    </Suspense>
+  ) : null
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
@@ -54,8 +60,7 @@ export default async function DashboardLayout({
         role={ctx.role}
         userEmail={userEmail}
         hubMode={hubMode}
-        logoUrl={branding?.logoUrl ?? null}
-        tenantName={branding?.name ?? null}
+        brand={brand}
         planLabel={planLabel}
       />
       {/* Sidebar offset + content gutter come from the authoritative .app-shell-*
@@ -78,17 +83,34 @@ export default async function DashboardLayout({
       >
         <Topbar
           role={ctx.role}
-          unreadCount={unreadCount}
           userEmail={userEmail}
           hubMode={hubMode}
-          tenants={switcherTenants ?? undefined}
-          activeTenantId={ctx.acting_as_tenant ? ctx.tenant_id : null}
-          logoUrl={branding?.logoUrl ?? null}
-          tenantName={branding?.name ?? null}
-          aiLimit={aiLimit}
+          brand={brand}
           planLabel={planLabel}
+          aiLimitSlot={ctx.tenant_id ? (
+            <Suspense fallback={<TopbarPillFallback />}>
+              <AiLimitSlot ctx={ctx} />
+            </Suspense>
+          ) : null}
+          tenantSwitcherSlot={ctx.role === 'super_admin' ? (
+            <Suspense fallback={<TopbarPillFallback width="150px" />}>
+              <TenantSwitcherSlot ctx={ctx} />
+            </Suspense>
+          ) : null}
+          unreadBadgeSlot={
+            <Suspense fallback={null}>
+              <UnreadBadgeSlot ctx={ctx} />
+            </Suspense>
+          }
         />
-        <SubscriptionBanner banner={access?.banner ?? null} />
+        {/* Sin fallback: el banner sólo existe en estados de suscripción
+            excepcionales, y reservarle sitio siempre movería el contenido en
+            el caso normal. */}
+        {ctx.tenant_id && (
+          <Suspense fallback={null}>
+            <SubscriptionBannerSlot ctx={ctx} />
+          </Suspense>
+        )}
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>

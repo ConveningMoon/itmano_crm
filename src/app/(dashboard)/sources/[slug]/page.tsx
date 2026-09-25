@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getChannelBySlug } from '@/lib/data/channels'
-import { getSubmissionsForChannel } from '@/lib/data/form-submissions'
+import { getTenantRow } from '@/lib/data/tenants'
+import { getSubmissionsForChannelSlug } from '@/lib/data/form-submissions'
 import { listSequences } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
@@ -31,20 +32,27 @@ export default async function ChannelDetailPage({
   const { tenant_id } = ctx
   const scope = scopeFor(ctx)
 
+  // Una sola ola: el canal (con sus métricas y su hosted_page), sus envíos,
+  // las secuencias, los agentes y la fila del tenant sólo dependen del slug y
+  // del tenant del contexto, no unos de otros. Antes eran cuatro olas: canal →
+  // métricas → todo lo demás.
+  //
   // Agent: only their own channel resolves; a non-owned/null channel → 404.
-  const channel = await getChannelBySlug(tenant_id, slug, 30, scope.agentId)
-  if (!channel) notFound()
-
   const supabase = createAdminClient()
-  const [submissions, sequences, { data: agentRows }, { data: hostedRow }, { data: tenantRow }] = await Promise.all([
-    getSubmissionsForChannel(channel.id, tenant_id),
+  const [channel, submissions, sequences, { data: agentRows }, tenantRow] = await Promise.all([
+    getChannelBySlug(tenant_id, slug, 30, scope.agentId),
+    getSubmissionsForChannelSlug(slug, tenant_id),
     // 'channel': una secuencia disparada por etiqueta (117) no se engancha a una
     // fuente — su disparador es la etiqueta, no el formulario.
     listSequences(tenant_id, scope.agentId, 'channel'),
-    supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', channel.tenantId).order('name'),
-    supabase.from('acquisition_channels').select('hosted_page').eq('id', channel.id).maybeSingle(),
-    supabase.from('tenants').select('slug, name, pages_managed_by_itmano').eq('id', channel.tenantId).maybeSingle(),
+    tenant_id
+      ? supabase.from('agents').select('id, name').eq('active', true).eq('tenant_id', tenant_id).order('name')
+      : Promise.resolve({ data: [] }),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    tenant_id ? getTenantRow(tenant_id) : Promise.resolve(null),
   ])
+  if (!channel) notFound()
+  const hostedRow = { hosted_page: channel.hostedPage }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hostedConfig = parseHostedPage((hostedRow as any)?.hosted_page)
   // La marca es del tenant (migración 091): aplica a todas sus fuentes, también

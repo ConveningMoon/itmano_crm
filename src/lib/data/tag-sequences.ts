@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { getActiveStepsFor, getSequenceRunsFor } from '@/lib/data/email-sequences'
 import type { LeadTag } from '@/lib/leads/tags'
 
 // Cobertura de las secuencias disparadas por etiqueta (117).
@@ -46,9 +47,14 @@ export async function getTenantLanguages(tenantId: string): Promise<string[]> {
     .eq('tenant_id', tenantId)
     .eq('active', true)
 
+  return languagesOf((data ?? []) as any[])
+}
+
+/** La misma regla de getTenantLanguages sobre filas de `agents` ya leídas. */
+export function languagesOf(agents: { language?: string | null; languages?: string[] | null }[]): string[] {
   const valid = SUPPORTED_LANGUAGE_CODES as readonly string[]
   const set = new Set<string>()
-  for (const a of (data ?? []) as any[]) {
+  for (const a of agents) {
     for (const l of (a.languages ?? []) as string[]) if (valid.includes(l)) set.add(l)
     if (a.language && valid.includes(a.language)) set.add(a.language as string)
   }
@@ -63,7 +69,12 @@ export async function getTagSequenceCoverage(tenantId: string | null): Promise<T
 
   const supabase = createAdminClient()
 
-  const [{ data: tagRows }, { data: seqRows }, languages] = await Promise.all([
+  // Una sola ola. Los pasos y las corridas se leen por tenant y se cruzan en
+  // memoria con las secuencias de etiqueta: pedirlos por ids de secuencia
+  // obligaba a esperar la lista primero, y eso era una ola entera más en cada
+  // carga de /emails. Y salen de los getters compartidos con listSequences,
+  // que en esta misma página pide exactamente esas dos tablas.
+  const [{ data: tagRows }, { data: seqRows }, { data: agentRows }, stepRows, runRows] = await Promise.all([
     supabase
       .from('lead_tags')
       .select('id, name, slug, color, description, position, requires_sequence')
@@ -75,29 +86,29 @@ export async function getTagSequenceCoverage(tenantId: string | null): Promise<T
       .select('id, name, language, active, trigger_tag_id')
       .eq('tenant_id', tenantId)
       .not('trigger_tag_id', 'is', null),
-    getTenantLanguages(tenantId),
+    supabase
+      .from('agents')
+      .select('language, languages')
+      .eq('tenant_id', tenantId)
+      .eq('active', true),
+    getActiveStepsFor(tenantId),
+    getSequenceRunsFor(tenantId),
   ])
 
+  const languages = languagesOf((agentRows ?? []) as any[])
   const sequences = (seqRows ?? []) as any[]
-  const seqIds    = sequences.map(s => s.id as string)
-
-  // Pasos activos y corridas activas de todas las secuencias de un tirón: una
-  // consulta por secuencia serían dos queries por fila del panel.
-  const [{ data: stepRows }, { data: runRows }] = await Promise.all([
-    seqIds.length > 0
-      ? supabase.from('email_sequence_steps').select('sequence_id').eq('active', true).in('sequence_id', seqIds)
-      : Promise.resolve({ data: [] as any[] }),
-    seqIds.length > 0
-      ? supabase.from('lead_sequence_runs').select('sequence_id').eq('status', 'active').in('sequence_id', seqIds)
-      : Promise.resolve({ data: [] as any[] }),
-  ])
+  const seqIds    = new Set(sequences.map(s => s.id as string))
 
   const stepCount = new Map<string, number>()
-  for (const r of (stepRows ?? []) as any[]) {
+  for (const r of stepRows) {
+    if (!seqIds.has(r.sequence_id)) continue
     stepCount.set(r.sequence_id, (stepCount.get(r.sequence_id) ?? 0) + 1)
   }
   const runCount = new Map<string, number>()
-  for (const r of (runRows ?? []) as any[]) {
+  for (const r of runRows) {
+    // El getter compartido trae todas las corridas del tenant; aquí sólo
+    // cuentan las activas de una secuencia de etiqueta.
+    if (r.status !== 'active' || !seqIds.has(r.sequence_id)) continue
     runCount.set(r.sequence_id, (runCount.get(r.sequence_id) ?? 0) + 1)
   }
 

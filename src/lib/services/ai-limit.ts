@@ -2,6 +2,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { TenantContext } from '@/lib/auth/tenant-context'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { getSubscription } from '@/lib/data/subscriptions'
+import { getTenantShellRow } from '@/lib/data/tenants'
 import { isCoreFeature, reserveUsdFor, discretionaryLimitUsd, ceilingUsdFor } from '@/lib/services/ai-budget'
 import type { AiFeature } from '@/lib/services/ai-feature-labels'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
@@ -61,9 +63,11 @@ function monthStartIso(): string {
 export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus> {
   const supabase = createAdminClient()
 
-  const [{ data: tenant }, { data: sub }, { data: events }] = await Promise.all([
-    supabase.from('tenants').select('ai_monthly_limit_usd, ai_unlimited').eq('id', tenantId).maybeSingle(),
-    supabase.from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle(),
+  // Fila del tenant y suscripción salen de los mismos getters cacheados que usa
+  // el shell: en una página son lecturas que ya estaban en vuelo.
+  const [tenant, sub, { data: events }] = await Promise.all([
+    getTenantShellRow(tenantId),
+    getSubscription(tenantId),
     supabase
       .from('ai_usage_events')
       .select('cost_usd')
@@ -71,12 +75,9 @@ export async function getAiLimitStatus(tenantId: string): Promise<AiLimitStatus>
       .gte('created_at', monthStartIso()),
   ])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const t = tenant as any
-  const unlimited = (t?.ai_unlimited as boolean) ?? false
-  const limitUsd  = Number(t?.ai_monthly_limit_usd ?? 10)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plan = ((sub as any)?.plan as SubscriptionPlan | undefined) ?? 'esencial'
+  const unlimited = tenant?.ai_unlimited ?? false
+  const limitUsd  = Number(tenant?.ai_monthly_limit_usd ?? 10)
+  const plan: SubscriptionPlan = sub?.plan ?? 'esencial'
 
   let usedUsd = 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,9 +153,9 @@ export interface AgentAiShare {
 export async function getAgentAiShare(tenantId: string, agentId: string): Promise<AgentAiShare | null> {
   const supabase = createAdminClient()
 
-  const [{ data: tenant }, { data: sub }, agentsRes, { data: events }] = await Promise.all([
-    supabase.from('tenants').select('ai_monthly_limit_usd, ai_unlimited').eq('id', tenantId).maybeSingle(),
-    supabase.from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle(),
+  const [tenant, sub, agentsRes, { data: events }] = await Promise.all([
+    getTenantShellRow(tenantId),
+    getSubscription(tenantId),
     supabase.from('agents').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     supabase
       .from('ai_usage_events')
@@ -164,16 +165,13 @@ export async function getAgentAiShare(tenantId: string, agentId: string): Promis
       .gte('created_at', monthStartIso()),
   ])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const t = tenant as any
-  if ((t?.ai_unlimited as boolean) ?? false) return null
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (((sub as any)?.plan as string | undefined) !== 'partner') return null
+  if (tenant?.ai_unlimited ?? false) return null
+  if (sub?.plan !== 'partner') return null
 
   const agentCount = agentsRes.count ?? 0
   if (agentCount <= 0) return null
 
-  const limitUsd = Number(t?.ai_monthly_limit_usd ?? 10)
+  const limitUsd = Number(tenant?.ai_monthly_limit_usd ?? 10)
   const shareUsd = discretionaryLimitUsd('partner', limitUsd) / agentCount
 
   let usedUsd = 0

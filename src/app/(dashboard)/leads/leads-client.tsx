@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
+import { RefreshingPill } from '@/components/ui/loading-indicator'
 import { LANGUAGE_CONFIG } from '@/lib/config'
 import {
   QUALITY_BANDS, QUALITY_CONFIG, URGENCY_CONFIG,
@@ -502,7 +503,6 @@ export function LeadsClient({
         .filter-input:focus { border-color: var(--border-accent) !important; outline: none; }
         .clear-btn:hover { color: var(--text-secondary) !important; }
         .page-btn:not(:disabled):hover { border-color: var(--border-accent) !important; color: var(--text-primary) !important; }
-        .results-zone { transition: opacity var(--dur-fast); }
       `}</style>
 
       {/* ── ZONA 1: Header ── */}
@@ -784,7 +784,9 @@ export function LeadsClient({
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
           Defensive horizontal scroll on phones so columns stay readable.)
           AnimatePresence mode="wait": crossfade de 150ms al alternar tabla↔kanban. */}
-      <div className="results-zone" style={{ opacity: isPending ? 0.55 : 1 }}>
+      <div className="results-zone" style={{ position: 'relative' }}>
+      <RefreshingPill show={isPending} />
+      <div style={{ opacity: isPending ? 0.55 : 1, transition: 'opacity var(--dur-fast)' }}>
       <AnimatePresence mode="wait" initial={false}>
       {filters.view === 'table' ? (
         <m.div
@@ -1108,6 +1110,7 @@ export function LeadsClient({
         </m.div>
       )}
       </AnimatePresence>
+      </div>
       </div>
 
       {/* ── Eliminar en lote — Paso 1: primera confirmación ── */}

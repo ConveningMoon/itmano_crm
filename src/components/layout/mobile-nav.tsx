@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, m } from 'motion/react'
 import { Menu, X, LogOut } from 'lucide-react'
 import { NavItem } from './nav-item'
-import { BrandLogo } from './brand-logo'
+import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
@@ -12,13 +12,13 @@ import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 // Mobile navigation: a hamburger trigger (phones only) + a left-sliding drawer that
 // mirrors the desktop sidebar (logo · nav · user/sign-out). Closes on overlay tap and
 // on navigation. Entirely additive — the trigger is `md:hidden`, so ≥768px is unaffected.
-export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, tenantName = null, planLabel = null }: {
+export function MobileNav({ role, userEmail, hubMode = false, brand = null, planLabel = null }: {
   role: TenantRole
   userEmail: string
   hubMode?: boolean
-  logoUrl?: string | null
-  tenantName?: string | null
-  planLabel?: string | null
+  // Logo y plan llegan ya renderizados desde el layout (ver Topbar).
+  brand?: ReactNode
+  planLabel?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const items = navItemsForRole(role, { hubMode })
@@ -105,7 +105,7 @@ export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, te
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <BrandLogo logoUrl={logoUrl} tenantName={tenantName} hubMode={hubMode} />
+              {brand}
               <div style={{ fontSize: '10px', fontWeight: 300, color: 'var(--text-muted)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
                 CRM by ITMANO
               </div>
@@ -156,16 +156,11 @@ export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, te
                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   {ROLE_LABELS[role]}
                 </div>
-                {planLabel && (
-                  <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
-                    {planLabel}
-                  </div>
-                )}
+                {planLabel}
               </div>
             </div>
             <form action={signOut} style={{ padding: '0 12px 14px' }}>
-              <button
-                type="submit"
+              <PendingSubmitButton
                 className="mnav-signout"
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
@@ -176,7 +171,7 @@ export function MobileNav({ role, userEmail, hubMode = false, logoUrl = null, te
               >
                 <LogOut size={15} strokeWidth={1.6} />
                 <span>Cerrar sesión</span>
-              </button>
+              </PendingSubmitButton>
             </form>
           </div>
         </m.aside>

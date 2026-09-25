@@ -2,9 +2,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { columns } from '@/lib/supabase/columns'
 import { getEditionsForTenant } from '@/lib/data/newsletters'
-import { getNewsletterStats, SIN_DATOS as ESTADISTICAS_VACIAS } from '@/lib/data/newsletter-stats'
+import { getNewsletterStats, SIN_DATOS } from '@/lib/data/newsletter-stats'
 import { ensureNewsletterChannel, ensureNewsletterSequence } from '@/lib/newsletters/channel'
 import { canUseNewsletters } from '@/lib/access/newsletters'
+import { getSubscription } from '@/lib/data/subscriptions'
+import { getTenantRow } from '@/lib/data/tenants'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
 
@@ -13,9 +15,11 @@ import { EditionsList } from './editions-list'
 // exista desde la primera visita y el formulario público responda sin que el
 // usuario haya hecho nada.
 
-const SUBSCRIPTION_COLUMNS = columns('subscriptions', ['plan'])
-const TENANT_COLUMNS = columns('tenants', ['slug'])
-const SEQUENCE_STEP_COLUMNS = columns('email_sequence_steps', ['id'])
+// Los pasos se resuelven por el TIPO de canal, no por el id de la secuencia:
+// así viajan en la misma ola que todo lo demás en vez de esperar a que
+// ensureNewsletterChannel devuelva su id. Si el canal (o la secuencia) se crea
+// en esta misma visita, no hay pasos todavía y el resultado vacío es correcto.
+const SEQUENCE_STEP_SELECT = `${columns('email_sequence_steps', ['id'])}, email_sequences!inner(id, acquisition_channels!inner(channel_type, archived_at))`
 
 export default async function NewslettersPage() {
   const ctx = await requireTenantContext()
@@ -25,17 +29,26 @@ export default async function NewslettersPage() {
   // super_admin en modo hub (sin tenant seleccionado) no tiene subscripción
   // que leer — canUseNewsletters ya lo deja pasar siempre por rol, así que el
   // plan por defecto aquí nunca lo bloquea a él, solo a un tenant real.
-  let plan: SubscriptionPlan = 'esencial'
-  if (tenant_id) {
-    const { data: subRow } = await db
-      .from('subscriptions')
-      .select(SUBSCRIPTION_COLUMNS)
-      .eq('tenant_id', tenant_id)
-      .maybeSingle()
-    // reason: el cliente de Supabase no está tipado en este repo.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plan = ((subRow as any)?.plan ?? 'esencial') as SubscriptionPlan
-  }
+  //
+  // getSubscription es la misma lectura cacheada que hace el shell, pero
+  // esperarla ANTES de lanzar las lecturas de la página las dejaba en una ola
+  // posterior a la del shell. Van todas juntas y el plan se comprueba después:
+  // si no alcanza, lo leído (todo acotado al tenant) se descarta.
+  const [subscription, canal, editions, stats, tenantRow, { data: stepRows }] = await Promise.all([
+    tenant_id ? getSubscription(tenant_id) : Promise.resolve(null),
+    tenant_id ? ensureNewsletterChannel(db, tenant_id) : Promise.resolve({ error: 'sin tenant' } as const),
+    tenant_id ? getEditionsForTenant(tenant_id) : Promise.resolve([]),
+    tenant_id ? getNewsletterStats(tenant_id) : Promise.resolve(null),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    tenant_id ? getTenantRow(tenant_id) : Promise.resolve(null),
+    tenant_id
+      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_SELECT)
+          .eq('tenant_id', tenant_id)
+          .eq('email_sequences.acquisition_channels.channel_type', 'newsletter')
+          .is('email_sequences.acquisition_channels.archived_at', null)
+      : Promise.resolve({ data: null }),
+  ])
+  const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
 
   if (!canUseNewsletters({ role }, plan)) {
     return (
@@ -74,25 +87,13 @@ export default async function NewslettersPage() {
     )
   }
 
-  // Prepara la newsletter ANTES de leer: así existe desde la primera visita y
-  // el formulario público responde sin que el usuario haya hecho nada.
-  const canal = await ensureNewsletterChannel(db, tenant_id)
+  // El canal implícito ya se preparó arriba, en la misma ola que las lecturas,
+  // igual que el conteo de pasos. La secuencia sólo se crea aquí si el canal no
+  // la tiene todavía: en ese caso nace vacía y el aviso de abajo es correcto.
   const sequenceId = 'error' in canal
     ? null
     : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
 
-  // getNewsletterStats sólo lee: si el canal no se pudo resolver (`canal`
-  // trae `error`), las estadísticas van en cero sin llamarla — nada que
-  // agregar sin un channel_id real.
-  const [editions, stats, { data: tenantRow }, { data: stepRows }] = await Promise.all([
-    getEditionsForTenant(tenant_id),
-    'error' in canal ? Promise.resolve(ESTADISTICAS_VACIAS) : getNewsletterStats(tenant_id, canal.id),
-    db.from('tenants').select(TENANT_COLUMNS).eq('id', tenant_id).maybeSingle(),
-    sequenceId
-      ? db.from('email_sequence_steps').select(SEQUENCE_STEP_COLUMNS)
-          .eq('tenant_id', tenant_id).eq('sequence_id', sequenceId)
-      : Promise.resolve({ data: null }),
-  ])
   // reason: el cliente de Supabase no está tipado en este repo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
@@ -101,7 +102,7 @@ export default async function NewslettersPage() {
   return (
     <EditionsList
       editions={editions}
-      stats={{ totals: stats.totals, byEdition: Object.fromEntries(stats.byEdition) }}
+      stats={{ totals: (stats ?? SIN_DATOS).totals, byEdition: Object.fromEntries((stats ?? SIN_DATOS).byEdition) }}
       tenantSlug={tenantSlug}
       sequenceId={sequenceId}
       sequenceEmpty={sequenceEmpty}

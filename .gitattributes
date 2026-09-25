@@ -1,1 +1,7 @@
 .githooks/* text eol=lf
+
+# El contrato OpenAPI se COMPARA byte a byte con el que genera el registro
+# (tests/agent-api-db/contract.test.ts). Sin esto, git entrega estos archivos
+# con CRLF en Windows y el test falla siempre ahí aunque el contrato esté bien.
+docs/agent-api/openapi.json text eol=lf
+src/lib/agent-api/openapi.generated.json text eol=lf
