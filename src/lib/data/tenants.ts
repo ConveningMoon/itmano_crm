@@ -58,7 +58,7 @@ export const TENANT_ROW_COLUMNS = columns('tenants', [
   'pages_managed_by_itmano', 'newsletter_source_domains',
   'currency', 'commission_model', 'commission_buy', 'commission_sell',
   'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
-  'public_site_url', 'newsletter_canonical_template',
+  'timezone', 'public_site_url', 'newsletter_canonical_template',
 ])
 
 export interface TenantRow {
@@ -85,6 +85,7 @@ export interface TenantRow {
   budget_premium_min:       number | string | null
   primary_areas:            string[] | null
   secondary_areas:          string[] | null
+  timezone:                 string | null
   public_site_url:          string | null
   newsletter_canonical_template: string | null
 }

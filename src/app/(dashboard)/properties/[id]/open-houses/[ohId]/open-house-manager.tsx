@@ -8,11 +8,12 @@ import type { OpenHouseDetail } from '@/lib/data/open-houses'
 import { formatOpenHouseDate, formatOpenHouseTime } from '@/lib/open-houses/format'
 import { defaultOpenHouseCopy } from '@/lib/open-houses/default-copy'
 import { utcToZonedWallTime } from '@/lib/open-houses/schedule'
+import { timeZoneLabel } from '@/lib/time-zones'
 import type { OpenHouseLanguage } from '@/lib/open-houses/model'
 import {
   cancelOpenHouse, deleteOpenHouseDraft, rescheduleOpenHouse, updateOpenHouseDetails, updateOpenHouseDraft,
 } from '../../../open-house-actions'
-import { OpenHouseForm, toActionInput, type OpenHouseFormValue } from '../open-house-form'
+import { OpenHouseForm, SenderSelect, toActionInput, type AgentOption, type OpenHouseFormValue } from '../open-house-form'
 import { BTN_DANGER, BTN_GHOST, BTN_PRIMARY, CARD, ERROR, HINT, INPUT, LABEL, LANG_LABEL, StateChip } from '../ui'
 import { EmailSection } from './email-section'
 import { ConfirmPanel } from './confirm-panel'
@@ -69,7 +70,7 @@ function NoticeEditor({ draft, onChange }: { draft: NoticeDraft; onChange: (d: N
 }
 
 export function OpenHouseManager({
-  detail, canManage, senderError, integrationPrompt, publicUrl, localPreviewUrl, previewAgentId,
+  detail, canManage, senderError, integrationPrompt, publicUrl, localPreviewUrl, previewAgentId, agents,
 }: {
   detail:            OpenHouseDetail
   canManage:         boolean
@@ -78,6 +79,7 @@ export function OpenHouseManager({
   publicUrl:         string | null
   localPreviewUrl:   string | null
   previewAgentId:    string | null
+  agents:            AgentOption[]
 }) {
   const router = useRouter()
   const { openHouse: oh, emails, rsvps, tags } = detail
@@ -102,6 +104,7 @@ export function OpenHouseManager({
     date: start0.date, startTime: start0.time, endTime: end0.time, timezone: oh.timezone,
     publicNotes: oh.publicNotes ?? '', languages: oh.languages as OpenHouseLanguage[],
     audienceTagIds: oh.audienceTagIds, audienceMatch: oh.audienceMatch, rsvpEnabled: oh.rsvpEnabled,
+    senderAgentId: oh.senderAgentId ?? '',
     announcementMode: sendsOnConfirm ? 'on_confirm' : 'scheduled', announcementDate: annWall.date, announcementTime: annWall.time,
     reminderEnabled: !!reminder, reminderCustom: !!reminder, reminderDate: remWall.date, reminderTime: remWall.time,
   }
@@ -115,6 +118,10 @@ export function OpenHouseManager({
   // Detalles públicos
   const [notes, setNotes] = useState(oh.publicNotes ?? '')
   const [rsvpOn, setRsvpOn] = useState(oh.rsvpEnabled)
+  const [senderId, setSenderId] = useState(oh.senderAgentId ?? '')
+  const senderName = oh.senderAgentId
+    ? (agents.find(a => a.id === oh.senderAgentId)?.name ?? 'Agente inactivo')
+    : 'el agente de cada lead'
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) {
     setError(null)
@@ -151,6 +158,7 @@ export function OpenHouseManager({
               </span>
             )) : <span style={HINT}>ninguna</span>}
             <span style={HINT}>· Idiomas: {oh.languages.map(l => LANG_LABEL[l] ?? l).join(', ')}</span>
+            <span style={HINT}>· Remitente: {senderName}</span>
           </div>
           {oh.publicNotes && <div style={{ ...HINT, marginTop: '8px' }}>“{oh.publicNotes}”</div>}
           {oh.status === 'cancelled' && oh.cancelReason && <div style={{ ...HINT, marginTop: '8px' }}>Motivo de cancelación: {oh.cancelReason}</div>}
@@ -201,6 +209,7 @@ export function OpenHouseManager({
           <OpenHouseForm
             initial={formInitial}
             tags={tags}
+            agents={agents}
             submitLabel="Guardar cambios"
             onCancel={() => setModal(null)}
             onSubmit={async v => {
@@ -215,7 +224,7 @@ export function OpenHouseManager({
 
       <ModalShell open={modal === 'details'} onClose={() => setModal(null)} maxWidth={520}>
         <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Detalles públicos</div>
+          <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Detalles</div>
           <div style={HINT}>Estos cambios se ven en la web y en los próximos correos, pero no generan un aviso.</div>
           <div>
             <label style={LABEL}>Indicaciones públicas</label>
@@ -224,10 +233,15 @@ export function OpenHouseManager({
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-primary)' }}>
             <input type="checkbox" checked={rsvpOn} onChange={e => setRsvpOn(e.target.checked)} /> Recibir confirmaciones de asistencia
           </label>
+          <div>
+            <label style={LABEL}>Enviar los correos a nombre de</label>
+            <SenderSelect agents={agents} value={senderId} onChange={setSenderId} />
+            <div style={{ ...HINT, marginTop: '6px' }}>Aplica a los correos que todavía no salieron.</div>
+          </div>
           {error && <div style={ERROR}>{error}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button onClick={() => setModal(null)} style={BTN_GHOST}>Cancelar</button>
-            <button disabled={pending} onClick={() => run(() => updateOpenHouseDetails(oh.id, { publicNotes: notes, rsvpEnabled: rsvpOn }))} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>Guardar</button>
+            <button disabled={pending} onClick={() => run(() => updateOpenHouseDetails(oh.id, { publicNotes: notes, rsvpEnabled: rsvpOn, senderAgentId: senderId || null }))} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>Guardar</button>
           </div>
         </div>
       </ModalShell>
@@ -240,7 +254,7 @@ export function OpenHouseManager({
             <div style={{ flex: '0 1 110px' }}><label style={LABEL}>Desde</label><input type="time" value={rs.startTime} onChange={e => setRs({ ...rs, startTime: e.target.value })} style={INPUT} /></div>
             <div style={{ flex: '0 1 110px' }}><label style={LABEL}>Hasta</label><input type="time" value={rs.endTime} onChange={e => setRs({ ...rs, endTime: e.target.value })} style={INPUT} /></div>
           </div>
-          <div style={HINT}>Zona horaria: {rs.timezone}</div>
+          <div style={HINT}>Zona horaria: {timeZoneLabel(rs.timezone)}</div>
           {announcementSent ? (
             <>
               <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>

@@ -3,58 +3,45 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { verifyRsvpToken } from '@/lib/open-houses/rsvp-token'
-import { formatOpenHouseDate, formatOpenHouseTime } from '@/lib/open-houses/format'
-import { RsvpResponder } from './rsvp-responder'
+import { formatOpenHouseDate, formatOpenHouseTime, googleCalendarUrl } from '@/lib/open-houses/format'
+import { mapsUrl } from '@/lib/open-houses/email-template'
+import { propertyEmailImages } from '@/lib/services/open-house-email'
+import { appBaseUrl, openHouseIcsUrl, propertyPublicUrl } from '@/lib/open-houses/urls'
+import { RsvpView, type RsvpViewModel } from './rsvp-view'
 
 // Página del enlace de RSVP de un correo de open house. Es DINÁMICA (depende
 // del token) y no registra nada al abrirse: los escáneres de enlaces visitan
 // cada URL antes que la persona. La respuesta se envía con un botón.
+//
+// El servidor resuelve todo (textos en el idioma del lead, fecha en la zona
+// del lugar, enlaces) y la vista sólo pinta y responde.
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Open house', robots: { index: false, follow: false } }
 
-const OH_COLUMNS   = columns('open_houses', ['id', 'tenant_id', 'property_id', 'starts_at', 'ends_at', 'timezone', 'public_notes', 'status', 'rsvp_enabled'])
-const PROP_COLUMNS = columns('properties', ['name', 'address', 'city', 'state'])
+const OH_COLUMNS     = columns('open_houses', ['id', 'tenant_id', 'property_id', 'starts_at', 'ends_at', 'timezone', 'public_notes', 'status', 'rsvp_enabled', 'sender_agent_id'])
+const PROP_COLUMNS   = columns('properties', ['name', 'address', 'city', 'state', 'slug', 'published_to_web', 'external_url', 'image_url', 'gallery'])
 const TENANT_COLUMNS = columns('tenants', ['name', 'slug', 'logo_url', 'primary_color'])
-const LEAD_COLUMNS = columns('leads', ['first_name', 'language'])
-const RSVP_COLUMNS = columns('open_house_rsvps', ['response', 'guests'])
-
-const COPY: Record<string, {
-  hello: string; question: string; yes: string; no: string; guests: string
-  cancelled: string; ended: string; closed: string; current: (r: 'yes' | 'no') => string
-}> = {
-  es: {
-    hello: 'Hola', question: '¿Vienes al open house?', yes: 'Sí, asistiré', no: 'No podré ir', guests: 'Acompañantes',
-    cancelled: 'Este open house fue cancelado.', ended: 'Este open house ya terminó.', closed: 'Este open house no recibe confirmaciones.',
-    current: r => (r === 'yes' ? 'Tienes confirmada tu asistencia. Puedes cambiarla abajo.' : 'Nos dijiste que no podrás ir. Si cambias de idea, avísanos abajo.'),
-  },
-  en: {
-    hello: 'Hi', question: 'Are you coming to the open house?', yes: "Yes, I'll be there", no: "I can't make it", guests: 'Guests',
-    cancelled: 'This open house was cancelled.', ended: 'This open house has ended.', closed: 'This open house is not taking RSVPs.',
-    current: r => (r === 'yes' ? "You're confirmed. You can change your answer below." : "You told us you can't make it. If that changes, let us know below."),
-  },
-  pt: {
-    hello: 'Olá', question: 'Você vem ao open house?', yes: 'Sim, estarei lá', no: 'Não poderei ir', guests: 'Acompanhantes',
-    cancelled: 'Este open house foi cancelado.', ended: 'Este open house já terminou.', closed: 'Este open house não recebe confirmações.',
-    current: r => (r === 'yes' ? 'Sua presença está confirmada. Você pode mudar abaixo.' : 'Você disse que não poderá ir. Se mudar de ideia, avise abaixo.'),
-  },
-}
+const LEAD_COLUMNS   = columns('leads', ['first_name', 'language', 'agent_id'])
+const RSVP_COLUMNS   = columns('open_house_rsvps', ['response', 'guests'])
+const AGENT_COLUMNS  = columns('agents', ['name', 'email'])
 
 interface RsvpOpenHouse {
   id: string; tenant_id: string; property_id: string; starts_at: string; ends_at: string
-  timezone: string; public_notes: string | null; status: string; rsvp_enabled: boolean
+  timezone: string; public_notes: string | null; status: string; rsvp_enabled: boolean; sender_agent_id: string | null
 }
 interface RsvpTenant   { name: string; slug: string | null; logo_url: string | null; primary_color: string | null }
-interface RsvpProperty { name: string | null; address: string; city: string | null; state: string | null }
-interface RsvpLead     { first_name: string | null; language: string | null }
-interface RsvpAnswer   { response: 'yes' | 'no'; guests: number }
-
-interface Loaded {
-  oh: RsvpOpenHouse; t: RsvpTenant; p: RsvpProperty; l: RsvpLead; r: RsvpAnswer | null
-  lang: string; accent: string; blocked: string | null
+interface RsvpProperty {
+  name: string | null; address: string; city: string | null; state: string | null; slug: string | null
+  published_to_web: boolean; external_url: string | null; image_url: string | null; gallery: string[] | null
 }
+interface RsvpLead     { first_name: string | null; language: string | null; agent_id: string | null }
+interface RsvpAnswer   { response: 'yes' | 'no'; guests: number }
+interface RsvpAgent    { name: string | null; email: string | null }
 
-async function loadRsvpPage(tenantSlug: string, token: string): Promise<Loaded | null> {
+const SUPPORTED = ['es', 'en', 'pt']
+
+async function loadRsvpPage(tenantSlug: string, token: string): Promise<RsvpViewModel | null> {
   const ids = verifyRsvpToken(token)
   if (!ids) return null
 
@@ -75,54 +62,53 @@ async function loadRsvpPage(tenantSlug: string, token: string): Promise<Loaded |
   // El enlace es de ESTE tenant: un token válido bajo otro slug no se muestra.
   if (!t || t.slug !== tenantSlug || !p || !l) return null
 
-  const lang = l.language && COPY[l.language] ? l.language : 'en'
-  const C = COPY[lang]
+  // Quien firma: el remitente elegido para el open house o el agente del lead.
+  const agentId = oh.sender_agent_id ?? l.agent_id
+  const { data: agentRow } = agentId
+    ? await db.from('agents').select(AGENT_COLUMNS).eq('id', agentId).eq('tenant_id', oh.tenant_id).maybeSingle()
+    : { data: null }
+  const agent = agentRow as unknown as RsvpAgent | null
+
+  const lang = l.language && SUPPORTED.includes(l.language) ? l.language : 'en'
+  const cancelled = oh.status === 'cancelled'
   const ended = new Date(oh.ends_at).getTime() <= Date.now()
-  const blocked = oh.status === 'cancelled' ? C.cancelled : ended ? C.ended : !oh.rsvp_enabled ? C.closed : null
-  return { oh, t, p, l, r: rsvp as unknown as RsvpAnswer | null, lang, accent: t.primary_color || '#C9A96E', blocked }
+  const title = p.name ?? p.address
+  const address = [p.address, p.city, p.state].filter(Boolean).join(', ')
+
+  return {
+    token,
+    lang,
+    state: cancelled ? 'cancelled' : ended ? 'ended' : !oh.rsvp_enabled ? 'closed' : 'open',
+    firstName: l.first_name ?? '',
+    current: (rsvp as unknown as RsvpAnswer | null) ?? null,
+    brand: { name: t.name, logoUrl: t.logo_url, accent: t.primary_color || '#C9A96E' },
+    property: {
+      title,
+      address,
+      images: propertyEmailImages(p.image_url, p.gallery),
+      url: propertyPublicUrl(t.slug ?? '', p) || null,
+    },
+    event: {
+      date:  formatOpenHouseDate(oh.starts_at, oh.timezone, lang),
+      time:  formatOpenHouseTime(oh.starts_at, oh.ends_at, oh.timezone, lang),
+      notes: oh.public_notes,
+    },
+    links: {
+      google: googleCalendarUrl({
+        title: `Open house — ${title}`, location: address,
+        description: [t.name, oh.public_notes].filter(Boolean).join('\n'),
+        startsAt: oh.starts_at, endsAt: oh.ends_at,
+      }),
+      ics:  openHouseIcsUrl(appBaseUrl(), oh.id),
+      maps: mapsUrl(address),
+    },
+    agent: agent?.name ? { name: agent.name, email: agent.email } : null,
+  }
 }
 
 export default async function RsvpPage({ params }: { params: Promise<{ tenantSlug: string; token: string }> }) {
   const { tenantSlug, token } = await params
-  const data = await loadRsvpPage(tenantSlug, token)
-  if (!data) notFound()
-  const { oh, t, p, l, r, lang, accent, blocked } = data
-  const C = COPY[lang]
-
-  return (
-    <main style={{ minHeight: '100vh', background: '#FBFAF8', color: '#12212F', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px' }}>
-      <div style={{ width: '100%', maxWidth: '480px', background: '#fff', border: '1px solid rgba(18,33,47,0.10)', borderRadius: '18px', padding: 'clamp(20px, 5vw, 32px)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '22px' }}>
-          {t.logo_url
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={t.logo_url} alt={t.name} style={{ height: '32px', width: 'auto' }} />
-            : <span style={{ fontSize: '15px', fontWeight: 700 }}>{t.name}</span>}
-        </div>
-        <div style={{ fontSize: '14px', color: 'rgba(18,33,47,0.68)' }}>{C.hello} {l.first_name},</div>
-        <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '-0.01em', margin: '6px 0 14px' }}>{C.question}</h1>
-        <div style={{ fontSize: '15px', fontWeight: 700 }}>{p.name ?? p.address}</div>
-        <div style={{ fontSize: '13px', color: 'rgba(18,33,47,0.68)', marginTop: '2px' }}>{[p.address, p.city, p.state].filter(Boolean).join(', ')}</div>
-        <div style={{ fontSize: '14px', marginTop: '12px', textDecoration: oh.status === 'cancelled' ? 'line-through' : undefined }}>
-          {formatOpenHouseDate(oh.starts_at, oh.timezone, lang)}
-          <br />
-          <span style={{ color: 'rgba(18,33,47,0.68)' }}>{formatOpenHouseTime(oh.starts_at, oh.ends_at, oh.timezone, lang)}</span>
-        </div>
-        {oh.public_notes && oh.status !== 'cancelled' && (
-          <div style={{ fontSize: '13px', color: 'rgba(18,33,47,0.68)', marginTop: '10px', lineHeight: 1.5 }}>{oh.public_notes}</div>
-        )}
-
-        {blocked ? (
-          <div style={{ marginTop: '22px', fontSize: '14px', fontWeight: 600 }}>{blocked}</div>
-        ) : (
-          <RsvpResponder
-            token={token}
-            accent={accent}
-            labels={{ yes: C.yes, no: C.no, guests: C.guests, current: r ? C.current(r.response) : null }}
-            lang={lang}
-            initialGuests={r?.guests ?? 0}
-          />
-        )}
-      </div>
-    </main>
-  )
+  const model = await loadRsvpPage(tenantSlug, token)
+  if (!model) notFound()
+  return <RsvpView model={model} />
 }

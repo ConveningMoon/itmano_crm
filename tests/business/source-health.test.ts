@@ -5,7 +5,7 @@ import { EMPTY_PROFILE, type BusinessProfile } from '@/lib/business/profile'
 const AJ: BusinessProfile = {
   currency: 'USD', commissionModel: 'percentage', commissionBuy: 3, commissionSell: 3,
   budgetEntryMax: 300_000, budgetPremiumMin: 500_000,
-  primaryAreas: ['Virginia Beach'], secondaryAreas: ['North Carolina'],
+  primaryAreas: ['Virginia Beach'], secondaryAreas: ['North Carolina'], timezone: null,
   publicSiteUrl: null, newsletterCanonicalTemplate: null,
 }
 

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { CalendarPlus } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { createOpenHouse } from '../../open-house-actions'
-import { OpenHouseForm, toActionInput, type OpenHouseFormValue, type TagOption } from './open-house-form'
+import { OpenHouseForm, toActionInput, type AgentOption, type OpenHouseFormValue, type TagOption } from './open-house-form'
 import { BTN_PRIMARY, HINT } from './ui'
 import type { OpenHouseLanguage } from '@/lib/open-houses/model'
 
@@ -17,15 +17,16 @@ function nextSaturday(): string {
 }
 
 export function NewOpenHouseButton({
-  propertyId, tags, defaultTagIds, defaultLanguages, blockedReason, defaultTimezone,
+  propertyId, tags, agents, defaultTagIds, defaultLanguages, blockedReason, defaultTimezone,
 }: {
   propertyId:       string
   tags:             TagOption[]
+  agents:           AgentOption[]
   defaultTagIds:    string[]
   defaultLanguages: OpenHouseLanguage[]
   /** Si el tenant no puede hacer open houses, por qué (dominio propio). */
   blockedReason:    string | null
-  /** Zona del último open house del equipo; si no hay, la del navegador. */
+  /** Zona del negocio (o la del último open house); si no hay, la del navegador. */
   defaultTimezone:  string | null
 }) {
   const router = useRouter()
@@ -36,7 +37,7 @@ export function NewOpenHouseButton({
     timezone: defaultTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
     publicNotes: '',
     languages: defaultLanguages.length ? defaultLanguages : ['es'],
-    audienceTagIds: defaultTagIds, audienceMatch: 'any', rsvpEnabled: true,
+    audienceTagIds: defaultTagIds, audienceMatch: 'any', rsvpEnabled: true, senderAgentId: '',
     announcementMode: 'on_confirm', announcementDate: '', announcementTime: '09:00',
     reminderEnabled: true, reminderCustom: false, reminderDate: '', reminderTime: '10:00',
   }
@@ -63,6 +64,7 @@ export function NewOpenHouseButton({
           <OpenHouseForm
             initial={initial}
             tags={tags}
+            agents={agents}
             submitLabel="Crear borrador"
             onCancel={() => setOpen(false)}
             onSubmit={async v => {

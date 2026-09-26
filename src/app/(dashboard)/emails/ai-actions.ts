@@ -103,7 +103,7 @@ const OPEN_HOUSE_RULES: string[] = [
   '- NEVER invent a date, time, address, price or any property detail. Refer to them only through the placeholders.',
 ]
 const OPEN_HOUSE_RSVP_RULE =
-  '- To confirm attendance, put {{rsvp_url}} alone on its own line (no text on that line). You may also mention {{calendar_url}} to add it to their calendar.'
+  '- Do NOT write any links or URLs. The email design already shows the date, the address and buttons to confirm attendance, add it to the calendar and get directions; you may refer to "the button below".'
 
 function isOpenHousePurpose(p: EmailAiPurpose): boolean {
   return p.startsWith('open_house_')
@@ -155,7 +155,7 @@ function buildPrompt(input: EmailAiInput): string {
     '- Do NOT write a signature or sign-off name at the end — it is appended automatically.',
     '- Do NOT mention unsubscribing.',
     ...(isOpenHousePurpose(input.purpose) ? OPEN_HOUSE_RULES : []),
-    ...(isOpenHousePurpose(input.purpose) && input.purpose !== 'open_house_cancellation' ? [OPEN_HOUSE_RSVP_RULE] : []),
+    ...(isOpenHousePurpose(input.purpose) ? [OPEN_HOUSE_RSVP_RULE] : []),
     '',
     'Call the compose_email tool with the subject and body.',
   ].join('\n')

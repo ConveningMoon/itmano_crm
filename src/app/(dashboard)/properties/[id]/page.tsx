@@ -10,10 +10,12 @@ import { PropertyPageOptions } from './property-page-options'
 import { PropertyDetailTabs } from './property-detail-tabs'
 import { EditPropertyButton } from './edit-property-button'
 import { LANGUAGE_CONFIG } from '@/lib/config'
-import { lastOpenHouseTimezone, listPropertyOpenHouses, listTenantTags } from '@/lib/data/open-houses'
+import { lastOpenHouseTimezone, listPropertyOpenHouses, listSenderAgents, listTenantTags } from '@/lib/data/open-houses'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import { DEFAULT_AUDIENCE_TAG_SLUGS } from '@/lib/open-houses/model'
 import { OpenHouseTab } from './open-houses/open-house-tab'
+import { mapBusinessProfile } from '@/lib/data/business-profile'
+import { businessTimeZone } from '@/lib/time-zones'
 
 // Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
 // del formulario, con botón Editar que abre el formulario completo COMO MODAL
@@ -44,7 +46,7 @@ export default async function PropertyDetailPage({
   // Los datos del tab Open house viajan en la misma ola: dependen sólo del id
   // de la propiedad y del tenant del contexto, no de la fila de la propiedad.
   const tenantId = ctx.tenant_id
-  const [p, tenantRow, openHouses, tags, sender, defaultTimezone] = await Promise.all([
+  const [p, tenantRow, openHouses, tags, sender, lastTimezone, agents] = await Promise.all([
     getPropertyById(id, tenantId),
     // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
     tenantId ? getTenantRow(tenantId) : Promise.resolve(null),
@@ -52,10 +54,14 @@ export default async function PropertyDetailPage({
     tenantId ? listTenantTags(tenantId) : Promise.resolve([]),
     tenantId ? resolveOpenHouseSender(createAdminClient(), tenantId) : Promise.resolve({ ok: false as const, error: 'Selecciona un equipo.' }),
     tenantId ? lastOpenHouseTimezone(tenantId) : Promise.resolve(null),
+    tenantId ? listSenderAgents(tenantId) : Promise.resolve([]),
   ])
   if (!p) notFound()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
+  // Hora por defecto de un open house nuevo: la de la zona principal del
+  // negocio (configurada o deducida); si no hay, la del último open house.
+  const defaultTimezone = businessTimeZone(mapBusinessProfile(tenantRow)) ?? lastTimezone
   // La marca es del tenant (migración 091): aplica a todas sus propiedades,
   // también a las que cargue después.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -170,6 +176,7 @@ export default async function PropertyDetailPage({
       propertyId={p.id}
       openHouses={openHouses}
       tags={tags}
+      agents={agents}
       defaultTagIds={tags.filter(t => (DEFAULT_AUDIENCE_TAG_SLUGS as readonly string[]).includes(t.slug)).map(t => t.id)}
       contentLanguages={p.contentLanguages}
       blockedReason={sender.ok ? null : sender.error}

@@ -33,6 +33,12 @@ export interface BusinessProfile {
   primaryAreas:     string[]
   /** Zonas que atiende sin ser su foco. Fuera de ambas, fuera_de_zona. */
   secondaryAreas:   string[]
+  /**
+   * Zona IANA de la zona principal (p. ej. America/New_York). Hora por defecto
+   * de los open houses. null = sin configurar: se deduce de primaryAreas
+   * (ver businessTimeZone en src/lib/time-zones.ts).
+   */
+  timezone:         string | null
   /** URL del sitio propio de la agencia. Identifica al tenant ante los buscadores. */
   publicSiteUrl:    string | null
   /**
@@ -48,7 +54,7 @@ export const EMPTY_PROFILE: BusinessProfile = {
   currency: null, commissionModel: null,
   commissionBuy: null, commissionSell: null,
   budgetEntryMax: null, budgetPremiumMin: null,
-  primaryAreas: [], secondaryAreas: [],
+  primaryAreas: [], secondaryAreas: [], timezone: null,
   publicSiteUrl: null, newsletterCanonicalTemplate: null,
 }
 

@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getPropertyById } from '@/lib/data/properties'
-import { getOpenHouseDetail } from '@/lib/data/open-houses'
+import { getOpenHouseDetail, listSenderAgents } from '@/lib/data/open-houses'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import { buildOpenHouseIntegrationPrompt } from '@/lib/open-houses/integration-prompt'
 import { appBaseUrl } from '@/lib/open-houses/urls'
@@ -25,9 +25,10 @@ export default async function OpenHouseDetailPage({ params }: { params: Promise<
   if (!detail || detail.openHouse.propertyId !== property.id) notFound()
 
   const db = createAdminClient()
-  const [sender, { data: tenant }] = await Promise.all([
+  const [sender, { data: tenant }, agents] = await Promise.all([
     resolveOpenHouseSender(db, property.tenantId),
     db.from('tenants').select('name, slug').eq('id', property.tenantId).maybeSingle(),
+    listSenderAgents(property.tenantId),
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const t = (tenant ?? {}) as any
@@ -67,7 +68,10 @@ export default async function OpenHouseDetailPage({ params }: { params: Promise<
         integrationPrompt={integrationPrompt}
         publicUrl={publicUrl}
         localPreviewUrl={localPreviewUrl}
-        previewAgentId={ctx.agent_id ?? property.createdByAgentId ?? null}
+        agents={agents}
+        // La vista previa firma como firmaría el envío: el remitente elegido o,
+        // en modo "cada lead", un agente de muestra del equipo.
+        previewAgentId={detail.openHouse.senderAgentId ?? ctx.agent_id ?? property.createdByAgentId ?? null}
       />
     </>
   )

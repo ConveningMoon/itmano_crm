@@ -9,14 +9,14 @@ const AJ: BusinessProfile = {
   currency: 'USD', commissionModel: 'percentage',
   commissionBuy: 3, commissionSell: 3,
   budgetEntryMax: 250_000, budgetPremiumMin: 600_000,
-  primaryAreas: ['Virginia Beach', 'Norfolk'], secondaryAreas: ['Chesapeake'],
+  primaryAreas: ['Virginia Beach', 'Norfolk'], secondaryAreas: ['Chesapeake'], timezone: null,
   publicSiteUrl: null, newsletterCanonicalTemplate: null,
 }
 const TECNOCASA: BusinessProfile = {
   currency: 'EUR', commissionModel: 'percentage',
   commissionBuy: 4, commissionSell: 4,
   budgetEntryMax: 400_000, budgetPremiumMin: 900_000,
-  primaryAreas: ['Barcelona'], secondaryAreas: ['Badalona'],
+  primaryAreas: ['Barcelona'], secondaryAreas: ['Badalona'], timezone: null,
   publicSiteUrl: null, newsletterCanonicalTemplate: null,
 }
 

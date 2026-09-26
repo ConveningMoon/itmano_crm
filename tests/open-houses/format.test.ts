@@ -30,6 +30,8 @@ describe('fecha y hora', () => {
       expect(vars[tag.replace(/[{}]/g, '')]).toBeTypeOf('string')
     }
     expect(vars.open_house_notes).toBe('')
+    // Dentro de una frase: "el sábado, 3 de octubre…", no "el Sábado…".
+    expect(vars.open_house_date).toBe('sábado, 3 de octubre de 2026')
   })
 })
 
@@ -77,11 +79,12 @@ describe('textos por defecto', () => {
     }
   })
 
-  it('todos salvo la cancelación ofrecen confirmar asistencia', () => {
-    for (const lang of OPEN_HOUSE_LANGUAGES) {
-      expect(defaultOpenHouseCopy('announcement', lang).body).toContain('{{rsvp_url}}')
-      expect(defaultOpenHouseCopy('reminder', lang).body).toContain('{{rsvp_url}}')
-      expect(defaultOpenHouseCopy('cancellation', lang).body).not.toContain('{{rsvp_url}}')
+  it('no llevan enlaces: los botones de la plantilla los reemplazan', () => {
+    for (const kind of OPEN_HOUSE_EMAIL_KINDS) {
+      for (const lang of OPEN_HOUSE_LANGUAGES) {
+        const { subject, body } = defaultOpenHouseCopy(kind, lang)
+        expect(`${subject}\n${body}`).not.toMatch(/_url\}\}|https?:\/\//)
+      }
     }
   })
 })

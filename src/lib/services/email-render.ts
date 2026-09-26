@@ -50,15 +50,19 @@ const UNSUBSCRIBE_LABEL: Partial<Record<Language, string>> = {
   nl: 'afmelden',
 }
 
-function unsubscribeLabel(locale: Language): string {
+export function unsubscribeLabel(locale: Language): string {
   return UNSUBSCRIBE_LABEL[locale] ?? UNSUBSCRIBE_LABEL.en!
 }
 
 // Stack de fuentes de sistema — lo que usaría un cliente de correo normal.
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+// Es una DECLARACIÓN completa (con `font-family:`), porque se interpola como
+// `style="…;${FONT};…"`. Antes era sólo la lista de fuentes: la declaración
+// quedaba inválida, el cliente la descartaba y el correo salía en su serif por
+// defecto en vez de la tipografía de sistema que busca este diseño.
+const FONT = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 const TEXT_COLOR = '#1a1a1a'
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -70,7 +74,7 @@ function escapeHtml(text: string): string {
 // Reemplaza {{tag}} por el valor correspondiente. `escaped` controla si los
 // valores se escapan (true para HTML del cuerpo, false para el asunto en texto
 // plano). Tags desconocidos quedan tal cual.
-function resolveMergeTags(text: string, vars: MergeVars, escaped: boolean): string {
+export function resolveMergeTags(text: string, vars: MergeVars, escaped: boolean): string {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key: string) => {
     const value = vars[key]
     if (value === undefined) return match
@@ -93,7 +97,7 @@ function linkifyUrls(escapedText: string): string {
 // Texto libre → párrafos. Bloques separados por línea en blanco se vuelven <p>;
 // saltos simples dentro de un bloque se vuelven <br/>. Escapa + resuelve tags
 // + linkifica URLs.
-function textToParagraphs(text: string, vars: MergeVars): string {
+export function textToParagraphs(text: string, vars: MergeVars): string {
   return text
     .split(/\n{2,}/)
     .map(block => block.trim())

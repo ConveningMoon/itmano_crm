@@ -89,7 +89,7 @@ function ContentModal({
             locale={language as Language}
             ai={{ purpose: AI_PURPOSE[email.kind], language: language as Language }}
             mergeTags={OPEN_HOUSE_MERGE_TAGS}
-            previewContext={{ openHouseId, ...(previewAgentId ? { agentId: previewAgentId } : {}) }}
+            previewContext={{ openHouseId, openHouseKind: email.kind, ...(previewAgentId ? { agentId: previewAgentId } : {}) }}
           />
         ) : (
           <div>

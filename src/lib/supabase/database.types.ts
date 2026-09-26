@@ -1951,6 +1951,7 @@ export type Database = {
           public_notes: string | null
           revision: number
           rsvp_enabled: boolean
+          sender_agent_id: string | null
           starts_at: string
           status: string
           tenant_id: string
@@ -1975,6 +1976,7 @@ export type Database = {
           public_notes?: string | null
           revision?: number
           rsvp_enabled?: boolean
+          sender_agent_id?: string | null
           starts_at: string
           status?: string
           tenant_id: string
@@ -1999,6 +2001,7 @@ export type Database = {
           public_notes?: string | null
           revision?: number
           rsvp_enabled?: boolean
+          sender_agent_id?: string | null
           starts_at?: string
           status?: string
           tenant_id?: string
@@ -2018,6 +2021,13 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_houses_sender_agent_id_fkey"
+            columns: ["sender_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
             referencedColumns: ["id"]
           },
           {
@@ -2681,6 +2691,7 @@ export type Database = {
           secondary_areas: string[] | null
           sending_domain: string | null
           slug: string
+          timezone: string | null
         }
         Insert: {
           ai_lead_scoring_enabled?: boolean
@@ -2711,6 +2722,7 @@ export type Database = {
           secondary_areas?: string[] | null
           sending_domain?: string | null
           slug: string
+          timezone?: string | null
         }
         Update: {
           ai_lead_scoring_enabled?: boolean
@@ -2741,6 +2753,7 @@ export type Database = {
           secondary_areas?: string[] | null
           sending_domain?: string | null
           slug?: string
+          timezone?: string | null
         }
         Relationships: []
       }

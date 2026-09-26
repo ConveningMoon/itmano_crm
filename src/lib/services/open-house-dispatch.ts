@@ -2,7 +2,6 @@ import 'server-only'
 import { createHash } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resendForAccount } from '@/lib/resend'
-import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 import { parseEmailContent } from '@/lib/email-content'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
@@ -11,9 +10,8 @@ import {
   type AudienceLeadWithContact,
 } from '@/lib/services/open-house-audience'
 import { chunk, decideRecipient } from '@/lib/open-houses/audience'
-import { buildOpenHouseMergeVars } from '@/lib/open-houses/format'
 import { createRsvpToken } from '@/lib/open-houses/rsvp-token'
-import { appBaseUrl, openHouseIcsUrl, openHouseRsvpUrl, propertyPublicUrl } from '@/lib/open-houses/urls'
+import { fromWithName, loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
 import type { AudienceMatch, OpenHouseEmailKind } from '@/lib/open-houses/model'
 
 // Despachador de los correos de un open house.
@@ -180,7 +178,7 @@ export async function dispatchOpenHouseEmail(
   // 2. El open house tiene que seguir en el estado que este correo supone.
   const { data: ohRow } = await db
     .from('open_houses')
-    .select('id, tenant_id, property_id, starts_at, ends_at, timezone, public_notes, languages, audience_tag_ids, audience_match, status, revision')
+    .select('id, tenant_id, property_id, starts_at, ends_at, timezone, public_notes, languages, audience_tag_ids, audience_match, status, revision, rsvp_enabled')
     .eq('id', email.open_house_id)
     .eq('tenant_id', email.tenant_id)
     .maybeSingle()
@@ -205,24 +203,19 @@ export async function dispatchOpenHouseEmail(
     await finish(db, email.id, { status: 'failed', last_error: senderRes.error, finished_at: now().toISOString() })
     return { outcome: 'failed', sent: 0, detail: senderRes.error }
   }
-  const { identity, tenantSlug } = senderRes.sender
+  const { identity } = senderRes.sender
 
-  const [{ data: property }, { data: contentRows }] = await Promise.all([
-    db.from('properties')
-      .select('name, address, city, state, slug, published_to_web, external_url')
-      .eq('id', oh.property_id)
-      .eq('tenant_id', email.tenant_id)
-      .maybeSingle(),
+  const [ctx, { data: contentRows }] = await Promise.all([
+    loadOpenHouseEmailContext(db, oh.id, email.tenant_id),
     db.from('open_house_email_contents')
       .select('language, subject, body_json, resend_template_id')
       .eq('email_id', email.id)
       .eq('tenant_id', email.tenant_id),
   ])
-  if (!property) {
+  if (!ctx) {
     await finish(db, email.id, { status: 'cancelled', last_error: 'La propiedad ya no existe.', finished_at: now().toISOString() })
     return { outcome: 'cancelled', sent: 0 }
   }
-  const p = property as any
   const contents = new Map<string, ContentRow>(((contentRows ?? []) as ContentRow[]).map(c => [c.language, c]))
 
   try {
@@ -233,12 +226,7 @@ export async function dispatchOpenHouseEmail(
     return { outcome: 'failed', sent: 0, detail: message }
   }
 
-  const baseUrl      = appBaseUrl()
-  const propertyName = (p.name as string | null) ?? (p.address as string)
-  const address      = [p.address, p.city, p.state].filter(Boolean).join(', ')
-  const propertyUrl  = propertyPublicUrl(tenantSlug, p)
-  const calendarUrl  = openHouseIcsUrl(baseUrl, oh.id)
-  const client       = resendForAccount(identity.account)
+  const client = resendForAccount(identity.account)
 
   let sentNow = 0
   let outOfTime = false
@@ -285,42 +273,36 @@ export async function dispatchOpenHouseEmail(
         }
 
         const unsubscribeUrl = generateUnsubscribeUrl(lead.id)
-        const vars = buildOpenHouseMergeVars({
-          customerName:    lead.firstName,
-          agentName:       lead.agentName,
-          agentEmail:      lead.agentEmail,
-          propertyName,
-          propertyAddress: address,
-          startsAt:        oh.starts_at,
-          endsAt:          oh.ends_at,
-          timeZone:        oh.timezone,
-          language:        r.language,
-          publicNotes:     oh.public_notes,
-          propertyUrl,
-          rsvpUrl:         openHouseRsvpUrl(baseUrl, tenantSlug, createRsvpToken(oh.id, lead.id)),
-          calendarUrl,
-        })
+        // Firma, nombre del remitente y respuestas: el agente elegido para el
+        // open house o, si no hay, el agente que atiende a este lead.
+        const agent = ctx.senderAgent ?? { name: lead.agentName, email: lead.agentEmail, signature: lead.agentSignature }
+        const from = fromWithName(agent.name, identity.from)
         const headers = {
           'List-Unsubscribe':      `<${unsubscribeUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         }
-        // Las respuestas llegan al agente del lead, que es quien firma.
-        const replyTo = lead.agentEmail || undefined
+        const replyTo = agent.email || undefined
 
         if (crmContent && subject) {
-          const rendered = renderEmail({
-            subject, content: crmContent, vars,
-            signature: lead.agentSignature,
-            unsubscribeUrl,
-            locale: r.language as EmailLocale,
+          const rendered = renderOpenHouseEmailForLead(ctx, {
+            kind: email.kind, language: r.language, subject, content: crmContent,
+            lead: { firstName: lead.firstName }, agent, unsubscribeUrl,
+            rsvpToken: createRsvpToken(oh.id, lead.id), rsvpEnabled: oh.rsvp_enabled === true,
           })
           crm.push({ leadId: lead.id, payload: {
-            from: identity.from, to: lead.email, headers, replyTo,
+            from, to: lead.email, headers, replyTo,
             subject: rendered.subject, html: rendered.html,
           } })
         } else {
+          // Template de Resend: el diseño lo pone el template; aquí sólo viajan
+          // las variables (las mismas que usa el contenido del CRM).
+          const { vars } = renderOpenHouseEmailForLead(ctx, {
+            kind: email.kind, language: r.language, subject: '', content: { v: 1, body: '' },
+            lead: { firstName: lead.firstName }, agent, unsubscribeUrl,
+            rsvpToken: createRsvpToken(oh.id, lead.id), rsvpEnabled: oh.rsvp_enabled === true,
+          })
           template.push({ leadId: lead.id, payload: {
-            from: identity.from, to: lead.email, headers, replyTo,
+            from, to: lead.email, headers, replyTo,
             template: { id: content.resend_template_id as string, variables: { ...vars, unsubscribe_url: unsubscribeUrl } },
           } })
         }

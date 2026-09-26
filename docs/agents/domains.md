@@ -205,6 +205,18 @@ masivo del producto: todo lo demás sale lead por lead.
   API batch de Resend con `Idempotency-Key`, y un 429 o una excepción dejan el
   correo `pending` con el error visible. Cada envío escribe `email_sends`
   (`send_type = 'open_house'`) para que rebotes y bajas bloqueen al lead.
+- Remitente: `open_houses.sender_agent_id` elige a nombre de qué agente salen
+  TODOS los correos (nombre visible sobre el correo verificado del equipo,
+  firma y `reply_to`). NULL = cada lead lo recibe de su propio agente.
+- Diseño: a diferencia de los demás correos del CRM (texto personal sin marca),
+  el open house usa su propia plantilla (`src/lib/open-houses/email-template.ts`):
+  logo, portada + dos fotos de la galería, tarjeta de fecha y lugar, y botones
+  (confirmar, ver la propiedad, calendario, cómo llegar). El texto del
+  composer va entre la tarjeta y los botones y NO lleva enlaces. La vista
+  previa y el envío renderizan con el mismo contexto (`open-house-email.ts`).
+- Zona horaria: la de un open house nuevo es la del negocio —`tenants.timezone`
+  del perfil o, si está vacía, la deducida de `primary_areas`
+  (`src/lib/time-zones.ts`)—, nunca la del navegador de quien lo crea.
 - No se escribe `lead_event` por envío (marcaría a cientos de leads como
   activos). Lo que puntúa es CONFIRMAR asistencia: `event_submission` (+20) una
   vez por open house (`dedup_key = open_house_rsvp:<id>`).
