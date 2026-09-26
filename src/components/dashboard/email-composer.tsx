@@ -105,7 +105,10 @@ interface Props {
   // Contexto para que la vista previa muestre la FIRMA REAL del agente que
   // firmaría el envío: por lead (one-off), por secuencia (steps) o por agente
   // (emails de cierre).
-  previewContext?: { leadId?: string; sequenceId?: string; agentId?: string; openHouseId?: string }
+  previewContext?: {
+    leadId?: string; sequenceId?: string; agentId?: string
+    openHouseId?: string; openHouseKind?: 'announcement' | 'reminder' | 'update' | 'cancellation'
+  }
   // Variables disponibles. Por defecto las de siempre; los correos de open
   // house suman las del evento (fecha, dirección, enlaces).
   mergeTags?: readonly { tag: string; label: string }[]
@@ -161,6 +164,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
         sequenceId: previewContext?.sequenceId,
         agentId:    previewContext?.agentId,
         openHouseId: previewContext?.openHouseId,
+        openHouseKind: previewContext?.openHouseKind,
       })
       if (!res.ok) { setPreviewError(res.error); return }
       setPreviewHtml(res.html)

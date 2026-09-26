@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import type { OpenHouseInput } from '../../open-house-actions'
 import { OPEN_HOUSE_LANGUAGES, MAX_OPEN_HOUSE_LANGUAGES, type AudienceMatch, type OpenHouseLanguage } from '@/lib/open-houses/model'
+import { TimeZoneSelect } from '@/components/dashboard/time-zone-select'
 import { BTN_GHOST, BTN_PRIMARY, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN } from './ui'
 
 // Formulario de un open house: fecha y franja, idiomas de los correos,
@@ -12,6 +13,7 @@ import { BTN_GHOST, BTN_PRIMARY, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN } f
 // recibió.
 
 export interface TagOption { id: string; name: string; color: string }
+export interface AgentOption { id: string; name: string }
 
 export interface OpenHouseFormValue {
   date:           string
@@ -23,6 +25,8 @@ export interface OpenHouseFormValue {
   audienceTagIds: string[]
   audienceMatch:  AudienceMatch
   rsvpEnabled:    boolean
+  /** '' = cada lead recibe el correo de su propio agente. */
+  senderAgentId:  string
   announcementMode: 'on_confirm' | 'scheduled'
   announcementDate: string
   announcementTime: string
@@ -37,6 +41,7 @@ export function toActionInput(v: OpenHouseFormValue): OpenHouseInput {
     date: v.date, startTime: v.startTime, endTime: v.endTime, timezone: v.timezone,
     publicNotes: v.publicNotes, languages: v.languages,
     audienceTagIds: v.audienceTagIds, audienceMatch: v.audienceMatch, rsvpEnabled: v.rsvpEnabled,
+    senderAgentId: v.senderAgentId || null,
     announcement: v.announcementMode === 'scheduled'
       ? { mode: 'scheduled', date: v.announcementDate, time: v.announcementTime }
       : { mode: 'on_confirm' },
@@ -46,21 +51,12 @@ export function toActionInput(v: OpenHouseFormValue): OpenHouseInput {
   }
 }
 
-function timeZones(current: string): string[] {
-  let all: string[] = []
-  try {
-    all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? []
-  } catch { /* navegador sin soporte: sólo la actual */ }
-  const set = new Set(all.length ? all : ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Mexico_City', 'America/Bogota', 'America/Sao_Paulo'])
-  set.add(current)
-  return [...set].sort()
-}
-
 export function OpenHouseForm({
-  initial, tags, submitLabel, onSubmit, onCancel,
+  initial, tags, agents, submitLabel, onSubmit, onCancel,
 }: {
   initial:     OpenHouseFormValue
   tags:        TagOption[]
+  agents:      AgentOption[]
   submitLabel: string
   onSubmit:    (v: OpenHouseFormValue) => Promise<{ ok: boolean; error?: string; warnings?: string[] }>
   onCancel:    () => void
@@ -69,7 +65,6 @@ export function OpenHouseForm({
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [pending, start] = useTransition()
-  const zones = useMemo(() => timeZones(initial.timezone), [initial.timezone])
 
   const set = <K extends keyof OpenHouseFormValue>(k: K, val: OpenHouseFormValue[K]) => setV(prev => ({ ...prev, [k]: val }))
 
@@ -124,9 +119,7 @@ export function OpenHouseForm({
       </div>
       <div>
         <label style={LABEL}>Zona horaria del lugar</label>
-        <select value={v.timezone} onChange={e => set('timezone', e.target.value)} style={{ ...INPUT, cursor: 'pointer' }}>
-          {zones.map(z => <option key={z} value={z}>{z}</option>)}
-        </select>
+        <TimeZoneSelect value={v.timezone} onChange={tz => set('timezone', tz)} style={INPUT} />
         <div style={{ ...HINT, marginTop: '6px' }}>La hora se escribe en esta zona en los correos y en la web, aunque el lead esté en otra.</div>
       </div>
 
@@ -193,6 +186,15 @@ export function OpenHouseForm({
         </div>
       </div>
 
+      {/* Remitente */}
+      <div>
+        <label style={LABEL}>Enviar los correos a nombre de</label>
+        <SenderSelect agents={agents} value={v.senderAgentId} onChange={id => set('senderAgentId', id)} />
+        <div style={{ ...HINT, marginTop: '6px' }}>
+          Su nombre aparece como remitente, su firma cierra el correo y las respuestas le llegan a él.
+        </div>
+      </div>
+
       {/* Anuncio */}
       <div>
         <label style={LABEL}>Envío del anuncio</label>
@@ -252,5 +254,21 @@ export function OpenHouseForm({
         </button>
       </div>
     </div>
+  )
+}
+
+/** Selector de remitente: el agente de cada lead o uno concreto del equipo. */
+export function SenderSelect({
+  agents, value, onChange,
+}: {
+  agents:   AgentOption[]
+  value:    string
+  onChange: (id: string) => void
+}) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT, cursor: 'pointer' }}>
+      <option value="">El agente asignado a cada lead</option>
+      {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+    </select>
   )
 }

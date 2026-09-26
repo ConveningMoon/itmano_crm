@@ -30,11 +30,22 @@ function capitalize(s: string): string {
   return s ? s.charAt(0).toLocaleUpperCase() + s.slice(1) : s
 }
 
-/** "Sábado, 3 de octubre de 2026" */
-export function formatOpenHouseDate(startsAt: Date | string, timeZone: string, language: string): string {
-  return capitalize(new Intl.DateTimeFormat(intlLocale(language), {
+/**
+ * "Sábado, 3 de octubre de 2026" para títulos y tarjetas. Con
+ * `{ midSentence: true }` sale tal cual lo escribe el idioma ("sábado, 3 de
+ * octubre…" en español, "Saturday, October 3…" en inglés): es la forma que
+ * va dentro de una frase, como en la variable {{open_house_date}}.
+ */
+export function formatOpenHouseDate(
+  startsAt: Date | string,
+  timeZone: string,
+  language: string,
+  opts: { midSentence?: boolean } = {},
+): string {
+  const text = new Intl.DateTimeFormat(intlLocale(language), {
     timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  }).format(new Date(startsAt)))
+  }).format(new Date(startsAt))
+  return opts.midSentence ? text : capitalize(text)
 }
 
 /** "11:00 a. m. – 2:00 p. m. (EDT)" — la zona abreviada evita malentendidos. */
@@ -78,7 +89,7 @@ export function buildOpenHouseMergeVars(i: OpenHouseMergeInput): Record<string, 
     agent_email:      i.agentEmail,
     property_name:    i.propertyName,
     property_address: i.propertyAddress,
-    open_house_date:  formatOpenHouseDate(i.startsAt, i.timeZone, i.language),
+    open_house_date:  formatOpenHouseDate(i.startsAt, i.timeZone, i.language, { midSentence: true }),
     open_house_time:  formatOpenHouseTime(i.startsAt, i.endsAt, i.timeZone, i.language),
     open_house_notes: i.publicNotes ?? '',
     property_url:     i.propertyUrl,

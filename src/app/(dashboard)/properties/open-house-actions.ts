@@ -69,6 +69,8 @@ const OpenHouseInputSchema = z.object({
   audienceTagIds: z.array(z.string().uuid()).max(30),
   audienceMatch:  z.enum(AUDIENCE_MATCHES),
   rsvpEnabled:    z.boolean(),
+  // null = cada lead recibe el correo de su propio agente.
+  senderAgentId:  z.string().trim().min(1).max(100).nullable().optional().default(null),
   announcement:   z.discriminatedUnion('mode', [
     z.object({ mode: z.literal('on_confirm') }),
     z.object({ mode: z.literal('scheduled'), date: DateStr, time: TimeStr }),
@@ -209,6 +211,14 @@ function parseSchedule(input: z.infer<typeof OpenHouseInputSchema>, now: Date): 
   return { ok: true, value: { startsAt, endsAt, announcementAt, reminderAt, warnings } }
 }
 
+/** El remitente elegido tiene que ser un agente ACTIVO del mismo tenant. */
+async function validSenderAgent(db: ReturnType<typeof createAdminClient>, tenantId: string, agentId: string | null): Promise<string | null | false> {
+  if (!agentId) return null
+  const { data } = await db.from('agents').select(columns('agents', ['id']))
+    .eq('id', agentId).eq('tenant_id', tenantId).eq('active', true).maybeSingle()
+  return data ? agentId : false
+}
+
 async function tenantTagIds(db: ReturnType<typeof createAdminClient>, tenantId: string, ids: string[]): Promise<string[]> {
   if (ids.length === 0) return []
   const { data } = await db.from('lead_tags').select(columns('lead_tags', ['id'])).eq('tenant_id', tenantId).in('id', ids)
@@ -234,7 +244,11 @@ export async function createOpenHouse(propertyId: string, raw: OpenHouseInput): 
   const now = new Date()
   const sched = parseSchedule(input, now)
   if (!sched.ok) return sched
-  const tagIds = await tenantTagIds(db, property.tenant_id, input.audienceTagIds)
+  const [tagIds, senderAgentId] = await Promise.all([
+    tenantTagIds(db, property.tenant_id, input.audienceTagIds),
+    validSenderAgent(db, property.tenant_id, input.senderAgentId),
+  ])
+  if (senderAgentId === false) return { ok: false, error: 'Ese agente no está activo en tu equipo.' }
 
   const { data: oh, error } = await db.from('open_houses').insert({
     tenant_id:           property.tenant_id,
@@ -247,6 +261,7 @@ export async function createOpenHouse(propertyId: string, raw: OpenHouseInput): 
     audience_tag_ids:    tagIds,
     audience_match:      input.audienceMatch,
     rsvp_enabled:        input.rsvpEnabled,
+    sender_agent_id:     senderAgentId,
     status:              'draft',
     created_by_user_id:  ctx.user_id,
     created_by_agent_id: ctx.agent_id ?? property.created_by_agent_id ?? null,
@@ -288,7 +303,11 @@ export async function updateOpenHouseDraft(openHouseId: string, raw: OpenHouseIn
   const now = new Date()
   const sched = parseSchedule(input, now)
   if (!sched.ok) return sched
-  const tagIds = await tenantTagIds(db, oh.tenant_id, input.audienceTagIds)
+  const [tagIds, senderAgentId] = await Promise.all([
+    tenantTagIds(db, oh.tenant_id, input.audienceTagIds),
+    validSenderAgent(db, oh.tenant_id, input.senderAgentId),
+  ])
+  if (senderAgentId === false) return { ok: false, error: 'Ese agente no está activo en tu equipo.' }
 
   const { error } = await db.from('open_houses').update({
     starts_at:        sched.value.startsAt.toISOString(),
@@ -299,6 +318,7 @@ export async function updateOpenHouseDraft(openHouseId: string, raw: OpenHouseIn
     audience_tag_ids: tagIds,
     audience_match:   input.audienceMatch,
     rsvp_enabled:     input.rsvpEnabled,
+    sender_agent_id:  senderAgentId,
   }).eq('id', oh.id).eq('status', 'draft')
   const overlap = overlapError(error)
   if (overlap) return { ok: false, error: overlap }
@@ -356,16 +376,27 @@ export async function deleteOpenHouseDraft(openHouseId: string): Promise<Result>
 }
 
 /** Datos públicos que no cambian el horario: se editan sin aviso. */
-export async function updateOpenHouseDetails(openHouseId: string, raw: { publicNotes: string; rsvpEnabled: boolean }): Promise<Result> {
-  const parsed = z.object({ publicNotes: z.string().trim().max(500), rsvpEnabled: z.boolean() }).safeParse(raw)
+export async function updateOpenHouseDetails(
+  openHouseId: string,
+  raw: { publicNotes: string; rsvpEnabled: boolean; senderAgentId: string | null },
+): Promise<Result> {
+  const parsed = z.object({
+    publicNotes: z.string().trim().max(500), rsvpEnabled: z.boolean(),
+    senderAgentId: z.string().trim().min(1).max(100).nullable(),
+  }).safeParse(raw)
   if (!parsed.success) return { ok: false, error: 'Datos inválidos' }
   const { ctx, db } = await ctxAndDb()
   const oh = await loadOpenHouse(db, ctx, openHouseId)
   if (!oh || !canManage(ctx, oh)) return { ok: false, error: 'Open house no encontrado.' }
   if (oh.status === 'cancelled') return { ok: false, error: 'El open house está cancelado.' }
+  const senderAgentId = await validSenderAgent(db, oh.tenant_id, parsed.data.senderAgentId)
+  if (senderAgentId === false) return { ok: false, error: 'Ese agente no está activo en tu equipo.' }
+  // El remitente aplica a los correos que aún no salieron; los enviados ya
+  // llegaron con el nombre que tenían.
   const { error } = await db.from('open_houses').update({
-    public_notes: parsed.data.publicNotes || null,
-    rsvp_enabled: parsed.data.rsvpEnabled,
+    public_notes:    parsed.data.publicNotes || null,
+    rsvp_enabled:    parsed.data.rsvpEnabled,
+    sender_agent_id: senderAgentId,
   }).eq('id', oh.id)
   if (error) return { ok: false, error: error.message }
   await revalidateOpenHouse(db, oh)

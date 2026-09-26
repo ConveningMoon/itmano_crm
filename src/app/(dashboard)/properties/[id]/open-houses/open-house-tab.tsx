@@ -4,7 +4,7 @@ import type { OpenHouseListItem } from '@/lib/data/open-houses'
 import { formatOpenHouseDate, formatOpenHouseTime } from '@/lib/open-houses/format'
 import { EMAIL_STATUS_LABEL, isOpenHouseLanguage, type OpenHouseLanguage } from '@/lib/open-houses/model'
 import { NewOpenHouseButton } from './new-open-house-button'
-import type { TagOption } from './open-house-form'
+import type { AgentOption, TagOption } from './open-house-form'
 import { CARD, HINT, StateChip } from './ui'
 
 // Tab "Open house" del detalle de una propiedad: la lista de sus open houses
@@ -12,11 +12,12 @@ import { CARD, HINT, StateChip } from './ui'
 // datos llegan como props desde la página.
 
 export function OpenHouseTab({
-  propertyId, openHouses, tags, defaultTagIds, contentLanguages, blockedReason, defaultTimezone,
+  propertyId, openHouses, tags, agents, defaultTagIds, contentLanguages, blockedReason, defaultTimezone,
 }: {
   propertyId:       string
   openHouses:       OpenHouseListItem[]
   tags:             TagOption[]
+  agents:           AgentOption[]
   defaultTagIds:    string[]
   contentLanguages: string[]
   blockedReason:    string | null
@@ -34,6 +35,7 @@ export function OpenHouseTab({
         <NewOpenHouseButton
           propertyId={propertyId}
           tags={tags}
+          agents={agents}
           defaultTagIds={defaultTagIds}
           defaultLanguages={defaultLanguages}
           blockedReason={blockedReason}

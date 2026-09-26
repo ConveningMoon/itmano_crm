@@ -7,11 +7,12 @@ import {
   CURRENCIES, COMMISSION_MODELS, EMPTY_PROFILE, type BusinessProfile,
 } from '@/lib/business/profile'
 import { parseCanonicalTemplate } from '@/lib/newsletters/canonical'
+import { isValidTimeZone } from '@/lib/open-houses/schedule'
 
 export const BUSINESS_PROFILE_COLUMNS = columns('tenants', [
   'currency', 'commission_model', 'commission_buy', 'commission_sell',
   'budget_entry_max', 'budget_premium_min', 'primary_areas', 'secondary_areas',
-  'public_site_url', 'newsletter_canonical_template',
+  'timezone', 'public_site_url', 'newsletter_canonical_template',
 ])
 
 // Los números llegan del formulario como string. `''` es "lo dejé vacío", que
@@ -33,6 +34,7 @@ export const BusinessProfileSchema = z.object({
   budgetPremiumMin: numeroOpcional,
   primaryAreas:     z.array(z.string().trim().min(1).max(80)).max(30),
   secondaryAreas:   z.array(z.string().trim().min(1).max(80)).max(30),
+  timezone: z.string().trim().max(64).nullable().refine(v => !v || isValidTimeZone(v), 'Zona horaria inválida'),
   publicSiteUrl: z.string().trim().max(300).nullable().superRefine((v, ctx) => {
     if (v === null || v === '') return
     if (!/^https?:\/\//i.test(v)) {
@@ -98,6 +100,7 @@ export function mapBusinessProfile(row: any): BusinessProfile {
     budgetPremiumMin: num(r.budget_premium_min),
     primaryAreas:     (r.primary_areas   ?? []) as string[],
     secondaryAreas:   (r.secondary_areas ?? []) as string[],
+    timezone:         (r.timezone ?? null) as string | null,
     publicSiteUrl:               (r.public_site_url ?? null) as string | null,
     newsletterCanonicalTemplate: (r.newsletter_canonical_template ?? null) as string | null,
   }
@@ -125,6 +128,7 @@ export async function saveBusinessProfile(
       budget_premium_min: p.budgetPremiumMin,
       primary_areas:      p.primaryAreas,
       secondary_areas:    p.secondaryAreas,
+      timezone:           p.timezone || null,
       // Cadena vacía se normaliza a null: mismo significado ("sin configurar"),
       // una sola forma de guardarlo.
       public_site_url:               p.publicSiteUrl?.trim() || null,

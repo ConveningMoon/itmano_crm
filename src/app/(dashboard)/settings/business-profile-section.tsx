@@ -8,6 +8,8 @@ import {
   type BusinessProfile, type Currency, type CommissionModel,
 } from '@/lib/business/profile'
 import { saveBusinessProfile } from './actions'
+import { TimeZoneSelect } from '@/components/dashboard/time-zone-select'
+import { inferTimeZoneFromAreas, timeZoneLabel } from '@/lib/time-zones'
 
 // Copy exacto (no se arma con JSX + `{'{slug}'}` intercalado a propósito: la
 // forma en que JSX pliega espacios en blanco entre texto y expresiones es
@@ -52,6 +54,7 @@ type Draft = {
   budgetPremiumMin: string
   primaryAreas:     string
   secondaryAreas:   string
+  timezone:         string
   publicSiteUrl:               string
   newsletterCanonicalTemplate: string
 }
@@ -67,6 +70,7 @@ function toDraft(p: BusinessProfile): Draft {
     budgetPremiumMin: n(p.budgetPremiumMin),
     primaryAreas:     p.primaryAreas.join(', '),
     secondaryAreas:   p.secondaryAreas.join(', '),
+    timezone:         p.timezone ?? '',
     publicSiteUrl:               p.publicSiteUrl ?? '',
     newsletterCanonicalTemplate: p.newsletterCanonicalTemplate ?? '',
   }
@@ -88,6 +92,7 @@ function toProfile(d: Draft): BusinessProfile {
     budgetPremiumMin: n(d.budgetPremiumMin),
     primaryAreas:     parseAreas(d.primaryAreas),
     secondaryAreas:   parseAreas(d.secondaryAreas),
+    timezone:         d.timezone || null,
     publicSiteUrl:               d.publicSiteUrl.trim() === '' ? null : d.publicSiteUrl.trim(),
     newsletterCanonicalTemplate: d.newsletterCanonicalTemplate.trim() === '' ? null : d.newsletterCanonicalTemplate.trim(),
   }
@@ -108,6 +113,8 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
   const simbolo = draft.currency ? CURRENCY_SYMBOL[draft.currency] : ''
 
   const EJEMPLOS = [150_000, 300_000, 500_000, 800_000]
+  // Lo que usaría "Automática", recalculado mientras se escriben las zonas.
+  const sugerida = inferTimeZoneFromAreas(preview.primaryAreas)
 
   function set<K extends keyof Draft>(k: K, v: Draft[K]) {
     setDraft(d => ({ ...d, [k]: v })); setSaved(false); setError(null)
@@ -226,6 +233,21 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
                 style={INPUT}
               />
               <div style={HINT}>Las atiendes, pero no son tu foco.</div>
+            </div>
+          </div>
+          <div style={{ marginTop: '16px', maxWidth: '520px' }}>
+            <label style={LABEL}>Zona horaria de tu zona principal</label>
+            <TimeZoneSelect
+              value={draft.timezone}
+              onChange={tz => set('timezone', tz)}
+              emptyLabel={sugerida
+                ? `Automática — ${timeZoneLabel(sugerida)}`
+                : 'Automática — no se pudo deducir de tu zona principal'}
+              style={INPUT}
+            />
+            <div style={HINT}>
+              La hora de tus open houses y de sus correos se escribe en esta zona. En &quot;Automática&quot; se
+              deduce de tu zona principal; elige una si la deducción no es la correcta.
             </div>
           </div>
         </div>

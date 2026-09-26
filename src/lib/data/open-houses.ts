@@ -12,7 +12,7 @@ const OPEN_HOUSE_COLUMNS = columns('open_houses', [
   'id', 'tenant_id', 'property_id', 'starts_at', 'ends_at', 'timezone', 'public_notes',
   'languages', 'audience_tag_ids', 'audience_match', 'rsvp_enabled', 'status', 'revision',
   'created_by_user_id', 'created_by_agent_id', 'confirmed_at', 'cancelled_at', 'cancel_reason',
-  'created_at',
+  'sender_agent_id', 'created_at',
 ])
 
 const EMAIL_COLUMNS = columns('open_house_emails', [
@@ -58,6 +58,8 @@ export interface OpenHouseRow {
   revision:        number
   createdByUserId: string | null
   createdByAgentId: string | null
+  /** A nombre de quién salen los correos; null = el agente de cada lead. */
+  senderAgentId:   string | null
   confirmedAt:     string | null
   cancelledAt:     string | null
   cancelReason:    string | null
@@ -135,6 +137,7 @@ function toOpenHouse(r: any, now = new Date()): OpenHouseRow {
     revision:         r.revision,
     createdByUserId:  r.created_by_user_id ?? null,
     createdByAgentId: r.created_by_agent_id ?? null,
+    senderAgentId:    r.sender_agent_id ?? null,
     confirmedAt:      r.confirmed_at ?? null,
     cancelledAt:      r.cancelled_at ?? null,
     cancelReason:     r.cancel_reason ?? null,
@@ -357,4 +360,20 @@ export async function lastOpenHouseTimezone(tenantId: string): Promise<string | 
     .limit(1)
     .maybeSingle()
   return ((data as any)?.timezone as string | undefined) ?? null
+}
+
+export interface SenderAgentOption { id: string; name: string; email: string | null }
+
+const SENDER_AGENT_COLUMNS = columns('agents', ['id', 'name', 'email'])
+
+/** Agentes activos del equipo: a nombre de cualquiera puede salir un open house. */
+export async function listSenderAgents(tenantId: string): Promise<SenderAgentOption[]> {
+  const db = createAdminClient()
+  const { data } = await db
+    .from('agents')
+    .select(SENDER_AGENT_COLUMNS)
+    .eq('tenant_id', tenantId)
+    .eq('active', true)
+    .order('name')
+  return ((data ?? []) as any[]).map(a => ({ id: a.id as string, name: a.name as string, email: (a.email as string | null) ?? null }))
 }

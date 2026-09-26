@@ -16,7 +16,8 @@ import {
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { EmailContentSchema } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
-import { openHousePreviewVars } from '@/lib/services/open-house-preview'
+import { loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
+import { OPEN_HOUSE_EMAIL_KINDS } from '@/lib/open-houses/model'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -539,6 +540,7 @@ const PreviewSchema = z.object({
   // Correos de open house: las variables del evento (fecha, dirección,
   // enlaces) salen de ese open house en vez de quedar literales.
   openHouseId: z.string().uuid().optional(),
+  openHouseKind: z.enum(OPEN_HOUSE_EMAIL_KINDS).optional(),
 })
 
 export async function previewEmailHtml(
@@ -596,26 +598,31 @@ export async function previewEmailHtml(
     }
   }
 
-  const openHouseVars = parsed.data.openHouseId
-    ? await openHousePreviewVars(supabase, {
-        openHouseId: parsed.data.openHouseId,
-        tenantId:    ctx.tenant_id,
-        language:    parsed.data.locale,
-        agentName,
-        agentEmail:  'agente@ejemplo.com',
-      })
-    : null
+  // Correo de open house: se renderiza con SU plantilla (fotos, tarjeta del
+  // evento, botones) y el mismo contexto que usa el envío real.
+  if (parsed.data.openHouseId) {
+    const ohCtx = await loadOpenHouseEmailContext(supabase, parsed.data.openHouseId, ctx.tenant_id)
+    if (!ohCtx) return { ok: false, error: 'Open house no encontrado.' }
+    const agent = ohCtx.senderAgent ?? {
+      name: agentName, email: 'agente@ejemplo.com',
+      signature: signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.en,
+    }
+    const oh = renderOpenHouseEmailForLead(ohCtx, {
+      kind: parsed.data.openHouseKind ?? 'announcement', language: parsed.data.locale,
+      subject: parsed.data.subject, content: parsed.data.content,
+      lead: { firstName: 'María' }, agent, unsubscribeUrl: '#', rsvpToken: null, rsvpEnabled: true,
+    })
+    return { ok: true, html: oh.html, subject: oh.subject }
+  }
 
   const rendered = renderEmail({
     subject: parsed.data.subject,
     content: parsed.data.content,
-    vars: openHouseVars
-      ? { customer_name: 'María', agent_name: agentName, agent_email: 'agente@ejemplo.com', ...openHouseVars }
-      : {
-          customer_name: 'María',
-          agent_name:    agentName,
-          agent_email:   'agente@ejemplo.com',
-        },
+    vars: {
+      customer_name: 'María',
+      agent_name:    agentName,
+      agent_email:   'agente@ejemplo.com',
+    },
     signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.en,
     unsubscribeUrl: '#',
     locale:         parsed.data.locale as EmailLocale,
