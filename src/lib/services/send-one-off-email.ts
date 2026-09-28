@@ -27,7 +27,7 @@ export async function sendOneOffEmail(
   // Lead + agente asignado (para la firma).
   const { data: lead } = await db
     .from('leads')
-    .select('id, first_name, email, language, email_blocked, email_blocked_reason, agents (name, email, email_signature)')
+    .select('id, first_name, email, language, email_blocked, email_blocked_reason, agents (name, email, email_signature, sender_local_part)')
     .eq('id', leadId)
     .maybeSingle()
   if (!lead) return { ok: false, error: 'Lead no encontrado.' }
@@ -92,7 +92,9 @@ export async function sendOneOffEmail(
   try {
     const { data, error } = await resendForAccount(identity.account).emails.send({
       // A nombre del agente del lead, con su dirección sobre el dominio del equipo.
-      from:    senderFromForAgent(identity, { name: agentName, email: agentEmail }),
+      from:    senderFromForAgent(identity, {
+        name: agentName, email: agentEmail, senderLocalPart: (agent?.sender_local_part as string | null | undefined) ?? null,
+      }),
       to:      leadEmail,
       headers: listUnsubscribeHeaders,
       subject: rendered.subject,

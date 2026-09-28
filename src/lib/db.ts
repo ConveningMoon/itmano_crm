@@ -15,6 +15,7 @@ export interface AgentRow {
   active: boolean
   created_at: string
   email_signature: string | null
+  sender_local_part?: string | null
   description?: string | null
   cover_photo_url?: string | null
   cover_photo_cutout?: boolean | null
@@ -84,6 +85,7 @@ export function mapAgent(r: AgentRow): Agent {
     accentColor: r.accent_color,
     active: r.active,
     emailSignature: r.email_signature ?? null,
+    senderLocalPart: r.sender_local_part ?? null,
     description: r.description ?? null,
     coverPhotoUrl: r.cover_photo_url ?? null,
     coverPhotoCutout: r.cover_photo_cutout === true,

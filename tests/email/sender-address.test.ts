@@ -20,6 +20,13 @@ describe('senderFromForAgent', () => {
       .toBe('"José" <jose.perez@mail.ajrealestateva.com>')
   })
 
+  it('la dirección fijada en agents.sender_local_part manda sobre la derivada', () => {
+    expect(senderFromForAgent(aj, { name: 'Melany', email: 'mela@ajrealestateva.com', senderLocalPart: 'melany' }))
+      .toBe('"Melany" <melany@mail.ajrealestateva.com>')
+    expect(senderFromForAgent(aj, { name: 'Melany', email: 'mela@ajrealestateva.com', senderLocalPart: '' }))
+      .toBe('"Melany" <mela@mail.ajrealestateva.com>')
+  })
+
   it('sin email usa el primer nombre', () => {
     expect(senderFromForAgent(aj, { name: 'Luis Pérez', email: null })).toBe('"Luis Pérez" <luis@mail.ajrealestateva.com>')
   })

@@ -39,7 +39,9 @@ sobre un dominio propio verificado, cada correo sale con el nombre del agente
 que lo firma y la parte local de su email sobre el dominio del equipo
 (`mela@ajrealestateva.com` → `"Melany" <mela@mail.ajrealestateva.com>`). Resend
 acepta cualquier dirección de un dominio verificado, así que no requiere DNS
-por agente. En el dominio compartido de ITMANO no se aplica: ahí la dirección es
+por agente. Owner/super pueden fijar la parte local de cada agente en
+Configuración → Email (`agents.sender_local_part`, única por tenant); vacía se
+deriva de su email. En el dominio compartido de ITMANO no se aplica: ahí la dirección es
 `<slug>@mail.itmano.com` y es la que identifica al tenant. El webhook inbound
 resuelve el tenant por dirección exacta, por slug en el dominio compartido o por
 dominio propio (`matchInboundTenant`).

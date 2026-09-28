@@ -195,7 +195,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const leadAgent = agents.find(a => a.id === lead.agentId)
   const emailSending = {
     from:          identity
-      ? senderFromForAgent(identity, leadAgent ? { name: leadAgent.name, email: leadAgent.email } : null)
+      ? senderFromForAgent(identity, leadAgent ? { name: leadAgent.name, email: leadAgent.email, senderLocalPart: leadAgent.senderLocalPart } : null)
       : null,
     sendingDomain: (tRow?.sending_domain as string | null) ?? null,
     domainStatus:  (tRow?.domain_status as string | null) ?? 'not_configured',

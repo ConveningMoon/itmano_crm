@@ -43,10 +43,17 @@ export function normalizeLocalPart(raw: string): string | null {
 export interface SenderAgent {
   name:  string | null
   email: string | null
+  /** agents.sender_local_part: la parte local fijada a mano; manda sobre la derivada. */
+  senderLocalPart?: string | null
 }
 
-/** Parte local del agente: la de su email o, sin email, su primer nombre. */
+/**
+ * Parte local del agente: la fijada en agents.sender_local_part; si no, la de
+ * su email o, sin email, su primer nombre.
+ */
 export function agentLocalPart(agent: SenderAgent): string | null {
+  const fixed = agent.senderLocalPart ? normalizeLocalPart(agent.senderLocalPart) : null
+  if (fixed) return fixed
   const email = agent.email?.trim() ?? ''
   const at = email.lastIndexOf('@')
   if (at > 0) {

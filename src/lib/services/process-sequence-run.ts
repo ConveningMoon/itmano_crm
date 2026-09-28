@@ -65,7 +65,7 @@ export async function processSequenceRun(params: {
   // así no añade una vuelta secuencial extra al camino de envío.
   const [leadRes, tenantRes, stepRes, channelRes, seqRes, access] = await Promise.all([
     db.from('leads')
-      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email, email_signature)')
+      .select('id, first_name, email, agent_id, email_blocked, email_blocked_reason, agents(id, name, email, email_signature, sender_local_part)')
       .eq('id', leadId)
       .maybeSingle(),
     db.from('tenants')
@@ -152,6 +152,7 @@ export async function processSequenceRun(params: {
     agent_name:         agent?.name ?? '',
     agent_email:        agent?.email ?? '',
     agent_signature:    (agent?.email_signature as string | null) ?? null,
+    agent_sender_local_part: (agent?.sender_local_part as string | null) ?? null,
     channel_name:       channel?.name ?? null,
     sequence_language:  seqLang,
     next_send_at:       (r.next_send_at as string | null) ?? null,

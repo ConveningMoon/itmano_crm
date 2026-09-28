@@ -22,12 +22,14 @@ const PROPERTY_COLUMNS = columns('properties', [
   'name', 'address', 'city', 'state', 'slug', 'published_to_web', 'external_url', 'image_url', 'gallery',
 ])
 const TENANT_COLUMNS = columns('tenants', ['name', 'slug', 'logo_url', 'primary_color'])
-const AGENT_COLUMNS  = columns('agents', ['id', 'name', 'email', 'email_signature'])
+const AGENT_COLUMNS  = columns('agents', ['id', 'name', 'email', 'email_signature', 'sender_local_part'])
 
 export interface EmailAgent {
   name:      string
   email:     string
   signature: string | null
+  /** agents.sender_local_part (ver senderFromForAgent). */
+  senderLocalPart?: string | null
 }
 
 export interface OpenHouseEmailContext {
@@ -87,7 +89,10 @@ export async function loadOpenHouseEmailContext(
       accent:  (t.primary_color as string | null) ?? null,
     },
     senderAgent: a
-      ? { name: (a.name as string) ?? '', email: (a.email as string | null) ?? '', signature: (a.email_signature as string | null) ?? null }
+      ? {
+          name: (a.name as string) ?? '', email: (a.email as string | null) ?? '', signature: (a.email_signature as string | null) ?? null,
+          senderLocalPart: (a.sender_local_part as string | null) ?? null,
+        }
       : null,
     baseUrl: appBaseUrl(),
   }

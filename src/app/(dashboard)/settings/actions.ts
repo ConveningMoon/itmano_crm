@@ -15,6 +15,7 @@ import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { detectCutout } from '@/lib/studio/agent-photo'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { PLANS } from '@/lib/plans'
+import { normalizeLocalPart } from '@/lib/email/sender-address'
 
 const LANGUAGE_ENUM = SUPPORTED_LANGUAGE_CODES as [string, ...string[]]
 
@@ -595,6 +596,43 @@ export async function updateAgentSignature(
     .eq('tenant_id', tenantId)
 
   if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { ok: true }
+}
+
+// ─── Dirección de envío por agente ────────────────────────────────────────────
+// agents.sender_local_part: la parte local con la que el agente firma sobre el
+// dominio verificado del equipo (senderFromForAgent). Vacío = se deriva de su
+// email. Es la identidad del equipo hacia afuera, así que la fija owner/super,
+// no el propio agente: nadie debería poder enviar como "adriana@".
+export async function updateAgentSenderLocalPart(
+  agentId: string,
+  localPart: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx    = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+
+  const tenantId = ctx.tenant_id
+  if (!tenantId) return { ok: false, error: 'Selecciona un tenant desde el centro de control.' }
+
+  const raw   = localPart.trim().toLowerCase()
+  const value = raw ? normalizeLocalPart(raw) : null
+  if (raw && value !== raw) {
+    return { ok: false, error: 'Usa sólo letras, números, punto, guion o guion bajo, sin empezar ni terminar con símbolo.' }
+  }
+
+  const { error } = await createAdminClient()
+    .from('agents')
+    .update({ sender_local_part: value })
+    .eq('id', agentId)
+    .eq('tenant_id', tenantId)
+  if (error) {
+    if (error.code === '23505') return { ok: false, error: 'Otro agente del equipo ya usa esa dirección.' }
+    if (error.code === '23514') return { ok: false, error: 'La dirección no es válida.' }
+    return { ok: false, error: error.message }
+  }
 
   revalidatePath('/settings')
   return { ok: true }

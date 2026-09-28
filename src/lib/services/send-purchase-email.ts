@@ -73,7 +73,7 @@ export async function sendPurchaseEmail(
         language,
         email_blocked,
         email_blocked_reason,
-        agents (id, name, email, email_signature, language, languages)
+        agents (id, name, email, email_signature, sender_local_part, language, languages)
       )
     `)
     .eq('id', processId)
@@ -217,7 +217,9 @@ export async function sendPurchaseEmail(
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   }
   // A nombre del agente del proceso, con su dirección sobre el dominio del equipo.
-  const from = senderFromForAgent(identity, { name: agentName, email: agentEmail })
+  const from = senderFromForAgent(identity, {
+    name: agentName, email: agentEmail, senderLocalPart: (agent?.sender_local_part as string | null | undefined) ?? null,
+  })
   let resendEmailId: string | null = null
   let sentSubject:   string | null = null
   try {
