@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { ADMIN_TENANT_COOKIE } from '@/lib/auth/admin-tenant'
 import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
@@ -12,6 +13,7 @@ import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
 import { initialAiBudgetUsd, planAiBudgetUsd } from '@/lib/services/ai-budget'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
+import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as updateScoreRules. The admin client (service_role) is the correct
@@ -339,6 +341,51 @@ export async function removeTenantDomain(
   const { error } = await supabase.from('tenants').update({
     sending_domain: null, resend_domain_id: null, domain_status: 'not_configured', domain_records: null,
   }).eq('id', tenantId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+// Remitente por defecto del equipo: tenants.email_from_address. Es la dirección
+// con la que salen los correos sin agente (notificaciones del equipo) y la base
+// sobre la que cada agente firma con la suya (senderFromForAgent). Sólo se
+// acepta sobre el dominio propio verificado del tenant (ownSendingDomain).
+const SenderSchema = z.object({
+  tenantId:  z.string().trim().min(1),
+  name:      z.string().trim().min(1).max(80),
+  localPart: z.string().trim().min(1).max(64),
+})
+
+export async function setTenantSender(
+  input: { tenantId: string; name: string; localPart: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  if (ctx.role !== 'super_admin') return { ok: false, error: 'Solo ITMANO puede gestionar dominios.' }
+
+  const parsed = SenderSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: 'Completa el nombre y la dirección.' }
+  const local = normalizeLocalPart(parsed.data.localPart)
+  if (!local || local !== parsed.data.localPart.toLowerCase()) {
+    return { ok: false, error: 'La dirección sólo admite letras, números, punto, guion y guion bajo.' }
+  }
+  const name = cleanDisplayName(parsed.data.name)
+  if (!name) return { ok: false, error: 'El nombre no es válido.' }
+
+  const supabase = createAdminClient()
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select(columns('tenants', ['resend_account', 'email_from_address', 'sending_domain', 'domain_status']))
+    .eq('id', parsed.data.tenantId)
+    .maybeSingle()
+  if (!tenant) return { ok: false, error: 'Tenant no encontrado.' }
+
+  const domain = ownSendingDomain(tenant as unknown as Parameters<typeof ownSendingDomain>[0])
+  if (!domain) return { ok: false, error: 'El tenant necesita un dominio propio verificado antes de fijar su remitente.' }
+
+  const { error } = await supabase.from('tenants')
+    .update({ email_from_address: `${name} <${local}@${domain}>` })
+    .eq('id', parsed.data.tenantId)
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/admin')

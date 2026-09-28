@@ -25,7 +25,7 @@ import { getLeadPriorityAxes, getLeadPriorityPositionFor } from '@/lib/data/lead
 import { resolveActorNames, authorOf } from '@/lib/data/activity-authors'
 import { buildScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { opportunitiesFor } from '@/lib/scoring/opportunities'
-import { resolveSenderIdentity } from '@/lib/services/sender-identity'
+import { resolveSenderIdentity, senderFromForAgent, usesSharedDomain } from '@/lib/services/sender-identity'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { mapBusinessProfile } from '@/lib/data/business-profile'
 import { getTenantRow } from '@/lib/data/tenants'
@@ -191,12 +191,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? resolveSenderIdentity(tRow as any, { customDomainAllowed: tenantAccess.customDomainAllowed })
     : null
+  // El corporativo sale a nombre del agente del lead (senderFromForAgent).
+  const leadAgent = agents.find(a => a.id === lead.agentId)
   const emailSending = {
-    from:          identity?.from ?? null,
+    from:          identity
+      ? senderFromForAgent(identity, leadAgent ? { name: leadAgent.name, email: leadAgent.email } : null)
+      : null,
     sendingDomain: (tRow?.sending_domain as string | null) ?? null,
     domainStatus:  (tRow?.domain_status as string | null) ?? 'not_configured',
     // true cuando el correo corporativo sale por el dominio compartido de ITMANO.
-    usingSharedDomain: !!identity?.from?.includes('@mail.itmano.com'),
+    usingSharedDomain: !!identity && usesSharedDomain(identity),
   }
 
   // Estado del análisis de fit con IA (064) — se muestra en el detalle del lead.

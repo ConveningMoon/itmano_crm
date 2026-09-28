@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Globe, RefreshCw, Trash2, Check, Copy, ChevronDown, ShieldCheck } from 'lucide-react'
-import { addTenantDomain, refreshTenantDomain, removeTenantDomain } from './actions'
+import { addTenantDomain, refreshTenantDomain, removeTenantDomain, setTenantSender } from './actions'
+import { addressOf, displayNameOf } from '@/lib/email/sender-address'
 
 interface DomainRecord { record?: string; type?: string; name?: string; value?: string; ttl?: string; priority?: number | null; status?: string }
 
@@ -28,11 +29,68 @@ function CopyValue({ text }: { text: string }) {
   )
 }
 
+const inputStyle = {
+  background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px',
+  padding: '7px 10px', fontSize: '12.5px', color: 'var(--text-primary)', outline: 'none', minWidth: 0,
+} as const
+
+// Remitente por defecto del equipo (tenants.email_from_address) sobre su dominio
+// propio verificado. Cada agente firma después con su propia dirección en ese
+// mismo dominio; esto fija la de los correos sin agente y el nombre de reserva.
+function SenderEditor({ tenantId, domain, current }: { tenantId: string; domain: string; current: string | null }) {
+  const router = useRouter()
+  const currentAddress = current ? addressOf(current) : ''
+  const sameDomain = currentAddress.endsWith(`@${domain}`)
+  const [name, setName]   = useState(current ? displayNameOf(current) : '')
+  const [local, setLocal] = useState(sameDomain ? currentAddress.slice(0, currentAddress.lastIndexOf('@')) : '')
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [pending, start]  = useTransition()
+  const disabled = pending || !name.trim() || !local.trim()
+
+  function save() {
+    setError(null); setSaved(false)
+    start(async () => {
+      const res = await setTenantSender({ tenantId, name, localPart: local })
+      if (!res.ok) { setError(res.error); return }
+      setSaved(true)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Remitente por defecto</div>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <input value={name} onChange={e => { setName(e.target.value); setSaved(false) }} placeholder="Nombre visible" style={{ ...inputStyle, flex: '1 1 140px' }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flex: '2 1 220px', minWidth: 0 }}>
+          <input value={local} onChange={e => { setLocal(e.target.value); setSaved(false) }} placeholder="hola" style={{ ...inputStyle, flex: 1, fontFamily: 'monospace' }} />
+          <code style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>@{domain}</code>
+        </span>
+        <button onClick={save} disabled={disabled}
+          style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+          {pending ? 'Guardando…' : saved ? 'Guardado' : 'Guardar'}
+        </button>
+      </div>
+      <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        {current ? <>Actual: <code style={{ color: 'var(--text-secondary)' }}>{current}</code>. </> : 'Sin remitente: los correos siguen saliendo por el dominio de ITMANO. '}
+        Cada agente envía con su nombre y la parte local de su email sobre este dominio.
+      </div>
+      {error && <div style={{ fontSize: '11.5px', color: 'var(--accent-coral)' }}>{error}</div>}
+    </div>
+  )
+}
+
 export function TenantDomainManager({
   tenantId, resendAccount, sendingDomain, domainStatus, domainRecords, managedByItmano,
+  emailFromAddress, ownSendingDomain,
 }: {
   tenantId: string
   resendAccount: string
+  /** tenants.email_from_address. */
+  emailFromAddress: string | null
+  /** Dominio propio verificado aceptado para el remitente; null = ninguno. */
+  ownSendingDomain: string | null
   sendingDomain: string | null
   domainStatus: string
   domainRecords: DomainRecord[] | null
@@ -96,6 +154,7 @@ export function TenantDomainManager({
 
       {open && (
         <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', background: 'var(--bg-surface)' }}>
+          {ownSendingDomain && <SenderEditor tenantId={tenantId} domain={ownSendingDomain} current={emailFromAddress} />}
           {!hasDomain ? (
             <>
               <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -163,7 +222,7 @@ export function TenantDomainManager({
               )}
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                 Agrega estos registros en el DNS del dominio y pulsa <strong>Verificar</strong>. Cuando quede
-                <strong> Verificado</strong>, los correos de este tenant saldrán desde su dominio.
+                <strong> Verificado</strong>, fija el remitente por defecto y los correos de este tenant saldrán desde su dominio.
               </div>
             </>
           )}

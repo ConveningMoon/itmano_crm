@@ -11,7 +11,8 @@ import {
 } from '@/lib/services/open-house-audience'
 import { chunk, decideRecipient } from '@/lib/open-houses/audience'
 import { createRsvpToken } from '@/lib/open-houses/rsvp-token'
-import { fromWithName, loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
+import { loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
+import { senderFromForAgent } from '@/lib/services/sender-identity'
 import type { AudienceMatch, OpenHouseEmailKind } from '@/lib/open-houses/model'
 
 // Despachador de los correos de un open house.
@@ -273,10 +274,10 @@ export async function dispatchOpenHouseEmail(
         }
 
         const unsubscribeUrl = generateUnsubscribeUrl(lead.id)
-        // Firma, nombre del remitente y respuestas: el agente elegido para el
-        // open house o, si no hay, el agente que atiende a este lead.
+        // Firma, remitente (nombre y dirección) y respuestas: el agente elegido
+        // para el open house o, si no hay, el agente que atiende a este lead.
         const agent = ctx.senderAgent ?? { name: lead.agentName, email: lead.agentEmail, signature: lead.agentSignature }
-        const from = fromWithName(agent.name, identity.from)
+        const from = senderFromForAgent(identity, agent)
         const headers = {
           'List-Unsubscribe':      `<${unsubscribeUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

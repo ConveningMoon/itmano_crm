@@ -93,18 +93,6 @@ export async function loadOpenHouseEmailContext(
   }
 }
 
-/**
- * `"Nombre" <correo@dominio>` con el correo verificado del equipo y el nombre
- * de quien firma. El nombre se limpia de comillas y ángulos: viene de la base,
- * pero un `<` en un nombre rompería la cabecera.
- */
-export function fromWithName(name: string, identityFrom: string): string {
-  const m = /<([^>]+)>/.exec(identityFrom)
-  const address = (m ? m[1] : identityFrom).trim()
-  const clean = name.replace(/["<>\r\n]/g, '').trim()
-  return clean ? `"${clean}" <${address}>` : identityFrom
-}
-
 export function renderOpenHouseEmailForLead(
   ctx: OpenHouseEmailContext,
   args: {

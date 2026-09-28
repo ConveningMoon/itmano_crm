@@ -1,6 +1,6 @@
 import 'server-only'
 import { resendForAccount } from '@/lib/resend'
-import { resolveSenderIdentity } from '@/lib/services/sender-identity'
+import { resolveSenderIdentity, senderFromForAgent } from '@/lib/services/sender-identity'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
@@ -216,6 +216,8 @@ export async function sendPurchaseEmail(
     'List-Unsubscribe':      `<${unsubscribeUrl}>`,
     'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
   }
+  // A nombre del agente del proceso, con su dirección sobre el dominio del equipo.
+  const from = senderFromForAgent(identity, { name: agentName, email: agentEmail })
   let resendEmailId: string | null = null
   let sentSubject:   string | null = null
   try {
@@ -235,7 +237,7 @@ export async function sendPurchaseEmail(
       })
       sentSubject = rendered.subject
       payload = {
-        from:    identity.from,
+        from,
         to:      leadEmail,
         headers: listUnsubscribeHeaders,
         subject: rendered.subject,
@@ -243,7 +245,7 @@ export async function sendPurchaseEmail(
       }
     } else {
       payload = {
-        from:     identity.from,
+        from,
         to:       leadEmail,
         headers:  listUnsubscribeHeaders,
         template: { id: templateId as string, variables: { customer_name: firstName, unsubscribe_url: unsubscribeUrl } },

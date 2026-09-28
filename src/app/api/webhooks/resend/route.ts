@@ -6,6 +6,8 @@ import { resendInboundForAccount } from '@/lib/resend'
 import { stripQuotedReply } from '@/lib/email/strip-quoted-reply'
 import { assessLeadFit } from '@/lib/services/ai-lead-fit'
 import { graduateSubscriber } from '@/lib/newsletters/subscriber'
+import { columns } from '@/lib/supabase/columns'
+import { matchInboundTenant, type InboundTenantRow } from '@/lib/email/inbound-tenant'
 
 // Transactional email events Resend fires for our sends.
 // email.unsubscribed does NOT exist for transactional emails (only for Audiences).
@@ -208,33 +210,27 @@ async function handleOutboundEvent(
 // the sender's email address and insert an email_replied event (+30 points).
 //
 // Multi-tenant routing: the reply's `to` address is OUR sending address, so it
-// identifies the tenant — se compara contra tenants.email_from_address (cada
-// tenant tiene una dirección única, sea de su dominio propio Growth/Partner o
-// de un slug del dominio compartido de ITMANO en Esencial). Con tenant
-// resuelto, la búsqueda del lead queda scoped y la ambigüedad entre tenants
-// (mismo email de lead en dos equipos) desaparece: leads es único por
-// (tenant_id, email). Si el `to` no matchea ningún tenant (config vieja,
-// forward raro), cae al comportamiento global anterior: match único o skip.
-
-// Resuelve el tenant dueño de la dirección destino del inbound. tenants es una
-// tabla chica — se trae completa y se normaliza en proceso porque
-// email_from_address puede estar guardado como "Nombre <email@dominio>".
+// identifies the tenant — exact email_from_address, the tenant slug on the
+// shared ITMANO domain, or the tenant's own domain (each agent sends from their
+// own address on it). See matchInboundTenant. Con tenant resuelto, la búsqueda
+// del lead queda scoped y la ambigüedad entre tenants (mismo email de lead en
+// dos equipos) desaparece: leads es único por (tenant_id, email). Si el `to` no
+// matchea ningún tenant (config vieja, forward raro), cae al comportamiento
+// global anterior: match único o skip.
+//
+// tenants es una tabla chica — se trae completa y se normaliza en proceso.
 async function resolveTenantByToAddress(
   db: ReturnType<typeof createAdminClient>,
   toRaw: string[] | undefined,
 ): Promise<string | null> {
   if (!toRaw || toRaw.length === 0) return null
-  const toAddresses = new Set(toRaw.map(extractEmail))
 
   const { data: tenants, error } = await db
     .from('tenants')
-    .select('id, email_from_address')
+    .select(columns('tenants', ['id', 'slug', 'email_from_address', 'sending_domain']))
   if (error) throw error
 
-  const matches = ((tenants ?? []) as { id: string; email_from_address: string | null }[])
-    .filter(t => t.email_from_address && toAddresses.has(extractEmail(t.email_from_address)))
-
-  return matches.length === 1 ? matches[0].id : null
+  return matchInboundTenant(toRaw, (tenants ?? []) as unknown as InboundTenantRow[])
 }
 
 async function handleInboundEvent(

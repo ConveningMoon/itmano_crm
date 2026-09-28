@@ -1,5 +1,9 @@
 import 'server-only'
 import { resolveResendAccount } from '@/lib/resend'
+import {
+  ITMANO_SHARED_DOMAIN, addressOf, agentLocalPart, cleanDisplayName, displayNameOf, domainOf, formatFrom,
+  type SenderAgent,
+} from '@/lib/email/sender-address'
 
 // ── Identidad de envío por tenant (migración 065) ─────────────────────────────
 // Decide desde qué cuenta de Resend y con qué "from" sale un correo:
@@ -11,8 +15,9 @@ import { resolveResendAccount } from '@/lib/resend'
 //     está verificado (domain_status = 'verified') envía desde él; si no, desde el
 //     dominio compartido de ITMANO ("<slug>@mail.itmano.com"). Esencial nunca tiene
 //     dominio propio → siempre el compartido.
-
-const ITMANO_SHARED_DOMAIN = 'mail.itmano.com'
+//
+// Sobre esa identidad, cada correo sale a nombre del agente que lo firma
+// (senderFromForAgent).
 
 export interface TenantSenderFields {
   name:               string
@@ -70,7 +75,31 @@ export function resolveSenderIdentity(
  * para que la regla sea exactamente "el correo saldría de tu dominio".
  */
 export function usesSharedDomain(identity: SenderIdentity): boolean {
-  const m = /<([^>]+)>/.exec(identity.from)
-  const address = (m ? m[1] : identity.from).trim().toLowerCase()
-  return address.endsWith(`@${ITMANO_SHARED_DOMAIN}`)
+  return domainOf(identity.from) === ITMANO_SHARED_DOMAIN
+}
+
+// ── Remitente por agente ──────────────────────────────────────────────────────
+// Un dominio verificado en Resend acepta cualquier dirección de ese dominio, así
+// que cada agente firma con la suya sin tocar el DNS: su nombre como nombre
+// visible y la parte local de su email sobre el dominio del equipo
+// (Melany, mela@ajrealestateva.com → "Melany" <mela@mail.ajrealestateva.com>).
+// En el dominio compartido de ITMANO no se hace: ahí la dirección identifica al
+// tenant (slug@mail.itmano.com) y el webhook de respuestas depende de ello.
+
+/**
+ * El `from` con el que sale un correo firmado por `agent`. Sin agente, o en el
+ * dominio compartido, es el de la identidad del tenant tal cual.
+ */
+export function senderFromForAgent(
+  identity: SenderIdentity,
+  agent: SenderAgent | null | undefined,
+): string {
+  if (!agent || usesSharedDomain(identity)) return identity.from
+  const domain = domainOf(identity.from)
+  if (!domain) return identity.from
+
+  const address = addressOf(identity.from)
+  const local = agentLocalPart(agent) ?? address.slice(0, address.lastIndexOf('@'))
+  const name = cleanDisplayName(agent.name ?? '') || displayNameOf(identity.from)
+  return formatFrom(name, local, domain)
 }
