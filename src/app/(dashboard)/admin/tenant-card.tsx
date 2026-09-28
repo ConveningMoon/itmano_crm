@@ -96,6 +96,8 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
         domainStatus={tenant.domainStatus}
         domainRecords={tenant.domainRecords}
         managedByItmano={tenant.pagesManagedByItmano}
+        emailFromAddress={tenant.emailFromAddress}
+        ownSendingDomain={tenant.ownSendingDomain}
       />
 
       <form action={enterTenant.bind(null, tenant.id)} style={{ marginTop: '4px' }}>

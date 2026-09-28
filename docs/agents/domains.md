@@ -32,7 +32,22 @@ La identidad de envío vive en el tenant:
 - Auth de Supabase usa la identidad común aprobada.
 
 Todos los envíos leen `tenants.email_from_address`. No introduzcas remitentes de
-A&J en código. Antes de cambiar envíos, revisa guards de `email_blocked`,
+A&J en código.
+
+Remitente por agente (`senderFromForAgent`, `src/lib/services/sender-identity.ts`):
+sobre un dominio propio verificado, cada correo sale con el nombre del agente
+que lo firma y la parte local de su email sobre el dominio del equipo
+(`mela@ajrealestateva.com` → `"Melany" <mela@mail.ajrealestateva.com>`). Resend
+acepta cualquier dirección de un dominio verificado, así que no requiere DNS
+por agente. En el dominio compartido de ITMANO no se aplica: ahí la dirección es
+`<slug>@mail.itmano.com` y es la que identifica al tenant. El webhook inbound
+resuelve el tenant por dirección exacta, por slug en el dominio compartido o por
+dominio propio (`matchInboundTenant`).
+
+Alta del dominio de un tenant (super_admin, `/admin` → Dominio de envío): agregar
+el subdominio (`mail.cliente.com`), cargar los registros DNS, pulsar Verificar y,
+con el dominio verificado, fijar el remitente por defecto. Sin ese remitente los
+correos siguen saliendo por el dominio compartido. Antes de cambiar envíos, revisa guards de `email_blocked`,
 cancelación de secuencias, unsubscribe y reputación del dominio.
 
 Las secuencias por etiqueta se crean automáticamente para cada combinación de

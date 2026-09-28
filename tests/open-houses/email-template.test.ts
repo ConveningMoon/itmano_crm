@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderOpenHouseEmail, type OpenHouseEmailInput } from '@/lib/open-houses/email-template'
-import { fromWithName, propertyEmailImages } from '@/lib/services/open-house-email'
+import { propertyEmailImages } from '@/lib/services/open-house-email'
 import { inferTimeZoneFromAreas, businessTimeZone } from '@/lib/time-zones'
 
 // La plantilla del correo de open house: botones en lugar de enlaces, las
@@ -66,16 +66,10 @@ describe('plantilla del correo de open house', () => {
   })
 })
 
-describe('fotos y remitente', () => {
+describe('fotos', () => {
   it('portada y las dos primeras de la galería, sin repetidas', () => {
     expect(propertyEmailImages('https://a', ['https://a', 'https://b', 'https://c', 'https://d'])).toEqual(['https://a', 'https://b', 'https://c'])
     expect(propertyEmailImages(null, ['javascript:x', 'https://b'])).toEqual(['https://b'])
-  })
-
-  it('pone el nombre del agente sobre el correo verificado del equipo', () => {
-    expect(fromWithName('Luis Pérez', 'Equipo <hola@equipo.com>')).toBe('"Luis Pérez" <hola@equipo.com>')
-    expect(fromWithName('Luis "<x>"', 'hola@equipo.com')).toBe('"Luis x" <hola@equipo.com>')
-    expect(fromWithName('  ', 'Equipo <hola@equipo.com>')).toBe('Equipo <hola@equipo.com>')
   })
 })
 

@@ -1,6 +1,6 @@
 import 'server-only'
 import { resendForAccount } from '@/lib/resend'
-import { resolveSenderIdentity } from '@/lib/services/sender-identity'
+import { resolveSenderIdentity, senderFromForAgent } from '@/lib/services/sender-identity'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
@@ -91,7 +91,8 @@ export async function sendOneOffEmail(
   let resendEmailId: string
   try {
     const { data, error } = await resendForAccount(identity.account).emails.send({
-      from:    identity.from,
+      // A nombre del agente del lead, con su dirección sobre el dominio del equipo.
+      from:    senderFromForAgent(identity, { name: agentName, email: agentEmail }),
       to:      leadEmail,
       headers: listUnsubscribeHeaders,
       subject: rendered.subject,

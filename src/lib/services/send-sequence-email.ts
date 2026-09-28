@@ -1,6 +1,6 @@
 import 'server-only'
 import { resendForAccount } from '@/lib/resend'
-import { resolveSenderIdentity } from '@/lib/services/sender-identity'
+import { resolveSenderIdentity, senderFromForAgent } from '@/lib/services/sender-identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
@@ -153,19 +153,22 @@ export async function sendSequenceEmail(
     compiledHtml    = rendered.html
   }
 
+  // A nombre del agente del lead, con su dirección sobre el dominio del equipo.
+  const from = senderFromForAgent(identity, { name: run.agent_name, email: run.agent_email })
+
   let resendEmailId: string
   try {
     const { data, error } = await resendForAccount(identity.account).emails.send(
       compiledHtml && compiledSubject
         ? {
-            from:    identity.from,
+            from,
             to:      run.lead_email,
             headers: listUnsubscribeHeaders,
             subject: compiledSubject,
             html:    compiledHtml,
           }
         : {
-            from:    identity.from,
+            from,
             to:      run.lead_email,
             headers: listUnsubscribeHeaders,
             template: {
