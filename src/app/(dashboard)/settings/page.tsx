@@ -13,6 +13,9 @@ import { EMPTY_PROFILE } from '@/lib/business/profile'
 import { getFitEvidence } from '@/lib/data/fit-evidence'
 import { countLeadsByTag, listLeadTags } from '@/lib/data/lead-tags'
 import type { FitEvidence } from '@/lib/scoring/calibration'
+import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-identity'
+import { domainOf } from '@/lib/email/sender-address'
 import { SettingsClient } from './settings-client'
 
 export default async function SettingsPage() {
@@ -49,7 +52,7 @@ export default async function SettingsPage() {
   // Una sola ola. Las reglas globales y las efectivas salen de la misma
   // consulta (getScoreRulesBundle) y la lista de owners va aquí y no en un
   // await suelto más abajo, que era una ola entera más por su cuenta.
-  const [tenantRow, { data: rawAgents }, businessProfile, scoreRules, { data: ownerProfiles }, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, leadTags, leadTagCounts] = await Promise.all([
+  const [tenantRow, { data: rawAgents }, businessProfile, scoreRules, { data: ownerProfiles }, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, leadTags, leadTagCounts, tenantAccess] = await Promise.all([
     // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
     getTenantRow(tenantId),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
@@ -67,6 +70,7 @@ export default async function SettingsPage() {
     wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
     canManageTags ? listLeadTags(tenantId)    : Promise.resolve([]),
     canManageTags ? countLeadsByTag(tenantId) : Promise.resolve({}),
+    getTenantAccessFor(tenantId),
   ])
   const scoringRules = scoreRules.effective
   const globalRules  = scoreRules.global
@@ -78,6 +82,14 @@ export default async function SettingsPage() {
     : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+
+  // Dominio sobre el que firma cada agente (senderFromForAgent). null = el
+  // equipo sale por el dominio compartido de ITMANO y la dirección por agente
+  // no aplica todavía.
+  const senderIdentity = tenantRowAny
+    ? resolveSenderIdentity(tenantRowAny, { customDomainAllowed: tenantAccess.customDomainAllowed })
+    : null
+  const senderDomain = senderIdentity && !usesSharedDomain(senderIdentity) ? domainOf(senderIdentity.from) : null
 
   // Valores recomendados por ITMANO (reglas globales) por id — los efectivos del
   // tenant conservan el id global, así el botón "Restablecer a recomendados"
@@ -154,6 +166,7 @@ export default async function SettingsPage() {
         multiAgent={multiAgent}
         canLinkSelf={canLinkSelf}
         myAgentId={ctx.agent_id}
+        senderDomain={senderDomain}
         ownerAgentId={ownerAgentId}
         canDeleteAgents={canDeleteAgents}
         userEmail={ctx.email}

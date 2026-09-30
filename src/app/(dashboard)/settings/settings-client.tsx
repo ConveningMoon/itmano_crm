@@ -11,7 +11,7 @@ import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiCapacityRequest } from './ai-capacity-request'
-import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription, updateAgentCoverPhoto, removeAgentCoverPhoto } from './actions'
+import { updateTenantName, updateTenantLogo, removeTenantLogo, updateAgent, createAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentSignature, updateAgentSenderLocalPart, updateAgentLanguages, setAgentAsOwner, deleteAgent, requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest, updateTenantDescription, updateAgentDescription, updateAgentCoverPhoto, removeAgentCoverPhoto } from './actions'
 import { openBillingPortal } from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, trialDaysLeft } from '@/lib/plans'
@@ -24,6 +24,7 @@ import { TagsSection } from './tags-section'
 import type { LeadTag } from '@/lib/leads/tags'
 import type { BusinessProfile } from '@/lib/business/profile'
 import { Tabs } from '@/components/ui/tabs'
+import { agentLocalPart } from '@/lib/email/sender-address'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
   super_admin: 'Administrador ITMANO',
@@ -977,7 +978,99 @@ function AgentSignatureRow({ agent, canEdit }: { agent: Agent; canEdit: boolean 
   )
 }
 
-function EmailSettingsSection({ agents, canManage, myAgentId }: { agents: Agent[]; canManage: boolean; myAgentId: string | null }) {
+// ─── Email settings: dirección de envío por agente ────────────────────────────
+// Cada agente firma con su nombre y una dirección sobre el dominio verificado del
+// equipo (senderFromForAgent). Vacío = la parte local de su email.
+
+function AgentSenderRow({ agent, domain, canEdit }: { agent: Agent; domain: string; canEdit: boolean }) {
+  const derived = agentLocalPart({ name: agent.name, email: agent.email }) ?? ''
+  const [value, setValue] = useState(agent.senderLocalPart ?? '')
+  const [saved, setSaved] = useState(agent.senderLocalPart ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk]       = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  const dirty = value.trim().toLowerCase() !== saved
+  const effective = (saved || derived) + '@' + domain
+
+  function handleSave() {
+    setError(null); setOk(false)
+    startTransition(async () => {
+      const res = await updateAgentSenderLocalPart(agent.id, value)
+      if (!res.ok) { setError(res.error); return }
+      const next = value.trim().toLowerCase()
+      setValue(next)
+      setSaved(next)
+      setOk(true)
+      setTimeout(() => setOk(false), 2000)
+    })
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 180px', minWidth: 0 }}>
+          <div style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            background: `${agent.accentColor}22`, border: `1px solid ${agent.accentColor}44`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '11px', fontWeight: 700, color: agent.accentColor, flexShrink: 0,
+          }}>
+            {agent.avatarInitials}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              &quot;{agent.name}&quot; &lt;{effective}&gt;
+            </div>
+          </div>
+        </div>
+        {canEdit && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '2 1 260px', minWidth: 0 }}>
+            <input
+              value={value}
+              onChange={e => { setValue(e.target.value); setError(null); setOk(false) }}
+              placeholder={derived}
+              maxLength={64}
+              aria-label={`Dirección de envío de ${agent.name}`}
+              style={{ ...INPUT, flex: 1, minWidth: 0, fontFamily: 'monospace' }}
+            />
+            <code style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>@{domain}</code>
+            <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              {pending ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        )}
+      </div>
+      {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+      {ok && <div style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Dirección guardada.</div>}
+    </div>
+  )
+}
+
+function SenderAddressCard({ agents, domain, canManage }: { agents: Agent[]; domain: string | null; canManage: boolean }) {
+  return (
+    <div style={CARD}>
+      <div style={CARD_HEADER}>
+        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Dirección de envío</span>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          {domain
+            ? <>Los correos salen con el nombre del agente y su dirección en <strong style={{ color: 'var(--text-secondary)' }}>{domain}</strong>. Si la dejas vacía se usa la parte de su email antes de la @.</>
+            : 'Tu equipo envía desde el dominio compartido de ITMANO. La dirección por agente se activa cuando el equipo envía desde su propio dominio verificado (planes Growth y Partner).'}
+        </div>
+      </div>
+      {domain && (agents.length === 0 ? (
+        <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+          No hay agentes todavía.
+        </div>
+      ) : (
+        agents.map(agent => <AgentSenderRow key={agent.id} agent={agent} domain={domain} canEdit={canManage} />)
+      ))}
+    </div>
+  )
+}
+
+function EmailSettingsSection({ agents, canManage, myAgentId, senderDomain }: { agents: Agent[]; canManage: boolean; myAgentId: string | null; senderDomain: string | null }) {
   // El agente sólo ve —y edita— su propia firma. Las de sus compañeros no eran
   // editables (requireSelfOrManager), pero seguían a la vista en solo lectura:
   // es texto que escribió otra persona y no aporta nada a su configuración.
@@ -985,6 +1078,7 @@ function EmailSettingsSection({ agents, canManage, myAgentId }: { agents: Agent[
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <SenderAddressCard agents={visible} domain={senderDomain} canManage={canManage} />
       <div style={CARD}>
         <div style={CARD_HEADER}>
           <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Firma de correo</span>
@@ -1473,6 +1567,8 @@ interface Props {
   multiAgent: boolean
   canLinkSelf: boolean
   myAgentId: string | null
+  /** Dominio propio sobre el que firman los agentes; null = dominio compartido. */
+  senderDomain: string | null
   ownerAgentId: string | null
   canDeleteAgents: boolean
   userEmail: string
@@ -1490,7 +1586,7 @@ interface Props {
 
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, businessProfile, scoringRules, recommendedRules,
-  canEditScoring, fitEvidence, canManageAgents, multiAgent, canLinkSelf, myAgentId, ownerAgentId, canDeleteAgents, userEmail, userRole,
+  canEditScoring, fitEvidence, canManageAgents, multiAgent, canLinkSelf, myAgentId, senderDomain, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
   leadTags, leadTagCounts,
 }: Props) {
@@ -1524,7 +1620,7 @@ export function SettingsClient({
             canDeleteAgents={canDeleteAgents}
           />
         ),
-        email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} />,
+        email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} senderDomain={senderDomain} />,
         etiquetas: <TagsSection tags={leadTags} counts={leadTagCounts} />,
         negocio: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

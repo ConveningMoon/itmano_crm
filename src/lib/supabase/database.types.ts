@@ -272,6 +272,7 @@ export type Database = {
           languages: string[]
           name: string
           phone: string | null
+          sender_local_part: string | null
           specialty: string | null
           tenant_id: string
           user_id: string | null
@@ -291,6 +292,7 @@ export type Database = {
           languages: string[]
           name: string
           phone?: string | null
+          sender_local_part?: string | null
           specialty?: string | null
           tenant_id: string
           user_id?: string | null
@@ -310,6 +312,7 @@ export type Database = {
           languages?: string[]
           name?: string
           phone?: string | null
+          sender_local_part?: string | null
           specialty?: string | null
           tenant_id?: string
           user_id?: string | null

@@ -38,6 +38,7 @@ export type PendingRun = {
   agent_name:         string
   agent_email:        string
   agent_signature:    string | null
+  agent_sender_local_part: string | null
   // Channel (optional)
   channel_name:       string | null
   // Sequence
@@ -154,7 +155,9 @@ export async function sendSequenceEmail(
   }
 
   // A nombre del agente del lead, con su dirección sobre el dominio del equipo.
-  const from = senderFromForAgent(identity, { name: run.agent_name, email: run.agent_email })
+  const from = senderFromForAgent(identity, {
+    name: run.agent_name, email: run.agent_email, senderLocalPart: run.agent_sender_local_part,
+  })
 
   let resendEmailId: string
   try {

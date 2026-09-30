@@ -276,7 +276,7 @@ export async function dispatchOpenHouseEmail(
         const unsubscribeUrl = generateUnsubscribeUrl(lead.id)
         // Firma, remitente (nombre y dirección) y respuestas: el agente elegido
         // para el open house o, si no hay, el agente que atiende a este lead.
-        const agent = ctx.senderAgent ?? { name: lead.agentName, email: lead.agentEmail, signature: lead.agentSignature }
+        const agent = ctx.senderAgent ?? { name: lead.agentName, email: lead.agentEmail, signature: lead.agentSignature, senderLocalPart: lead.agentSenderLocalPart }
         const from = senderFromForAgent(identity, agent)
         const headers = {
           'List-Unsubscribe':      `<${unsubscribeUrl}>`,

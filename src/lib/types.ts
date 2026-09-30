@@ -37,6 +37,8 @@ export interface Agent {
   accentColor: string
   active: boolean
   emailSignature?: string | null
+  /** Parte local fijada para su dirección de envío; null = derivada de su email. */
+  senderLocalPart?: string | null
   /** Descripción del agente para personalizar el análisis de fit con IA (064). */
   description?: string | null
   /** Portada del agente (095). La usan los diseños del Estudio; siempre opcional. */

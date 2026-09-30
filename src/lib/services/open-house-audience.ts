@@ -60,6 +60,7 @@ export interface AudienceLeadWithContact extends AudienceLead {
   agentName:      string
   agentEmail:     string
   agentSignature: string | null
+  agentSenderLocalPart: string | null
 }
 
 /** Datos de envío de una lista de leads del tenant (email, idioma, agente). */
@@ -72,7 +73,7 @@ export async function loadAudienceLeads(
   for (const ids of chunk([...new Set(leadIds)], IDS_PER_QUERY)) {
     const { data, error } = await db
       .from('leads')
-      .select('id, first_name, email, language, email_blocked, agents (id, name, email, email_signature, language, languages)')
+      .select('id, first_name, email, language, email_blocked, agents (id, name, email, email_signature, sender_local_part, language, languages)')
       .eq('tenant_id', tenantId)
       .in('id', ids)
     if (error) throw new Error(error.message)
@@ -91,6 +92,7 @@ export async function loadAudienceLeads(
         agentName:      (agent?.name as string | null) ?? '',
         agentEmail:     (agent?.email as string | null) ?? '',
         agentSignature: (agent?.email_signature as string | null) ?? null,
+        agentSenderLocalPart: (agent?.sender_local_part as string | null) ?? null,
       })
     }
   }
