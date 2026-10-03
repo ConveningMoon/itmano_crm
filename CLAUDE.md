@@ -21,6 +21,8 @@ Configuración específica de Claude Code:
   pantalla, sección, filtro o acción que consulte la base de datos se entrega
   con su skeleton, spinner o estado pendiente en el mismo cambio. Revisa también
   que no introduzca consultas en serie evitables.
+- Cumple siempre "Cache Components" de `AGENTS.md`: di explícitamente cuándo
+  una tarea puede aprovecharlo y aplícalo o explica por qué no.
 - Las skills oficiales de Supabase viven en `.claude/skills/` y su procedencia
   está fijada en `skills-lock.json`.
 - Graphify debe estar instalado globalmente en la misma versión que declara

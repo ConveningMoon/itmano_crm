@@ -147,6 +147,24 @@ modifica la consulta:
   layout y página usan los getters con `cache()` en vez de repetir la query.
   Para medir cascadas, `SUPABASE_TRACE=1` registra cada round-trip.
 
+## Cache Components
+
+Cada ruta sale del CDN con un shell prerenderizado y lo que lee la sesión o la
+base llega por streaming detrás de `<Suspense>`. Dónde se lee la sesión, cuándo
+se permite `use cache` y con qué clave, y cómo se invalidan las páginas
+alojadas: "Cache Components" en `docs/agents/architecture.md`.
+
+- Cada vez que una tarea toque una página, layout o lectura de datos donde se
+  pueda aplicar Cache Components (sacar algo al shell estático, quitar un
+  `instant = false`, cachear con `use cache` / `use cache: private`, mover una
+  lectura de sesión detrás de `<Suspense>`, convertir ISR a `cacheLife`), dilo
+  explícitamente. Si lo recomiendas y cabe en la tarea sin riesgo para el
+  aislamiento por tenant, aplícalo en el mismo cambio y menciónalo en el
+  resumen; si no lo aplicas, explica por qué.
+- Nunca un `await` de sesión o de base en el cuerpo de un layout, ni datos de
+  un tenant en `use cache` sin su `tenant_id` en la clave, ni nada derivado de
+  la sesión fuera de `use cache: private`.
+
 ## Verificación
 
 Ejecuta sólo lo proporcional al cambio, pero no declares terminado algo sin
@@ -154,6 +172,7 @@ verificarlo:
 
 ```text
 npm run lint
+npx next typegen   # en un clon limpio, antes de tsc (perfiles de cacheLife)
 npx tsc --noEmit
 npm run test:unit
 npm run build

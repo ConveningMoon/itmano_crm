@@ -4,10 +4,9 @@ import { Topbar } from '@/components/layout/topbar'
 import { NavList } from '@/components/layout/nav-list'
 import { MobileNavTriggerFallback } from '@/components/layout/mobile-nav'
 import { NewLeadButton } from '@/components/layout/new-lead-button'
-import { NewVersionNotice } from '@/components/layout/new-version-notice'
 import { SpeedInsights } from '@/components/layout/speed-insights'
 import {
-  AiLimitSlot, BrandFallback, BrandSlot, MobileNavSlot, NewLeadSlot, SidebarNavSlot,
+  AiLimitSlot, BrandFallback, BrandSlot, MobileNavSlot, NewLeadSlot, NewVersionNoticeSlot, SidebarNavSlot,
   SidebarUserFallback, SidebarUserSlot, SubscriptionBannerSlot, TenantSwitcherSlot,
   TopbarPillFallback, UnreadBadgeSlot,
 } from '@/components/layout/shell-slots'
@@ -111,15 +110,14 @@ export default function DashboardLayout({
         </main>
       </div>
       {/* Deploy que renderiza esta pestaña. Sólo existe en Vercel: en local
-          no hay deploys que comparar y el aviso no se monta. La variable se
-          lee en el build, que es cuando se prerenderiza el shell: cada deploy
-          lleva la suya en su HTML estático. */}
-      {process.env.VERCEL_DEPLOYMENT_ID && (
-        <NewVersionNotice version={process.env.VERCEL_DEPLOYMENT_ID} />
-      )}
+          no hay deploys que comparar y el aviso no se monta. */}
+      <Suspense fallback={null}>
+        <NewVersionNoticeSlot />
+      </Suspense>
       {/* Métricas reales de quien usa el CRM (Speed Insights). Sólo en
           producción: los previews y local no tienen el script y sus visitas
-          gastarían la cuota gratuita de eventos. */}
+          gastarían la cuota gratuita de eventos. VERCEL_ENV se lee en el
+          build, al prerenderizar el shell, y el script sale en su HTML. */}
       {process.env.VERCEL_ENV === 'production' && <SpeedInsights />}
     </div>
   )

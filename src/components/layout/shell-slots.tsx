@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { connection } from 'next/server'
 import { getCurrentTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
 import { getShellData } from '@/lib/data/shell'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -12,6 +13,7 @@ import { NewLeadButton } from './new-lead-button'
 import { SidebarUser } from './sidebar-user'
 import { navItemsForRole } from './nav-items'
 import { SubscriptionBanner } from '@/components/dashboard/subscription-banner'
+import { NewVersionNotice } from './new-version-notice'
 
 // Las piezas del shell que dependen de la sesión o de la base, cada una como
 // Server Component async para montarla dentro de su propio <Suspense>.
@@ -165,6 +167,18 @@ export async function TenantSwitcherSlot() {
   const { switcherTenants } = await getShellData(ctx)
   if (!switcherTenants) return null
   return <TenantSwitcher tenants={switcherTenants} activeTenantId={ctx.acting_as_tenant ? ctx.tenant_id : null} />
+}
+
+/**
+ * Aviso de versión nueva (sólo en Vercel). El deploy se lee en el request y no
+ * en el shell prerenderizado: el aviso compara con /api/version, que lo lee en
+ * runtime, y lo que vale en el build no tiene por qué existir. No toca la base
+ * ni pinta nada hasta que hay versión nueva, así que el fallback es vacío.
+ */
+export async function NewVersionNoticeSlot() {
+  await connection()
+  const version = process.env.VERCEL_DEPLOYMENT_ID
+  return version ? <NewVersionNotice version={version} /> : null
 }
 
 /** Banner de estado de suscripción sobre el contenido. */

@@ -69,21 +69,85 @@ rendimiento (`docs/performance/`):
 - Una agregación que encadenaba varias lecturas va a una RPC por tenant
   (`sequence_email_metrics`, `tenant_channel_metrics`), `stable`, con
   `search_path` vacío y ejecutable sólo por `service_role`.
-- El layout de `(dashboard)` dispara `getShellData(ctx)` sin esperarlo y sólo
-  espera al contexto. Sin ese disparo React no llega a los slots hasta después
-  del árbol de la página y el shell sale una ola por detrás.
-- El layout de `(dashboard)` sólo espera al contexto. Todo lo que lee de la base
-  (logo, plan, no leídas, límite de IA, switcher, banner) llega por streaming
-  desde `src/components/layout/shell-slots.tsx` dentro de `<Suspense>`, con
-  fallbacks del mismo tamaño. No añadas lecturas al layout fuera de ese patrón.
+- El layout de `(dashboard)` no espera a nada (ver "Cache Components"). Todo lo
+  que depende de la sesión o de la base (ítems del nav según el rol, usuario,
+  drawer móvil, logo, plan, no leídas, límite de IA, switcher, banner) llega
+  por streaming desde `src/components/layout/shell-slots.tsx`, cada slot en su
+  `<Suspense>` con un fallback del mismo tamaño. Cada slot lee el contexto y
+  `getShellData(ctx)` por su cuenta; los dos están en `cache()`, así que siguen
+  siendo una lectura de contexto y una ola para el shell. No añadas lecturas
+  al layout fuera de ese patrón.
 - Mide con `SUPABASE_TRACE=1` antes y después de tocar una página: compara
   consultas y olas, no milisegundos.
+
+## Cache Components
+
+El proyecto usa `cacheComponents: true` (Partial Prerendering). Cada ruta tiene
+un shell que se prerenderiza en el build y sale del CDN antes de que la función
+lea la cookie; lo que depende del request llega por streaming detrás de
+`<Suspense>`. Guía de Next: `node_modules/next/dist/docs/01-app/02-guides/`
+(`migrating-to-cache-components.md`, `authentication-with-cache-components.md`,
+`instant-navigation.md`). Historia y mediciones: fase 5 de
+`docs/performance/2026-09-auditoria-rendimiento-opus.md`.
+
+- **Dónde se lee la sesión.** Nunca en el cuerpo de un layout: un `await` ahí
+  saca del shell todo lo que cuelga de él. La sesión
+  (`getCurrentTenantContext`, cookies, headers) se lee dentro de un componente
+  envuelto en `<Suspense>`: los slots del shell en el layout y la página dentro
+  del `<Suspense>` que le pone su `loading.tsx`. Por eso toda página del
+  dashboard necesita su `loading.tsx` (ya lo exigía "Estados de carga").
+- **Hooks de ruta en Client Components** (`usePathname`, `useParams`,
+  `useSelectedLayoutSegment(s)`, `useSearchParams`): en el prerender de una
+  ruta con parámetros suspenden. Si el componente vive en el layout (nav,
+  topbar, template), lleva la lectura a una hoja pequeña dentro de su propio
+  `<Suspense>` (`NavActiveMarker` en `nav-item.tsx`, `TopbarTitle` en
+  `topbar.tsx`). Nunca pases `{children}` en un fallback.
+- **IO síncrona en render** (`new Date()`, `Date.now()`, `Math.random()`,
+  `crypto.randomUUID()`) rompe el prerender: va dentro de `use cache`, detrás
+  de `connection()` o en un efecto de cliente. El fallo sale en `next build`.
+- **`use cache` (caché compartida entre usuarios).** Sólo para datos públicos o
+  globales, y con todo lo que distingue el resultado en los argumentos: los
+  datos de un tenant llevan su `tenant_id` (o su slug público) como argumento,
+  y nada derivado de la sesión entra nunca en un `use cache` plano. Hoy sólo
+  lo usan las páginas alojadas (`/web`, `/nl`, `/hp`), el sitemap de `/nl` y
+  el año del footer de marketing. Siempre con `cacheLife` explícito.
+- **`use cache: private`** es la única forma de cachear algo que lee la
+  sesión, y vive sólo en el navegador. Ojo con el super_admin, que actúa como
+  otro tenant por cookie: el tenant efectivo sale del contexto, nunca de un
+  valor cacheado. Ante la duda, no caches: el objetivo es el shell estático.
+- **Páginas alojadas.** Una carga cacheada por página (`use cache` +
+  `cacheLife('hosted')`, 5 minutos, perfil en `next.config.ts`) que comparten
+  `generateMetadata` y la página, con un tag de `hostedTag`
+  (`src/lib/hosted-cache.ts`): por tenant id en `/web` y `/nl`, por slug de
+  tenant en `/hp`. Quien cambia lo que muestran lo expira con `updateTag` en
+  server actions y con `revalidateTag(tag, { expire: 0 })` fuera de ellas
+  (crons, webhooks). No uses `revalidatePath` para estas rutas.
+  `generateStaticParams` nunca devuelve `[]`: usa `alMenosUnParametro`.
+- **`instant = false`** sólo como bloqueo documentado, con el motivo escrito
+  encima. Hoy lo llevan las páginas alojadas (esperan sus params para dar un
+  404 real) y la vista previa de `/hp` y el RSVP (por visita). Ninguna ruta
+  del dashboard lo necesita.
+- **Route handlers `GET`** se prerenderizan si no leen nada del request. Los
+  que deben ser por request llaman a `connection()` antes de cualquier
+  `try/catch` (el aborto del prerender se lanza como excepción; ver
+  `defineRoute` en `src/lib/agent-api/handler.ts` y `/api/version`).
+- **Redirects con el shell ya enviado.** Un `redirect()` dentro de un
+  `<Suspense>` (p. ej. `requireTenantContext` del super_admin en modo hub) se
+  resuelve en el cliente y la respuesta es 200, no 307. El guard sin sesión
+  sigue en `src/proxy.ts`, que responde 307 antes de servir nada.
+- **Prefetch.** El prefetch de un `<Link>` trae sólo el shell estático de la
+  ruta, sin tocar la base, así que el nav lo usa por defecto.
+  `partialPrefetching` está evaluado y apagado (fase 5).
+- **Tipos.** Los perfiles de `cacheLife` se tipan con `next typegen`; CI lo
+  corre antes de `tsc`.
 
 ## Versiones nuevas en pestañas abiertas
 
 Con Skew Protection, una pestaña abierta sigue hablando con su deploy hasta una
 carga completa. `NewVersionNotice` (montado en el layout de `(dashboard)` sólo
-en Vercel) compara el deploy de la pestaña con `GET /api/version`, avisa y, a
+en Vercel, mediante `NewVersionNoticeSlot`, que lee el deploy en el request y
+no en el shell prerenderizado) compara el deploy de la pestaña con
+`GET /api/version`, avisa y, a
 partir de ahí, convierte la siguiente navegación interna en carga completa. Una
 navegación que no pase por `<a>` (como `useCardNavigation`) debe consultar
 `hayVersionNueva()` de `src/lib/app-version.ts` y hacer lo mismo.
