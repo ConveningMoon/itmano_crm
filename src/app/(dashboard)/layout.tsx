@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
+import { NewVersionNotice } from '@/components/layout/new-version-notice'
 import {
   AiLimitSlot, BrandFallback, BrandSlot, PlanLabelFallback, PlanLabelSlot,
   SubscriptionBannerSlot, TenantSwitcherSlot, TopbarPillFallback, UnreadBadgeSlot,
@@ -115,6 +116,11 @@ export default async function DashboardLayout({
           {children}
         </main>
       </div>
+      {/* Deploy que renderiza esta pestaña. Sólo existe en Vercel: en local
+          no hay deploys que comparar y el aviso no se monta. */}
+      {process.env.VERCEL_DEPLOYMENT_ID && (
+        <NewVersionNotice version={process.env.VERCEL_DEPLOYMENT_ID} />
+      )}
     </div>
   )
 }
