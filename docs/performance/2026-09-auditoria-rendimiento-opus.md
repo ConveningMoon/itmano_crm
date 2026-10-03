@@ -965,3 +965,24 @@ un error: `itmano-crm-sandbox.vercel.app` es la URL base de la API de agentes
 en sandbox y quedaría congelada. Sólo `itmano-crm` debe ignorar las ramas que
 no son `main`, lo que además saca de producción los previews de ramas, que
 usaban la base y las llaves reales.
+
+## Build roto por Pro: `check-sharp-tracing`
+
+El primer push tras activar Pro falló en los dos proyectos con todas las rutas
+de sharp marcadas como "no declaran sus binarios". Causa: con Skew Protection,
+Vercel pasa `NEXT_DEPLOYMENT_ID` al build; Next 16.3 activa entonces
+`experimental.runtimeServerDeploymentId` (`next/dist/server/config.js`) y
+escribe en `.next/required-server-files.json` sólo la config de runtime, sin
+`outputFileTracingIncludes`. El script leía ese `{}`. Los binarios SÍ iban en
+el bundle: la config completa se usa en memoria para el trazado.
+
+Sin arreglo, el siguiente merge a `main` habría fallado igual. El script ahora
+verifica el resultado: que el `.nft.json` de cada función que carga sharp
+contenga un archivo `libvips` de `@img`. Probado en positivo (10/10) y en
+negativo (quitando `/admin` de la lista, lo detecta).
+
+## Ajustes aplicados en Vercel (con aprobación de Dylan)
+
+- `itmano-crm`: Ignored Build Step, sólo `main`. Verificado con el push de la
+  rama: cancelado en `itmano-crm`, construido en `itmano-crm-sandbox`.
+- `itmano-crm`: Function CPU en Performance (2 vCPU / 4 GB).

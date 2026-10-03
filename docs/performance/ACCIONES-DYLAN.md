@@ -74,7 +74,12 @@ Dos reglas al regenerar llaves de proveedores:
 
 ## 2. Ajustes de Vercel que aprovechan Pro
 
-### 2a. Que `itmano-crm` construya sólo `main`  ·  lo puedo aplicar yo
+### 2a. Que `itmano-crm` construya sólo `main`  ·  ✅ aplicado el 2026-10-03
+
+Ignored Build Step del proyecto:
+`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi`.
+Comprobado: el push de `chore/vercel-pro` quedó cancelado en `itmano-crm` y se
+construyó sólo en `itmano-crm-sandbox`.
 
 Hoy cada push a cualquier rama genera un preview en `itmano-crm`, y esos
 previews usan las variables de **producción**: base de datos real, llaves
@@ -87,7 +92,10 @@ contra el sandbox. También corta a la mitad el almacenamiento de deployments.
 sandbox (`docs/agent-api/README.md`). Si ignorara `main`, esa URL quedaría
 congelada.
 
-### 2b. Function CPU en Performance  ·  lo puedo aplicar yo
+### 2b. Function CPU en Performance  ·  ✅ aplicado el 2026-10-03
+
+Vale desde el próximo deploy de producción. Para comprobar el efecto, compara
+en Observability la duración por ruta antes y después del merge.
 
 Pro permite subir las funciones de 1 vCPU / 2 GB a **2 vCPU / 4 GB**. Vercel
 la recomienda para aplicaciones con SSR y sensibles a la latencia, que es
@@ -104,7 +112,10 @@ CRM abierto mientras salía un deploy. Su ventana por defecto es 1 día;
 conviene **7 días**, porque el CRM se deja abierto en una pestaña. Lo puedo
 aplicar yo junto con 2a y 2b.
 
-### 2d. Proteger los previews del sandbox  ·  lo puedo aplicar yo
+### 2d. Proteger los previews del sandbox  ·  descartado
+
+Dylan lo descartó: el sandbox no tiene datos personales. Queda la
+explicación por si se reconsidera.
 
 Hoy cualquier preview de `itmano-crm-sandbox` es público. Con protección sólo
 en Preview, para verlos hace falta estar logueado en Vercel. El dominio de
