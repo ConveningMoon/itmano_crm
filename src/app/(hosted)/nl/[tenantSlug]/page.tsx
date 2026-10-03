@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Newspaper, ArrowUpRight } from 'lucide-react'
+import { cacheLife } from 'next/cache'
 import {
   getPublicTenant, getPublicEditions, getPublicNewsletterChannel, getPublicTenantSlugs,
   type PublicEdition,
@@ -11,6 +12,13 @@ import { formatEditionDate } from './nl-format'
 import { EditionByline } from './edition-byline'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from './nl-chrome'
 import { SubscribeForm } from './subscribe-form'
+import { alMenosUnParametro } from '@/lib/hosted-cache'
+
+// instant = false a propósito: la página espera sus params fuera de un
+// <Suspense> para poder responder 404 de verdad. Los slugs que lista
+// generateStaticParams salen prerenderizados igual; uno nuevo se renderiza en
+// su primera visita y queda cacheado desde ahí, como el ISR al que sustituye.
+export const instant = false
 
 // Portada pública de la newsletter del tenant — news.itmano.com/<slug>.
 //
@@ -18,25 +26,35 @@ import { SubscribeForm } from './subscribe-form'
 // completo: el formulario de suscripción (antes vivía en la página de la
 // serie) más el feed de ediciones publicadas, más reciente primero.
 
-// ISR: la página no lee cookies ni searchParams, así que se cachea y se sirve
-// desde el edge en vez de renderizarse por visita — mismo razonamiento que el
-// catálogo de propiedades (web/[tenantSlug]/page.tsx). Las server actions de
-// newsletters revalidan esta ruta al publicar/despublicar una edición.
-export const revalidate = 300
+// Cacheada: la página no lee cookies ni searchParams, así que se prerenderiza
+// y se sirve desde el edge en vez de renderizarse por visita — mismo
+// razonamiento que el catálogo de propiedades (web/[tenantSlug]/page.tsx). Las
+// server actions de newsletters la invalidan al publicar/despublicar una
+// edición; el perfil `hosted` (5 minutos) sólo es el techo.
+async function loadHome(tenantSlug: string) {
+  'use cache'
+  cacheLife('hosted')
+  const tenant = await getPublicTenant(tenantSlug)
+  if (!tenant) return null
+  const [editions, channel] = await Promise.all([
+    getPublicEditions(tenant.id),
+    getPublicNewsletterChannel(tenant.id),
+  ])
+  return { tenant, editions, channel }
+}
 
-// Obligatorio para que la ruta entre al manifiesto de prerender: sin esto,
-// `revalidate` no tiene efecto sobre un segmento dinámico (ver shared.ts).
 export async function generateStaticParams() {
   const tenantSlugs = await getPublicTenantSlugs()
-  return tenantSlugs.map(tenantSlug => ({ tenantSlug }))
+  return alMenosUnParametro(tenantSlugs.map(tenantSlug => ({ tenantSlug })), ['tenantSlug'])
 }
 
 type Params = Promise<{ tenantSlug: string }>
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { tenantSlug } = await params
-  const tenant = await getPublicTenant(tenantSlug)
-  if (!tenant) return { title: 'Página no disponible' }
+  const home = await loadHome(tenantSlug)
+  if (!home) return { title: 'Página no disponible' }
+  const { tenant } = home
   return {
     title: `Newsletter — ${tenant.name}`,
     description: `Ediciones de la newsletter de ${tenant.name}.`,
@@ -45,13 +63,10 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function PublicNewsletterHomePage({ params }: { params: Params }) {
   const { tenantSlug } = await params
-  const tenant = await getPublicTenant(tenantSlug)
-  if (!tenant) notFound()
+  const home = await loadHome(tenantSlug)
+  if (!home) notFound()
 
-  const [editions, channel] = await Promise.all([
-    getPublicEditions(tenant.id),
-    getPublicNewsletterChannel(tenant.id),
-  ])
+  const { tenant, editions, channel } = home
   const P = pal(tenant.primary_color || '#C9A96E')
 
   return (

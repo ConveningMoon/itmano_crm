@@ -11,6 +11,11 @@ import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 // Editor de una edición. Server Component: hace todo el fetch (edición,
 // biblioteca del Estudio, slug del tenant) y se lo pasa como props a
 // EditionEditor (client). Un `agent` sólo edita lo que creó — mismo patrón que

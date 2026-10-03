@@ -7,6 +7,23 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "itmano-crm-dev-trace",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "3010"],
+      "port": 3010,
+      "env": {
+        "SUPABASE_TRACE": "1",
+        "TRACE_OUT": "C:/Users/djver/AppData/Local/Temp/claude/C--dev-itmano-crm/6c23230e-a5af-4849-a786-b4e908fb5bf2/scratchpad/trace.jsonl",
+        "NODE_OPTIONS": "--require C:/Users/djver/AppData/Local/Temp/claude/C--dev-itmano-crm/6c23230e-a5af-4849-a786-b4e908fb5bf2/scratchpad/tee-trace.cjs"
+      }
+    },
+    {
+      "name": "itmano-crm-start",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "start", "-p", "3100"],
+      "port": 3100
     }
   ]
 }

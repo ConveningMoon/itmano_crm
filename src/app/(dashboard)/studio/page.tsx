@@ -5,6 +5,11 @@ import { listTemplates } from '@/lib/data/studio-templates'
 import { StudioTeaser } from './teaser'
 import { StudioTabs } from './studio-tabs'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 // La generación encadena Claude (dirección de escena) + Nano Banana (la escena)
 // + sharp (la composición) en una sola invocación. Los fetch a Gemini tienen su
 // propio timeout para abortar limpio antes de este límite.

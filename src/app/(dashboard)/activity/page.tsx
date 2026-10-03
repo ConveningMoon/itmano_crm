@@ -5,8 +5,10 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getAllActivity } from '@/lib/data/activity'
 import { ActivityRow } from './activity-ui'
 
-// Reads cookies via the tenant context → must render dynamically.
-export const dynamic = 'force-dynamic'
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
 
 const PAGE = 30
 

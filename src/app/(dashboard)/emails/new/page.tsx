@@ -4,6 +4,11 @@ import { NewSequenceForm } from './new-sequence-form'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 export default async function NewSequencePage() {
   const { tenant_id, role } = await requireTenantContext()
   // Picker de tenant: solo super_admin SIN selección (hoy inalcanzable aquí por

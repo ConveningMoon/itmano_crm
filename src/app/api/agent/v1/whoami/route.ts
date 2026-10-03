@@ -1,6 +1,5 @@
 import { defineRoute } from '@/lib/agent-api/handler'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // Verifica el cableado sin leer ningún dato de negocio: todo sale del contexto

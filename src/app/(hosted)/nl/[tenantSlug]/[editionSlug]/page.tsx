@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
+import { cacheLife } from 'next/cache'
 import {
   getPublicTenant, getPublicEdition, getPublicNewsletterPaths, getPublicNewsletterChannel,
   getTenantCanonicalTemplate, getEditionSiblings,
@@ -15,17 +16,20 @@ import { editionCanonicalUrl, editionAlternates } from '@/lib/newsletters/canoni
 import { SubscribeForm } from '../subscribe-form'
 import { EditionViewBeacon } from './edition-view-beacon'
 import { EditionJsonLd } from './edition-jsonld'
+import { alMenosUnParametro } from '@/lib/hosted-cache'
+
+// instant = false a propósito: la página espera sus params fuera de un
+// <Suspense> para poder responder 404 de verdad. Los slugs que lista
+// generateStaticParams salen prerenderizados igual; uno nuevo se renderiza en
+// su primera visita y queda cacheado desde ahí, como el ISR al que sustituye.
+export const instant = false
 
 // Lectura pública de una edición — news.itmano.com/<tenant-slug>/<edición>.
 // La edición cuelga directamente del tenant: ya no hay serie de por medio.
 
-// ISR — mismo razonamiento que la portada.
-export const revalidate = 300
-
-// Obligatorio: sin esto `revalidate` no aplica a un segmento dinámico (ver
-// shared.ts). getPublicNewsletterPaths ya trae exactamente esta forma.
+// getPublicNewsletterPaths ya trae exactamente esta forma.
 export async function generateStaticParams() {
-  return getPublicNewsletterPaths()
+  return alMenosUnParametro(await getPublicNewsletterPaths(), ['tenantSlug', 'editionSlug'])
 }
 
 type Params = Promise<{ tenantSlug: string; editionSlug: string }>
@@ -53,17 +57,43 @@ async function seoDeLaEdicion(args: {
   return { canonical, languages }
 }
 
+/**
+ * Todo lo que la edición lee de la base, en UNA entrada de caché: la comparten
+ * generateMetadata y la página, así que el canonical y el hreflang también se
+ * calculan una sola vez. Cacheada — mismo razonamiento que la portada.
+ */
+async function loadEdition(tenantSlug: string, editionSlug: string) {
+  'use cache'
+  cacheLife('hosted')
+  const tenant = await getPublicTenant(tenantSlug)
+  if (!tenant) return { tenant: null, edition: null } as const
+  const edition = await getPublicEdition(tenant.id, editionSlug)
+  if (!edition) return { tenant, edition: null } as const
+
+  // El formulario de suscripción vive también aquí, no sólo en la portada
+  // (hallazgo de la revisión): sin esto, quien llega directo a una edición
+  // por un enlace compartido nunca ve dónde suscribirse, y edition_id nunca
+  // se escribe — el conteo de suscriptores por edición se quedaba en cero
+  // para siempre. Mismo `SubscribeForm` que la portada, con `editionId` para
+  // que la atribución (getNewsletterStats/aggregateStats) sepa qué edición
+  // captó al lector.
+  const [channel, seo] = await Promise.all([
+    getPublicNewsletterChannel(tenant.id),
+    seoDeLaEdicion({
+      tenantId: tenant.id, tenantSlug, editionSlug,
+      translationGroupId: edition.translation_group_id,
+    }),
+  ])
+  return { tenant, edition, channel, seo } as const
+}
+
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { tenantSlug, editionSlug } = await params
-  const tenant = await getPublicTenant(tenantSlug)
-  if (!tenant) return { title: 'Página no disponible' }
-  const edition = await getPublicEdition(tenant.id, editionSlug)
-  if (!edition) return { title: 'Edición no disponible' }
-
-  const { canonical, languages } = await seoDeLaEdicion({
-    tenantId: tenant.id, tenantSlug, editionSlug,
-    translationGroupId: edition.translation_group_id,
-  })
+  const data = await loadEdition(tenantSlug, editionSlug)
+  if (!data.tenant) return { title: 'Página no disponible' }
+  if (!data.edition) return { title: 'Edición no disponible' }
+  const { tenant, edition } = data
+  const { canonical, languages } = data.seo
 
   return {
     title: `${edition.title} — ${tenant.name}`,
@@ -92,27 +122,14 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function PublicNewsletterEditionPage({ params }: { params: Params }) {
   const { tenantSlug, editionSlug } = await params
-  const tenant = await getPublicTenant(tenantSlug)
-  if (!tenant) notFound()
-  const edition = await getPublicEdition(tenant.id, editionSlug)
+  const data = await loadEdition(tenantSlug, editionSlug)
   // Sin contenido parseable (jsonb roto o vacío) la edición no es renderizable:
   // mejor 404 que pintarla a medias. parseNewsletterContent ya corrió dentro
   // de getPublicEdition (shared.ts) — aquí sólo se comprueba el resultado.
-  if (!edition || !edition.content) notFound()
-
-  // El formulario de suscripción vive también aquí, no sólo en la portada
-  // (hallazgo de la revisión): sin esto, quien llega directo a una edición
-  // por un enlace compartido nunca ve dónde suscribirse, y edition_id nunca
-  // se escribe — el conteo de suscriptores por edición se quedaba en cero
-  // para siempre. Mismo `SubscribeForm` que la portada, con `editionId` para
-  // que la atribución (getNewsletterStats/aggregateStats) sepa qué edición
-  // captó al lector.
-  const channel = await getPublicNewsletterChannel(tenant.id)
-
-  const { canonical } = await seoDeLaEdicion({
-    tenantId: tenant.id, tenantSlug, editionSlug,
-    translationGroupId: edition.translation_group_id,
-  })
+  if (!data.tenant || !data.edition) notFound()
+  const { tenant, edition, channel } = data
+  if (!edition.content) notFound()
+  const { canonical } = data.seo
 
   const P = pal(tenant.primary_color || '#C9A96E')
   // Único caller server-side de renderNewsletterHtml para esta página: el HTML

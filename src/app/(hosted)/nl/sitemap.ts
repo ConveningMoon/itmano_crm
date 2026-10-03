@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { cacheLife } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
@@ -16,12 +17,14 @@ import { isExternalCanonical } from '@/lib/newsletters/canonical'
 // sitio es contradecirse. En ese caso la entrada del sitemap es del sitio del
 // cliente, y el prompt de integración se lo dice.
 
-export const revalidate = 3600
-
 const EDITION_COLUMNS = columns('newsletter_editions', ['slug', 'tenant_id', 'updated_at'])
 const TENANT_COLUMNS  = columns('tenants', ['id', 'slug', 'newsletter_canonical_template'])
 
+// Se regenera cada hora (perfil `hours`), igual que el `revalidate = 3600`
+// que tenía antes de Cache Components.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  'use cache'
+  cacheLife('hours')
   const db = createAdminClient()
 
   const { data: editionRows, error } = await db

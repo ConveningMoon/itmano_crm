@@ -1,6 +1,11 @@
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SupportForm } from './support-form'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 // Soporte técnico dentro del CRM: cualquier usuario del tenant puede escribir a
 // ITMANO. La solicitud se registra en el CRM (platform_requests → /solicitudes
 // del super_admin, con aviso por Telegram) con la identidad del solicitante

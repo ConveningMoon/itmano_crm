@@ -2,7 +2,6 @@ import { defineRoute } from '@/lib/agent-api/handler'
 import { parseLeadFilters, listLeads } from '@/lib/agent-api/queries/leads'
 import { serializeContact } from '@/lib/agent-api/serializers/lead'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // Proyección de persona sobre las MISMAS filas que /leads: mismos ids. Se

@@ -1,7 +1,5 @@
 import documento from '@/lib/agent-api/openapi.generated.json'
 
-export const runtime = 'nodejs'
-
 /**
  * El contrato, servido tal cual. Público a propósito: no hay nada que proteger
  * —los ejemplos salen del tenant demo sintético— y un contrato tras

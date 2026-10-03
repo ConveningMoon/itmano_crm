@@ -10,6 +10,11 @@ import { getTenantRow } from '@/lib/data/tenants'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 // Pantalla única de la newsletter del tenant — ya no hay series que elegir
 // antes: el canal implícito se prepara aquí, ANTES de leer nada, para que
 // exista desde la primera visita y el formulario público responda sin que el
@@ -92,7 +97,7 @@ export default async function NewslettersPage() {
   // la tiene todavía: en ese caso nace vacía y el aviso de abajo es correcto.
   const sequenceId = 'error' in canal
     ? null
-    : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
+    : (canal.sequenceId ?? (await ensureNewsletterSequence(db, tenant_id, canal.id)))
 
   // reason: el cliente de Supabase no está tipado en este repo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

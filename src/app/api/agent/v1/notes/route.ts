@@ -1,7 +1,6 @@
 import { defineRoute } from '@/lib/agent-api/handler'
 import { createNote } from '@/lib/agent-api/queries/writes'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // La nota se guarda como evento en lead_events con 0 puntos: queda en la

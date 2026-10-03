@@ -14,6 +14,13 @@ vi.mock('@/lib/agent-api/auth', async (importOriginal) => {
 vi.mock('@/lib/agent-api/rate-limit', () => ({
   checkRateLimit: (...args: unknown[]) => mockRateLimit(...args),
 }))
+// connection() exige el scope de un request de Next; aquí no hay ninguno y lo
+// único que importa es que el handler la llame antes del try (ver handler.ts).
+const mockConnection = vi.fn(async () => {})
+vi.mock('next/server', async (importOriginal) => {
+  const real = await importOriginal<typeof import('next/server')>()
+  return { ...real, connection: () => mockConnection() }
+})
 vi.mock('@/lib/agent-api/idempotency', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/agent-api/idempotency')>()
   return { ...real, beginIdempotent: (...args: unknown[]) => mockBegin(...args) }
@@ -45,6 +52,20 @@ describe('defineRoute', () => {
     const res = await route(new Request('http://x/agent/v1/leads'), sinParams)
 
     expect(res.status).toBe(401)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('deja escapar el aborto del prerender en vez de convertirlo en respuesta', async () => {
+    // Con Cache Components el build prerenderiza los GET: connection() lanza
+    // para abortarlo. Si el catch lo atrapara, el build guardaría ese error
+    // como respuesta estática de la ruta.
+    const aborto = new Error('prerender abortado')
+    mockConnection.mockRejectedValueOnce(aborto)
+    const handler = vi.fn()
+    const route = defineRoute({ scope: 'read', kind: 'read', handler })
+
+    await expect(route(new Request('http://x/agent/v1/leads'), sinParams)).rejects.toBe(aborto)
+    expect(mockAuthenticate).not.toHaveBeenCalled()
     expect(handler).not.toHaveBeenCalled()
   })
 

@@ -9,14 +9,18 @@ import { propertyEmailImages } from '@/lib/services/open-house-email'
 import { appBaseUrl, openHouseIcsUrl, propertyPublicUrl } from '@/lib/open-houses/urls'
 import { RsvpView, type RsvpViewModel } from './rsvp-view'
 
+// instant = false a propósito: se renderiza en cada visita (depende del
+// enlace concreto) y no tiene un shell que valga la pena adelantar.
+export const instant = false
+
 // Página del enlace de RSVP de un correo de open house. Es DINÁMICA (depende
 // del token) y no registra nada al abrirse: los escáneres de enlaces visitan
 // cada URL antes que la persona. La respuesta se envía con un botón.
 //
 // El servidor resuelve todo (textos en el idioma del lead, fecha en la zona
-// del lugar, enlaces) y la vista sólo pinta y responde.
+// del lugar, enlaces) y la vista sólo pinta y responde. Con Cache Components no
+// hace falta marcarla: lee sin `use cache`, así que se renderiza por visita.
 
-export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { title: 'Open house', robots: { index: false, follow: false } }
 
 const OH_COLUMNS     = columns('open_houses', ['id', 'tenant_id', 'property_id', 'starts_at', 'ends_at', 'timezone', 'public_notes', 'status', 'rsvp_enabled', 'sender_agent_id'])

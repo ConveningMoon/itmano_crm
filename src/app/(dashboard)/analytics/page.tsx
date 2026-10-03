@@ -18,6 +18,11 @@ import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { Tabs } from '@/components/ui/tabs'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 // Colorea el tiempo, no lo puntua: responder en la primera hora es el estandar
 // que cita todo el sector, pero no entra en ningun score.
 const RESPONSE_TONE_COLOR: Record<string, string> = {

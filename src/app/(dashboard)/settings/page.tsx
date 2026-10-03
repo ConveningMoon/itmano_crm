@@ -18,6 +18,11 @@ import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-i
 import { domainOf } from '@/lib/email/sender-address'
 import { SettingsClient } from './settings-client'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 export default async function SettingsPage() {
   const ctx      = await requireTenantContext()
   const supabase = createAdminClient()

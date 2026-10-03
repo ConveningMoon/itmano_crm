@@ -16,6 +16,11 @@ import { AdminClient } from './admin-client'
 import { TenantCard } from './tenant-card'
 import { HubFeed } from './hub-feed'
 
+// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
+// Remove this opt-out after verifying the segment passes validation without it.
+// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
+export const instant = false;
+
 // Centro de control del super_admin: pulso de la plataforma, entrada al CRM de
 // cada tenant y gestión (crear tenant / provisionar owner). Guarded server-side.
 export default async function AdminPage() {
