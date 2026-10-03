@@ -986,3 +986,9 @@ negativo (quitando `/admin` de la lista, lo detecta).
 - `itmano-crm`: Ignored Build Step, sólo `main`. Verificado con el push de la
   rama: cancelado en `itmano-crm`, construido en `itmano-crm-sandbox`.
 - `itmano-crm`: Function CPU en Performance (2 vCPU / 4 GB).
+- Aviso de versión nueva (`NewVersionNotice` + `GET /api/version`) y carga
+  completa en la siguiente navegación tras un deploy. Verificado en local con
+  un deploy simulado: aparece el aviso, el clic en el menú hace carga completa,
+  sin versión nueva la navegación sigue en cliente, y en móvil ocupa 343 px.
+- Skew Protection Maximum Age: la API devuelve "Skew Protection not found";
+  queda para el panel (7 días).

@@ -1,7 +1,8 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { hayVersionNueva } from '@/lib/app-version'
 
 // Feedback inmediato al navegar a una vista de detalle (card de fuente,
 // propiedad o lead). El push se envuelve en una transición: mientras la ruta
@@ -10,8 +11,26 @@ import { useRouter } from 'next/navigation'
 export function useCardNavigation() {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const navigate = (href: string) => startTransition(() => router.push(href))
-  return { navigate, pending }
+  const [recargando, setRecargando] = useState(false)
+  // Si el usuario vuelve atrás y el navegador restaura esta página desde su
+  // caché (bfcache), el overlay no debe seguir puesto.
+  useEffect(() => {
+    const alMostrar = (ev: PageTransitionEvent) => { if (ev.persisted) setRecargando(false) }
+    window.addEventListener('pageshow', alMostrar)
+    return () => window.removeEventListener('pageshow', alMostrar)
+  }, [])
+  const navigate = (href: string) => {
+    // Hay deploy nuevo (ver NewVersionNotice): la tarjeta abre con carga
+    // completa, igual que los enlaces, para que la versión nueva entre aquí.
+    // El overlay se mantiene hasta que el navegador cambia de página.
+    if (hayVersionNueva()) {
+      setRecargando(true)
+      window.location.assign(href)
+      return
+    }
+    startTransition(() => router.push(href))
+  }
+  return { navigate, pending: pending || recargando }
 }
 
 export function NavLoadingOverlay({ show, label = 'Abriendo…' }: { show: boolean; label?: string }) {
