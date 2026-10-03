@@ -104,13 +104,26 @@ justo el CRM: cada página se renderiza en el servidor.
 Al volumen actual (unos cientos de páginas al día) el coste extra son
 céntimos al mes y queda dentro del crédito de uso que incluye Pro.
 
-### 2c. Skew Protection  ·  ya activo, ajustar la ventana
+### 2c. Versiones nuevas: aviso + Skew Protection 7 días + corte  ·  falta un ajuste tuyo
 
-Es una función exclusiva de Pro y ya está encendida por defecto en el
-proyecto. Evita el error de "Server Action not found" que veía quien tenía el
-CRM abierto mientras salía un deploy. Su ventana por defecto es 1 día;
-conviene **7 días**, porque el CRM se deja abierto en una pestaña. Lo puedo
-aplicar yo junto con 2a y 2b.
+Decidido el 2026-10-03 (opciones A + B + D):
+
+- **A y B, en código** (rama `chore/vercel-pro`). Cuando sale un deploy, quien
+  tiene el CRM abierto ve abajo "Hay una versión nueva del CRM · Actualizar".
+  Si lo ignora o lo cierra, su siguiente clic en el menú o en una tarjeta
+  carga la página completa y entra la versión nueva sin perder nada escrito.
+  La pestaña pregunta cada 5 minutos y al volver a ella; en segundo plano no
+  pregunta.
+- **Skew Protection a 7 días: hazlo tú en el panel.** La API de Vercel rechaza
+  el cambio ("Skew Protection not found") aunque los builds ya la usan.
+  `itmano-crm` → Settings → Advanced → Skew Protection → Maximum Age =
+  **7 days**. Requiere retención de producción ≥ 7 días (punto 2e).
+- **D, el corte para cambios críticos, sin código.** Tras desplegar un cambio
+  que nadie debe seguir usando en su versión vieja: Deployments → el deploy
+  nuevo → ⋯ → **Skew Protection Threshold** → Set. Las versiones anteriores
+  dejan de responder y las pestañas abiertas pasan a la nueva en su siguiente
+  acción. Úsalo sólo cuando haga falta: quien esté escribiendo algo en ese
+  momento puede perderlo.
 
 ### 2d. Proteger los previews del sandbox  ·  descartado
 

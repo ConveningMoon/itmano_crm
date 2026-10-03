@@ -79,6 +79,15 @@ rendimiento (`docs/performance/`):
 - Mide con `SUPABASE_TRACE=1` antes y después de tocar una página: compara
   consultas y olas, no milisegundos.
 
+## Versiones nuevas en pestañas abiertas
+
+Con Skew Protection, una pestaña abierta sigue hablando con su deploy hasta una
+carga completa. `NewVersionNotice` (montado en el layout de `(dashboard)` sólo
+en Vercel) compara el deploy de la pestaña con `GET /api/version`, avisa y, a
+partir de ahí, convierte la siguiente navegación interna en carga completa. Una
+navegación que no pase por `<a>` (como `useCardNavigation`) debe consultar
+`hayVersionNueva()` de `src/lib/app-version.ts` y hacer lo mismo.
+
 ## Perfil de negocio
 
 El perfil del mercado vive en columnas nullable de `tenants` y se administra en
