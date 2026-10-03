@@ -2,7 +2,7 @@
 
 import { z } from 'zod'
 import { after } from 'next/server'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { getCurrentTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
@@ -22,6 +22,7 @@ import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import { audienceLeadIdsByTags, loadAudienceLeads } from '@/lib/services/open-house-audience'
 import { dispatchOpenHouseEmail } from '@/lib/services/open-house-dispatch'
 import { recordOpenHouseRsvp } from '@/lib/services/open-house-rsvp'
+import { hostedTag } from '@/lib/hosted-cache'
 
 // Server Actions de los open houses de una propiedad.
 //
@@ -123,20 +124,12 @@ async function loadEmails(db: ReturnType<typeof createAdminClient>, oh: any) {
   return ((data ?? []) as any[]).map(e => ({ ...e, kind: e.kind as OpenHouseEmailKind, status: e.status as OpenHouseEmailStatus }))
 }
 
-async function revalidateOpenHouse(db: ReturnType<typeof createAdminClient>, oh: { id?: string; tenant_id: string; property_id: string }) {
+function revalidateOpenHouse(oh: { id?: string; tenant_id: string; property_id: string }) {
   revalidatePath(`/properties/${oh.property_id}`)
   if (oh.id) revalidatePath(`/properties/${oh.property_id}/open-houses/${oh.id}`)
-  // La cuenta regresiva vive en la ficha pública (ISR).
-  const [{ data: tenant }, { data: property }] = await Promise.all([
-    db.from('tenants').select(columns('tenants', ['slug'])).eq('id', oh.tenant_id).maybeSingle(),
-    db.from('properties').select(columns('properties', ['slug'])).eq('id', oh.property_id).maybeSingle(),
-  ])
-  const tSlug = (tenant as any)?.slug as string | undefined
-  const pSlug = (property as any)?.slug as string | undefined
-  if (tSlug) {
-    revalidatePath(`/web/${tSlug}`)
-    if (pSlug) revalidatePath(`/web/${tSlug}/${pSlug}`)
-  }
+  // La cuenta regresiva vive en la ficha pública, cacheada con el tag del
+  // catálogo del tenant (hostedTag.web).
+  updateTag(hostedTag.web(oh.tenant_id))
 }
 
 function dispatchSoon(emailId: string) {
@@ -360,7 +353,7 @@ export async function updateOpenHouseDraft(openHouseId: string, raw: OpenHouseIn
     if (ids.length) await db.from('open_house_email_contents').delete().in('email_id', ids).in('language', removed)
   }
 
-  await revalidateOpenHouse(db, { ...oh, property_id: oh.property_id })
+  revalidateOpenHouse({ ...oh, property_id: oh.property_id })
   return { ok: true, warnings: sched.value.warnings }
 }
 
@@ -399,7 +392,7 @@ export async function updateOpenHouseDetails(
     sender_agent_id: senderAgentId,
   }).eq('id', oh.id)
   if (error) return { ok: false, error: error.message }
-  await revalidateOpenHouse(db, oh)
+  revalidateOpenHouse(oh)
   return { ok: true }
 }
 
@@ -614,7 +607,7 @@ export async function confirmOpenHouse(openHouseId: string, expectedToSend: numb
   const sendsNow = announcementAt.getTime() <= now.getTime()
   if (sendsNow) dispatchSoon(announcement.id)
 
-  await revalidateOpenHouse(db, oh)
+  revalidateOpenHouse(oh)
   return { ok: true, sendsNow }
 }
 
@@ -722,7 +715,7 @@ export async function rescheduleOpenHouse(
     dispatchSoon(created.id)
   }
 
-  await revalidateOpenHouse(db, oh)
+  revalidateOpenHouse(oh)
   return { ok: true, notified: plan.notify }
 }
 
@@ -763,7 +756,7 @@ export async function cancelOpenHouse(
     dispatchSoon(created.id)
   }
 
-  await revalidateOpenHouse(db, oh)
+  revalidateOpenHouse(oh)
   return { ok: true, notified: plan.notify }
 }
 

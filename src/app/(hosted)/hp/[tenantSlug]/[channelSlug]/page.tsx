@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { cacheLife } from 'next/cache'
+import { cacheLife, cacheTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { loadHostedPage } from './load'
 import { HostedPageView } from './hosted-page-view'
-import { alMenosUnParametro } from '@/lib/hosted-cache'
+import { alMenosUnParametro, hostedTag } from '@/lib/hosted-cache'
 
 // instant = false a propósito: la página espera sus params fuera de un
 // <Suspense> para poder responder 404 de verdad. Los slugs que lista
@@ -25,10 +25,11 @@ export const instant = false
 // loadHostedPage sin este envoltorio.
 //
 // La ventana de 5 minutos (perfil `hosted`) es solo el techo: al guardar en el
-// constructor se invalida esta página.
+// constructor, o al cambiar o archivar el canal, se expira hostedTag.hp.
 async function loadPublishedPage(tenantSlug: string, channelSlug: string) {
   'use cache'
   cacheLife('hosted')
+  cacheTag(hostedTag.hp(tenantSlug))
   return loadHostedPage(tenantSlug, channelSlug)
 }
 

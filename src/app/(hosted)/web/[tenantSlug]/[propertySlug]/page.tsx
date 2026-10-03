@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { cacheLife } from 'next/cache'
+import { cacheLife, cacheTag } from 'next/cache'
 import { getPublicTenant, getPublishedProperty, getPublishedPropertyPaths } from '../shared'
 import { PublicPropertyView } from './public-property-view'
 import { getPublicOpenHouseForProperty } from '@/lib/data/open-houses'
-import { alMenosUnParametro } from '@/lib/hosted-cache'
+import { alMenosUnParametro, hostedTag } from '@/lib/hosted-cache'
 
 // instant = false a propósito: la página espera sus params fuera de un
 // <Suspense> para poder responder 404 de verdad. Los slugs que lista
@@ -26,6 +26,9 @@ async function loadProperty(tenantSlug: string, propertySlug: string) {
   cacheLife('hosted')
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) return null
+  // Etiqueta del tenant, no de la propiedad: así una propiedad despublicada o
+  // con el slug cambiado también deja de servirse en su URL vieja.
+  cacheTag(hostedTag.web(tenant.id))
   const property = await getPublishedProperty(tenant.id, propertySlug)
   if (!property) return null
   const openHouse = await getPublicOpenHouseForProperty(property.id, tenant.id)

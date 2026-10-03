@@ -1,9 +1,11 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { hostedTag } from '@/lib/hosted-cache'
+import { getTenantRow } from '@/lib/data/tenants'
 import { getCurrentTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess, requireChannelWriteAccess, assertCanWriteChannel, assertCanWriteLead } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
@@ -57,11 +59,11 @@ export async function updateHostedPage(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/sources')
-  // La página pública se sirve con ISR (revalidate 300): sin esta invalidación el
+  // La página pública se sirve cacheada (perfil `hosted`): sin esto el
   // constructor guardaría y el cambio no se vería hasta que expire la ventana.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ch = channel as any
-  if (ch.tenants?.slug && ch.slug) revalidatePath(`/hp/${ch.tenants.slug}/${ch.slug}`)
+  if (ch.tenants?.slug) updateTag(hostedTag.hp(ch.tenants.slug))
   return { ok: true }
 }
 
@@ -729,7 +731,15 @@ export async function updateChannel(
   revalidatePath('/sources')
   revalidatePath('/emails')
   revalidatePath('/analytics')
+  // Nombre y activo cambian lo que sirve su página pública (inactivo → 404).
+  await expireHostedPages(channel.tenant_id)
   return { ok: true }
+}
+
+// Expira las páginas públicas /hp del tenant (hostedTag.hp va por su slug).
+async function expireHostedPages(tenantId: string) {
+  const tenant = await getTenantRow(tenantId)
+  if (tenant?.slug) updateTag(hostedTag.hp(tenant.slug))
 }
 
 // ─── Archive channel (soft-delete) ────────────────────────────────────────────
@@ -761,6 +771,8 @@ export async function archiveChannel(
   revalidatePath('/sources')
   revalidatePath('/emails')
   revalidatePath('/analytics')
+  // Archivada, su página pública deja de existir: que el 404 se vea ya.
+  await expireHostedPages(channel.tenant_id)
   return { ok: true }
 }
 

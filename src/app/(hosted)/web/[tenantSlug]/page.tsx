@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { cacheLife } from 'next/cache'
+import { cacheLife, cacheTag } from 'next/cache'
 import { getPublicTenant, getPublishedProperties, getPublicTenantSlugs } from './shared'
 import { PublicCatalog } from './public-catalog'
-import { alMenosUnParametro } from '@/lib/hosted-cache'
+import { alMenosUnParametro, hostedTag } from '@/lib/hosted-cache'
 
 // instant = false a propósito: la página espera sus params fuera de un
 // <Suspense> para poder responder 404 de verdad. Los slugs que lista
@@ -28,6 +28,7 @@ async function loadCatalog(tenantSlug: string) {
   cacheLife('hosted')
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) return null
+  cacheTag(hostedTag.web(tenant.id))
   const properties = await getPublishedProperties(tenant.id)
   return { tenant, properties }
 }

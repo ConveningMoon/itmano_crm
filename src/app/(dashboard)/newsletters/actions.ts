@@ -1,8 +1,9 @@
 'use server'
 
 import { z } from 'zod'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { guarded } from '@/lib/actions/guarded'
+import { hostedTag } from '@/lib/hosted-cache'
 import { requireTenantContext, type TenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteEdition } from '@/lib/auth/guards'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -30,16 +31,13 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 
-// Cada action revalida su ruta pública además de la del CRM: publicar tiene que
-// verse ya, no en la próxima ventana de ISR.
-//
-// Con una sola newsletter por tenant, la URL pública ya no lleva slug de serie:
-// sólo tenant y edición.
-function revalidateAll(tenantSlug: string, editionSlug?: string | null) {
+// Cada action expira también las páginas públicas además de la ruta del CRM:
+// publicar tiene que verse ya, no al vencer los 5 minutos del perfil `hosted`.
+// El tag es del tenant (portada y todas sus ediciones), así que cubre también
+// la URL vieja de una edición que cambió de slug o se despublicó.
+function revalidateAll(tenantId: string) {
   revalidatePath('/newsletters')
-  if (!tenantSlug) return
-  revalidatePath(`/nl/${tenantSlug}`)
-  if (editionSlug) revalidatePath(`/nl/${tenantSlug}/${editionSlug}`)
+  updateTag(hostedTag.nl(tenantId))
 }
 
 const TENANT_COLUMNS = columns('tenants', ['slug'])
@@ -294,7 +292,7 @@ async function createEditionImpl(input: unknown): Promise<Result<{ id: string }>
   })
   if (!inserted.ok) return inserted
 
-  revalidateAll(g.tenantSlug)
+  revalidateAll(g.tenantId)
   return inserted
 }
 
@@ -391,7 +389,7 @@ async function updateEditionImpl(id: string, input: unknown): Promise<Result<nul
     if (!ahora.has(url)) await deleteOrphanMedia(g.db, g.tenantId, url, id)
   }
 
-  revalidateAll(g.tenantSlug, existing.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: null }
 }
 
@@ -462,7 +460,7 @@ async function publishEditionImpl(id: string): Promise<Result<null>> {
     .eq('id', id).eq('tenant_id', g.tenantId)
 
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, edition.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: null }
 }
 
@@ -482,7 +480,7 @@ async function unpublishEditionImpl(id: string): Promise<Result<null>> {
   if (error) return { ok: false, error: error.message }
   // Despublicar es el caso donde MÁS importa llegar a la ruta de la edición:
   // sin revalidarla, la pieza retirada se sigue sirviendo desde el caché.
-  revalidateAll(g.tenantSlug, existing.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: null }
 }
 
@@ -509,7 +507,7 @@ async function archiveEditionImpl(id: string): Promise<Result<null>> {
     .update({ status: 'archived' })
     .eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, existing.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: null }
 }
 
@@ -532,7 +530,7 @@ async function restoreEditionImpl(id: string): Promise<Result<null>> {
     .update({ status: 'draft' })
     .eq('id', id).eq('tenant_id', g.tenantId)
   if (error) return { ok: false, error: error.message }
-  revalidateAll(g.tenantSlug, existing.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: null }
 }
 
@@ -565,7 +563,7 @@ async function deleteEditionImpl(id: string): Promise<Result<null>> {
     await deleteOrphanMedia(g.db, g.tenantId, url, id)
   }
 
-  revalidateAll(g.tenantSlug, existing.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: null }
 }
 
@@ -644,7 +642,7 @@ async function generateEditionWithAiImpl(input: unknown): Promise<Result<{ id: s
   })
   if (!inserted.ok) return inserted
 
-  revalidateAll(g.tenantSlug)
+  revalidateAll(g.tenantId)
   return inserted
 }
 
@@ -682,7 +680,7 @@ async function generateCoverForEditionImpl(editionId: string): Promise<Result<{ 
   // se acumulaban huérfanos: cada reintento dejaba la anterior en el bucket.
   await deleteOrphanMedia(g.db, g.tenantId, edition.coverImageUrl, editionId)
 
-  revalidateAll(g.tenantSlug, edition.slug)
+  revalidateAll(g.tenantId)
   return { ok: true, data: { url: result.url } }
 }
 
@@ -832,7 +830,7 @@ async function createEditionFromJsonImpl(input: unknown): Promise<Result<{ id: s
   })
   if (!inserted.ok) return inserted
 
-  revalidateAll(g.tenantSlug)
+  revalidateAll(g.tenantId)
   return inserted
 }
 

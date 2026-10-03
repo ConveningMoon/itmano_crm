@@ -60,18 +60,18 @@ function makeFakeSupabase(rowsByTable: Record<string, Record<string, unknown>[]>
 }
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }))
 
-import { revalidatePath } from 'next/cache'
+import { revalidateTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 
 const mockCreateAdminClient = createAdminClient as unknown as ReturnType<typeof vi.fn>
-const mockRevalidatePath = revalidatePath as unknown as ReturnType<typeof vi.fn>
+const mockRevalidateTag = revalidateTag as unknown as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   mockCreateAdminClient.mockReset()
-  mockRevalidatePath.mockReset()
+  mockRevalidateTag.mockReset()
 })
 
 describe('restoreAfterReactivation', () => {
@@ -128,23 +128,18 @@ describe('restoreAfterReactivation', () => {
     expect(report).toEqual({ propertiesRepublished: 0, newslettersRepublished: 1 })
   })
 
-  it('newsletters: purga el caché de las dos rutas públicas al republicar', async () => {
+  it('newsletters: expira ya el caché de las páginas públicas del tenant al republicar', async () => {
     // Sin esto, el archivo del cliente que acaba de volver a pagar sigue
-    // apareciendo vacío hasta que expire la ventana de ISR (300 s). Con una
-    // sola newsletter por tenant no hay slug de serie que resolver: la ruta
-    // de la edición cuelga directo del tenant.
-    const fake = makeFakeSupabase({
-      newsletter_editions: [{ id: 'n1', slug: 'agosto-2026' }],
-      tenants:             [{ id: 'tenant-x', slug: 'aj' }],
-    })
+    // apareciendo vacío hasta que vencen los 5 minutos del perfil `hosted`.
+    // La portada y todas las ediciones comparten el tag del tenant, y
+    // `expire: 0` impide servir la copia vieja ni una vez.
+    const fake = makeFakeSupabase({ newsletter_editions: [{ id: 'n1' }] })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake de prueba, no el cliente real tipado
     mockCreateAdminClient.mockReturnValue(fake.client as any)
 
     await restoreAfterReactivation('tenant-x')
 
-    const paths = mockRevalidatePath.mock.calls.map(c => c[0])
-    expect(paths).toContain('/nl/aj')
-    expect(paths).toContain('/nl/aj/agosto-2026')
+    expect(mockRevalidateTag).toHaveBeenCalledWith('hosted:nl:tenant-x', { expire: 0 })
   })
 
   it('newsletters: sin nada que republicar no toca el caché', async () => {
@@ -154,7 +149,7 @@ describe('restoreAfterReactivation', () => {
 
     await restoreAfterReactivation('tenant-x')
 
-    expect(mockRevalidatePath).not.toHaveBeenCalled()
+    expect(mockRevalidateTag).not.toHaveBeenCalled()
   })
 
   it('newsletters: un borrador propio del tenant (sin la marca) no vuelve a publicarse', async () => {

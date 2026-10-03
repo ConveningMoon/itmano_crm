@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Newspaper, ArrowUpRight } from 'lucide-react'
-import { cacheLife } from 'next/cache'
+import { cacheLife, cacheTag } from 'next/cache'
 import {
   getPublicTenant, getPublicEditions, getPublicNewsletterChannel, getPublicTenantSlugs,
   type PublicEdition,
@@ -12,7 +12,7 @@ import { formatEditionDate } from './nl-format'
 import { EditionByline } from './edition-byline'
 import { pal, WRAP, DISPLAY, Masthead, Footer } from './nl-chrome'
 import { SubscribeForm } from './subscribe-form'
-import { alMenosUnParametro } from '@/lib/hosted-cache'
+import { alMenosUnParametro, hostedTag } from '@/lib/hosted-cache'
 
 // instant = false a propósito: la página espera sus params fuera de un
 // <Suspense> para poder responder 404 de verdad. Los slugs que lista
@@ -36,6 +36,7 @@ async function loadHome(tenantSlug: string) {
   cacheLife('hosted')
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) return null
+  cacheTag(hostedTag.nl(tenant.id))
   const [editions, channel] = await Promise.all([
     getPublicEditions(tenant.id),
     getPublicNewsletterChannel(tenant.id),

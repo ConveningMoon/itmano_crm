@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft } from 'lucide-react'
-import { cacheLife } from 'next/cache'
+import { cacheLife, cacheTag } from 'next/cache'
 import {
   getPublicTenant, getPublicEdition, getPublicNewsletterPaths, getPublicNewsletterChannel,
   getTenantCanonicalTemplate, getEditionSiblings,
@@ -16,7 +16,7 @@ import { editionCanonicalUrl, editionAlternates } from '@/lib/newsletters/canoni
 import { SubscribeForm } from '../subscribe-form'
 import { EditionViewBeacon } from './edition-view-beacon'
 import { EditionJsonLd } from './edition-jsonld'
-import { alMenosUnParametro } from '@/lib/hosted-cache'
+import { alMenosUnParametro, hostedTag } from '@/lib/hosted-cache'
 
 // instant = false a propósito: la página espera sus params fuera de un
 // <Suspense> para poder responder 404 de verdad. Los slugs que lista
@@ -67,6 +67,7 @@ async function loadEdition(tenantSlug: string, editionSlug: string) {
   cacheLife('hosted')
   const tenant = await getPublicTenant(tenantSlug)
   if (!tenant) return { tenant: null, edition: null } as const
+  cacheTag(hostedTag.nl(tenant.id))
   const edition = await getPublicEdition(tenant.id, editionSlug)
   if (!edition) return { tenant, edition: null } as const
 
