@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
 import { NewVersionNotice } from '@/components/layout/new-version-notice'
+import { SpeedInsights } from '@/components/layout/speed-insights'
 import {
   AiLimitSlot, BrandFallback, BrandSlot, PlanLabelFallback, PlanLabelSlot,
   SubscriptionBannerSlot, TenantSwitcherSlot, TopbarPillFallback, UnreadBadgeSlot,
@@ -121,6 +122,10 @@ export default async function DashboardLayout({
       {process.env.VERCEL_DEPLOYMENT_ID && (
         <NewVersionNotice version={process.env.VERCEL_DEPLOYMENT_ID} />
       )}
+      {/* Métricas reales de quien usa el CRM (Speed Insights). Sólo en
+          producción: los previews y local no tienen el script y sus visitas
+          gastarían la cuota gratuita de eventos. */}
+      {process.env.VERCEL_ENV === 'production' && <SpeedInsights />}
     </div>
   )
 }

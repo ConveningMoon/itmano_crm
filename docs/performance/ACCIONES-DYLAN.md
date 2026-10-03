@@ -155,17 +155,27 @@ del crédito incluido. Pon un tope (por ejemplo 50 $) **sólo con
 notificaciones**, sin pausar proyectos: pausar producción tumbaría el CRM a
 tus clientes.
 
-### 2g. Mirar los tiempos reales  ·  gratis
+### 2g. Mirar los tiempos reales  ·  Speed Insights listo en código, actívalo tú
 
-**Observability → Vercel Functions**, filtrando por ruta, da la duración real
-de cada página en producción. Es la forma de comprobar el efecto de la región
-y de 2b sin instalar nada.
-
-Speed Insights no se instaló: la librería oficial choca hoy con las
-dependencias de Vitest y forzar la instalación arriesga el build en Vercel. Su
-plan gratuito sólo da una puntuación global; los tiempos por país están en
-Speed Insights Plus (10 $/mes por proyecto). No hace falta mientras
-Observability baste.
+- **Observability → Vercel Functions** (incluido): duración de cada página en
+  el servidor, por ruta.
+- **Speed Insights** (rama `perf/speed-insights`): mide en el navegador de
+  cada usuario real cuánto tarda en ver la página (TTFB, LCP, INP, CLS),
+  agrupado por ruta (`/leads/[id]`, no un lead por fila). Sólo se monta en
+  producción y sólo en el CRM.
+  - No usa el paquete `@vercel/speed-insights`: no se instala sin forzar
+    dependencias, y forzarlo rompe el `npm ci` de Vercel (probado). El
+    componente propio hace lo mismo que el paquete: cargar el script que
+    Vercel sirve en el dominio y pasarle la ruta.
+  - Ya está activado en el panel de `itmano-crm` (no hay botón "Enable": el
+    panel muestra "No data available" hasta que llega el primer evento).
+    **Tú:** mergea el PR; los datos aparecen tras las primeras visitas.
+  - **Plan gratis:** sólo la puntuación global por ruta, 10 000 eventos cada
+    30 días compartidos por el equipo; si se pasa, pausa la recogida, no
+    cobra.
+  - **Speed Insights Plus (10 $/mes + 0,65 $ por 10 000 eventos):** TTFB y LCP
+    **por país**, que es lo que dice si España mejora. Recomendado mientras
+    duren Cache Components y la mudanza; se puede quitar después.
 
 ---
 
@@ -211,13 +221,65 @@ in-app, faltan las ocho variables de Paddle **Live** en Vercel.
 
 ---
 
-## 5. Rendimiento que queda (ninguna es urgente)
+## 5. Rendimiento que queda
 
-| Qué | Cuesta | Gana |
-|---|---|---|
-| **Cache Components (PPR)** | 2–4 días de trabajo | El shell saldría de la CDN (~135 ms desde España en vez de ~1 s). La mayor palanca que queda para España. |
-| **Mudanza a `iad1` + `us-east-1`** | Ventana de 60–90 min | España ~150 → ~90 ms por viaje, y el tenant piloto (Virginia) mejora. Plan completo en el informe. |
-| **`tenant_id` y `role` en el JWT** | ~1 día + revisión de auth | Quita la primera consulta de cada página (~10 ms con la base al lado). |
+### 5a. Cache Components (PPR)  ·  aprobado, en sesión aparte
+
+Prompt listo para pegar en una sesión nueva:
+`docs/performance/2026-10-prompt-cache-components.md`. 2–4 días de trabajo,
+por etapas, con preview en el sandbox antes de mergear.
+
+### 5b. Mudanza a `iad1` + `us-east-1`  ·  cuando decidas el día
+
+Ganancia: el tenant piloto (Virginia) ~60 ms menos por página; España ~150 →
+~90 ms por viaje. El procedimiento técnico completo está en el informe
+("Plan de mudanza"). Producción hoy: Postgres 17.6, 21 MB, 478 archivos en
+Storage.
+
+**Lo que tienes que preparar tú (una vez):**
+
+1. **Herramientas:** instala Docker Desktop. La CLI de Supabase lo usa para
+   volcar la base con la misma versión de Postgres (17).
+2. **El límite de 2 proyectos.** Supabase gratis permite 2 proyectos activos
+   y ya tienes sandbox y producción. Dos salidas:
+   - **Pausar el sandbox durante la mudanza** (gratis). Mientras esté pausado
+     no hay desarrollo ni suites remotas.
+   - **Contratar Supabase Pro ese mes** (25 $), que además trae backups
+     diarios. Es la opción cómoda.
+3. **Crear el proyecto nuevo** en `us-east-1`, con la misma organización.
+4. **Darme acceso:** cambia en `.mcp.json` el `project_ref` de
+   `supabase_production` por el nuevo (te digo la línea exacta) y autoriza con
+   `/mcp` desde una terminal `claude`.
+5. **Cadenas de conexión** (viejo y nuevo, "Session pooler") en un archivo
+   `.env.migration.local` en la raíz del repo. Git lo ignora y mis scripts lo
+   leen sin mostrar su contenido.
+6. **Elegir la ventana:** 60–90 minutos con poco uso, y avisar a tus clientes
+   de que no usen el CRM en ese rato. Los webhooks de Paddle y Resend
+   reintentan solos; los leads que entren por formularios públicos durante el
+   corte se recuperan con un volcado incremental justo antes del cambio (está
+   en el plan).
+
+**Lo que hago yo:** ensayo completo restaurando el sandbox en el proyecto
+nuevo con suites de esquema, RLS y scoring; el día de la ventana, el volcado y
+la restauración de producción, la copia de Storage, la reescritura de URLs de
+imágenes, el cambio de variables en Vercel y de la región a `iad1`, y las
+pruebas (login, páginas, subida de foto, suites, advisors y tabla de TTFB). El
+proyecto viejo queda pausado 30 días como vuelta atrás: volver es restaurar
+variables y región, y redeploy.
+
+**Efecto para tus usuarios:** todos tendrán que volver a entrar con Magic
+Link una vez (el proyecto nuevo firma las sesiones con otra clave).
+
+### 5c. `tenant_id` y `role` en el JWT  ·  baja prioridad
+
+Quita la primera consulta de cada página: ~5–10 ms con la base al lado. Sólo
+vale la pena si la función y la base vuelven a separarse.
+
+### 5d. Medir  ·  15 minutos, cuando quieras
+
+Entra en `app.itmano.com` en el navegador de una sesión de Claude Code con tu
+Magic Link y pide repetir la tabla de TTFB del informe. Así se compara cada
+paso (hoy, después de PPR, después de la mudanza) con el mismo método.
 
 ---
 
