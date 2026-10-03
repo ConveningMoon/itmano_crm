@@ -167,7 +167,9 @@ tus clientes.
     dependencias, y forzarlo rompe el `npm ci` de Vercel (probado). El
     componente propio hace lo mismo que el paquete: cargar el script que
     Vercel sirve en el dominio y pasarle la ruta.
-  - **Tú:** `itmano-crm` → **Speed Insights** → **Enable**, y mergea el PR.
+  - Ya está activado en el panel de `itmano-crm` (no hay botón "Enable": el
+    panel muestra "No data available" hasta que llega el primer evento).
+    **Tú:** mergea el PR; los datos aparecen tras las primeras visitas.
   - **Plan gratis:** sólo la puntuación global por ruta, 10 000 eventos cada
     30 días compartidos por el equipo; si se pasa, pausa la recogida, no
     cobra.

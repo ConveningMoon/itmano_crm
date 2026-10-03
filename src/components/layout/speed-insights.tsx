@@ -40,6 +40,10 @@ export function SpeedInsights() {
       const s = document.createElement('script')
       s.src = base ? `${base}/speed-insights/script.js` : '/_vercel/speed-insights/script.js'
       s.defer = true
+      // Los mismos datos que pone el paquete 2.0.0 en Next: el panel de
+      // Vercel identifica con ellos la integración que envía las métricas.
+      s.dataset.sdkn = '@vercel/speed-insights/next'
+      s.dataset.sdkv = '2.0.0'
       document.head.appendChild(s)
       script.current = s
     }

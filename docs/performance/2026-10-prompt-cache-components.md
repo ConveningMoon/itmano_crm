@@ -140,5 +140,23 @@ pusheadas, y documenta exactamente dónde quedó la siguiente.
 - `docs/agents/architecture.md` actualizado con las convenciones nuevas: dónde
   se lee la sesión, cuándo se permite `use cache` y con qué clave, cómo se
   invalidan las páginas alojadas.
+- **Regla permanente para los agentes, pedida por Dylan.** Añade a `AGENTS.md`
+  (fuente de verdad compartida por Claude y Codex), en "Estados de carga
+  obligatorios" o en una sección propia, una regla con este sentido:
+
+  > Cada vez que una tarea toque una página, layout o lectura de datos donde
+  > se pueda aplicar Cache Components (sacar algo al shell estático, quitar un
+  > `instant = false`, cachear con `use cache` / `use cache: private`, mover una
+  > lectura de sesión detrás de `<Suspense>`, convertir ISR a `cacheLife`), el
+  > agente lo dice explícitamente. Si lo recomienda y cabe en la tarea sin
+  > riesgo para el aislamiento por tenant, lo aplica en el mismo cambio y lo
+  > menciona en su resumen; si no lo aplica, explica por qué.
+
+  Redáctala con el estilo compacto del resto de `AGENTS.md`, sin duplicar lo
+  que ya diga `docs/agents/architecture.md` (enlázalo). En `CLAUDE.md`, que
+  importa `AGENTS.md`, añade sólo una línea que remita a esa regla, igual que
+  hace con "Estados de carga obligatorios". Pasa `npm run check:agents`: valida
+  la configuración de agentes y puede exigir cambios paralelos en
+  `.codex/config.toml` o en `docs/agents/`.
 - Mensaje final a Dylan en español: rama, commits, verificaciones, riesgos y
   pendientes, y qué debe mirar en el preview antes de mergear.
