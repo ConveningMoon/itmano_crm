@@ -84,6 +84,10 @@ if (faltan.length > 0) {
     '\n  y en tu máquina no se reproduce. Añádelas a `outputFileTracingIncludes`' +
     '\n  en next.config.ts con SHARP_NATIVE.\n'
   )
+  // Lo que el build dejó escrito, para distinguir "falta en next.config.ts" de
+  // "el build no conservó outputFileTracingIncludes".
+  console.error(`  outputFileTracingIncludes en ${path.relative(RAIZ, CONFIG)}:`)
+  console.error(`  ${JSON.stringify(incluye).slice(0, 1500)}\n`)
   process.exit(1)
 }
 
