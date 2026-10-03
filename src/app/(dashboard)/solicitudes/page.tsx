@@ -3,11 +3,6 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { listPlatformRequests } from './actions'
 import { RequestsClient } from './requests-client'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 // Bandeja de solicitudes de plataforma — solo super_admin. Reúne el formulario
 // de contacto de la landing (kind='contact') y el soporte del CRM
 // (kind='support', incluye solicitudes de más capacidad de IA) en dos tabs,

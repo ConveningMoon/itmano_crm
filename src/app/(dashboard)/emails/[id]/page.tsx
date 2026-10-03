@@ -14,11 +14,6 @@ import { EmailMetricsCard } from './email-metrics-card'
 import { getStepMetrics } from '@/lib/services/email-metrics'
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus, Send } from 'lucide-react'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {
   es: 'var(--accent-gold)',

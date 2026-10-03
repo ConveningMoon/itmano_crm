@@ -7,11 +7,6 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 // Creación de una edición nueva. Server Component: fetch de la biblioteca del
 // Estudio y las fuentes del tenant, luego el formulario (client) hace su
 // trabajo y navega al editor completo en /newsletters/<id>. El canal implícito

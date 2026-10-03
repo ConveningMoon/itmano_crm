@@ -1,10 +1,8 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import type { ReactNode } from 'react'
-import { Plus, Bell } from 'lucide-react'
-import { MobileNav } from './mobile-nav'
-import type { TenantRole } from '@/lib/auth/tenant-context'
+import { Suspense, type ReactNode } from 'react'
+import { Bell } from 'lucide-react'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
@@ -16,37 +14,40 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin':         'Centro de control',
 }
 
-// Lo que depende de la base (contador de no leídas, límite de IA, switcher de
-// tenant, logo y plan) llega como ReactNode desde el layout, cada uno dentro
-// de su <Suspense>: así la barra se pinta en cuanto se conoce el rol y esas
-// piezas se rellenan por streaming sin mover nada.
-export function Topbar({
-  role = 'agent_owner',
-  userEmail = '',
-  hubMode = false,
-  brand = null,
-  planLabel = null,
-  aiLimitSlot = null,
-  tenantSwitcherSlot = null,
-  unreadBadgeSlot = null,
-}: {
-  role?: TenantRole
-  userEmail?: string
-  hubMode?: boolean
-  // Branding del tenant activo — solo lo consume el drawer móvil.
-  brand?: ReactNode
-  // Nombre del plan del tenant — lo consume el drawer móvil.
-  planLabel?: ReactNode
-  // Límite mensual de IA del tenant activo (vacío en modo hub).
-  aiLimitSlot?: ReactNode
-  // Solo definido para super_admin — el switcher de tenant.
-  tenantSwitcherSlot?: ReactNode
-  // Contador sobre la campana.
-  unreadBadgeSlot?: ReactNode
-}) {
+const DEFAULT_TITLE = 'ITMANO CRM'
+
+// Título de la página activa. Va aparte y en su propio <Suspense> porque lee
+// la ruta: en el prerender de una ruta con parámetros (/leads/[id]) la ruta aún
+// no se conoce y usePathname suspende. Esas rutas no tienen título propio, así
+// que el fallback es ya el texto definitivo y no hay salto.
+function TopbarTitle() {
   const pathname = usePathname()
+  return <>{PAGE_TITLES[pathname] ?? DEFAULT_TITLE}</>
+}
+
+// Marco de la barra superior. Sale en el shell prerenderizado del dashboard; lo
+// que depende de la sesión o de la base (drawer móvil, límite de IA, switcher
+// de tenant, contador de no leídas, "Registrar Lead") llega como ReactNode
+// desde el layout, cada pieza dentro de su <Suspense> (ver shell-slots.tsx).
+export function Topbar({
+  mobileNav,
+  aiLimitSlot,
+  tenantSwitcherSlot,
+  unreadBadgeSlot,
+  newLeadSlot,
+}: {
+  // Drawer móvil (botón + panel); solo se ve en teléfonos.
+  mobileNav: ReactNode
+  // Límite mensual de IA del tenant activo (vacío en modo hub).
+  aiLimitSlot: ReactNode
+  // Solo pinta algo para super_admin — el switcher de tenant.
+  tenantSwitcherSlot: ReactNode
+  // Contador sobre la campana.
+  unreadBadgeSlot: ReactNode
+  // "Registrar Lead" — vacío en modo hub.
+  newLeadSlot: ReactNode
+}) {
   const router = useRouter()
-  const title = PAGE_TITLES[pathname] ?? 'ITMANO CRM'
 
   return (
     <header
@@ -63,7 +64,7 @@ export function Topbar({
     >
       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
         {/* Drawer trigger — phones only (md:hidden inside MobileNav). */}
-        <MobileNav role={role} userEmail={userEmail} hubMode={hubMode} brand={brand} planLabel={planLabel} />
+        {mobileNav}
         <h1
           style={{
             fontSize: '15px',
@@ -74,7 +75,9 @@ export function Topbar({
             whiteSpace: 'nowrap',
           }}
         >
-          {title}
+          <Suspense fallback={DEFAULT_TITLE}>
+            <TopbarTitle />
+          </Suspense>
         </h1>
       </div>
 
@@ -108,32 +111,7 @@ export function Topbar({
 
         {/* Registrar Lead — oculto en modo hub (sin tenant seleccionado no hay
             destino para el lead; /leads/new redirigiría al centro de control). */}
-        {!hubMode && (
-          <button
-            className="btn-cta"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '7px 14px',
-              borderRadius: '8px',
-              border: 'none',
-              backgroundColor: 'var(--accent-gold)',
-              color: 'var(--bg-base)',
-              fontSize: '12px',
-              fontWeight: '600',
-              letterSpacing: '0.04em',
-              cursor: 'pointer',
-            }}
-            onClick={() => router.push('/leads/new')}
-            aria-label="Registrar Lead"
-          >
-            <Plus size={14} strokeWidth={2} />
-            {/* Label collapses to an icon-only button on phones; full text at sm:+. */}
-            <span className="hidden sm:inline">Registrar Lead</span>
-          </button>
-        )}
-
+        {newLeadSlot}
       </div>
     </header>
   )

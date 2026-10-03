@@ -13,11 +13,6 @@ import { NewFolderButton } from '@/components/dashboard/folders'
 import { Tabs } from '@/components/ui/tabs'
 import { Plus, Mail } from 'lucide-react'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 // /emails tiene tres clases de correo y antes iban apiladas en una sola página:
 //
 //   · Secuencias — campañas de nutrición que arrancan con un formulario o a mano.

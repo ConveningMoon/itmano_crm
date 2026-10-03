@@ -8,11 +8,6 @@ import { listLeadTags } from '@/lib/data/lead-tags'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 export default async function LeadsPage({
   searchParams,
 }: {

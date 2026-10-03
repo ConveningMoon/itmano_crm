@@ -7,11 +7,6 @@ import { resolveMockups } from '@/lib/studio/mockups'
 import { StudioTeaser } from '../teaser'
 import { TemplateEditor } from './editor'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 // El editor pide pantalla ancha —código y lienzo de 1080×1350 lado a lado— y no
 // es una cuarta pestaña a propósito: la autoría no va al mismo nivel que el
 // consumo. Ver la decisión 10 del spec.

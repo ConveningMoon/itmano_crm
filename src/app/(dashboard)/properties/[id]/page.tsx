@@ -17,11 +17,6 @@ import { OpenHouseTab } from './open-houses/open-house-tab'
 import { mapBusinessProfile } from '@/lib/data/business-profile'
 import { businessTimeZone } from '@/lib/time-zones'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 // Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
 // del formulario, con botón Editar que abre el formulario completo COMO MODAL
 // en esta misma página) + tab Página (catálogo alojado / embebible / solicitar)

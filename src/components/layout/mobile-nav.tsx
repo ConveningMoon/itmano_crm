@@ -9,6 +9,45 @@ import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
+// Trigger — phones only. `flex` here + `md:hidden` controls display via CSS class
+// only — no inline display: so the md:hidden rule can override at ≥768px.
+function MenuTrigger({ open = false, onOpen }: { open?: boolean; onOpen?: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Abrir menú"
+      aria-expanded={open}
+      onClick={onOpen}
+      disabled={!onOpen}
+      className="flex md:hidden"
+      style={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '40px',
+        height: '40px',
+        marginRight: '4px',
+        borderRadius: '8px',
+        border: '1px solid var(--border-subtle)',
+        background: 'transparent',
+        color: 'var(--text-secondary)',
+        cursor: onOpen ? 'pointer' : 'default',
+        flexShrink: 0,
+      }}
+    >
+      <Menu size={18} strokeWidth={2} />
+    </button>
+  )
+}
+
+/**
+ * El botón del drawer mientras llega la sesión (MobileNavSlot): mismo sitio y
+ * tamaño, inerte. El drawer necesita el rol para su nav, así que no puede
+ * abrirse antes.
+ */
+export function MobileNavTriggerFallback() {
+  return <MenuTrigger />
+}
+
 // Mobile navigation: a hamburger trigger (phones only) + a left-sliding drawer that
 // mirrors the desktop sidebar (logo · nav · user/sign-out). Closes on overlay tap and
 // on navigation. Entirely additive — the trigger is `md:hidden`, so ≥768px is unaffected.
@@ -33,30 +72,7 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
 
   return (
     <>
-      {/* Trigger — phones only. `flex` here + `md:hidden` controls display via CSS class
-          only — no inline display: so the md:hidden rule can override at ≥768px. */}
-      <button
-        type="button"
-        aria-label="Abrir menú"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-        className="flex md:hidden"
-        style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '40px',
-          height: '40px',
-          marginRight: '4px',
-          borderRadius: '8px',
-          border: '1px solid var(--border-subtle)',
-          background: 'transparent',
-          color: 'var(--text-secondary)',
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
-      >
-        <Menu size={18} strokeWidth={2} />
-      </button>
+      <MenuTrigger open={open} onOpen={() => setOpen(true)} />
 
       {/* Overlay + sliding panel. AnimatePresence anima entrada y salida. */}
       <AnimatePresence>

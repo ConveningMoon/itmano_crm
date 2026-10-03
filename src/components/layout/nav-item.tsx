@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { m } from 'motion/react'
@@ -73,8 +73,6 @@ interface NavItemProps {
 }
 
 export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'nav-indicator', hrefs }: NavItemProps) {
-  const pathname = usePathname()
-  const isActive = computeActive(pathname, href, hrefs)
   const Icon = ICONS[icon]
 
   // Prefetch POR INTENCIÓN, no al entrar en viewport.
@@ -100,7 +98,7 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
       onMouseEnter={armPrefetch}
       onFocus={armPrefetch}
       onTouchStart={armPrefetch}
-      className={isActive ? 'nav-item nav-item-active' : 'nav-item'}
+      className="nav-item"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -113,21 +111,13 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
         position: 'relative',
       }}
     >
-      {isActive && (
-        <m.span
-          layoutId={indicatorId}
-          transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: '6px',
-            bottom: '6px',
-            width: '2px',
-            borderRadius: '1px',
-            backgroundColor: 'var(--accent-gold)',
-          }}
-        />
-      )}
+      {/* Lo único que lee la ruta, en su propio <Suspense>: en el prerender de
+          una ruta con parámetros (/leads/[id]) la ruta no se conoce y el hook
+          suspende. Así el enlace sale en el shell estático y sólo la marca de
+          activo espera; en las rutas sin parámetros sale ya marcada. */}
+      <Suspense fallback={null}>
+        <NavActiveMarker href={href} hrefs={hrefs} indicatorId={indicatorId} />
+      </Suspense>
       {Icon && <Icon size={16} strokeWidth={1.6} />}
       <span style={{ flex: 1 }}>{label}</span>
       {/* Señal inmediata del clic: con prefetch por intención, un toque en móvil
@@ -164,5 +154,30 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
         </span>
       )}
     </Link>
+  )
+}
+
+/**
+ * Barra dorada del ítem activo. Lleva `data-nav-active`, que es lo que pinta el
+ * enlace como activo (`.nav-item:has([data-nav-active])` en globals.css).
+ */
+function NavActiveMarker({ href, hrefs, indicatorId }: { href: string; hrefs?: string[]; indicatorId: string }) {
+  const pathname = usePathname()
+  if (!computeActive(pathname, href, hrefs)) return null
+  return (
+    <m.span
+      data-nav-active=""
+      layoutId={indicatorId}
+      transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: '6px',
+        bottom: '6px',
+        width: '2px',
+        borderRadius: '1px',
+        backgroundColor: 'var(--accent-gold)',
+      }}
+    />
   )
 }

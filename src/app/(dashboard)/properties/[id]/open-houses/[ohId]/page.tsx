@@ -11,11 +11,6 @@ import { appBaseUrl } from '@/lib/open-houses/urls'
 import { hostedPropertiesUrl } from '@/lib/hosted-page'
 import { OpenHouseManager } from './open-house-manager'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 // Detalle de un open house: datos, correos (por idioma), audiencia y
 // confirmación, RSVPs y cómo se ve en la web. El servidor arma todo y el
 // gestor (cliente) sólo pinta y llama a las Server Actions.

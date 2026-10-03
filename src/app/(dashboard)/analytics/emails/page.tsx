@@ -3,11 +3,6 @@ import { getGlobalEmailMetrics } from '@/lib/services/email-metrics'
 import Link from 'next/link'
 import { ArrowLeft, Send, MousePointer2, MessageCircle, AlertCircle, UserMinus, TrendingDown } from 'lucide-react'
 
-// @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
-// Remove this opt-out after verifying the segment passes validation without it.
-// See: https://nextjs.org/docs/app/guides/migrating-to-cache-components
-export const instant = false;
-
 const CARD: React.CSSProperties = {
   background:   'var(--bg-surface)',
   border:       '1px solid var(--border-subtle)',
