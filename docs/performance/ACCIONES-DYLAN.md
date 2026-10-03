@@ -1,146 +1,218 @@
 # Lo que queda en tus manos
 
-Todo lo que se podía arreglar desde el código ya está hecho y verificado (ver
-`2026-09-auditoria-rendimiento-opus.md`, fases 1 a 3). Esta lista es sólo lo
-que un agente no puede hacer: desplegar, tocar ajustes de panel y decidir
-gastos.
+Actualizado el 2026-10-03, con Vercel Pro ya contratado. Lo que se podía arreglar
+desde el código está hecho y verificado (ver
+`2026-09-auditoria-rendimiento-opus.md`, fases 1 a 4). Esta lista es sólo lo
+que un agente no puede hacer: tocar paneles, decidir gastos y manejar secretos.
 
-Orden recomendado: 1 → 2 → 3. El 4 y el 5 son proyectos aparte.
+## Estado confirmado
 
----
-
-## 1. Mergear y desplegar  ·  gratis  ·  5 minutos  ·  **lo más importante**
-
-Abre el PR de `perf/auditoria-rendimiento` y mergéalo.
-
-Con eso pasan dos cosas a la vez:
-
-- Se despliega todo el trabajo de las tres fases.
-- **La función vuelve a `sfo1`.** Hoy producción corre en `iad1`
-  (Washington) con la base en `us-west-1` (California): cada consulta cruza
-  Estados Unidos de costa a costa, unos 60–70 ms, y una página hace dos olas
-  de consultas. Marcaste `sfo1` en el panel de Vercel pero quedó pendiente de
-  un deploy; este lo aplica. La función queda pegada a la base y cada consulta
-  pasa de ~65 ms a ~2 ms.
-
-Si por lo que sea no quieres mergear todavía, el efecto de la región lo
-consigues igual desde Vercel → Deployments → el último de producción → ⋯ →
-**Redeploy**.
-
-**Cómo comprobar que funcionó:** entra a `app.itmano.com`, abre las
-herramientas de desarrollo (F12) en la pestaña Red, recarga `/dashboard` dos
-veces y mira el TTFB de la segunda. La medición previa desde Europa, con la
-función en `iad1`, fue: dashboard 944 ms, leads 2 000 ms, emails 1 676 ms,
-admin 1 690 ms. Deberías ver entre un tercio y la mitad de eso.
+- El PR de rendimiento está mergeado y desplegado.
+- **La función de producción corre en `sfo1`** (verificado en el último deploy de
+  producción), al lado de la base en `us-west-1`. El cruce de costa a costa
+  ya no existe.
+- La cuenta de Vercel es Pro. El CRM queda dentro de los términos de uso
+  comercial.
 
 ---
 
-## 2. Vercel: parar el doble build y limpiar el almacenamiento  ·  gratis  ·  10 minutos
+## 1. Recuperar el `.env.local`  ·  15–30 minutos
 
-**El problema:** *Functions Storage* va en **26,88 GB sobre un límite de
-10 GB**. La causa es que los proyectos `itmano-crm` e `itmano-crm-sandbox`
-están conectados al MISMO repositorio, así que cada push construye dos veces:
-20 deployments en diez días × 2 proyectos × 7 funciones cada uno.
+### Lo que NO funciona: sacarlo de Vercel
 
-### 2a. Que cada proyecto construya sólo lo suyo
+Las 17 variables del proyecto `itmano-crm` y las 15 de `itmano-crm-sandbox`
+están guardadas como **Sensitive**. Vercel no vuelve a mostrar un valor
+Sensitive a nadie: ni en el panel, ni por API, ni con `vercel env pull`, que
+las escribe vacías. Tampoco existen en el entorno Development, que es el que
+`vercel env pull` descarga por defecto. **No hay forma de recuperar esos
+valores desde Vercel.**
 
-En cada proyecto: **Settings → Git → Ignored Build Step → Custom**, y pega el
-comando correspondiente:
+Y aunque se pudiera, las de `itmano-crm` son las de **producción**: el
+contrato del repo prohíbe tenerlas en el clon de desarrollo.
 
-- Proyecto `itmano-crm` (sólo debe construir producción):
+No intentes sacarlas con una ruta temporal que las imprima: es exactamente
+cómo se filtran secretos.
 
-  ```bash
-  [ "$VERCEL_GIT_COMMIT_REF" != "main" ] && exit 0 || exit 1
-  ```
+### Lo que tienes hoy
 
-- Proyecto `itmano-crm-sandbox` (sólo las ramas de trabajo):
+`.env.local` y `.env.development.local` son idénticos y apuntan al
+**sandbox**, que es lo correcto. Tienen las seis variables que el día a día
+necesita: las tres de Supabase sandbox, las dos del dev-login y
+`RESEND_API_KEY`. `npm run dev`, `npm run build` y el login local funcionan
+con eso.
 
-  ```bash
-  [ "$VERCEL_GIT_COMMIT_REF" = "main" ] && exit 0 || exit 1
-  ```
+Lo demás no se "perdió": el diseño del repo es que las llaves reales (IA,
+Telegram, Paddle) no estén en local salvo cuando hacen falta.
 
-A partir de ahí cada push construye una vez. Sigues teniendo preview de cada
-PR, en el proyecto sandbox y con datos de sandbox, que es lo que querías.
+### Cómo completarlo, variable por variable
 
-### 2b. Guardar menos historial
+Añádelas a `.env.development.local` (y a `.env.local` si quieres que `next
+build` también las vea). Sólo las que vayas a usar.
+
+| Variable | De dónde sale | ¿Hace falta en local? |
+|---|---|---|
+| `SUPABASE_JWT_SECRET` | Supabase → proyecto **sandbox** → Settings → JWT Keys → Legacy JWT secret | Sí, para `npm run test:rls` |
+| `CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `STUDIO_RENDER_SECRET`, `NOTIFICATIONS_WEBHOOK_SECRET`, `CONTACT_WEBHOOK_SECRET` | Inventados. Genera uno nuevo para cada uno con `openssl rand -hex 32` | Sólo si pruebas esa ruta. No tienen que coincidir con producción |
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | Opcional |
+| `CHROME_EXECUTABLE_PATH` | La ruta de tu Chrome, p. ej. `C:\Program Files\Google\Chrome\Application\chrome.exe` | Sólo para el Estudio |
+| `ANTHROPIC_API_KEY`, `GOOGLE_AI_API_KEY` | Crea una llave NUEVA en console.anthropic.com / aistudio.google.com | Sólo para probar IA, y además con `ALLOW_LOCAL_AI_SPEND=1`. Cobran de verdad |
+| `TELEGRAM_BOT_TOKEN` | @BotFather → /mybots → API Token | Casi nunca: publica en chats reales |
+| `RESEND_API_KEY_ITMANO`, `RESEND_INBOUND_*` | Resend → API Keys → crear una nueva | Sólo para probar envíos |
+| `PADDLE_*` | Paddle **sandbox** → Developer Tools → Authentication | Sólo para probar facturación |
+| `DEV_LOGIN_SECRET` | Ya lo tienes. **Cámbialo** por uno nuevo (`openssl rand -hex 32`): el anterior quedó en logs que se leyeron en sesiones de agente | Sí |
+
+Dos reglas al regenerar llaves de proveedores:
+
+- **Crear una llave nueva no rompe producción.** Producción sigue usando la
+  suya, guardada en Vercel. No revoques la vieja salvo que también la cambies
+  en Vercel.
+- Guarda desde ahora cada secreto en un gestor de contraseñas (1Password,
+  Bitwarden…). Una variable Sensitive de Vercel es de sólo escritura: si no la
+  tienes en otro sitio, la pierdes.
+
+---
+
+## 2. Ajustes de Vercel que aprovechan Pro
+
+### 2a. Que `itmano-crm` construya sólo `main`  ·  ✅ aplicado el 2026-10-03
+
+Ignored Build Step del proyecto:
+`if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi`.
+Comprobado: el push de `chore/vercel-pro` quedó cancelado en `itmano-crm` y se
+construyó sólo en `itmano-crm-sandbox`.
+
+Hoy cada push a cualquier rama genera un preview en `itmano-crm`, y esos
+previews usan las variables de **producción**: base de datos real, llaves
+reales. Con este ajuste las ramas sólo se construyen en `itmano-crm-sandbox`,
+contra el sandbox. También corta a la mitad el almacenamiento de deployments.
+
+**Corrección a la versión anterior de esta lista:** `itmano-crm-sandbox`
+**debe seguir construyendo `main`**. Su dominio de producción,
+`itmano-crm-sandbox.vercel.app`, es la URL base de la API de agentes en
+sandbox (`docs/agent-api/README.md`). Si ignorara `main`, esa URL quedaría
+congelada.
+
+### 2b. Function CPU en Performance  ·  ✅ aplicado el 2026-10-03
+
+Vale desde el próximo deploy de producción. Para comprobar el efecto, compara
+en Observability la duración por ruta antes y después del merge.
+
+Pro permite subir las funciones de 1 vCPU / 2 GB a **2 vCPU / 4 GB**. Vercel
+la recomienda para aplicaciones con SSR y sensibles a la latencia, que es
+justo el CRM: cada página se renderiza en el servidor.
+
+Al volumen actual (unos cientos de páginas al día) el coste extra son
+céntimos al mes y queda dentro del crédito de uso que incluye Pro.
+
+### 2c. Skew Protection  ·  ya activo, ajustar la ventana
+
+Es una función exclusiva de Pro y ya está encendida por defecto en el
+proyecto. Evita el error de "Server Action not found" que veía quien tenía el
+CRM abierto mientras salía un deploy. Su ventana por defecto es 1 día;
+conviene **7 días**, porque el CRM se deja abierto en una pestaña. Lo puedo
+aplicar yo junto con 2a y 2b.
+
+### 2d. Proteger los previews del sandbox  ·  descartado
+
+Dylan lo descartó: el sandbox no tiene datos personales. Queda la
+explicación por si se reconsidera.
+
+Hoy cualquier preview de `itmano-crm-sandbox` es público. Con protección sólo
+en Preview, para verlos hace falta estar logueado en Vercel. El dominio de
+producción del sandbox sigue público, que es lo que necesita la API de agentes.
+
+### 2e. Retención de deployments  ·  sólo desde el panel
 
 En cada proyecto: **Settings → Security → Deployment Retention Policy**.
 
 | | `itmano-crm` | `itmano-crm-sandbox` |
 |---|---|---|
-| Preview | 1 día | 1 día |
+| Preview | 1 día | 7 días |
 | Canceled / Errored | 1 día | 1 día |
-| Production | 7 días | 1 día |
+| Production | **7 días** | 7 días |
 
-Vercel siempre conserva los últimos 3 deployments del proyecto y los últimos 3
-de producción listos, así que el rollback inmediato no se pierde. Lo borrado
-se puede restaurar durante 30 días.
+Producción a 7 días y no menos: Skew Protection no puede llegar más atrás que
+la retención. Vercel conserva siempre los últimos deployments listos, así que
+el rollback inmediato no se pierde.
 
-El borrado corre en las 48 h siguientes: comprueba después en **Usage →
-Deployment Storage**. No borres deployments a mano salvo que siga por encima.
+### 2f. Spend Management  ·  sólo desde el panel, **importante**
 
----
+**Team Settings → Billing → Spend Management.** Pro factura el uso por encima
+del crédito incluido. Pon un tope (por ejemplo 50 $) **sólo con
+notificaciones**, sin pausar proyectos: pausar producción tumbaría el CRM a
+tus clientes.
 
-## 3. Planes de pago: qué comprar y qué no
+### 2g. Mirar los tiempos reales  ·  gratis
 
-### Vercel Pro — 20 $/mes — **sí, pero no por velocidad**
+**Observability → Vercel Functions**, filtrando por ruta, da la duración real
+de cada página en producción. Es la forma de comprobar el efecto de la región
+y de 2b sin instalar nada.
 
-La razón es de cumplimiento, no de rendimiento. La política de uso justo de
-Vercel dice literalmente que *"Hobby teams are restricted to non-commercial
-personal use only"* y define uso comercial como cualquier despliegue que cobre
-a visitantes o clientes. El CRM cobra suscripciones por Paddle, así que hoy
-está fuera de los términos del plan gratuito.
-
-Lo que Pro **no** te da: menos cold starts. El bytecode caching y el
-pre-warming de Fluid Compute aplican igual en Hobby.
-
-Lo que sí te da: quitarte el riesgo del límite de almacenamiento, retención
-configurable de verdad, logs de 1 día en vez de 1 hora, y hasta 5 regiones
-(que hoy no sirven de nada porque Postgres está en un solo sitio).
-
-### Supabase Pro — 25 $/mes — **no acelera nada hoy**
-
-La base pesa 19 MB, con 2 tenants y 162 leads, cache hit del 100 % y consultas
-de 0,5 a 7 ms. Micro compute (lo que incluye Pro) no va a hacer más rápida
-ninguna pantalla. Cómpralo cuando quieras backups diarios, que el proyecto no
-se pause por inactividad, o soporte — no por velocidad.
-
-**Lo que sí acelera es la región, y eso es gratis** (punto 1).
+Speed Insights no se instaló: la librería oficial choca hoy con las
+dependencias de Vitest y forzar la instalación arriesga el build en Vercel. Su
+plan gratuito sólo da una puntuación global; los tiempos por país están en
+Speed Insights Plus (10 $/mes por proyecto). No hace falta mientras
+Observability baste.
 
 ---
 
-## 4. Mudanza a `iad1` + `us-east-1`  ·  proyecto con ventana de mantenimiento
+## 3. Supabase gratis: haz backups tú  ·  10 minutos al mes
 
-Tus usuarios están en EE. UU. y en España. Con función y base juntas en
-California, España paga ~150 ms por viaje; en Virginia pagaría ~90 ms y la
-costa este de EE. UU. mejoraría también. Nadie empeora.
+El plan gratuito **no incluye backups descargables**. La propia documentación
+de Supabase recomienda que los proyectos gratuitos exporten su base con
+regularidad. Con datos de clientes, es lo que más importa de esta lista
+después del punto 1.
 
-Implica crear un proyecto Supabase nuevo en `us-east-1` y migrar datos,
-storage y variables. **El plan completo, paso a paso, con comandos, riesgos y
-vuelta atrás, está en `2026-09-auditoria-rendimiento-opus.md`**, sección "Plan
-de mudanza". Estimación de ventana: 60–90 minutos.
+1. Instala Docker Desktop (el `db dump` de la CLI de Supabase lo usa por
+   debajo).
+2. Supabase → proyecto de **producción** → Connect → copia la cadena de
+   conexión *Session pooler*.
+3. Desde una carpeta FUERA del repo:
 
-Hazlo después del punto 1, no antes: conviene medir primero cuánto mejora
-sólo con alinear la región actual.
+   ```bash
+   supabase db dump --db-url "<cadena>" -f esquema.sql
+   ```
+
+   ```bash
+   supabase db dump --db-url "<cadena>" --data-only -f datos.sql
+   ```
+
+4. Guarda los dos archivos fuera del ordenador (un disco o una nube privada).
+
+Las fotos de Storage no van en ese volcado. Hoy son unos 434 archivos y se
+pueden volver a subir; si crecen, conviene copiarlas también.
+
+Cuando el negocio lo permita, **Supabase Pro (25 $/mes) es la siguiente
+compra**: siete días de backups automáticos. No por velocidad: la base pesa
+19 MB y responde en milisegundos.
 
 ---
 
-## 5. Decisiones que necesitan tu visto bueno (ninguna es urgente)
+## 4. Hallazgo: Paddle no está configurado en producción
+
+El proyecto `itmano-crm` no tiene ninguna variable `PADDLE_*`; el sandbox sí.
+El botón de pago de Configuración (`startCheckout` → `src/lib/paddle/checkout.ts`)
+necesita el price ID y `PADDLE_API_KEY`, y `getPaddle()` lanza si falta la
+llave. Si algún cliente intenta pagar desde el CRM hoy, verá un error. Si cobras por otra vía, no pasa nada; si quieres activar el cobro
+in-app, faltan las ocho variables de Paddle **Live** en Vercel.
+
+---
+
+## 5. Rendimiento que queda (ninguna es urgente)
 
 | Qué | Cuesta | Gana |
 |---|---|---|
-| **Cache Components (PPR)** | 2–4 días de trabajo | El shell y el esqueleto saldrían de la CDN (~135 ms desde España en vez de ~1 s). Es la mayor palanca que queda para España. El spike está hecho: 22 archivos con configuración de ruta que migrar y el layout, que lee cookies arriba del todo, hay que reestructurar. |
-| **Meter `tenant_id` y `role` en el JWT** | ~1 día + revisión de auth | Quita la primera consulta de cada página. Con la base al lado vale ~10 ms; con la base lejos valía ~65 ms. Por eso conviene decidirlo DESPUÉS de la región. Hay que diseñar la revocación (hoy el rol se revalida en cada request). |
-| **Speed Insights o Web Analytics de Vercel** | Incluido en Pro | TTFB y LCP reales por país, que es lo único que dice de verdad cómo se ve el CRM desde España. |
+| **Cache Components (PPR)** | 2–4 días de trabajo | El shell saldría de la CDN (~135 ms desde España en vez de ~1 s). La mayor palanca que queda para España. |
+| **Mudanza a `iad1` + `us-east-1`** | Ventana de 60–90 min | España ~150 → ~90 ms por viaje, y el tenant piloto (Virginia) mejora. Plan completo en el informe. |
+| **`tenant_id` y `role` en el JWT** | ~1 día + revisión de auth | Quita la primera consulta de cada página (~10 ms con la base al lado). |
 
 ---
 
 ## 6. Dos cosas menores
 
-- **Rota `DEV_LOGIN_SECRET`** en el `.env.development.local` de las dos
-  computadoras. `next dev` escribe la URL del dev-login con el secreto en su
-  propio log, y ese log se leyó durante estas sesiones. Sólo sirve en
-  `localhost` contra sandbox, así que el riesgo es bajo, pero rotarlo es
-  gratis.
 - **Leaked password protection** en Supabase → Authentication → Policies. Con
   Magic Link no cambia nada hoy, pero activarlo tampoco cuesta.
+- **Crons:** `sequence-orchestrator` y `billing-lifecycle` los llama
+  cron-job.org. Con Pro podrían pasar a Vercel Cron, pero eso también los
+  activaría en el proyecto sandbox, que tiene llaves reales de IA y Telegram.
+  Mientras cron-job.org funcione, no hay motivo para moverlos.
