@@ -38,6 +38,18 @@ const nextConfig: NextConfig = {
     remotePatterns: supabaseHost
       ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }]
       : [],
+    // Vercel guarda cada transformación el MAYOR de dos plazos: el max-age que
+    // manda Supabase Storage (3600 s, el default de supabase-js al subir) y
+    // este. Con el default, cada foto se volvía a transformar cada hora: más
+    // lenta para quien la pedía en ese momento y, en Pro, una transformación y
+    // una escritura de caché facturadas cada vez.
+    //
+    // 31 días es seguro porque toda subida que acaba en next/image usa un path
+    // nuevo (`crypto.randomUUID()` en propiedades, logos, portadas de agente,
+    // páginas alojadas y newsletters), así que una URL nunca cambia de contenido: reemplazar una
+    // foto es otra URL. Si algún día se sube con `upsert: true` a un path fijo
+    // y se pinta con next/image, ese path verá la versión vieja hasta 31 días.
+    minimumCacheTTL: 2678400,
   },
   // sharp ships a native binary; keep it as a real require() at runtime instead
   // of letting the bundler trace/link it (Turbopack's Windows junction-point
