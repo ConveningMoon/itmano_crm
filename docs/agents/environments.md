@@ -35,6 +35,15 @@ producción. Vitest carga únicamente `.env.test.local` y
 archivos se commitea. Las credenciales reales de producción no deben vivir en el
 clon normal de desarrollo.
 
+Las variables de los dos proyectos de Vercel son de tipo **Sensitive**: Vercel
+no vuelve a mostrar su valor (ni panel, ni API, ni `vercel env pull`, que las
+deja vacías). Vercel no sirve como copia de los `.env` locales. Para reconstruir
+uno, las llaves de Supabase sandbox salen de su panel, los secretos propios
+(`CRON_SECRET`, `UNSUBSCRIBE_SECRET`, `STUDIO_RENDER_SECRET`…) se generan nuevos
+con `openssl rand -hex 32` y las llaves de proveedores se crean nuevas en cada
+proveedor sin revocar las que usa producción. El paso a paso está en
+`docs/performance/ACCIONES-DYLAN.md`.
+
 El login de producción es Magic Link. En sandbox, el acceso local pasa por
 `/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=<correo>` y termina en el mismo
 callback real. La ruta falla cerrada si la aplicación no apunta al sandbox;

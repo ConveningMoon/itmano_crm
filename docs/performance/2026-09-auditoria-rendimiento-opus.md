@@ -913,3 +913,55 @@ que se entregó a Dylan al cerrar la fase 3, y lo esencial es:
    la región).
 7. Estabilizar los ejemplos del contrato OpenAPI para que su test deje de
    depender del decay.
+
+---
+
+# Fase 4 (Claude Opus 5.5) — 2026-10-03: Vercel Pro
+
+Rama: `chore/vercel-pro`. Dylan contrató Vercel Pro; Supabase sigue en el plan
+gratuito. Alcance: comprobar que el despliegue de las fases 1–3 llegó a
+producción, aprovechar lo que Pro desbloquea y corregir la lista de acciones.
+
+## Comprobado
+
+- El PR de rendimiento está en `main` y el último deploy de producción
+  (`dpl_8YyHgZqVzpgJsNTvjcoJh7hLT1oK`) corre en **`sfo1`**, al lado de
+  Postgres en `us-west-1`.
+- Desde el navegador de la sesión, sin login: `/login` responde en ~100 ms y
+  la redirección del proxy de `/dashboard` y `/leads` en ~105–125 ms. Las
+  páginas autenticadas no se pudieron medir (no había sesión de producción);
+  queda en manos de Dylan con Observability → Vercel Functions.
+- Las 17 variables de `itmano-crm` y las 15 de `itmano-crm-sandbox` son
+  Sensitive: no son recuperables desde Vercel (documentado en
+  `docs/agents/environments.md`).
+- `itmano-crm` no tiene variables `PADDLE_*`: el checkout in-app no funciona en
+  producción.
+
+## Implementado
+
+- **`images.minimumCacheTTL` a 31 días.** Vercel cachea una transformación
+  remota el mayor entre el `max-age` de origen (3600 s, el default de
+  supabase-js) y este valor, así que cada foto se re-transformaba cada hora:
+  más lenta para el visitante de ese momento y, en Pro, una transformación y
+  una escritura de caché facturadas. Es seguro porque toda subida que llega a
+  `next/image` usa un path `randomUUID()`. Verificado con `next start`:
+  `/_next/image` responde `Cache-Control: public, max-age=2678400`.
+
+## Descartado
+
+- **Speed Insights.** `@vercel/speed-insights` (1.x y 2.x) no instala: su peer
+  opcional `@sveltejs/kit` arrastra `vite@8` y choca con `vitest@2`/`vite@5`.
+  Forzarlo con `--legacy-peer-deps` dejaría un lockfile que el `npm install`
+  de Vercel podría rechazar. El plan gratuito sólo da la puntuación global;
+  Observability cubre la duración por ruta sin código.
+- **Mover los crons de cron-job.org a Vercel Cron.** Vercel Cron se activaría
+  también en `itmano-crm-sandbox`, que construye `main` y tiene llaves reales
+  de IA y Telegram.
+
+## Corrección a la fase 3
+
+El Ignored Build Step propuesto para `itmano-crm-sandbox` (ignorar `main`) era
+un error: `itmano-crm-sandbox.vercel.app` es la URL base de la API de agentes
+en sandbox y quedaría congelada. Sólo `itmano-crm` debe ignorar las ramas que
+no son `main`, lo que además saca de producción los previews de ramas, que
+usaban la base y las llaves reales.
