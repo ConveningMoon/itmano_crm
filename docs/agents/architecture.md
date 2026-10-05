@@ -101,7 +101,11 @@ lea la cookie; lo que depende del request llega por streaming detrás de
   ruta con parámetros suspenden. Si el componente vive en el layout (nav,
   topbar, template), lleva la lectura a una hoja pequeña dentro de su propio
   `<Suspense>` (`NavActiveMarker` en `nav-item.tsx`, `TopbarTitle` en
-  `topbar.tsx`). Nunca pases `{children}` en un fallback.
+  `topbar.tsx`). Nunca pases `{children}` en un fallback. Lo que sólo se monta
+  en producción (`SpeedInsights`, con `VERCEL_ENV === 'production'`) no lo
+  prerenderiza ni el build local ni el de los previews: si lo tocas, compruébalo
+  con `VERCEL_ENV=production npm run build`. Así se rompió el primer deploy de
+  producción de Cache Components.
 - **IO síncrona en render** (`new Date()`, `Date.now()`, `Math.random()`,
   `crypto.randomUUID()`) rompe el prerender: va dentro de `use cache`, detrás
   de `connection()` o en un efecto de cliente. El fallo sale en `next build`.
