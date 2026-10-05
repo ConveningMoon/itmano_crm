@@ -117,8 +117,18 @@ export default function DashboardLayout({
       {/* Métricas reales de quien usa el CRM (Speed Insights). Sólo en
           producción: los previews y local no tienen el script y sus visitas
           gastarían la cuota gratuita de eventos. VERCEL_ENV se lee en el
-          build, al prerenderizar el shell, y el script sale en su HTML. */}
-      {process.env.VERCEL_ENV === 'production' && <SpeedInsights />}
+          build, al prerenderizar el shell.
+
+          En su propio <Suspense>: lee la ruta (usePathname/useParams), que en
+          el prerender de una ruta con parámetros no se conoce. No pinta nada,
+          así que el fallback es vacío y el script se inyecta al hidratar.
+          Como sólo se monta en producción, ni local ni los previews detectan
+          un fallo aquí: comprobarlo con `VERCEL_ENV=production npm run build`. */}
+      {process.env.VERCEL_ENV === 'production' && (
+        <Suspense fallback={null}>
+          <SpeedInsights />
+        </Suspense>
+      )}
     </div>
   )
 }
