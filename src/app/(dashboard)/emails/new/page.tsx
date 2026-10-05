@@ -3,8 +3,9 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewSequenceForm } from './new-sequence-form'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-export default async function NewSequencePage() {
+async function NewSequencePage() {
   const { tenant_id, role } = await requireTenantContext()
   // Picker de tenant: solo super_admin SIN selección (hoy inalcanzable aquí por
   // requireTenantContext; actuando como tenant, fixedTenantId ya viene del contexto).
@@ -59,3 +60,5 @@ export default async function NewSequencePage() {
     </>
   )
 }
+
+export default freshOnNavigation(NewSequencePage)

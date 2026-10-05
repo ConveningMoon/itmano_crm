@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { Suspense, type ReactNode } from 'react'
+import { Suspense, useEffect, type ReactNode } from 'react'
 import { Bell } from 'lucide-react'
 
 const PAGE_TITLES: Record<string, string> = {
@@ -48,6 +48,9 @@ export function Topbar({
   newLeadSlot: ReactNode
 }) {
   const router = useRouter()
+  // La campana navega con router.push: sin esto nada precarga /notifications.
+  // Es el shell estático de la ruta, sin consultas (ver NewLeadButton).
+  useEffect(() => { router.prefetch('/notifications') }, [router])
 
   return (
     <header

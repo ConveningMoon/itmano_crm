@@ -15,10 +15,11 @@ import { Tabs } from '@/components/ui/tabs'
 import { AdminClient } from './admin-client'
 import { TenantCard } from './tenant-card'
 import { HubFeed } from './hub-feed'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Centro de control del super_admin: pulso de la plataforma, entrada al CRM de
 // cada tenant y gestión (crear tenant / provisionar owner). Guarded server-side.
-export default async function AdminPage() {
+async function AdminPage() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
@@ -133,3 +134,5 @@ export default async function AdminPage() {
     </>
   )
 }
+
+export default freshOnNavigation(AdminPage)

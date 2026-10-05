@@ -1,11 +1,12 @@
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SupportForm } from './support-form'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Soporte técnico dentro del CRM: cualquier usuario del tenant puede escribir a
 // ITMANO. La solicitud se registra en el CRM (platform_requests → /solicitudes
 // del super_admin, con aviso por Telegram) con la identidad del solicitante
 // adjuntada automáticamente.
-export default async function SoportePage() {
+async function SoportePage() {
   // Guard (redirige a /login sin sesión) y, de paso, el email del solicitante:
   // sale del claim ya validado, sin pedírselo otra vez al servidor de auth.
   const { email: userEmail } = await getCurrentTenantContext()
@@ -30,3 +31,5 @@ export default async function SoportePage() {
     </>
   )
 }
+
+export default freshOnNavigation(SoportePage)

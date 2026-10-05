@@ -18,6 +18,7 @@ import {
   ArrowRightCircle,
   CheckCircle2,
 } from 'lucide-react'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 type AgentStat = {
   agent: Agent
@@ -44,7 +45,7 @@ function getInitials(firstName: string, lastName: string): string {
   return (f + l).toUpperCase() || f.toUpperCase()
 }
 
-export default async function DashboardPage() {
+async function DashboardPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const scope = scopeFor(ctx)
@@ -453,3 +454,5 @@ export default async function DashboardPage() {
     </div>
   )
 }
+
+export default freshOnNavigation(DashboardPage)

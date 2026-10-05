@@ -32,8 +32,9 @@ import { getTenantRow } from '@/lib/data/tenants'
 import { getTagIdsWithSequence, getTagsForLead, listLeadTags } from '@/lib/data/lead-tags'
 import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
+async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
@@ -262,3 +263,5 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     />
   )
 }
+
+export default freshOnNavigation(LeadPage)

@@ -6,6 +6,7 @@ import { canUseNewsletters } from '@/lib/access/newsletters'
 import { getSubscription } from '@/lib/data/subscriptions'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Creación de una edición nueva. Server Component: fetch de la biblioteca del
 // Estudio y las fuentes del tenant, luego el formulario (client) hace su
@@ -30,7 +31,7 @@ import { NewEditionForm } from './new-edition-form'
 // la action, no a la que tenía el botón.
 export const maxDuration = 300
 
-export default async function NewEditionPage() {
+async function NewEditionPage() {
   const ctx = await requireTenantContext()
   if (!ctx.tenant_id) redirect('/newsletters')
   const tenantId = ctx.tenant_id
@@ -55,3 +56,5 @@ export default async function NewEditionPage() {
     </div>
   )
 }
+
+export default freshOnNavigation(NewEditionPage)

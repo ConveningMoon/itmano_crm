@@ -12,6 +12,7 @@ import { SequencesTable } from './sequences-table'
 import { NewFolderButton } from '@/components/dashboard/folders'
 import { Tabs } from '@/components/ui/tabs'
 import { Plus, Mail } from 'lucide-react'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // /emails tiene tres clases de correo y antes iban apiladas en una sola página:
 //
@@ -30,7 +31,7 @@ type EmailsTab = 'secuencias' | 'etiquetas' | 'cierre'
 
 const TABS: EmailsTab[] = ['secuencias', 'etiquetas', 'cierre']
 
-export default async function EmailsPage({
+async function EmailsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -218,3 +219,5 @@ export default async function EmailsPage({
     </>
   )
 }
+
+export default freshOnNavigation(EmailsPage)

@@ -1055,15 +1055,37 @@ el RSVP se renderizan por visita.
   llega con el shell ya enviado: 200 + redirección en cliente, no 307. Sin
   sesión el proxy sigue respondiendo 307.
 - En rutas con `[id]` el ítem activo del nav aparece al hidratar.
-- Con Cache Components las rutas se conservan con `<Activity>`: el estado de
-  UI (inputs, desplegables) puede persistir al volver a una ruta. **No se
-  verificó**; queda pendiente.
+- Con Cache Components las rutas se conservan ocultas con `<Activity>`.
+  Verificado con `next start`: un modal de Filtros abierto seguía abierto al
+  volver a /leads por el menú, y /leads/new conservaba lo escrito; tras crear
+  un lead, "Registrar Lead" habría mostrado la confirmación del lead anterior
+  en vez de un formulario vacío. Se resolvió en el commit de cierre (abajo).
 
 ## Pendiente
 
 - Medir en el preview, con sesión, el TTFB del documento de `/dashboard` frente
   al preview de `main`, y en producción tras el merge Observability y Speed
   Insights por ruta.
-- Verificar el estado conservado por `<Activity>` (punto anterior).
 - Los pasos de propiedades del cron de facturación siguen sin invalidar `/web`
   (techo de 5 minutos, como antes).
+
+## Cierre (2026-10-05): estado conservado y precargas de botones
+
+- **Cada visita a una página del dashboard vuelve a empezar limpia**, como
+  antes de Cache Components. Toda página exporta `freshOnNavigation(Página)`
+  (`src/components/layout/fresh-page.tsx`), que la remonta en el cleanup de un
+  `useLayoutEffect`, el instante en que `<Activity>` la oculta. Medido tres
+  veces: volver a /leads/new por "Registrar Lead" da el formulario vacío desde
+  el primer frame; el modal de Filtros vuelve cerrado; escribir en el buscador
+  (sólo cambia search params) no remonta el input ni le quita el foco. Mismas
+  consultas y olas en las 20 rutas.
+- Descartado: `useRouter().bfcacheId` como `key`. En el template no cambia
+  nunca (es el id del segmento del layout) y dentro de la página dejaba ver la
+  versión conservada, con el estado viejo, hasta ~3 s, mientras llegaban los
+  datos de la navegación nueva.
+- "Registrar Lead" y la campana navegan con `router.push` y nada precargaba su
+  destino: ahora `router.prefetch` (sólo el shell estático, sin consultas). Del
+  clic a pintar /leads/new: ~1 s → 13 ms; /notifications: 8 ms.
+- `NewVersionNotice` lee el deploy en el request (`NewVersionNoticeSlot`):
+  verificado con un build sin `VERCEL_DEPLOYMENT_ID` y la variable sólo en
+  runtime.

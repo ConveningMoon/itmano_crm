@@ -2,6 +2,7 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getGlobalEmailMetrics } from '@/lib/services/email-metrics'
 import Link from 'next/link'
 import { ArrowLeft, Send, MousePointer2, MessageCircle, AlertCircle, UserMinus, TrendingDown } from 'lucide-react'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 const CARD: React.CSSProperties = {
   background:   'var(--bg-surface)',
@@ -22,7 +23,7 @@ function pctColor(val: number, thresholdGood: number, thresholdBad: number, inve
   return 'var(--text-muted)'
 }
 
-export default async function EmailAnalyticsPage() {
+async function EmailAnalyticsPage() {
   const { tenant_id, role } = await requireTenantContext()
   const isSuperAdmin = role === 'super_admin'
   const metrics = await getGlobalEmailMetrics(tenant_id)
@@ -241,3 +242,5 @@ export default async function EmailAnalyticsPage() {
     </div>
   )
 }
+
+export default freshOnNavigation(EmailAnalyticsPage)

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 
@@ -8,6 +9,10 @@ import { Plus } from 'lucide-react'
 // para el super_admin en modo hub (NewLeadSlot).
 export function NewLeadButton() {
   const router = useRouter()
+  // No es un <Link>, así que nada lo precargaba y el clic esperaba al servidor
+  // (~1 s) antes de pintar algo. La precarga trae sólo el shell estático de
+  // /leads/new (sin tocar la base): el skeleton sale al instante.
+  useEffect(() => { router.prefetch('/leads/new') }, [router])
   return (
     <button
       className="btn-cta"

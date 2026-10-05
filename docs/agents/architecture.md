@@ -135,9 +135,18 @@ lea la cookie; lo que depende del request llega por streaming detrás de
   `<Suspense>` (p. ej. `requireTenantContext` del super_admin en modo hub) se
   resuelve en el cliente y la respuesta es 200, no 307. El guard sin sesión
   sigue en `src/proxy.ts`, que responde 307 antes de servir nada.
-- **Prefetch.** El prefetch de un `<Link>` trae sólo el shell estático de la
-  ruta, sin tocar la base, así que el nav lo usa por defecto.
-  `partialPrefetching` está evaluado y apagado (fase 5).
+- **Estado al volver a una página.** Con Cache Components Next conserva las
+  rutas visitadas ocultas con `<Activity>` en vez de desmontarlas. Toda página
+  de `(dashboard)` exporta `freshOnNavigation(SuPágina)`
+  (`src/components/layout/fresh-page.tsx`), que la remonta al ocultarse: cada
+  visita empieza limpia, como antes (sin confirmaciones viejas, modales
+  abiertos ni formularios con el envío anterior). Una página nueva lo lleva
+  también, salvo que quiera conservar su estado a propósito; en ese caso
+  resetea a mano lo transitorio según `preserving-ui-state.md` de la guía.
+- **Prefetch.** El prefetch de una ruta trae sólo su shell estático, sin tocar
+  la base, así que el nav lo usa por defecto y los botones que navegan con
+  `router.push` (Registrar Lead, la campana) precargan su destino con
+  `router.prefetch`. `partialPrefetching` está evaluado y apagado (fase 5).
 - **Tipos.** Los perfiles de `cacheLife` se tipan con `next typegen`; CI lo
   corre antes de `tsc`.
 

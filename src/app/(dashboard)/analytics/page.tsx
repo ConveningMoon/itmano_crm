@@ -17,6 +17,7 @@ import { Users, Inbox, TrendingUp, Activity, GitBranch, Mail } from 'lucide-reac
 import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { Tabs } from '@/components/ui/tabs'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Colorea el tiempo, no lo puntua: responder en la primera hora es el estandar
 // que cita todo el sector, pero no entra en ningun score.
@@ -47,7 +48,7 @@ const CARD_SUBTITLE: React.CSSProperties = {
   marginBottom: '16px',
 }
 
-export default async function AnalyticsPage() {
+async function AnalyticsPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const scope = scopeFor(ctx)
@@ -755,3 +756,5 @@ export default async function AnalyticsPage() {
     </div>
   )
 }
+
+export default freshOnNavigation(AnalyticsPage)

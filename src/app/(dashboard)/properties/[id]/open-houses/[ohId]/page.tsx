@@ -10,12 +10,13 @@ import { buildOpenHouseIntegrationPrompt } from '@/lib/open-houses/integration-p
 import { appBaseUrl } from '@/lib/open-houses/urls'
 import { hostedPropertiesUrl } from '@/lib/hosted-page'
 import { OpenHouseManager } from './open-house-manager'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Detalle de un open house: datos, correos (por idioma), audiencia y
 // confirmación, RSVPs y cómo se ve en la web. El servidor arma todo y el
 // gestor (cliente) sólo pinta y llama a las Server Actions.
 
-export default async function OpenHouseDetailPage({ params }: { params: Promise<{ id: string; ohId: string }> }) {
+async function OpenHouseDetailPage({ params }: { params: Promise<{ id: string; ohId: string }> }) {
   const { id, ohId } = await params
   const ctx = await requireTenantContext()
 
@@ -76,3 +77,5 @@ export default async function OpenHouseDetailPage({ params }: { params: Promise<
     </>
   )
 }
+
+export default freshOnNavigation(OpenHouseDetailPage)

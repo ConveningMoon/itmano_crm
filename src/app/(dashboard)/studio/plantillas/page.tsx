@@ -6,13 +6,14 @@ import { listMockupOverrides } from '@/lib/data/studio-mockups'
 import { resolveMockups } from '@/lib/studio/mockups'
 import { StudioTeaser } from '../teaser'
 import { TemplateEditor } from './editor'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // El editor pide pantalla ancha —código y lienzo de 1080×1350 lado a lado— y no
 // es una cuarta pestaña a propósito: la autoría no va al mismo nivel que el
 // consumo. Ver la decisión 10 del spec.
 export const maxDuration = 120
 
-export default async function TemplatesPage({ searchParams }: {
+async function TemplatesPage({ searchParams }: {
   searchParams: Promise<{ key?: string }>
 }) {
   const ctx = await getCurrentTenantContext()
@@ -43,3 +44,5 @@ export default async function TemplatesPage({ searchParams }: {
     />
   )
 }
+
+export default freshOnNavigation(TemplatesPage)
