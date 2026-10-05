@@ -2,8 +2,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getProperties } from '@/lib/data/properties'
 import { PropertiesClient } from './properties-client'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-export default async function PropertiesPage() {
+async function PropertiesPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   // Picker de tenant en el modal: solo super_admin SIN selección (hoy
@@ -33,3 +34,5 @@ export default async function PropertiesPage() {
     />
   )
 }
+
+export default freshOnNavigation(PropertiesPage)

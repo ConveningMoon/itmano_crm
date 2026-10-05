@@ -8,8 +8,9 @@ import { getSourcesHealth } from '@/lib/data/source-health'
 import { listFolders } from '@/lib/data/folders'
 import { columns } from '@/lib/supabase/columns'
 import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-export default async function SourcesPage({
+async function SourcesPage({
   searchParams,
 }: {
   searchParams: Promise<{ window?: string }>
@@ -169,3 +170,5 @@ export default async function SourcesPage({
     </>
   )
 }
+
+export default freshOnNavigation(SourcesPage)

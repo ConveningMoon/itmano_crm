@@ -204,14 +204,12 @@ export async function getEditionSiblings(
   return (data as any[]).map(r => ({ slug: r.slug as string, language: r.language as string }))
 }
 
-// ── Parámetros para el prerender (ISR) ───────────────────────────────────────
-// Sin generateStaticParams, un segmento dinámico NO entra al manifiesto de
-// prerender y `export const revalidate` se ignora: la ruta se renderiza entera
-// en cada visita. Verificado y documentado en web/[tenantSlug]/shared.ts.
+// ── Parámetros para el prerender ─────────────────────────────────────────────
+// Mismo contrato que web/[tenantSlug]/shared.ts: lo listado se prerenderiza en
+// el build y lo demás se sirve bajo demanda.
 //
 // Devuelve [] si la lectura falla: un build no debe caerse porque la base no
-// responda. Con dynamicParams (default true) las rutas que no estén en la
-// lista se renderizan bajo demanda y a partir de ahí se cachean igual.
+// responda (la página lo convierte con alMenosUnParametro).
 
 /**
  * Slugs de tenant a prerenderizar para la PORTADA (`/nl/<tenant>`): todos los

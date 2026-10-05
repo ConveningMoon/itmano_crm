@@ -28,6 +28,12 @@ jobs:
       - name: Agent configuration
         run: npm run check:agents
 
+      # Los perfiles propios de cacheLife (next.config.ts) y los tipos de rutas
+      # los genera Next en .next/types; sin este paso un checkout limpio no
+      # conoce `cacheLife('hosted')` y tsc falla.
+      - name: Next types
+        run: npx next typegen
+
       # Aquí es donde salta un `.select()` con una columna que la vista ya no
       # expone: las listas se validan contra src/lib/supabase/database.types.ts.
       - name: Types

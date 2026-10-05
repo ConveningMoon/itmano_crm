@@ -17,8 +17,9 @@ import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-identity'
 import { domainOf } from '@/lib/email/sender-address'
 import { SettingsClient } from './settings-client'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-export default async function SettingsPage() {
+async function SettingsPage() {
   const ctx      = await requireTenantContext()
   const supabase = createAdminClient()
 
@@ -183,3 +184,5 @@ export default async function SettingsPage() {
     </>
   )
 }
+
+export default freshOnNavigation(SettingsPage)

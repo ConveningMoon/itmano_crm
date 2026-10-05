@@ -7,9 +7,7 @@ import {
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getNotifications } from '@/lib/data/notifications'
 import { MarkReadOnMount } from './mark-read-on-mount'
-
-// Force dynamic — reads cookies via the tenant context.
-export const dynamic = 'force-dynamic'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // ─── Per-type presentation ──────────────────────────────────────────────────
 interface TypeMeta { label: string; icon: LucideIcon; color: string }
@@ -51,7 +49,7 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export default async function NotificationsPage({
+async function NotificationsPage({
   searchParams,
 }: {
   searchParams: Promise<{ type?: string }>
@@ -217,3 +215,5 @@ function FilterChip({ label, href, active }: { label: string; href: string; acti
     </Link>
   )
 }
+
+export default freshOnNavigation(NotificationsPage)

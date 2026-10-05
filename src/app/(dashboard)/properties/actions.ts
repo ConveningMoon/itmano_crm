@@ -1,7 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { assertCanWriteProperty, resolveTargetTenant } from '@/lib/auth/guards'
@@ -11,6 +11,7 @@ import {
   parseEmbedInput, toPropertyEmbeds, EMBED_PLACEMENTS, MAX_EMBEDS, MAX_EMBED_URL,
 } from '@/lib/services/property-embeds'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { hostedTag } from '@/lib/hosted-cache'
 
 // http(s)-only URL, empty string tolerated (normalized to null before insert).
 const httpUrl = z
@@ -191,25 +192,18 @@ function toColumns(data: ParsedProperty) {
 }
 
 // ── Invalidación del catálogo público ────────────────────────────────────────
-// /web/<tenant> y sus detalles se sirven con ISR (revalidate 300). Sin esta
-// llamada, el cliente publica o corrige una propiedad y no la ve en su web hasta
-// que expire la ventana — y eso destruye la confianza mucho más de lo que gana
-// en velocidad. Aquí el revalidate deja de ser el mecanismo de frescura y pasa a
+// /web/<tenant> y sus fichas se sirven cacheadas (perfil `hosted`, 5 minutos).
+// Sin esta llamada, el cliente publica o corrige una propiedad y no la ve en su
+// web hasta que expire la ventana — y eso destruye la confianza mucho más de lo
+// que gana en velocidad. El plazo deja de ser el mecanismo de frescura y pasa a
 // ser solo el techo para lo que cambie fuera de la app.
 //
-// Se invalida por slug del tenant para no tirar el cache de los demás. Es
-// best-effort: si la lectura del slug falla, la página se refresca sola al
-// expirar la ventana; no tiene sentido abortar un guardado ya commiteado.
-async function revalidatePublicCatalog(
-  db: ReturnType<typeof createAdminClient>,
-  tenantId: string,
-  propertySlug?: string | null,
-) {
-  const { data } = await db.from('tenants').select('slug').eq('id', tenantId).maybeSingle()
-  const slug = (data as { slug: string } | null)?.slug
-  if (!slug) return
-  revalidatePath(`/web/${slug}`)
-  if (propertySlug) revalidatePath(`/web/${slug}/${propertySlug}`)
+// updateTag y no revalidateTag: quien guarda suele abrir su web justo después,
+// y tiene que ver su cambio, no la copia anterior. El tag es por tenant, así
+// que cubre el catálogo y TODAS sus fichas —también la URL vieja de una
+// propiedad que cambió de slug o se despublicó— sin tirar el caché de los demás.
+function expirePublicCatalog(tenantId: string) {
+  updateTag(hostedTag.web(tenantId))
 }
 
 export async function createProperty(
@@ -270,7 +264,7 @@ export async function createProperty(
   if (error) return { ok: false, error: slugError(error.message) }
 
   revalidatePath('/properties')
-  await revalidatePublicCatalog(db, targetTenant, parsed.data.slug)
+  expirePublicCatalog(targetTenant)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { ok: true, id: (data as any).id as string }
 }
@@ -325,7 +319,7 @@ export async function updateProperty(
   if (error) return { ok: false, error: slugError(error.message) }
 
   revalidatePath('/properties')
-  await revalidatePublicCatalog(db, existingRow.tenant_id as string, parsed.data.slug)
+  expirePublicCatalog(existingRow.tenant_id as string)
   return { ok: true }
 }
 
@@ -369,7 +363,7 @@ export async function deleteProperty(
   )
 
   revalidatePath('/properties')
-  await revalidatePublicCatalog(db, existingRow.tenant_id as string, existingRow.slug as string | null)
+  expirePublicCatalog(existingRow.tenant_id as string)
   return { ok: true }
 }
 

@@ -4,13 +4,11 @@ import { ArrowLeft } from 'lucide-react'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getAllActivity } from '@/lib/data/activity'
 import { ActivityRow } from './activity-ui'
-
-// Reads cookies via the tenant context → must render dynamically.
-export const dynamic = 'force-dynamic'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 const PAGE = 30
 
-export default async function ActivityPage({
+async function ActivityPage({
   searchParams,
 }: {
   searchParams: Promise<{ count?: string }>
@@ -78,3 +76,5 @@ export default async function ActivityPage({
     </div>
   )
 }
+
+export default freshOnNavigation(ActivityPage)

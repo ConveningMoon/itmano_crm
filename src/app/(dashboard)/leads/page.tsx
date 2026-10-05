@@ -7,8 +7,9 @@ import { parseLeadListFilters } from '@/lib/leads/list-filters'
 import { listLeadTags } from '@/lib/data/lead-tags'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-export default async function LeadsPage({
+async function LeadsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -89,3 +90,5 @@ function toChannelOptions(rawChannels: any[] | null): ChannelOption[] {
     active:      (r.active ?? true) as boolean,
   }))
 }
+
+export default freshOnNavigation(LeadsPage)

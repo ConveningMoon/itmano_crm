@@ -1,69 +1,56 @@
 import { Suspense } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Topbar } from '@/components/layout/topbar'
-import { NewVersionNotice } from '@/components/layout/new-version-notice'
+import { NavList } from '@/components/layout/nav-list'
+import { MobileNavTriggerFallback } from '@/components/layout/mobile-nav'
+import { NewLeadButton } from '@/components/layout/new-lead-button'
 import { SpeedInsights } from '@/components/layout/speed-insights'
 import {
-  AiLimitSlot, BrandFallback, BrandSlot, PlanLabelFallback, PlanLabelSlot,
-  SubscriptionBannerSlot, TenantSwitcherSlot, TopbarPillFallback, UnreadBadgeSlot,
+  AiLimitSlot, BrandFallback, BrandSlot, MobileNavSlot, NewLeadSlot, NewVersionNoticeSlot, SidebarNavSlot,
+  SidebarUserFallback, SidebarUserSlot, SubscriptionBannerSlot, TenantSwitcherSlot,
+  TopbarPillFallback, UnreadBadgeSlot,
 } from '@/components/layout/shell-slots'
-import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
-import { getShellData } from '@/lib/data/shell'
 
-export default async function DashboardLayout({
+// El layout NO espera a nada. Con Cache Components su marco —sidebar, topbar y
+// el <main> con el loading.tsx de la página— se prerenderiza en el build y sale
+// del CDN en la primera respuesta, antes de que la función lea la cookie.
+//
+// Todo lo que depende de la sesión (ítems según el rol, usuario, drawer móvil,
+// "Registrar Lead") o de la base (logo, plan, no leídas, límite de IA,
+// switcher, banner) es un slot de shell-slots.tsx dentro de su <Suspense>, con
+// un fallback del mismo tamaño. Cada slot lee el contexto por su cuenta
+// (getCurrentTenantContext está en cache()) y los datos de getShellData, así
+// que siguen siendo UNA lectura de contexto y UNA ola para el shell.
+//
+// No leas la sesión ni la base aquí arriba: un `await` en el cuerpo del layout
+// saca del shell estático todo el dashboard, incluido el loading.tsx de cada
+// página. Ver "Cache Components" en docs/agents/architecture.md.
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const ctx = await getCurrentTenantContext()
-
-  // Modo hub: super_admin sin tenant seleccionado — el nav colapsa a
-  // Centro de control + Notificaciones (el resto redirigiría al hub).
-  const hubMode = ctx.role === 'super_admin' && !ctx.tenant_id
-
-  // El shell sólo espera al contexto (rol, tenant, email). Todo lo demás que
-  // lee de la base —logo, plan, contador de no leídas, límite de IA, switcher
-  // de tenant y banner de suscripción— va dentro de un <Suspense> propio y
-  // llega por streaming. Sigue siendo UNA ola de consultas (getShellData la
-  // deduplica), pero ya no bloquea: el nav y el loading.tsx de la página se
-  // pintan de inmediato, y en una carga dura el HTML del shell sale antes de
-  // que la base responda.
-  //
-  // El email sale del claim del JWT que ya validó getCurrentTenantContext;
-  // pedirlo otra vez al servidor de auth era un round-trip entero.
-  const userEmail = ctx.email
-
-  // Dispara la ola del shell AQUÍ, sin esperarla. Los slots comparten esta
-  // misma promesa porque getShellData está en cache(); sin este disparo React
-  // no llega a renderizarlos hasta después del árbol de la página, y sus
-  // consultas salían una ola entera por detrás de las de la página.
-  //
-  // El `.catch` vacío no traga nada: cada slot vuelve a esperar la MISMA
-  // promesa y recibe el rechazo ahí, donde su error boundary lo ve. Sólo evita
-  // que Node la marque como rechazo no manejado durante el hueco en que nadie
-  // la está esperando todavía.
-  const shellData = getShellData(ctx)
-  shellData.catch(() => {})
-
   const brand = (
     <Suspense fallback={<BrandFallback />}>
-      <BrandSlot ctx={ctx} hubMode={hubMode} />
+      <BrandSlot />
     </Suspense>
   )
-  const planLabel = ctx.tenant_id ? (
-    <Suspense fallback={<PlanLabelFallback />}>
-      <PlanLabelSlot ctx={ctx} />
-    </Suspense>
-  ) : null
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-base)' }}>
       <Sidebar
-        role={ctx.role}
-        userEmail={userEmail}
-        hubMode={hubMode}
         brand={brand}
-        planLabel={planLabel}
+        nav={
+          // El fallback es el nav de un tenant: lo que ven agent_owner y agent.
+          <Suspense fallback={<NavList />}>
+            <SidebarNavSlot />
+          </Suspense>
+        }
+        user={
+          <Suspense fallback={<SidebarUserFallback />}>
+            <SidebarUserSlot />
+          </Suspense>
+        }
       />
       {/* Sidebar offset + content gutter come from the authoritative .app-shell-*
           rules in globals.css (a layered utility would lose to the unlayered
@@ -84,47 +71,53 @@ export default async function DashboardLayout({
         }}
       >
         <Topbar
-          role={ctx.role}
-          userEmail={userEmail}
-          hubMode={hubMode}
-          brand={brand}
-          planLabel={planLabel}
-          aiLimitSlot={ctx.tenant_id ? (
+          mobileNav={
+            <Suspense fallback={<MobileNavTriggerFallback />}>
+              <MobileNavSlot />
+            </Suspense>
+          }
+          aiLimitSlot={
             <Suspense fallback={<TopbarPillFallback />}>
-              <AiLimitSlot ctx={ctx} />
+              <AiLimitSlot />
             </Suspense>
-          ) : null}
-          tenantSwitcherSlot={ctx.role === 'super_admin' ? (
-            <Suspense fallback={<TopbarPillFallback width="150px" />}>
-              <TenantSwitcherSlot ctx={ctx} />
+          }
+          // Sin fallback: sólo existe para el super_admin, y reservarle sitio
+          // movería la barra de todos los demás al llegar la sesión.
+          tenantSwitcherSlot={
+            <Suspense fallback={null}>
+              <TenantSwitcherSlot />
             </Suspense>
-          ) : null}
+          }
           unreadBadgeSlot={
             <Suspense fallback={null}>
-              <UnreadBadgeSlot ctx={ctx} />
+              <UnreadBadgeSlot />
+            </Suspense>
+          }
+          newLeadSlot={
+            <Suspense fallback={<NewLeadButton />}>
+              <NewLeadSlot />
             </Suspense>
           }
         />
         {/* Sin fallback: el banner sólo existe en estados de suscripción
             excepcionales, y reservarle sitio siempre movería el contenido en
             el caso normal. */}
-        {ctx.tenant_id && (
-          <Suspense fallback={null}>
-            <SubscriptionBannerSlot ctx={ctx} />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <SubscriptionBannerSlot />
+        </Suspense>
         <main className="app-shell-main max-md:overflow-x-hidden" style={{ flex: 1, overflowY: 'auto' }}>
           {children}
         </main>
       </div>
       {/* Deploy que renderiza esta pestaña. Sólo existe en Vercel: en local
           no hay deploys que comparar y el aviso no se monta. */}
-      {process.env.VERCEL_DEPLOYMENT_ID && (
-        <NewVersionNotice version={process.env.VERCEL_DEPLOYMENT_ID} />
-      )}
+      <Suspense fallback={null}>
+        <NewVersionNoticeSlot />
+      </Suspense>
       {/* Métricas reales de quien usa el CRM (Speed Insights). Sólo en
           producción: los previews y local no tienen el script y sus visitas
-          gastarían la cuota gratuita de eventos. */}
+          gastarían la cuota gratuita de eventos. VERCEL_ENV se lee en el
+          build, al prerenderizar el shell, y el script sale en su HTML. */}
       {process.env.VERCEL_ENV === 'production' && <SpeedInsights />}
     </div>
   )

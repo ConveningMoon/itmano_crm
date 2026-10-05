@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewLeadClient } from './new-lead-client'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 export interface ChannelOption {
   id:          string
@@ -20,7 +21,7 @@ export interface TenantOption {
   name: string
 }
 
-export default async function NewLeadPage() {
+async function NewLeadPage() {
   const ctx      = await requireTenantContext()
   // El picker de tenant solo aplica a un super_admin SIN selección — estado hoy
   // inalcanzable aquí (requireTenantContext lo manda al hub), pero la expresión
@@ -81,3 +82,5 @@ export default async function NewLeadPage() {
     />
   )
 }
+
+export default freshOnNavigation(NewLeadPage)

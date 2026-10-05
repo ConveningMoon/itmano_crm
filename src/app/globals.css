@@ -208,6 +208,16 @@ body {
   to { background-position-x: -20%; }
 }
 
+/* Entrada de página del dashboard (template.tsx): fade + 6px hacia arriba.
+   En CSS para que corra en la primera pintura del shell estático, sin esperar
+   a hidratar. Sin fill: al terminar no deja transform puesto. */
+.page-enter {
+  animation: page-enter 250ms var(--ease-out-premium);
+}
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
 /* Spinner de carga compartido: navegación pendiente del nav (useLinkStatus) y
    botones que esperan una consulta. Tamaño fijo y visibilidad por opacidad, para
    que aparecer no desplace el layout. */
@@ -256,18 +266,20 @@ body {
 .btn-cta:hover { filter: brightness(1.08); box-shadow: var(--shadow-sm); }
 .btn-cta:active { transform: scale(0.98); }
 
-/* Nav items: base colors live here (not inline) so :hover can win the cascade */
+/* Nav items: base colors live here (not inline) so :hover can win the cascade.
+   El activo lo marca NavActiveMarker con [data-nav-active] DENTRO del enlace:
+   el enlace sale en el shell prerenderizado y sólo la marca lee la ruta. */
 .nav-item {
   color: var(--text-secondary);
   background-color: transparent;
   font-weight: 400;
   transition: background-color var(--dur-fast), color var(--dur-fast);
 }
-.nav-item:hover:not(.nav-item-active) {
+.nav-item:hover:not(:has([data-nav-active])) {
   background-color: var(--bg-elevated);
   color: var(--text-primary);
 }
-.nav-item-active {
+.nav-item:has([data-nav-active]) {
   color: var(--accent-gold);
   background-color: color-mix(in srgb, var(--accent-gold) 8%, transparent);
   font-weight: 500;

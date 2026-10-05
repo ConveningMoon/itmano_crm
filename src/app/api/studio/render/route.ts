@@ -9,7 +9,6 @@ import { renderDocumentToPng, studioFontFaceCss } from '@/lib/studio/render/chro
 // La llama el propio servidor (generar, recomponer, miniatura), nunca el
 // navegador — por eso el guardia es un secreto compartido y no la sesión.
 
-export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const schema = z.object({

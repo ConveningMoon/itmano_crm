@@ -3,7 +3,6 @@ import { getDeal } from '@/lib/agent-api/queries/deals'
 import { getTenantCurrency } from '@/lib/agent-api/queries/leads'
 import { serializeDeal } from '@/lib/agent-api/serializers/deal'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 export const GET = defineRoute({

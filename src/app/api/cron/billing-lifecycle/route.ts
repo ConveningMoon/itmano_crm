@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
-import { revalidateNewsletterPaths, type RevalidatableEdition } from '@/lib/newsletters/revalidate'
+import { revalidateNewsletterPaths } from '@/lib/newsletters/revalidate'
 
-const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'slug'])
+const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id'])
 
 // Los plazos de 14 y 60 dias no los dispara ningun webhook: hacen falta pasadas
 // programadas. Diario, via cron-job.org (misma infraestructura que el
@@ -166,14 +166,13 @@ export async function GET(request: NextRequest) {
           logError('newsletters', row.tenant_id, error)
           continue
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const bajadas = ((unpublished ?? []) as any[]) as RevalidatableEdition[]
+        const bajadas = unpublished ?? []
         report.newslettersUnpublished += bajadas.length
 
         // Sin purgar el cache, la pieza retirada se sigue sirviendo desde el
-        // edge hasta que expire la ventana de ISR (300 s). Best-effort: no
-        // puede tumbar la pasada del cron.
-        if (bajadas.length > 0) await revalidateNewsletterPaths(supabase, row.tenant_id, bajadas)
+        // edge hasta que vencen los 5 minutos del perfil `hosted`.
+        // Best-effort: no puede tumbar la pasada del cron.
+        if (bajadas.length > 0) revalidateNewsletterPaths(row.tenant_id)
       } catch (err) {
         logError('newsletters', row.tenant_id, err)
       }

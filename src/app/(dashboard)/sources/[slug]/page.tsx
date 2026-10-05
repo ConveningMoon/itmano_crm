@@ -13,6 +13,7 @@ import { SubmissionsList } from './submissions-list'
 import { SourceTabs } from './source-tabs'
 import { PageOptions } from './page-options'
 import { parseHostedPage } from '@/lib/hosted-page'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -22,7 +23,7 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
   manual:        'Manual',
 }
 
-export default async function ChannelDetailPage({
+async function ChannelDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>
@@ -216,3 +217,5 @@ export default async function ChannelDetailPage({
     </>
   )
 }
+
+export default freshOnNavigation(ChannelDetailPage)

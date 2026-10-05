@@ -992,3 +992,100 @@ negativo (quitando `/admin` de la lista, lo detecta).
   sin versión nueva la navegación sigue en cliente, y en móvil ocupa 343 px.
 - Skew Protection Maximum Age: la API devuelve "Skew Protection not found";
   queda para el panel (7 días).
+
+---
+
+# Fase 5 (Claude Opus 5.5) — 2026-10-03: Cache Components
+
+Rama: `perf/cache-components`. Dylan aprobó la adopción el 2026-10-03.
+Convenciones resultantes: "Cache Components" en `docs/agents/architecture.md`.
+
+## Qué se hizo (un commit por etapa)
+
+1. **Base** (`b009afb`): `cacheComponents: true`, fuera `dynamic`/`revalidate`/
+   `runtime` (`maxDuration` es compatible y se queda), codemod
+   `cache-components-instant-false` sobre `./src/app` (41 archivos), páginas
+   alojadas de ISR a `use cache` + `cacheLife('hosted')`, `connection()` en
+   `defineRoute` (fuera del `try`: si no, el aborto del prerender acababa
+   guardado como un 401 estático) y en `/api/version`, año del footer de
+   marketing en `use cache`, `next typegen` en CI antes de `tsc`.
+2. **Shell del dashboard** (`af40731`): el layout no espera a nada; sesión y
+   base en slots con `<Suspense>` (`shell-slots.tsx`). El fallback del nav es
+   el nav de tenant, idéntico para agent_owner y agent. Los hooks de ruta
+   (activo del nav, título, entrada de página) van a hojas con su `<Suspense>`.
+   La entrada de página pasa a CSS: con motion/react el shell llegaba con
+   `opacity:0` hasta hidratar. **Cero `instant = false` en el dashboard.**
+3. **Páginas alojadas** (`98d91d3`): tags `hostedTag` + `updateTag` /
+   `revalidateTag(tag, { expire: 0 })` en vez de `revalidatePath`.
+4. **Navegación** (`0ee372a`): el nav vuelve al prefetch por defecto.
+5. **Cierre**: `NewVersionNotice` lee el deploy en el request
+   (`NewVersionNoticeSlot`), documentación y regla de agentes.
+
+## Mediciones
+
+- **Rutas**: las 25 del dashboard pasan de `ƒ` (dinámica) a `◐` (shell
+  prerenderizado + streaming); marketing sigue `○`.
+- **Consultas y olas** (`SUPABASE_TRACE=1`, `next dev`, segunda carga): idénticas
+  antes y después en las 20 rutas de la tabla de la fase 3 (todas 2 olas,
+  `/leads/[id]` 3). Primer byte en dev: ~450 ms → ~90 ms.
+- **`next start` local**: primer byte del documento 6–9 ms (shell) con el resto
+  en streaming; antes esperaba a `user_profiles`.
+- **Clic en el nav hasta el skeleton de destino** (`next start`): 44 ms sin
+  prefetch (antes, sin hover), 21 ms con el prefetch por defecto. Las 9 rutas
+  del nav precargadas no añaden ninguna consulta (sigue en 9 en `/dashboard`).
+- **`partialPrefetching`**: evaluado y apagado. Mismo coste en la base, shells
+  más pesados y lentos (2–3,6 kB y 60–75 ms frente a 1,5–1,9 kB y 10–30 ms) y
+  sólo ahorra en enlaces a una misma ruta con distintos params (4 hoy).
+- **Páginas alojadas**: en el preview de Vercel salen `PRERENDER` y luego `HIT`;
+  un slug inexistente da 404 real y se cachea. Editar desde el CRM el precio de
+  una propiedad, el titular de una página de canal y el título de una edición
+  se vio al instante en la página pública (`next start` contra sandbox; los
+  tres cambios se revirtieron).
+
+## Qué queda con `instant = false` y por qué
+
+Sólo en páginas alojadas: `/web`, `/nl` y `/hp` esperan sus params fuera de
+`<Suspense>` para responder 404 de verdad (lo listado en
+`generateStaticParams` sale prerenderizado igual); la vista previa de `/hp` y
+el RSVP se renderizan por visita.
+
+## Cambios de comportamiento a vigilar
+
+- Un `redirect()` de una página (p. ej. super_admin en modo hub → `/admin`)
+  llega con el shell ya enviado: 200 + redirección en cliente, no 307. Sin
+  sesión el proxy sigue respondiendo 307.
+- En rutas con `[id]` el ítem activo del nav aparece al hidratar.
+- Con Cache Components las rutas se conservan ocultas con `<Activity>`.
+  Verificado con `next start`: un modal de Filtros abierto seguía abierto al
+  volver a /leads por el menú, y /leads/new conservaba lo escrito; tras crear
+  un lead, "Registrar Lead" habría mostrado la confirmación del lead anterior
+  en vez de un formulario vacío. Se resolvió en el commit de cierre (abajo).
+
+## Pendiente
+
+- Medir en el preview, con sesión, el TTFB del documento de `/dashboard` frente
+  al preview de `main`, y en producción tras el merge Observability y Speed
+  Insights por ruta.
+- Los pasos de propiedades del cron de facturación siguen sin invalidar `/web`
+  (techo de 5 minutos, como antes).
+
+## Cierre (2026-10-05): estado conservado y precargas de botones
+
+- **Cada visita a una página del dashboard vuelve a empezar limpia**, como
+  antes de Cache Components. Toda página exporta `freshOnNavigation(Página)`
+  (`src/components/layout/fresh-page.tsx`), que la remonta en el cleanup de un
+  `useLayoutEffect`, el instante en que `<Activity>` la oculta. Medido tres
+  veces: volver a /leads/new por "Registrar Lead" da el formulario vacío desde
+  el primer frame; el modal de Filtros vuelve cerrado; escribir en el buscador
+  (sólo cambia search params) no remonta el input ni le quita el foco. Mismas
+  consultas y olas en las 20 rutas.
+- Descartado: `useRouter().bfcacheId` como `key`. En el template no cambia
+  nunca (es el id del segmento del layout) y dentro de la página dejaba ver la
+  versión conservada, con el estado viejo, hasta ~3 s, mientras llegaban los
+  datos de la navegación nueva.
+- "Registrar Lead" y la campana navegan con `router.push` y nada precargaba su
+  destino: ahora `router.prefetch` (sólo el shell estático, sin consultas). Del
+  clic a pintar /leads/new: ~1 s → 13 ms; /notifications: 8 ms.
+- `NewVersionNotice` lee el deploy en el request (`NewVersionNoticeSlot`):
+  verificado con un build sin `VERCEL_DEPLOYMENT_ID` y la variable sólo en
+  runtime.

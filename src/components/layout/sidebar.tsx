@@ -1,25 +1,19 @@
 import type { ReactNode } from 'react'
 import { LogOut } from 'lucide-react'
-import { NavItem } from './nav-item'
 import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { signOut } from '@/lib/auth/sign-out'
-import type { TenantRole } from '@/lib/auth/tenant-context'
-import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
-// El logo y el plan dependen de la base y llegan como ReactNode desde el
-// layout, cada uno dentro de su <Suspense>: el nav se pinta en cuanto se
-// conoce el rol y esas dos piezas se rellenan por streaming en su sitio.
-export function Sidebar({ role, userEmail, hubMode = false, brand = null, planLabel = null }: {
-  role: TenantRole
-  userEmail: string
-  hubMode?: boolean
-  brand?: ReactNode
-  // Nombre de la suscripción del tenant (p. ej. "Plan Growth"); nada en hub.
-  planLabel?: ReactNode
+// Marco del sidebar de escritorio. Es estático: sale en el shell prerenderizado
+// del dashboard. Lo que depende de la sesión o de la base (logo, ítems según el
+// rol, usuario y plan) llega como ReactNode desde el layout, cada pieza dentro
+// de su <Suspense> con un fallback del mismo tamaño (ver shell-slots.tsx).
+export function Sidebar({ brand, nav, user }: {
+  brand: ReactNode
+  // Ítems del nav (los <NavItem>); el <nav> que los contiene es de aquí.
+  nav: ReactNode
+  // Bloque del usuario activo (SidebarUser) — sin el botón de cerrar sesión.
+  user: ReactNode
 }) {
-  // Admin console is super_admin-only — hidden from the nav for everyone else.
-  const items = navItemsForRole(role, { hubMode })
-
   return (
     // Hidden on phones (drawer takes over <md); restored to the fixed flex column
     // at md: — the desktop (≥768px) render is byte-identical to before.
@@ -73,66 +67,13 @@ export function Sidebar({ role, userEmail, hubMode = false, brand = null, planLa
           overflowY: 'auto',
         }}
       >
-        {items.map(item => (
-          <NavItem key={item.href} {...item} hrefs={items.map(i => i.href)} />
-        ))}
+        {nav}
       </nav>
 
       {/* Active user + sign out */}
       <style>{`.signout-btn:hover { background: var(--bg-elevated) !important; color: var(--text-secondary) !important; }`}</style>
       <div style={{ borderTop: '1px solid var(--border-subtle)' }}>
-        <div
-          style={{
-            padding: '12px 16px 8px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-          }}
-        >
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: 'rgba(91,142,201,0.15)',
-              border: '1px solid rgba(91,142,201,0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '11px',
-              fontWeight: '600',
-              color: 'var(--accent-blue)',
-              flexShrink: 0,
-            }}
-          >
-            {initialsFromEmail(userEmail)}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: 'var(--text-primary)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {userEmail}
-            </div>
-            <div
-              style={{
-                fontSize: '10px',
-                color: 'var(--text-muted)',
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {ROLE_LABELS[role]}
-            </div>
-            {planLabel}
-          </div>
-        </div>
+        {user}
 
         <form action={signOut} style={{ padding: '0 12px 12px' }}>
           <PendingSubmitButton

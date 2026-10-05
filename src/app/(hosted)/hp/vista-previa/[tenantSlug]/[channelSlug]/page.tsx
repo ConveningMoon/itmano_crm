@@ -2,6 +2,10 @@ import { notFound } from 'next/navigation'
 import { loadHostedPage } from '../../../[tenantSlug]/[channelSlug]/load'
 import { HostedPageView } from '../../../[tenantSlug]/[channelSlug]/hosted-page-view'
 
+// instant = false a propósito: se renderiza en cada visita (depende del
+// enlace concreto) y no tiene un shell que valga la pena adelantar.
+export const instant = false
+
 // Previsualización del constructor de páginas alojadas.
 //
 // Existe como ruta propia para que la pública pueda cachearse: mientras el
@@ -11,12 +15,12 @@ import { HostedPageView } from '../../../[tenantSlug]/[channelSlug]/hosted-page-
 //
 // Aquí SÍ es dinámica a propósito: el editor guarda y recarga esperando ver su
 // último cambio, así que cachearla sería exactamente lo contrario de lo que hace
-// falta.
+// falta. Con Cache Components basta con NO usar `use cache`: loadHostedPage lee
+// sin caché, así que la página se renderiza en cada visita.
 //
 // Cuelga de /hp/ para conservar el comportamiento actual: la URL es pública y
 // solo la conoce quien edita. Si en algún momento debe exigir sesión, basta
 // moverla fuera de /hp/ — el proxy la protege automáticamente.
-export const dynamic = 'force-dynamic'
 
 type Params = Promise<{ tenantSlug: string; channelSlug: string }>
 

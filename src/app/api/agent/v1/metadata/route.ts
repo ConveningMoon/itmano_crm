@@ -6,7 +6,6 @@ import { BUCKETS, BUY_DIMS, SELL_DIMS } from '@/lib/scoring/vocabulary'
 import { PIPELINE } from '@/lib/agent-api/schemas/deal'
 import { getTenantCurrency } from '@/lib/agent-api/queries/leads'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // Enums vivos del CRM. Existe para que el consumidor no hardcodee vocabulario

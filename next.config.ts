@@ -30,6 +30,22 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SHARP_NATIVE = ["./node_modules/@img/**"]
 
 const nextConfig: NextConfig = {
+  // Partial Prerendering: el shell de cada ruta (menú, cabecera, skeletons) se
+  // prerenderiza en el build y sale del CDN; lo que lee la sesión o la base
+  // llega por streaming detrás. Convenciones en docs/agents/architecture.md
+  // ("Cache Components").
+  cacheComponents: true,
+  cacheLife: {
+    // Páginas públicas alojadas (/web, /nl, /hp). Mismo techo que el ISR de
+    // 300 s que tenían: lo normal es que las invalide la acción que guarda el
+    // cambio, y este plazo sólo cubre lo que cambie fuera del CRM. `expire`
+    // no se fija (hereda "nunca" de default): una página poco visitada sirve
+    // su copia y se regenera detrás, como hacía el ISR.
+    hosted: {
+      stale:      300,
+      revalidate: 300,
+    },
+  },
   images: {
     // Sin esto, next/image rechaza cualquier URL remota y toca caer a <img>
     // plano: se sirve el original a tamaño completo, sin WebP ni redimensionado.

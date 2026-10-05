@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { m } from 'motion/react'
@@ -73,34 +73,24 @@ interface NavItemProps {
 }
 
 export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'nav-indicator', hrefs }: NavItemProps) {
-  const pathname = usePathname()
-  const isActive = computeActive(pathname, href, hrefs)
   const Icon = ICONS[icon]
 
-  // Prefetch POR INTENCIÓN, no al entrar en viewport.
+  // Prefetch por defecto, al entrar en viewport.
   //
-  // Con el prefetch por defecto, cada carga de página disparaba ~21 renders
-  // dinámicos en el servidor: el nav tiene ~14 rutas y Sidebar y MobileNav están
-  // MONTADOS a la vez (uno lo esconde CSS, pero sus Link siguen prefetcheando),
-  // así que cada ruta se pedía dos veces. Todas son dinámicas —leen cookies para
-  // el contexto de tenant—, o sea que ninguna se sirve de un cache estático: son
-  // invocaciones reales que compiten con la página que el usuario sí pidió.
+  // Antes de Cache Components iba por intención (hover/foco/toque): cada ruta
+  // era dinámica y prefetchearla era un render completo en el servidor, ~21 por
+  // carga de página. Ahora cada ruta tiene su shell prerenderizado y el
+  // prefetch trae SÓLO eso (nav, cabecera y el skeleton del loading.tsx): sale
+  // del build, sin tocar la base —medido con SUPABASE_TRACE: la carga de
+  // /dashboard sigue en sus 9 consultas con las 9 rutas del nav prefetcheadas—.
+  // A cambio, el clic pinta el skeleton de destino sin esperar a la red,
+  // también en un toque de móvil, que antes llegaba sin nada precargado.
   //
-  // `prefetch={false}` hasta que hay intención; al primer hover/foco/toque pasa a
-  // `null`, que es el valor que restaura el prefetch por defecto de Next. El
-  // hover da 100-300 ms de ventaja, suficiente para que el clic siga sintiéndose
-  // instantáneo, y el nav móvil oculto ya nunca prefetchea nada.
-  const [intent, setIntent] = useState(false)
-  const armPrefetch = () => setIntent(true)
-
+  // El drawer móvil sólo monta sus ítems al abrirse, así que no duplica nada.
   return (
     <Link
       href={href}
-      prefetch={intent ? null : false}
-      onMouseEnter={armPrefetch}
-      onFocus={armPrefetch}
-      onTouchStart={armPrefetch}
-      className={isActive ? 'nav-item nav-item-active' : 'nav-item'}
+      className="nav-item"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -113,26 +103,18 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
         position: 'relative',
       }}
     >
-      {isActive && (
-        <m.span
-          layoutId={indicatorId}
-          transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: '6px',
-            bottom: '6px',
-            width: '2px',
-            borderRadius: '1px',
-            backgroundColor: 'var(--accent-gold)',
-          }}
-        />
-      )}
+      {/* Lo único que lee la ruta, en su propio <Suspense>: en el prerender de
+          una ruta con parámetros (/leads/[id]) la ruta no se conoce y el hook
+          suspende. Así el enlace sale en el shell estático y sólo la marca de
+          activo espera; en las rutas sin parámetros sale ya marcada. */}
+      <Suspense fallback={null}>
+        <NavActiveMarker href={href} hrefs={hrefs} indicatorId={indicatorId} />
+      </Suspense>
       {Icon && <Icon size={16} strokeWidth={1.6} />}
       <span style={{ flex: 1 }}>{label}</span>
-      {/* Señal inmediata del clic: con prefetch por intención, un toque en móvil
-          o un clic sin hover previo llega sin nada precargado y el loading.tsx
-          de la ruta no aparece hasta que responde el servidor. */}
+      {/* Señal inmediata del clic para cuando el prefetch aún no llegó (red
+          lenta, o un clic justo al cargar): hasta que responde el servidor no
+          aparece el loading.tsx de la ruta. */}
       <LinkPendingSpinner />
       {badge !== undefined && (
         <span
@@ -164,5 +146,30 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
         </span>
       )}
     </Link>
+  )
+}
+
+/**
+ * Barra dorada del ítem activo. Lleva `data-nav-active`, que es lo que pinta el
+ * enlace como activo (`.nav-item:has([data-nav-active])` en globals.css).
+ */
+function NavActiveMarker({ href, hrefs, indicatorId }: { href: string; hrefs?: string[]; indicatorId: string }) {
+  const pathname = usePathname()
+  if (!computeActive(pathname, href, hrefs)) return null
+  return (
+    <m.span
+      data-nav-active=""
+      layoutId={indicatorId}
+      transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: '6px',
+        bottom: '6px',
+        width: '2px',
+        borderRadius: '1px',
+        backgroundColor: 'var(--accent-gold)',
+      }}
+    />
   )
 }

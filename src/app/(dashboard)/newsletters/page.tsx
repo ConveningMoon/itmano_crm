@@ -9,6 +9,7 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import { getTenantRow } from '@/lib/data/tenants'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Pantalla única de la newsletter del tenant — ya no hay series que elegir
 // antes: el canal implícito se prepara aquí, ANTES de leer nada, para que
@@ -21,7 +22,7 @@ import { EditionsList } from './editions-list'
 // en esta misma visita, no hay pasos todavía y el resultado vacío es correcto.
 const SEQUENCE_STEP_SELECT = `${columns('email_sequence_steps', ['id'])}, email_sequences!inner(id, acquisition_channels!inner(channel_type, archived_at))`
 
-export default async function NewslettersPage() {
+async function NewslettersPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const db = createAdminClient()
@@ -92,7 +93,7 @@ export default async function NewslettersPage() {
   // la tiene todavía: en ese caso nace vacía y el aviso de abajo es correcto.
   const sequenceId = 'error' in canal
     ? null
-    : (canal.sequenceId ?? await ensureNewsletterSequence(db, tenant_id, canal.id))
+    : (canal.sequenceId ?? (await ensureNewsletterSequence(db, tenant_id, canal.id)))
 
   // reason: el cliente de Supabase no está tipado en este repo.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -111,3 +112,5 @@ export default async function NewslettersPage() {
     />
   )
 }
+
+export default freshOnNavigation(NewslettersPage)

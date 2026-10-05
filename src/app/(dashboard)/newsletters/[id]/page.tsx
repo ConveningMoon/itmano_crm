@@ -10,6 +10,7 @@ import { getTenantRow } from '@/lib/data/tenants'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Editor de una edición. Server Component: hace todo el fetch (edición,
 // biblioteca del Estudio, slug del tenant) y se lo pasa como props a
@@ -31,7 +32,7 @@ export const maxDuration = 300
 // editor la muestra en el círculo del preview, igual que la página pública.
 const AGENT_OPTION_COLUMNS = columns('agents', ['id', 'name', 'cover_photo_url'])
 
-export default async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
+async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const ctx = await requireTenantContext()
   if (!ctx.tenant_id) redirect('/newsletters')
@@ -92,3 +93,5 @@ export default async function EditionPage({ params }: { params: Promise<{ id: st
     />
   )
 }
+
+export default freshOnNavigation(EditionPage)

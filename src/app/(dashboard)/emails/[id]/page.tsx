@@ -13,6 +13,7 @@ import { getEligibleLeadsForSequence } from '@/lib/data/leads'
 import { EmailMetricsCard } from './email-metrics-card'
 import { getStepMetrics } from '@/lib/services/email-metrics'
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus, Send } from 'lucide-react'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {
@@ -86,7 +87,7 @@ function EmailMetricsSkeleton() {
   )
 }
 
-export default async function EmailSequenceDetailPage({
+async function EmailSequenceDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
@@ -394,3 +395,5 @@ export default async function EmailSequenceDetailPage({
     </>
   )
 }
+
+export default freshOnNavigation(EmailSequenceDetailPage)

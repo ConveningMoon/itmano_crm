@@ -16,6 +16,7 @@ import { DEFAULT_AUDIENCE_TAG_SLUGS } from '@/lib/open-houses/model'
 import { OpenHouseTab } from './open-houses/open-house-tab'
 import { mapBusinessProfile } from '@/lib/data/business-profile'
 import { businessTimeZone } from '@/lib/time-zones'
+import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
 // del formulario, con botón Editar que abre el formulario completo COMO MODAL
@@ -30,7 +31,7 @@ const STATUS_LABEL: Record<string, string> = {
   available: 'Disponible', in_process: 'En proceso', sold: 'Vendida',
 }
 
-export default async function PropertyDetailPage({
+async function PropertyDetailPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>
@@ -236,3 +237,5 @@ export default async function PropertyDetailPage({
     </>
   )
 }
+
+export default freshOnNavigation(PropertyDetailPage)

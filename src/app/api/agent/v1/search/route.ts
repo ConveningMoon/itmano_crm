@@ -1,7 +1,6 @@
 import { defineRoute } from '@/lib/agent-api/handler'
 import { parseSearchParams, search } from '@/lib/agent-api/queries/search'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // Transversal y deliberadamente pobre: localiza una entidad y devuelve tipo, id

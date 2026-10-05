@@ -1,7 +1,6 @@
 import { defineRoute } from '@/lib/agent-api/handler'
 import { createDraft } from '@/lib/agent-api/queries/writes'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 // CREA UN BORRADOR Y LO DEVUELVE. No envía. Ninguna ruta de esta superficie

@@ -105,15 +105,15 @@ export function bathroomsLabel(full: number | null, half: number | null): string
   return h > 0 ? `${f} + ${h} medio${h === 1 ? '' : 's'}` : String(f)
 }
 
-// ── Parámetros para el prerender (ISR) ───────────────────────────────────────
-// Sin generateStaticParams, un segmento dinámico NO entra al manifiesto de
-// prerender y `export const revalidate` se ignora: la ruta se renderiza entera
-// en cada visita. Verificado — con revalidate solo, prerender-manifest quedaba
-// vacío y el catálogo tardaba ~1s por request.
+// ── Parámetros para el prerender ─────────────────────────────────────────────
+// Lo que devuelven se prerenderiza en el build con sus datos (`use cache` en
+// cada página). Antes de Cache Components esto era lo que activaba el ISR: sin
+// generateStaticParams el `revalidate` de un segmento dinámico se ignoraba y
+// el catálogo tardaba ~1s por request.
 //
 // Ambas devuelven [] si la lectura falla: un build no debe caerse porque la base
-// no responda. Con dynamicParams (default true) las rutas que no estén en la
-// lista se renderizan bajo demanda y a partir de ahí se cachean igual.
+// no responda (la página convierte el [] con alMenosUnParametro). Las rutas que
+// no estén en la lista se renderizan bajo demanda.
 
 export async function getPublicTenantSlugs(): Promise<string[]> {
   const db = createAdminClient()

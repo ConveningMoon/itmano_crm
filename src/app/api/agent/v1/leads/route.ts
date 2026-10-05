@@ -3,7 +3,6 @@ import { parseLeadFilters, listLeads, getLead, getTenantCurrency } from '@/lib/a
 import { createLead } from '@/lib/agent-api/queries/writes'
 import { serializeLead } from '@/lib/agent-api/serializers/lead'
 
-export const runtime = 'nodejs'
 export const maxDuration = 30
 
 export const GET = defineRoute({

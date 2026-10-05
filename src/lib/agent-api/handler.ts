@@ -1,4 +1,5 @@
 import 'server-only'
+import { connection } from 'next/server'
 import { authenticate, requireScope, type AgentContext, type Scope } from './auth'
 import { checkRateLimit } from './rate-limit'
 import { beginIdempotent, requestHash } from './idempotency'
@@ -30,6 +31,12 @@ type RouteContext = { params: Promise<Record<string, string>> }
  */
 export function defineRoute(opts: RouteOptions) {
   return async function route(req: Request, routeCtx: RouteContext): Promise<Response> {
+    // FUERA del try a propósito. Con Cache Components el build intenta
+    // prerenderizar los GET, y leer las cabeceras aborta ese prerender
+    // lanzando: dentro del try, el catch lo convertiría en un 401 y el build
+    // lo guardaría como respuesta estática de la ruta.
+    await connection()
+
     let rateHeaders: Record<string, string> = {}
 
     try {

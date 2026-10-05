@@ -1,5 +1,15 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { cacheLife } from 'next/cache'
+
+// El año entra en el HTML prerenderizado: una lectura de reloj en el render
+// rompería el prerender con Cache Components. Se recalcula a diario, que basta
+// para que el cambio de año aparezca solo.
+async function AnioActual() {
+  'use cache'
+  cacheLife('days')
+  return new Date().getFullYear()
+}
 
 export function MarketingFooter() {
   return (
@@ -62,7 +72,7 @@ export function MarketingFooter() {
           }}
         >
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            © {new Date().getFullYear()} ITMANO. Todos los derechos reservados.
+            © <AnioActual /> ITMANO. Todos los derechos reservados.
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
             CRM INMOBILIARIO CON IA
