@@ -1205,3 +1205,89 @@ los datos.
 La conclusión "Supabase Pro no acelera nada hoy" era incompleta. Se basaba en
 los 0,5–7 ms de las consultas dentro de Postgres y no medía la latencia de la
 API tras una pausa.
+
+## Segunda revisión (Claude Opus 5.5, 2026-10-10, misma rama)
+
+Dylan pidió revisar todo otra vez antes de mergear. Resultado: el
+enfriamiento era el diagnóstico correcto y el latido es lo que hace falta. La
+revisión encontró además un arreglo de código y un coste de infraestructura.
+También corrigió una medición de la fase 5.
+
+### ¿Instancia o conexiones? Experimento controlado
+
+`pg_stat_activity` mostró que el pool de PostgREST se recrea (todas sus
+conexiones tenían ~2 minutos) y sus logs registran conexiones cerradas por
+inactividad. Si la causa fuera abrir conexiones, un latido de una consulta no
+bastaría para una página que lanza diez en paralelo. Se midió, en
+`upstream_service_time` de los logs de borde y con la clave anon:
+
+| Paso | Tiempo |
+|---|---|
+| E1: 1 consulta tras 200 s sin tráfico | 300 ms |
+| E2: 10 en paralelo justo después | 9–47 ms (mediana 24) |
+| E3: 10 en paralelo 5 s después | 2–5 ms |
+| E4: 10 en paralelo tras 40 s | 4–39 ms (mediana 30) |
+| E5: 10 en paralelo tras 200 s | 157–179 ms (mediana 172) |
+| E6: 10 en paralelo 5 s después | 2–6 ms |
+
+Lo caro es despertar la instancia (E1, E5); abrir conexiones nuevas con la
+instancia despierta cuesta ~25 ms (E2, E4). Basta una consulta para
+despertarla: el latido de una consulta es suficiente.
+
+### Página real con y sin latido
+
+`/dashboard` completo, pedido desde un Web Worker del navegador de la sesión
+(tiempo total hasta tener todos los datos): 1 119 ms tras 200 s sin tráfico,
+635 ms en caliente, **549 ms tras 200 s con un latido cada 10 s** a
+`/api/health`. (La segunda ronda, sobre `/leads`, quedó contaminada por
+peticiones propias justo antes de la carga fría y se descarta.)
+
+### Arreglo: una ola menos para los agentes
+
+`getCurrentTenantContext` esperaba el perfil para, si el rol era `agent`,
+pedir después su fila de `agents`: dos consultas en serie antes de cada página
+y cada action para 2 de los 5 usuarios de producción. Las mediciones de olas
+de las fases 1–5 se hicieron como agent_owner y super_admin, por eso no se vio.
+Ahora van en paralelo (`agents.user_id` es único) y el tenant se valida en
+memoria. 6 tests nuevos en `tests/auth/tenant-context.test.ts`, incluido uno
+que falla si las consultas vuelven a ir en serie.
+
+### Coste del proxy
+
+Preview temporal del sandbox (rama `exp/ppr-stream`, borrada) con una página
+mínima de PPR (shell estático + 2 s dinámicos), sin y con el proxy. Desde
+Node, desde Europa:
+
+- Sin proxy: primer byte del shell en 78–140 ms; lo dinámico a ~2,25 s.
+- Con `proxy.ts`: shell en 248–302 ms; lo dinámico a ~2,43 s.
+- Con el guard como `middleware.ts` edge: igual que con `proxy.ts` (250–300 ms).
+
+`proxy.ts` corre en `sfo1` y Vercel ejecuta también el middleware edge en la
+región de las funciones: cada carga y cada navegación pagan un viaje
+usuario ↔ California. Sólo lo reduce la mudanza de región.
+
+### Corrección a la fase 5: cómo se medía el primer byte
+
+- El "primer byte del documento ~88 ms" era el `103 Early Hints` de Vercel:
+  Chrome lo cuenta en `responseStart`. El dato real es
+  `finalResponseHeadersStart`.
+- El navegador integrado de la app de Claude retiene las respuestas hasta
+  completarlas: ahí el shell parece llegar a la vez que los datos (FCP 2,06 s
+  en frío), aunque desde Node el mismo preview entrega el shell primero, con
+  `identity`, gzip o Brotli, por HTTP/1.1 o HTTP/2, y con el mismo User-Agent
+  que el navegador integrado. Un servidor externo que envía 1 byte cada 0,5 s
+  sí llegó por partes, así que la retención es selectiva de esa capa. En un
+  navegador normal el shell de Cache Components funciona.
+
+### Cambios finales de la rama
+
+- Cron de Vercel cada minuto a `/api/warm` (`vercel.json`): sustituye el job
+  manual de cron-job.org que se proponía. Vercel envía `CRON_SECRET`.
+- `DbWarmer` late también con `pointermove` y `focus`: tras una pausa larga
+  despierta la base cuando la persona vuelve, antes de su primer clic.
+
+### Observación aparte (no es de velocidad)
+
+`vercel.json` programa `/api/cron/score-decay` a diario, pero esa ruta sólo
+exporta `POST` y Vercel Cron llama con `GET`: esa entrada responde 405. Si el
+decay corre, lo dispara otro programador (cron-job.org). Conviene comprobarlo.
