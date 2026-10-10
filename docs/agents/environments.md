@@ -25,6 +25,23 @@ pruebas y advisors pertinentes; cumplido ese gate no hace falta pedir otra
 autorización. Los `DROP`, `TRUNCATE`, borrados masivos y demás cambios difíciles
 de recuperar conservan la confirmación explícita del contrato operativo.
 
+### Claves de firma JWT
+
+Las sesiones se firman con ES256. Cada build incrusta las claves públicas del
+proyecto al que apunta (`next.config.ts` → `src/lib/supabase/jwks.ts`) para
+que `getClaims` no las descargue.
+
+- **Rotar** no pide nada: un token con un `kid` que no viene en el bundle hace
+  que `getClaims` descargue el JWKS, como antes.
+- **Revocar** una clave (por ejemplo, tras una filtración) pide redeployar
+  producción y sandbox justo después: hasta el siguiente build, el servidor
+  de Next sigue aceptando la firma de la clave revocada. PostgREST la rechaza
+  al instante, así que ese token no lee datos: `getCurrentTenantContext`
+  falla al leer el perfil y cierra la sesión.
+- El log del build muestra el `kid` incrustado (`[jwks] claves de sesión en el
+  bundle: ...`). Si la descarga falla, el build sigue y avisa con
+  `[jwks] sin claves en el bundle`.
+
 ## Desarrollo local
 
 `.env.development.local` debe redirigir las variables Supabase al sandbox y gana

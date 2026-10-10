@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, connection } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { opcionesClaims } from '@/lib/supabase/jwks'
 
 // Toca la base por el mismo camino que una página (API REST → PostgREST →
 // Postgres, con service_role) para que no se enfríe. Lo llama DbWarmer desde el
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   if (!viaCron) {
     const supabase = await createClient()
-    const { data: claims } = await supabase.auth.getClaims()
+    const { data: claims } = await supabase.auth.getClaims(undefined, opcionesClaims)
     if (!claims) return respuesta(401)
   }
 

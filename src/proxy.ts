@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { HOSTED_SUBDOMAIN_REWRITE } from '@/lib/hosted-page'
+import { opcionesClaims } from '@/lib/supabase/jwks'
 
 // sitemap.xml: público en TODOS los hosts.
 //
@@ -81,9 +82,13 @@ export async function proxy(request: NextRequest) {
   // Si algún día se volviera a una clave simétrica, getClaims cae solo al mismo
   // request remoto: se pierde la mejora, no la seguridad.
   //
+  // La clave pública viene en el bundle (`opcionesClaims`): este proxy corre en
+  // el borde cercano a cada usuario y, sin ella, cada instancia nueva la
+  // descargaba de us-west-1 antes de responder (ver src/lib/supabase/jwks.ts).
+  //
   // No corras lógica entre createServerClient y esta llamada (evita logouts
   // aleatorios).
-  const { data: claims } = await supabase.auth.getClaims()
+  const { data: claims } = await supabase.auth.getClaims(undefined, opcionesClaims)
 
   if (!claims) {
     const loginUrl = new URL('/login', request.url)

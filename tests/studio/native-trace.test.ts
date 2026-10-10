@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import nextConfig from '../../next.config'
+import { PHASE_TEST } from 'next/constants'
+import config from '../../next.config'
+
+// next.config.ts exporta una función (en build y dev descarga las claves de
+// sesión); en la fase de test devuelve la config sin tocar la red.
+const nextConfig = await config(PHASE_TEST)
 
 // Guardia del fallo de sharp en producción.
 //
