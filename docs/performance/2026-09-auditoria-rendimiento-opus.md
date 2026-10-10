@@ -1130,3 +1130,78 @@ a cualquier usuario fuera de UTC.
 - Pendiente menor: "Entrar al CRM" del super_admin tarda ~4 s (espera al
   contexto, luego al tenant y renderiza `/dashboard` entero en la respuesta de
   la acción). No cambió con Cache Components.
+
+
+---
+
+# Fase 6 (Claude Sonnet 5.5) — 2026-10-10: la base se enfría
+
+Rama: `perf/db-warm`. Motivo: tras las fases 1–5 el shell sale en ~88 ms, pero
+Dylan percibe que el contenido aún tarda. Quedan 0,4–1,3 s entre el shell y
+los datos.
+
+## Dónde se va el tiempo
+
+- **Dentro de Postgres, casi nada.** `pg_stat_statements`: las consultas de
+  PostgREST promedian 1,9–7 ms. Lo lento de la lista (200–600 ms) son consultas
+  del propio panel de Supabase (extensiones, zonas horarias, privilegios).
+- **Las filas son pequeñas** (`tenants` 680 B, `properties` 6 kB): no es payload.
+- **Sí hay un recargo por enfriamiento.** Logs de borde de la API
+  (`query_logs`, `edge_logs`, 24 h, sólo llamadas del servidor de Vercel desde
+  el colo SJC), mediana de `origin_time` según la pausa desde la petición
+  anterior a `/rest/v1`:
+
+  | Pausa | n | origin p50 | upstream p50 |
+  |---|---|---|---|
+  | < 3 s | 717 | 32 ms | 14 ms |
+  | 3–20 s | 38 | 36 ms | 10 ms |
+  | 20–45 s | 19 | 67 ms | 37 ms |
+  | 45–90 s | 13 | 119 ms | 54 ms |
+  | 90–150 s | 29 | 210 ms | 90 ms |
+  | 150–240 s | 25 | 432 ms | 229 ms |
+  | 240–330 s | 209 | 458 ms | 264 ms |
+
+  Los de 240–330 s son casi todos el monitor de `/api/health` (cada 5 min):
+  ninguno mantiene caliente la base. Los 394 `GET /rest/v1/tenants` del día
+  (de 1 110 llamadas) son en gran parte ese monitor.
+- **Pool de PostgREST estable:** 10 conexiones, la más joven de 44 s: no hay
+  reconexión constante. El recargo afecta tanto al tramo previo al upstream
+  (~+180 ms) como al propio upstream (~+240 ms), lo que apunta a la instancia
+  (compute Nano, 0,5 GB, CPU compartida) y no a una consulta concreta.
+- **La función de Vercel no se enfría a esa escala:** medido en el navegador de
+  la sesión con `/api/version` (sin base), tiempo de espera 251–262 ms tras
+  pausas de 20, 60 y 120 s, igual que en caliente. (Desde mi PC los sondeos con
+  Node daban +240 ms en la primera petición: era la conexión nueva por el proxy
+  local, no la función.)
+- Otras colas: `/auth/v1/.well-known/jwks.json` se pide 35 veces al día (176 ms
+  de mediana; la caché de supabase-js dura 10 min por instancia) y las lecturas
+  de Storage de las imágenes originales tardan 832 ms de mediana.
+
+## Qué se implementó
+
+- `/api/warm` (`src/app/api/warm/route.ts`): un conteo `HEAD` sobre `tenants`
+  con `service_role` por el mismo camino que una página. Sólo responde a una
+  sesión válida o a `Authorization: Bearer <CRON_SECRET>`; sin ellos, 401 sin
+  tocar la base. Verificado en local: sin sesión 401, con secreto erróneo 401,
+  con sesión 204.
+- `DbWarmer` (`src/components/layout/db-warmer.tsx`) y sus reglas puras
+  (`src/lib/warm.ts`, 5 tests): latido cada ~10 s con la pestaña a la vista y
+  actividad en los últimos 5 minutos; se detiene solo. Se monta sólo con
+  `VERCEL_ENV=production`, en el layout de `(dashboard)`. Verificado en local
+  (latidos a los 12 s y 35 s, estado 204). Build con
+  `VERCEL_ENV=production npm run build` correcto.
+- Documentado en `docs/agents/architecture.md` ("Rendimiento de lecturas").
+
+## Qué falta y quién lo hace
+
+- Dylan: job de cron-job.org cada minuto a `/api/warm` con el secreto, para
+  cubrir las pausas sin nadie conectado (ver `ACCIONES-DYLAN.md`, 5e).
+- Tras desplegar, repetir la tabla de arriba con los mismos filtros y comparar
+  la mediana en la banda de más de 90 s.
+- Si no basta, probar el compute Micro (Supabase Pro). Sin garantía.
+
+## Corrección a la fase 4
+
+La conclusión "Supabase Pro no acelera nada hoy" era incompleta. Se basaba en
+los 0,5–7 ms de las consultas dentro de Postgres y no medía la latencia de la
+API tras una pausa.

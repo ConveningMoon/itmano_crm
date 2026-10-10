@@ -206,8 +206,8 @@ Las fotos de Storage no van en ese volcado. Hoy son unos 434 archivos y se
 pueden volver a subir; si crecen, conviene copiarlas también.
 
 Cuando el negocio lo permita, **Supabase Pro (25 $/mes) es la siguiente
-compra**: siete días de backups automáticos. No por velocidad: la base pesa
-19 MB y responde en milisegundos.
+compra**: siete días de backups automáticos. Y ahora también una razón de
+velocidad, con un matiz: ver 5e.
 
 ---
 
@@ -222,6 +222,44 @@ in-app, faltan las ocho variables de Paddle **Live** en Vercel.
 ---
 
 ## 5. Rendimiento que queda
+
+### 5e. La base se enfría  ·  corregido en código; falta un ajuste tuyo (2026-10-10)
+
+**Corrección a lo que dije antes:** concluí que Supabase Pro "no acelera nada"
+porque las consultas tardan 2–7 ms dentro de Postgres. Eso es cierto y no
+cuenta el problema: la API de Supabase se **enfría** cuando recibe poco
+tráfico. Con los logs de producción (24 h, llamadas desde Vercel), la mediana
+de una consulta de la app según el tiempo que la base llevaba sin recibir
+nada:
+
+| Pausa | Mediana |
+|---|---|
+| menos de 20 s | 32–36 ms |
+| 20–45 s | 67 ms |
+| 45–90 s | 119 ms |
+| 90–150 s | 210 ms |
+| más de 2,5 min | 430–460 ms (13 veces más) |
+
+Con 2 tenants hay poco tráfico, así que casi cada página que abres tras una
+pausa paga ese recargo en cada ola de consultas. Es la parte lenta que queda
+tras el shell. Tampoco es Vercel: su función responde igual de rápido tras 20,
+60 y 120 s de pausa.
+
+- **Hecho (rama `perf/db-warm`):** `DbWarmer`, un latido a `/api/warm` cada
+  ~10 s mientras tienes el CRM a la vista y has hecho algo hace menos de 5
+  minutos. Se detiene solo. Cubre las sesiones.
+- **Te toca (3 minutos, gratis): cubrir las pausas sin nadie conectado.** En
+  cron-job.org (donde ya están los crons de secuencias) crea un job que cada
+  **1 minuto** haga un GET a `https://app.itmano.com/api/warm` con la cabecera
+  `Authorization: Bearer <CRON_SECRET de producción>` y respuesta esperada 204.
+  Bastan las horas en que se usa el CRM (p. ej. 06:00–23:00 UTC). Con eso la
+  primera consulta tras un rato sin nadie cae en la zona de ~100 ms y no en la
+  de ~450 ms.
+- **La solución de fondo es el compute:** el plan gratuito usa Nano (0,5 GB,
+  CPU compartida). Micro (1 GB) sale en Pro, que ya traería backups. No puedo
+  garantizar que Micro elimine el enfriamiento: sólo se sabe probándolo, y
+  cambiar de compute tiene menos de 2 minutos de corte. Decide tras ver el
+  efecto de los dos pasos anteriores, repitiendo el análisis de la tabla.
 
 ### 5a. Cache Components (PPR)  ·  aprobado, en sesión aparte
 

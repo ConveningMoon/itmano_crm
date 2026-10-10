@@ -77,6 +77,15 @@ rendimiento (`docs/performance/`):
   `getShellData(ctx)` por su cuenta; los dos están en `cache()`, así que siguen
   siendo una lectura de contexto y una ola para el shell. No añadas lecturas
   al layout fuera de ese patrón.
+- La base (compute Nano de Supabase) se enfría: una consulta que con la base
+  activa tarda 32 ms tarda 67 ms tras 20-45 s sin tráfico y ~450 ms tras más
+  de 2,5 minutos (logs de la API de producción). `DbWarmer`
+  (`src/components/layout/db-warmer.tsx`, reglas en `src/lib/warm.ts`) manda un
+  GET a `/api/warm` cada ~10 s mientras alguien tiene el CRM a la vista y ha
+  hecho algo hace menos de 5 minutos. No lo quites ni lo muevas fuera del
+  layout de `(dashboard)`; y si mides una página de producción tras una pausa
+  larga, di que la base estaba fría. `/api/warm` sólo responde a una sesión o
+  a `CRON_SECRET` y cuenta filas sin leerlas.
 - Mide con `SUPABASE_TRACE=1` antes y después de tocar una página: compara
   consultas y olas, no milisegundos.
 
