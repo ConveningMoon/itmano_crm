@@ -263,23 +263,38 @@ Verificado de tres formas:
   cada acción (perfil y luego fila de agente): ahora van juntas. Dos de cada
   cinco usuarios tienen ese rol.
 
+**Medido tras el merge (2026-10-10):** con alguien usando el CRM, la base
+responde en la primera página como en caliente (~170 frente a ~150 ms); con
+sólo el cron, la primera página tras unos minutos sin nadie paga ~150 ms de
+base, frente a ~450 ms antes. Detalle en el informe.
+
 **La solución de fondo sigue siendo el compute:** Micro (1 GB) sale en
 Supabase Pro, que además trae backups. No puedo garantizar que elimine el
 enfriamiento sin probarlo. Decide tras medir el efecto de este cambio.
 
-### 5f. El proxy añade un viaje a California en cada página  ·  sólo lo arregla la región
+### 5f. El proxy: dos costes medidos  ·  uno tiene arreglo en código (2026-10-10)
 
-`proxy.ts` (el guard de sesión) se ejecuta en la región de las funciones
-(`sfo1`). Cada carga de página y cada navegación pasa primero por ahí. Medido
-contra un preview con una página de prueba idéntica, con y sin proxy, desde
-Europa: el shell llega en ~80–140 ms sin proxy y en ~250–300 ms con él, y la
-parte dinámica se retrasa lo mismo.
+**Corrección:** el 2026-10-10 escribí que `proxy.ts` se ejecutaba en `sfo1`.
+No es así: corre en el borde de Vercel cerca de quien navega (`cdg1`, `fra1`,
+`arn1` para España). Lo prueban la redirección sin sesión, que tarda 87–105 ms
+desde Europa, y que el proxy descarga las claves de sesión desde colos
+europeos. Los dos costes medidos siguen siendo reales:
 
-- **Probado y descartado:** pasarlo a `middleware.ts` en runtime edge. Vercel
-  también lo ejecuta en la región de las funciones: el retraso no cambió.
-- **Lo que sí lo reduce:** la mudanza a `iad1` + `us-east-1` (5b). Desde
-  España el viaje pasaría de ~150 a ~90 ms; desde Virginia, de ~65 a ~5 ms. Y
-  aplica dos veces por página (shell y datos).
+- **Claves de sesión (JWKS) en cada instancia nueva del proxy:** 71 descargas
+  desde Europa en 9 horas (mediana 159–232 ms cada una), con uno o dos
+  usuarios. La primera página que sirve cada instancia nueva paga ese tiempo.
+  **Arreglo propuesto** (pendiente de tu visto bueno, toca el guard de sesión):
+  que el latido de `DbWarmer` pase también por el proxy, para que la instancia
+  cercana siga viva y con las claves en caché mientras usas el CRM. La
+  alternativa, pasar las claves públicas a `getClaims`, ahorra también la
+  primera visita del día, pero retrasa hasta el siguiente deploy el efecto de
+  revocar una clave en una emergencia.
+- **Con el proxy delante, el shell no sale de la CDN cercana:** en un preview
+  con una página idéntica, el shell llegó en ~80–140 ms sin proxy y en
+  ~250–300 ms con él (también con `middleware.ts` edge). Es un viaje de ida y
+  vuelta a California en cada carga y navegación. Lo reduce la mudanza a
+  `iad1` + `us-east-1` (5b): desde España ~150 → ~90 ms; desde Virginia,
+  ~65 → ~5 ms.
 
 ### 5a. Cache Components (PPR)  ·  ✅ hecho (PR #279, 2026-10-05)
 

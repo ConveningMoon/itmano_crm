@@ -90,10 +90,12 @@ rendimiento (`docs/performance/`):
 - `getCurrentTenantContext` lee perfil y fila de agente en la misma ola. No
   vuelvas a esperar el rol para pedir algo que se puede pedir en paralelo y
   descartar después.
-- `proxy.ts` corre en la región de las funciones (`sfo1`): cada carga y cada
-  navegación pagan un viaje usuario ↔ California antes del shell. No añadas
-  trabajo al proxy. Pasarlo a `middleware.ts` edge NO lo evita en Vercel
-  (medido el 2026-10-10).
+- `proxy.ts` corre en el borde de Vercel, cerca de quien navega (no en
+  `sfo1`). Cada instancia nueva descarga el JWKS de Supabase antes de
+  verificar la sesión (~160-230 ms desde Europa), y con el proxy delante el
+  shell de PPR no sale de la CDN cercana (+~150 ms desde Europa, medido en un
+  preview; `middleware.ts` edge da lo mismo). No añadas trabajo ni consultas
+  al proxy.
 - Mide con `SUPABASE_TRACE=1` antes y después de tocar una página: compara
   consultas y olas, no milisegundos. Para medir producción, el navegador
   integrado de la app de Claude retiene las respuestas hasta completarlas (no

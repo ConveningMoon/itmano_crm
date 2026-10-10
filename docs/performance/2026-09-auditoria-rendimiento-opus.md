@@ -1291,3 +1291,77 @@ usuario ↔ California. Sólo lo reduce la mudanza de región.
 `vercel.json` programa `/api/cron/score-decay` a diario, pero esa ruta sólo
 exporta `POST` y Vercel Cron llama con `GET`: esa entrada responde 405. Si el
 decay corre, lo dispara otro programador (cron-job.org). Conviene comprobarlo.
+
+## Medición en producción tras el merge (#283, deploy de las 15:04 UTC del 2026-10-10)
+
+Método: cargas completas de `/dashboard` pedidas desde un Web Worker del
+navegador de la sesión (super_admin dentro de un tenant, desde Europa; se mide
+el tiempo hasta tener la respuesta entera) y, para cada carga, el desglose en
+los logs de borde de Supabase. Las cargas "en caliente" son la misma página
+repetida justo después.
+
+### Funciona lo desplegado
+
+- **Cron:** un `HEAD /rest/v1/tenants` de Vercel exactamente cada minuto (a los
+  :49 s). `/api/warm` responde 401 sin sesión y no toca la base.
+- **Latido con sesión:** 20 de 20 pings a `/api/warm` con 204. Los latidos
+  reales de Dylan aparecieron cada ~6–10 s mientras usaba el CRM y pararon al
+  dejarlo.
+- **Agentes:** `user_profiles` y `agents` del contexto salen en el mismo
+  milisegundo.
+
+### Escenario A: nadie usando el CRM (sólo el cron), 200 s sin páginas
+
+| Ronda | Primera carga | En caliente | Base: primera / caliente |
+|---|---|---|---|
+| A1 (primera petición al deploy nuevo) | 1 904 ms | 689 ms | ~240 / ~100 ms |
+| A2 | 1 200 ms | 521 ms | ~280 / ~110 ms |
+| A3 | 843 ms | 499 ms | ~230 / ~80 ms |
+
+Con el cron la base queda tibia: el recargo de la base en la primera página
+baja de ~450 ms (antes del deploy) a ~150 ms. El resto de la diferencia es
+del lado de Vercel (en A1, el arranque del deploy recién publicado).
+
+### Escenario B: alguien usando el CRM (latido cada 10 s simulado)
+
+| Ronda | Primera carga | En caliente | Base: primera / caliente |
+|---|---|---|---|
+| B1 | 1 704 ms | 524 ms | ~1 300 / ~150 ms (parón de la instancia) |
+| B2 | 875 ms | 482 ms | ~170 / ~150 ms |
+
+En B2 la base respondió como en caliente: el latido cumple. B1 coincidió con
+un parón de la instancia (abajo).
+
+### Desglose de lo que queda
+
+Tras 4 minutos sin páginas: `/dashboard` sin sesión (sólo el proxy, 307) tardó
+105, 104 y 87 ms, así que **el proxy no se enfría**. La misma página con
+sesión, justo después: 717 ms frente a 485/478 ms. De esos +232 ms, ~124 ms
+fueron la descarga del JWKS en una instancia nueva de la función de la página
+(entre la consulta del tenant seleccionado y la del perfil), ~70–100 ms la
+base tibia (último ping del cron 53 s antes) y ~35 ms el resto del arranque.
+
+### Hallazgo: el proxy descarga el JWKS desde Europa
+
+`/auth/v1/.well-known/jwks.json` desde las 06:33 UTC: 41 descargas desde CDG
+(mediana 159 ms), 24 desde FRA (178 ms), 6 desde ARN (232 ms) y 23 desde SJC
+(22 ms). Las europeas sólo pueden ser del proxy: **corre en el borde, cerca
+del usuario, no en `sfo1`** (lo que se escribió antes en esta fase era
+incorrecto). Cada instancia nueva del proxy paga ~160–230 ms en la primera
+página que sirve. Opciones en `ACCIONES-DYLAN.md` (5f).
+
+### Hallazgo: parones intermitentes de la instancia
+
+Consultas de más de 250 ms con la base activa (menos de 20 s desde la
+anterior), 24 h: episodios a las 07:04, 07:08, 09:12, 12:05, 13:32, 13:36,
+15:05 y 15:20, el peor de 13 consultas a ~600 ms a la vez. No coinciden con
+checkpoints (14:56:38 y 15:06:38, triviales) ni dejan rastro en los logs de
+Postgres. Son de la instancia Nano (CPU compartida), no del enfriamiento.
+
+### Latencia por consulta antes y después
+
+Consultas de página con `service_role` desde Vercel: antes del deploy (24 h,
+841 consultas) mediana 39 ms, p90 152 ms; después (20 min, 125 consultas)
+mediana 44 ms, p90 154 ms. La muestra posterior no es representativa: las
+pruebas forzaron pausas de 200 s y cayó el parón de B1. Repetir con un día de
+uso real.
