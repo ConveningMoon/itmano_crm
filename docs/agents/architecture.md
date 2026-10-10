@@ -90,10 +90,12 @@ rendimiento (`docs/performance/`):
 - `getCurrentTenantContext` lee perfil y fila de agente en la misma ola. No
   vuelvas a esperar el rol para pedir algo que se puede pedir en paralelo y
   descartar después.
-- `proxy.ts` corre en el borde de Vercel, cerca de quien navega (no en
-  `sfo1`), y con el proxy delante el shell de PPR no sale de la CDN cercana
-  (+~150 ms desde Europa, medido en un preview; `middleware.ts` edge da lo
-  mismo). No añadas trabajo ni consultas al proxy.
+- En producción `proxy.ts` corre en el borde de Vercel, cerca de quien navega
+  (307 sin sesión en ~100 ms desde Europa); en los previews corre en `sfo1`
+  (~250-380 ms). Mide el proxy en producción: un preview no lo representa. En
+  un preview, con el proxy delante el shell de PPR no salía de la CDN cercana
+  (+~150 ms desde Europa; `middleware.ts` edge daba lo mismo), pendiente de
+  confirmar en producción. No añadas trabajo ni consultas al proxy.
 - Las claves públicas de sesión (JWKS) viajan en el bundle: `next.config.ts`
   las descarga en el build y `src/lib/supabase/jwks.ts` las entrega a
   `getClaims`. Toda llamada a `supabase.auth.getClaims()` en servidor pasa

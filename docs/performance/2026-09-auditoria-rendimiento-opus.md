@@ -1416,15 +1416,40 @@ instancias del proxy en muchas regiones del borde, una por región con tráfico.
   en verde.
 - **Build:** `[jwks] claves de sesión en el bundle: 66e07c66-… (ES256)`
   (sandbox). En el chunk del proxy queda
-  `leerJwks('{"keys":[…]}')` → `opcionesClaims`.
+  `leerJwks('{"keys":[…]}')` → `opcionesClaims`. En Vercel la línea sale una
+  sola vez y `next.config.ts` tarda 656 ms en total.
+- **A/B en previews de sandbox** (18:49 UTC). Misma sesión de un usuario
+  `agent_owner` (generateLink + verifyOtp, sin correo). Tres cargas de
+  `/dashboard` por deployment desde Europa. Los dos deployments estaban fríos:
+
+  | Deployment | Descargas del JWKS | 1ª carga (cabeceras / total) | Calientes (total) |
+  |---|---|---|---|
+  | A: código de `main` (preview de `docs/medicion-fase6`) | 2 (proxy y función) | 2 032 / 3 604 ms | 618, 698 ms |
+  | B: esta rama | **0** | 1 324 / 2 211 ms | 1 162, 574 ms |
+
+  Las dos versiones respondieron 200 con la misma página (135 KB). La
+  diferencia de la primera carga es una sola muestra con arranque en frío, así
+  que lo concluyente es 2 → 0 descargas.
+
+### Hallazgo: los previews no ejecutan el proxy donde producción
+
+En el preview A, la primera descarga del JWKS salió de SJC y no la siguió
+ninguna consulta: era el proxy, en `sfo1`. `/dashboard` sin sesión (307)
+tardó 243–606 ms desde Europa en los dos previews y 100–110 ms en producción,
+donde las descargas del proxy salen de CDG, FRA y ARN (24 h: 41, 31 y 6,
+todas de `supabase-ssr createServerClient`). **En producción el proxy corre
+en el borde; en los previews, en `sfo1`.** Toda medición del proxy hecha en
+un preview, incluido el +~150 ms del shell de la fase 6, hay que confirmarla
+en producción.
 
 ## Cómo medir tras el merge
 
 En los `edge_logs` de producción, cuenta las peticiones a
-`/auth/v1/.well-known/jwks.json` por hora y por colo. Antes había 71 en 9
-horas desde Europa, más las de SJC. Después deberían quedar en cero salvo tras
-una rotación. Compara también la primera carga tras una pausa con la de la
-fase 6.
+`/auth/v1/.well-known/jwks.json` por colo, `user_agent` y
+`x_client_info`. En las 24 h previas hubo 102 desde el servidor
+(`supabase-ssr createServerClient`): 78 desde colos europeos y 24 desde SJC.
+Después deberían quedar en cero salvo tras una rotación. Compara también la
+primera carga tras una pausa con la de la fase 6.
 
 **Cache Components:** no aplica aquí. El proxy no puede usar `use cache` y la
 sesión no va en caché compartida. Las claves en el build son el equivalente

@@ -296,7 +296,10 @@ europeos. Los dos costes medidos siguen siendo reales:
   ~250–300 ms con él (también con `middleware.ts` edge). Es un viaje de ida y
   vuelta a California en cada carga y navegación. Lo reduce la mudanza a
   `iad1` + `us-east-1` (5b): desde España ~150 → ~90 ms; desde Virginia,
-  ~65 → ~5 ms.
+  ~65 → ~5 ms. **Ojo (medido después):** los previews ejecutan el proxy en
+  `sfo1` y producción en el borde, así que este coste puede ser menor en
+  producción. Hay que medirlo allí con tu sesión antes de decidir la mudanza
+  por este motivo.
 
 ### 5a. Cache Components (PPR)  ·  ✅ hecho (PR #279, 2026-10-05)
 
