@@ -345,7 +345,7 @@ export default function PlanesPage() {
               </p>
               <div style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <Link href="/#contacto" className="mk-btn-gold btn-cta">Empieza tu prueba</Link>
-                <Link href="/#producto" className="mk-btn-ghost">Ver cómo funciona</Link>
+                <Link href="/#recorrido" className="mk-btn-ghost">Ver cómo funciona</Link>
               </div>
             </div>
           </Reveal>

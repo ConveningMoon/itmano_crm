@@ -45,7 +45,8 @@ describe('middleware matcher — public/system routes are NOT protected', () => 
     // El script de medición que cargan las landings externas. Protegerlo les
     // devolvía el HTML de /login donde esperaban JavaScript.
     '/intake.js',
-    // El recorrido del producto que reproduce el hero de la landing.
+    // Video e imágenes servidos desde public/: el matcher los deja pasar por
+    // extensión, aunque hoy ninguna página pública use un video.
     '/landing/producto.mp4',
     '/landing/producto.webm',
     '/landing/producto-poster.webp',

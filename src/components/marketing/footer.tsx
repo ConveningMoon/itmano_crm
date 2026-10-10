@@ -39,14 +39,16 @@ export function MarketingFooter() {
             </div>
             <p className="mk-body" style={{ fontSize: '13px' }}>
               El CRM con inteligencia artificial hecho sólo para bienes raíces:
-              captación, calificación, seguimiento y cierre en un solo lugar.
+              captación, calificación, seguimiento, newsletters, open houses y
+              propiedades en un solo lugar.
             </p>
           </div>
 
           <div style={{ display: 'flex', gap: '56px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <span className="mk-label" style={{ marginBottom: '2px' }}>Plataforma</span>
-              <Link href="/#producto" className="mk-footer-link">Producto</Link>
+              <Link href="/#recorrido" className="mk-footer-link">Recorrido</Link>
+              <Link href="/#plataforma" className="mk-footer-link">Plataforma</Link>
               <Link href="/planes" className="mk-footer-link">Planes e inversión</Link>
               <Link href="/#contacto" className="mk-footer-link">Contáctanos</Link>
               <Link href="/login" className="mk-footer-link">Iniciar sesión</Link>

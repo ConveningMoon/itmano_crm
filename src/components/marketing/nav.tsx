@@ -7,9 +7,9 @@ import { AnimatePresence, m } from 'motion/react'
 import { EASE_OUT_PREMIUM } from '@/components/motion/primitives'
 
 const LINKS = [
-  { href: '/#producto', label: 'Producto' },
-  { href: '/#ia', label: 'IA' },
-  { href: '/#enfoque', label: 'Enfoque' },
+  { href: '/#recorrido', label: 'Recorrido' },
+  { href: '/#plataforma', label: 'Plataforma' },
+  { href: '/#inversion', label: 'Inversión' },
   { href: '/planes', label: 'Planes' },
 ]
 
