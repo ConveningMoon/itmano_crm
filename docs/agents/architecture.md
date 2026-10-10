@@ -87,6 +87,11 @@ rendimiento (`docs/performance/`):
   minuto para los huecos sin nadie. No lo quites ni lo muevas fuera del layout
   de `(dashboard)`. `/api/warm` sólo responde a una sesión o a `CRON_SECRET` y
   cuenta filas sin leerlas.
+- El latido también renueva la sesión cuando al token le quedan menos de 45
+  minutos (`debeRenovarSesion` en `src/lib/warm.ts`). El token dura una hora;
+  sin esa renovación anticipada, quien vuelve de una pausa lo encuentra
+  caducado y cada petición en paralelo (navegación y prefetch de cada enlace
+  del menú) lo renueva por su cuenta en el proxy.
 - `getCurrentTenantContext` lee perfil y fila de agente en la misma ola. No
   vuelvas a esperar el rol para pedir algo que se puede pedir en paralelo y
   descartar después.
