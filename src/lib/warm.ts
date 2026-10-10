@@ -44,3 +44,22 @@ export function debeLatir(e: EstadoLatido): boolean {
   if (e.ahora - e.ultimaActividad > INACTIVIDAD_MAX_MS) return false
   return e.ahora - e.ultimoLatido >= LATIDO_MS
 }
+
+// El latido también renueva la sesión, con margen. El token de Supabase dura
+// una hora y antes sólo se renovaba al caducar. Quien volvía de una pausa lo
+// encontraba caducado con probabilidad pausa/60 min. Entonces cada petición en
+// paralelo (la navegación y el prefetch de cada enlace del menú) lo renovaba
+// por su cuenta en el proxy. En producción hubo ráfagas de 4-9 renovaciones
+// de 170-720 ms cada una (2026-10-10).
+//
+// Renovando cuando quedan menos de 45 minutos, la persona deja el CRM con 45-60
+// minutos de token por delante, y una pausa de menos de 45 minutos ya no paga
+// nada. Una pausa de más de una hora sigue renovando al volver, como antes.
+
+/** Con menos vida que esto por delante, el latido renueva la sesión. */
+export const RENOVAR_SESION_MS = 45 * 60_000
+
+/** ¿Debe el latido renovar la sesión? `exp` es el claim del JWT, en segundos. */
+export function debeRenovarSesion(exp: number | undefined, ahora: number): boolean {
+  return typeof exp === 'number' && exp * 1000 - ahora < RENOVAR_SESION_MS
+}

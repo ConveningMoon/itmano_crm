@@ -7,11 +7,11 @@ import { EVALUAR_CADA_MS, debeLatir } from '@/lib/warm'
  * Latido que mantiene caliente la base mientras se usa el CRM (reglas y motivo
  * en src/lib/warm.ts). No pinta nada.
  *
- * Latir = un GET a /api/warm, que toca la base por el camino de una página. Se
- * hace cada ~20 s con la pestaña a la vista y actividad reciente; al volver a
- * la pestaña o al tocar algo tras una pausa, se lanza enseguida si ya toca,
- * para que el recargo de una base fría lo pague el latido y no el siguiente
- * clic.
+ * Latir = un GET a /api/warm, que toca la base por el camino de una página y
+ * renueva la sesión antes de que caduque. Se hace cada ~10 s con la pestaña a
+ * la vista y actividad reciente; al volver a la pestaña o al tocar algo tras
+ * una pausa, se lanza enseguida si ya toca, para que el recargo de una base
+ * fría lo pague el latido y no el siguiente clic.
  */
 export function DbWarmer() {
   useEffect(() => {
