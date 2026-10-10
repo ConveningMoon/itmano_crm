@@ -106,9 +106,9 @@ export const config = {
 // se registraba y no había ningún error visible. Los envíos seguían entrando
 // por su propio endpoint, así que nada parecía roto.
 //
-// `mp4`/`webm` por lo mismo: el recorrido del producto que reproduce el hero de
-// la landing vive en /landing/. Sin excluirlos, el guard le devolvía el HTML de
-// /login al elemento <video> y el hero se quedaba en su marcador.
+// `mp4`/`webm` por lo mismo: un <video> público servido desde public/ recibía el
+// HTML de /login en vez del archivo. La home ya no tiene video, pero la
+// exclusión se queda para el próximo medio que se publique.
 //
 // `robots.txt` no está listado aparte: ya cae en la exclusión genérica de
 // `.txt$` de abajo (junto con los .txt de licencias de fuentes en

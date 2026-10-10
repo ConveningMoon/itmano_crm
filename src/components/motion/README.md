@@ -35,3 +35,24 @@ con la receta más parecida — no se inventan duraciones nuevas.
    el bloque `@media` de globals.css cubre CSS, y recharts se gatea a mano con
    `matchMedia` (no obedece a MotionConfig).
 5. Colores siempre desde tokens (`var(--…)`), jamás hex en componentes.
+
+## Landing pública
+
+La home (`src/app/(marketing)/page.tsx`) es la única superficie con motion de
+autor; sus escenas viven en `src/components/marketing/landing/`. Sigue estas
+reglas además de las de arriba:
+
+- Un solo material: la luz. `CityLights` (canvas 2D, sin dependencias) pinta el
+  mercado de noche; la misma luz dorada reaparece en "Se pierde antes", en el
+  riel del recorrido y en la regla del mercado. No se agregan efectos que no
+  salgan de ese mundo.
+- Todo lo que corre en bucle se detiene fuera de pantalla y con la pestaña
+  oculta (`IntersectionObserver` + `visibilitychange`, o `useInView` en las
+  muestras de la plataforma).
+- El estado final viene en el HTML: sin JS o con reduced motion se ve la lista
+  completa, la ciudad quieta y cada escena en su último cuadro.
+- Nada de `Math.random()` ni de reloj en el render: la ciudad usa un PRNG con
+  semilla y la cuenta regresiva arranca de una constante, para no romper el
+  prerender de Cache Components ni la hidratación.
+- Los datos de las escenas son ficticios (`demo-data.ts`, correos en
+  example.com) y la página lo dice junto a cada muestra.
