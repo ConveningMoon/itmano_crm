@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import { CheckCircle2, Circle, Inbox } from 'lucide-react'
 import { setRequestResponded, type PlatformRequestRow } from './actions'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Tabs Contacto | Soporte con checkbox de respondido. La lista llega del
 // Server Component; el toggle es una server action con actualización optimista
@@ -24,10 +25,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   ai_capacity: 'Capacidad de IA',
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('es-419', {
+function formatDate(iso: string) {
+  return <FechaLocal fecha={iso} locale="es-419" opciones={{
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+  }} />
 }
 
 export function RequestsClient({ requests }: { requests: PlatformRequestRow[] }) {

@@ -16,6 +16,7 @@ import {
   archiveEdition, restoreEdition, unpublishEdition, deleteEdition,
   getNewsletterIntegrationPrompt,
 } from './actions'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Pantalla única de la newsletter: tira de totales, aviso de secuencia vacía y
 // la tabla de ediciones con sus acciones. Sustituye a series-list.tsx +
@@ -44,8 +45,8 @@ const STATUS_LABEL: Record<NewsletterStatus, { label: string; color: string; bg:
   archived:  { label: 'Archivada', color: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.12)' },
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
+function fmtDate(iso: string) {
+  return <FechaLocal fecha={iso} locale="es" opciones={{ day: 'numeric', month: 'short', year: 'numeric' }} />
 }
 
 const GHOST_BTN: React.CSSProperties = {
@@ -419,8 +420,8 @@ function EditionRow({
           )}
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             {edition.publishedAt
-              ? `Publicada el ${fmtDate(edition.publishedAt)}`
-              : `Creada el ${fmtDate(edition.createdAt)}`}
+              ? <>Publicada el {fmtDate(edition.publishedAt)}</>
+              : <>Creada el {fmtDate(edition.createdAt)}</>}
           </span>
           {edStats && (
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>

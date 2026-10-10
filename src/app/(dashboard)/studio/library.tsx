@@ -5,6 +5,7 @@ import { Loader2, Sparkles } from 'lucide-react'
 import { deleteStudioImage, recomposeImage, regenerateStudioImage } from './actions'
 import { Lightbox } from './lightbox'
 import type { StudioImage } from '@/lib/studio/types'
+import { FechaLocal } from '@/components/ui/local-date'
 
 const RECIPE_LABELS: Record<string, string> = {
   open_house:  'Casa abierta',
@@ -14,8 +15,8 @@ const RECIPE_LABELS: Record<string, string> = {
   open_prompt: 'Mi Imagen',
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+function formatDate(iso: string) {
+  return <FechaLocal fecha={iso} locale="es" opciones={{ day: 'numeric', month: 'short' }} />
 }
 
 const actionStyle: React.CSSProperties = {

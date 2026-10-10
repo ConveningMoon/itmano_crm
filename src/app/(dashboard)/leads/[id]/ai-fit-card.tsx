@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sparkles, RefreshCw, ArrowRight, AlertTriangle, Clock } from 'lucide-react'
 import { analyzeLeadFit } from './actions'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Briefing accionable del análisis de fit con IA (lo que el agente necesita
 // antes de contactar): lectura del lead, próxima mejor acción con su premura,
@@ -145,7 +146,7 @@ export function AiFitCard({
 
           {when && (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              Analizado el {new Date(when).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              Analizado el <FechaLocal fecha={when} opciones={{ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }} />
             </div>
           )}
         </div>

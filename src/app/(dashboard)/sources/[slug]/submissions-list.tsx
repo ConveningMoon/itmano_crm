@@ -6,18 +6,7 @@ import Link from 'next/link'
 import { ChevronRight, ChevronDown, Mail, Phone, Check, Clock } from 'lucide-react'
 import type { SubmissionRow } from '@/lib/data/form-submissions'
 import { toggleSubmissionResponded } from '../actions'
-
-function relativeTime(iso: string): string {
-  const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
-  if (secs < 60)  return 'hace un momento'
-  const mins = Math.floor(secs / 60)
-  if (mins < 60)  return `hace ${mins} min`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `hace ${hours} h`
-  const days = Math.floor(hours / 24)
-  if (days < 7)   return `hace ${days} d`
-  return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
+import { TiempoRelativo } from '@/components/ui/local-date'
 
 // Only contact_form / event submissions carry a respondible state.
 function usesRespondedState(channelType: string): boolean {
@@ -79,7 +68,7 @@ function SubmissionItem({
         )}
 
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>
-          {relativeTime(sub.submittedAt)}
+          <TiempoRelativo fecha={sub.submittedAt} />
         </span>
       </button>
 

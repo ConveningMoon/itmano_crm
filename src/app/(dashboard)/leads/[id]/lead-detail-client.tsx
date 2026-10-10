@@ -32,20 +32,21 @@ import type { ScoreBreakdown } from '@/lib/scoring/score-breakdown'
 import { getLeadSource } from '@/lib/leads/source'
 import type { LeadTag } from '@/lib/leads/tags'
 import { LeadTagsCard } from './lead-tags-card'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatFullDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('es-ES', {
-    day: 'numeric', month: 'long', year: 'numeric',
-  })
+function formatFullDate(dateStr: string) {
+  return <FechaLocal fecha={dateStr} opciones={{ day: 'numeric', month: 'long', year: 'numeric' }} />
 }
 
-function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('es-ES', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+function formatDateTime(dateStr: string) {
+  return (
+    <FechaLocal fecha={dateStr} opciones={{
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }} />
+  )
 }
 
 function getInitials(firstName: string, lastName: string): string {
@@ -203,7 +204,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   // estado ya no se deduce de la etapa del lead: vive en purchase_processes.
   const isProcessActive = currentStage === 'en_proceso' || purchaseProcess?.completedAt != null
 
-  const infoRows: { label: string; value: string; copy?: string }[] = [
+  const infoRows: { label: string; value: React.ReactNode; copy?: string }[] = [
     { label: 'Nombre',      value: `${lead.firstName} ${lead.lastName}` },
     { label: 'Email',       value: lead.email, copy: lead.email },
     { label: 'Teléfono',    value: lead.phone || '—', copy: lead.phone || undefined },

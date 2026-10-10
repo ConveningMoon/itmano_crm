@@ -25,6 +25,7 @@ import type { LeadTag } from '@/lib/leads/tags'
 import type { BusinessProfile } from '@/lib/business/profile'
 import { Tabs } from '@/components/ui/tabs'
 import { agentLocalPart } from '@/lib/email/sender-address'
+import { FechaLocal } from '@/components/ui/local-date'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
   super_admin: 'Administrador ITMANO',
@@ -1250,7 +1251,7 @@ function SubscriptionCard({ subscription, canManage }: {
             {BILLING_CYCLE_LABELS[subscription.billingCycle]}
             {subscription.currentPeriodEnd && (
               <> · Renueva el{' '}
-                {new Date(subscription.currentPeriodEnd).toLocaleDateString('es', { day: 'numeric', month: 'long' })}
+                <FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={{ day: 'numeric', month: 'long' }} />
               </>
             )}
           </div>
@@ -1259,7 +1260,7 @@ function SubscriptionCard({ subscription, canManage }: {
         {subscription.cancelAt && (
           <div style={{ fontSize: '12px', color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
             Tu suscripción termina el{' '}
-            <strong>{new Date(subscription.cancelAt).toLocaleDateString('es', { day: 'numeric', month: 'long' })}</strong>.
+            <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>.
             Conservas el acceso completo hasta entonces.
           </div>
         )}
@@ -1268,7 +1269,7 @@ function SubscriptionCard({ subscription, canManage }: {
           <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
             {trialDaysLeft(subscription.trialEndsAt) > 0 ? (
               <>Tu período de prueba termina el{' '}
-                <strong>{new Date(subscription.trialEndsAt).toLocaleDateString('es', { day: 'numeric', month: 'long' })}</strong>
+                <strong><FechaLocal fecha={subscription.trialEndsAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>
                 {' '}({trialDaysLeft(subscription.trialEndsAt)} día{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'} restante{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'}).
                 El equipo ITMANO te contactará para elegir tu plan definitivo.</>
             ) : (

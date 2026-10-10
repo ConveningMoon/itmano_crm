@@ -320,7 +320,7 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
                   <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                     {prop.bedrooms   !== null && <span>{prop.bedrooms} hab.</span>}
                     {prop.bathrooms  !== null && <span>{prop.bathrooms} baños</span>}
-                    {prop.sqft       !== null && <span>{prop.sqft.toLocaleString()} sqft</span>}
+                    {prop.sqft       !== null && <span>{prop.sqft.toLocaleString('en-US')} sqft</span>}
                     {prop.yearBuilt  !== null && <span>{prop.yearBuilt}</span>}
                   </div>
                 )}

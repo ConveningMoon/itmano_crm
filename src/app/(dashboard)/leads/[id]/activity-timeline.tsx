@@ -6,6 +6,7 @@ import {
   FileText, MailX, Send, Sparkles, ArrowUpRight,
 } from 'lucide-react'
 import type { LeadEvent } from '@/lib/types'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Cada tipo de evento: icono + color + una acción legible ("Llenó un formulario",
 // "Respondió un correo"…) y opcionalmente el tab del historial al que enlaza.
@@ -44,11 +45,13 @@ const LINK_LABEL: Record<'formularios' | 'emails', string> = {
   emails:      'Ver correo',
 }
 
-function formatDateTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('es-ES', {
-    day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+function formatDateTime(dateStr: string) {
+  return (
+    <FechaLocal fecha={dateStr} opciones={{
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }} />
+  )
 }
 
 // Historial de actividad del lead — extraído de lead-detail-client para vivir

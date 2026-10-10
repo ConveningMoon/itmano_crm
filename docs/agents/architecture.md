@@ -196,6 +196,23 @@ la UI falle sólo en producción.
 Después de una migración que cambie columnas, regenera tipos desde el entorno
 que ya la recibió con `npm run types:db:sandbox` o `npm run types:db`.
 
+## Fechas y números en Client Components
+
+Un Client Component se renderiza en el servidor (Vercel, en UTC) y otra vez al
+hidratar en el navegador de cada usuario. Un `toLocaleString('es-ES', …)` sin
+`timeZone`, una hora relativa calculada con la hora actual o un número con
+`toLocaleString()` sin idioma dan un texto distinto en cada lado: React lanza
+el error #418, tira el HTML del servidor y vuelve a renderizar ese tramo en el
+cliente. Pasaba en producción en la ficha del lead.
+
+- Fecha u hora en la zona de quien mira: `<FechaLocal>` de
+  `src/components/ui/local-date.tsx`. "Hace X": `<TiempoRelativo>`.
+- Un número formateado lleva siempre su idioma (`toLocaleString('en-US')`).
+- En Server Components no hay hidratación, pero formatean en UTC: si importa
+  el día exacto, pasa el `timeZone` del tenant (`tenants.timezone`).
+- Para reproducirlo en local: `next start` con `TZ=UTC` y un navegador en
+  otra zona; el error sólo sale en el build de producción.
+
 ## Diseño
 
 - Tokens en `src/app/globals.css`, expuestos a Tailwind con `@theme inline`.
