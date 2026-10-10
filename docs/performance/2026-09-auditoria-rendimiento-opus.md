@@ -1089,3 +1089,44 @@ el RSVP se renderizan por visita.
 - `NewVersionNotice` lee el deploy en el request (`NewVersionNoticeSlot`):
   verificado con un build sin `VERCEL_DEPLOYMENT_ID` y la variable sólo en
   runtime.
+
+## Producción tras el merge (2026-10-10)
+
+Medido en app.itmano.com desde el navegador de la sesión, como super_admin
+dentro de Tenant Test. Sólo lectura y navegación.
+
+- **Primer byte del documento: ~88 ms en todas las rutas del dashboard**
+  (Navigation Timing de una carga completa). El documento entero, con lo
+  dinámico por streaming, llega en 0,73–1,26 s (`/leads/[id]`, la de 3 olas, es
+  la más lenta). La medición de la fase 2 daba 0,7–2 s de primer byte, aunque
+  entonces se midió con `fetch` RSC y la función estaba en `iad1`.
+- **Navegación por el menú: URL y skeleton de destino en 7–13 ms**, datos en
+  0,4–0,7 s.
+- Speed Insights se carga y reporta el patrón de ruta (`/leads/[id]`).
+- Páginas alojadas: `PRERENDER` y luego `HIT` del CDN; un slug inexistente da
+  404 real y también se cachea. Ningún canal de producción tiene página `/hp`
+  activada, así que sus URLs dan 404 a propósito.
+- El primer deploy de `main` falló: `SpeedInsights` leía la ruta fuera de
+  `<Suspense>` y sólo se monta en producción (corregido en la PR #280).
+
+### Error de hidratación #418 en fechas (preexistente, corregido)
+
+La consola de producción mostraba `Minified React error #418` (el texto del
+servidor no coincide con el del cliente). Causa: Client Components que
+formatean fechas con `toLocaleString('es-ES', …)` sin `timeZone`. El servidor
+de Vercel corre en UTC y el navegador en la zona del usuario: el servidor
+mandaba "08:49" y el navegador pintaba "13:49"; React tiraba ese HTML y volvía
+a renderizar el tramo en el cliente. No lo introdujo Cache Components y afecta
+a cualquier usuario fuera de UTC.
+
+- Arreglo: `<FechaLocal>` y `<TiempoRelativo>` (`src/components/ui/local-date.tsx`)
+  formatean en UTC en el servidor y al hidratar, y en la zona del navegador
+  después (`useSyncExternalStore` con instantánea de servidor). 12 Client
+  Components migrados; un `toLocaleString()` de número, con idioma fijo.
+- Verificado con un arnés de Chrome sin cabeza (`puppeteer-core`, zona
+  `Asia/Yekaterinburg` y `America/New_York`, servidor `next start` con
+  `TZ=UTC`): con el código de `main`, #418 en `/leads` y `/leads/[id]`; con el
+  arreglo, 0 en las 19 rutas probadas (incluidas `/admin` y `/solicitudes`).
+- Pendiente menor: "Entrar al CRM" del super_admin tarda ~4 s (espera al
+  contexto, luego al tenant y renderiza `/dashboard` entero en la respuesta de
+  la acción). No cambió con Cache Components.

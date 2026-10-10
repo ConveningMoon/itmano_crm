@@ -8,6 +8,7 @@ import { createTenant, updateTenant, deleteTenant, provisionOwner, updateTenantS
 import { updateTenantLogo, removeTenantLogo } from '../settings/actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type SubscriptionPlan, type SubscriptionStatus, type BillingCycle } from '@/lib/subscriptions'
 import { TRIAL, trialDaysLeft, trialEndsAtFromNow } from '@/lib/plans'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Estado editable del select de suscripción: las solicitudes pendientes
 // (change/cancel_requested) se editan como 'active' — guardar las resuelve.
@@ -26,9 +27,9 @@ function dateInputValue(iso: string | null): string {
 
 // Fecha corta para los campos de solo lectura de Paddle (current_period_end,
 // degraded_at) — los escribe el webhook, aquí solo se muestran.
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+  return <FechaLocal fecha={iso} opciones={{ day: 'numeric', month: 'short', year: 'numeric' }} />
 }
 
 // ─── Style constants (consistent with Settings) ──────────────────────────────

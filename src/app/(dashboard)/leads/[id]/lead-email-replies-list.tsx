@@ -3,15 +3,16 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown, Mail } from 'lucide-react'
 import type { LeadEmailReply } from '@/lib/data/lead-email-replies'
+import { FechaLocal } from '@/components/ui/local-date'
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('es-ES', {
+function formatDateTime(iso: string) {
+  return <FechaLocal fecha={iso} opciones={{
     day:    '2-digit',
     month:  'short',
     year:   'numeric',
     hour:   '2-digit',
     minute: '2-digit',
-  })
+  }} />
 }
 
 function ReplyItem({ reply, open, onToggle }: {

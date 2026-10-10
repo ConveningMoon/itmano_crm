@@ -24,6 +24,7 @@ import type { ChannelOption } from './new/page'
 import { tagChipStyle, type LeadTag } from '@/lib/leads/tags'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Source kind → icon (reuses the leads/new source icons; brand icons unavailable in
 // lucide v1 so representative generics are used).
@@ -49,8 +50,8 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })
+function formatDate(dateStr: string) {
+  return <FechaLocal fecha={dateStr} opciones={{ month: 'short', day: 'numeric' }} />
 }
 
 // Las bandas (y sus colores) viven en scoring/temperature-band: mismo corte que

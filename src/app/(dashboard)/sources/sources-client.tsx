@@ -20,6 +20,7 @@ import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanen
 import { FormSection } from '@/components/ui/form-section'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { IntegrationPromptModal } from './integration-prompt-modal'
+import { FechaLocal } from '@/components/ui/local-date'
 
 type TabValue = ChannelType | 'all' | 'archived'
 
@@ -925,7 +926,7 @@ function ArchivedChannelRow({ ch, first, isSuperAdmin, tenantName, canDelete }: 
   const typeColor   = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel   = CHANNEL_TYPE_LABELS[ch.channelType]
   const archivedStr = ch.archivedAt
-    ? new Date(ch.archivedAt).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })
+    ? <FechaLocal fecha={ch.archivedAt} locale="es" opciones={{ day: '2-digit', month: 'short', year: 'numeric' }} />
     : '—'
 
   return (
