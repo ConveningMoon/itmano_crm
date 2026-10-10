@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { columns } from '@/lib/supabase/columns'
+import { opcionesClaims } from '@/lib/supabase/jwks'
 import { getSelectedTenant } from './admin-tenant'
 
 const PROFILE_COLUMNS    = columns('user_profiles', ['tenant_id', 'role'])
@@ -45,6 +46,8 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
   // (claves asimétricas ES256), así que la identidad se resuelve sin ida y vuelta
   // al servidor de auth. Es igual de confiable que getUser() —la firma se valida,
   // no se confía en la cookie— y ahorra un round-trip en CADA página y action.
+  // La clave pública viene en el bundle (src/lib/supabase/jwks.ts), así que una
+  // instancia nueva tampoco espera a descargarla.
   // La cookie de tenant seleccionado (super_admin) se valida contra `tenants`.
   // Arranca YA, en paralelo con el perfil: sólo hace red si la cookie existe,
   // y esperar a conocer el rol para lanzarla era una ola entera más en cada
@@ -52,7 +55,7 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
   // super_admin la respuesta se ignora, como siempre.
   const selectedPromise = getSelectedTenant()
 
-  const { data: claims, error: authError } = await supabase.auth.getClaims()
+  const { data: claims, error: authError } = await supabase.auth.getClaims(undefined, opcionesClaims)
 
   if (authError || !claims) {
     redirect('/login')

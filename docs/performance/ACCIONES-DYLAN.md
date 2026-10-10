@@ -272,7 +272,7 @@ base, frente a ~450 ms antes. Detalle en el informe.
 Supabase Pro, que además trae backups. No puedo garantizar que elimine el
 enfriamiento sin probarlo. Decide tras medir el efecto de este cambio.
 
-### 5f. El proxy: dos costes medidos  ·  uno tiene arreglo en código (2026-10-10)
+### 5f. El proxy: dos costes medidos  ·  uno resuelto en código (2026-10-10)
 
 **Corrección:** el 2026-10-10 escribí que `proxy.ts` se ejecutaba en `sfo1`.
 No es así: corre en el borde de Vercel cerca de quien navega (`cdg1`, `fra1`,
@@ -283,12 +283,14 @@ europeos. Los dos costes medidos siguen siendo reales:
 - **Claves de sesión (JWKS) en cada instancia nueva del proxy:** 71 descargas
   desde Europa en 9 horas (mediana 159–232 ms cada una), con uno o dos
   usuarios. La primera página que sirve cada instancia nueva paga ese tiempo.
-  **Arreglo propuesto** (pendiente de tu visto bueno, toca el guard de sesión):
-  que el latido de `DbWarmer` pase también por el proxy, para que la instancia
-  cercana siga viva y con las claves en caché mientras usas el CRM. La
-  alternativa, pasar las claves públicas a `getClaims`, ahorra también la
-  primera visita del día, pero retrasa hasta el siguiente deploy el efecto de
-  revocar una clave en una emergencia.
+  **✅ Resuelto (rama `perf/claves-sesion`):** las claves públicas viajan en
+  el build y ninguna instancia las descarga. Se descartó que el latido pasara
+  por el proxy: sólo mantenía viva la instancia de quien ya está dentro, y con
+  usuarios repartidos entre Estados Unidos, Latinoamérica y España hay
+  instancias en muchas regiones del borde.
+  **Lo único que te toca:** si un día **revocas** una clave de firma en
+  Supabase (Settings → JWT Keys), redeploya producción y sandbox justo
+  después. Rotar no pide nada. Detalle en `docs/agents/environments.md`.
 - **Con el proxy delante, el shell no sale de la CDN cercana:** en un preview
   con una página idéntica, el shell llegó en ~80–140 ms sin proxy y en
   ~250–300 ms con él (también con `middleware.ts` edge). Es un viaje de ida y

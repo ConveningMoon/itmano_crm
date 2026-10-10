@@ -1365,3 +1365,67 @@ Consultas de página con `service_role` desde Vercel: antes del deploy (24 h,
 mediana 44 ms, p90 154 ms. La muestra posterior no es representativa: las
 pruebas forzaron pausas de 200 s y cayó el parón de B1. Repetir con un día de
 uso real.
+
+# Fase 7 (Claude Opus 5.5) — 2026-10-10: claves de sesión en el bundle
+
+Rama: `perf/claves-sesion`. Motivo: el hallazgo de la fase 6 sobre el JWKS.
+`getClaims` verifica la firma en local, pero antes necesita la clave pública:
+auth-js la descarga en cada instancia nueva y, en las calientes, cada 10
+minutos (su TTL). El proxy corre en el borde cerca de cada usuario, así que
+paga 160–230 ms desde Europa en la primera página de cada instancia.
+
+## Decisión
+
+Los usuarios están sobre todo en Estados Unidos, Latinoamérica y España: hay
+instancias del proxy en muchas regiones del borde, una por región con tráfico.
+
+- **Latido a través del proxy (descartado):** sólo mantenía viva la instancia
+  de quien ya usa el CRM. No cubría su primera página, las otras regiones ni
+  la función de la página en `sfo1`.
+- **Claves en el build (elegido):** `next.config.ts` descarga
+  `<NEXT_PUBLIC_SUPABASE_URL>/auth/v1/.well-known/jwks.json` en `next build` y
+  `next dev` y lo escribe en el bundle como `process.env.SUPABASE_JWKS`.
+  `src/lib/supabase/jwks.ts` filtra las claves públicas y exporta
+  `opcionesClaims`. Las tres llamadas a `getClaims` (proxy,
+  `getCurrentTenantContext` y `/api/warm`) lo pasan. Si la descarga falla, el
+  build sigue y todo funciona como antes.
+
+## Seguridad
+
+- **Rotar:** un token con un `kid` que no está en el bundle hace que auth-js
+  descargue el JWKS, como antes. Comprobado con la librería real en
+  `tests/auth/jwks.test.ts`.
+- **Revocar:** el servidor de Next acepta la clave revocada hasta el siguiente
+  deploy. Antes eran hasta 20 minutos: 10 de caché en el borde de Supabase y
+  10 de la librería. PostgREST no usa esa caché y la rechaza al instante (docs
+  de Supabase, "Public key discovery and caching").
+  `getCurrentTenantContext` lee el perfil por PostgREST antes de cualquier otra
+  cosa, así que ese token no llega a ningún dato y la sesión se cierra. No hay
+  otra verificación de JWT en `src/` (sólo esas tres llamadas a `getClaims`).
+  Procedimiento en `docs/agents/environments.md`: redeployar tras revocar.
+- **Nada privado en el bundle:** se descartan las claves con `d`, `p`, `q`,
+  `dp`, `dq`, `qi` o `k`, y las `oct`, al descargar y al leer. Las claves no
+  llegan al navegador: 0 archivos de `.next/static` las contienen.
+
+## Verificación
+
+- **Tests:** `tests/auth/jwks.test.ts` (10 tests): filtrado, lectura y
+  `opcionesClaims`. Contra auth-js real, con tokens ES256 firmados en el test:
+  el token se verifica sin red, un `kid` rotado descarga el JWKS y una firma
+  falsa con el mismo `kid` se rechaza. `test:unit`: 115 archivos y 1225 tests
+  en verde.
+- **Build:** `[jwks] claves de sesión en el bundle: 66e07c66-… (ES256)`
+  (sandbox). En el chunk del proxy queda
+  `leerJwks('{"keys":[…]}')` → `opcionesClaims`.
+
+## Cómo medir tras el merge
+
+En los `edge_logs` de producción, cuenta las peticiones a
+`/auth/v1/.well-known/jwks.json` por hora y por colo. Antes había 71 en 9
+horas desde Europa, más las de SJC. Después deberían quedar en cero salvo tras
+una rotación. Compara también la primera carga tras una pausa con la de la
+fase 6.
+
+**Cache Components:** no aplica aquí. El proxy no puede usar `use cache` y la
+sesión no va en caché compartida. Las claves en el build son el equivalente
+estático, sin E/S.

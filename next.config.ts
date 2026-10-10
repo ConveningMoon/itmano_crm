@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants";
+import { clavesPublicas } from "./src/lib/supabase/jwks";
 
 // Host de Supabase Storage, derivado del env en vez de hardcodear el project ref
 // — así un cambio de proyecto no deja las imágenes rotas en silencio.
@@ -136,4 +138,36 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Claves públicas de sesión de Supabase para getClaims, escritas en el bundle
+// (por qué, en src/lib/supabase/jwks.ts). Salen del NEXT_PUBLIC_SUPABASE_URL
+// del propio build, así que un preview lleva las de sandbox y producción las
+// suyas sin configurar nada en Vercel.
+//
+// Si la descarga falla, el build sigue y getClaims las baja en runtime como
+// antes: más lento, igual de seguro.
+async function jwksDelProyecto(): Promise<string | undefined> {
+  // Los workers del build heredan el valor del proceso principal: una sola
+  // descarga por build.
+  if (process.env.SUPABASE_JWKS) return process.env.SUPABASE_JWKS;
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return undefined;
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, "")}/auth/v1/.well-known/jwks.json`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const keys = clavesPublicas(await res.json());
+    if (keys.length === 0) throw new Error("el JWKS no trae claves públicas");
+    console.log(`[jwks] claves de sesión en el bundle: ${keys.map((k) => `${k.kid} (${k.alg})`).join(", ")}`);
+    return (process.env.SUPABASE_JWKS = JSON.stringify({ keys }));
+  } catch (error) {
+    console.warn(`[jwks] sin claves en el bundle (${(error as Error).message}); getClaims las descargará en runtime`);
+    return undefined;
+  }
+}
+
+export default async function config(phase: string): Promise<NextConfig> {
+  if (phase !== PHASE_PRODUCTION_BUILD && phase !== PHASE_DEVELOPMENT_SERVER) return nextConfig;
+  const jwks = await jwksDelProyecto();
+  return jwks ? { ...nextConfig, env: { SUPABASE_JWKS: jwks } } : nextConfig;
+}
