@@ -47,14 +47,20 @@ export function DbWarmer() {
       evaluar()
     }
 
-    const eventos = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const
+    // `pointermove` y `focus` despiertan la base cuando la persona VUELVE, antes
+    // de su primer clic: tras una pausa larga la base tarda ~300 ms en
+    // reaccionar, y mover el ratón hacia el menú suele dar ese margen. El
+    // manejador sólo compara marcas de tiempo, así que su frecuencia no cuesta.
+    const eventos = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'scroll'] as const
     for (const e of eventos) window.addEventListener(e, alHaberActividad, { passive: true, capture: true })
+    window.addEventListener('focus', alHaberActividad)
     document.addEventListener('visibilitychange', evaluar)
     const intervalo = window.setInterval(evaluar, EVALUAR_CADA_MS)
     evaluar()
 
     return () => {
       for (const e of eventos) window.removeEventListener(e, alHaberActividad, { capture: true })
+      window.removeEventListener('focus', alHaberActividad)
       document.removeEventListener('visibilitychange', evaluar)
       window.clearInterval(intervalo)
     }

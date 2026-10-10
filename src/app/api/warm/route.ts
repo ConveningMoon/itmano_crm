@@ -4,9 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 // Toca la base por el mismo camino que una página (API REST → PostgREST →
 // Postgres, con service_role) para que no se enfríe. Lo llama DbWarmer desde el
-// navegador cada ~10 s mientras alguien usa el CRM, y puede llamarlo un
-// programador externo con `Authorization: Bearer <CRON_SECRET>` para cubrir los
-// huecos sin nadie conectado (ver src/lib/warm.ts).
+// navegador cada ~10 s mientras alguien usa el CRM, y el cron de `vercel.json`
+// cada minuto (Vercel manda `Authorization: Bearer <CRON_SECRET>`) para cubrir
+// los huecos sin nadie conectado (ver src/lib/warm.ts).
 //
 // Sólo responde a una sesión válida o al secreto de cron: sin ellos no toca la
 // base, así que no es un punto para generar carga anónima. /api queda fuera del
