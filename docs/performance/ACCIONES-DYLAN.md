@@ -206,8 +206,8 @@ Las fotos de Storage no van en ese volcado. Hoy son unos 434 archivos y se
 pueden volver a subir; si crecen, conviene copiarlas también.
 
 Cuando el negocio lo permita, **Supabase Pro (25 $/mes) es la siguiente
-compra**: siete días de backups automáticos. No por velocidad: la base pesa
-19 MB y responde en milisegundos.
+compra**: siete días de backups automáticos. Y ahora también una razón de
+velocidad, con un matiz: ver 5e.
 
 ---
 
@@ -223,11 +223,69 @@ in-app, faltan las ocho variables de Paddle **Live** en Vercel.
 
 ## 5. Rendimiento que queda
 
-### 5a. Cache Components (PPR)  ·  aprobado, en sesión aparte
+### 5e. La base se enfría  ·  corregido en código, sin ajustes tuyos (2026-10-10)
 
-Prompt listo para pegar en una sesión nueva:
-`docs/performance/2026-10-prompt-cache-components.md`. 2–4 días de trabajo,
-por etapas, con preview en el sandbox antes de mergear.
+**Corrección a lo que dije antes:** concluí que Supabase Pro "no acelera nada"
+porque las consultas tardan 2–7 ms dentro de Postgres. Eso es cierto y no
+cuenta el problema: la instancia de Supabase (Nano) se **enfría** cuando recibe
+poco tráfico. Con los logs de producción (24 h, llamadas desde Vercel), la
+mediana de una consulta de la app según el tiempo que la base llevaba sin
+recibir nada:
+
+| Pausa | Mediana |
+|---|---|
+| menos de 20 s | 32–36 ms |
+| 20–45 s | 67 ms |
+| 45–90 s | 119 ms |
+| 90–150 s | 210 ms |
+| más de 2,5 min | 430–460 ms (13 veces más) |
+
+Verificado de tres formas:
+
+- **Experimento controlado:** una consulta tras 200 s sin tráfico, 300 ms;
+  diez en paralelo justo después, 24 ms de mediana; diez en paralelo tras
+  200 s, 172 ms. Lo caro es despertar la instancia, no abrir conexiones: basta
+  una consulta para despertarla.
+- **Página real (`/dashboard` completo, desde el navegador):** 1 119 ms en
+  frío, 635 ms en caliente, **549 ms con latido** cada 10 s.
+- **Vercel no se enfría:** su función responde igual tras 20, 60 y 120 s.
+
+**Hecho (rama `perf/db-warm`), sin nada que configurar:**
+
+- `DbWarmer`: un latido a `/api/warm` cada ~10 s mientras tienes el CRM a la
+  vista y has hecho algo hace menos de 5 minutos. También se lanza al mover el
+  ratón o volver a la ventana tras una pausa, para despertar la base antes del
+  primer clic.
+- Un cron de Vercel cada minuto a `/api/warm` (en `vercel.json`) para las
+  pausas sin nadie conectado. **Ya no hace falta el job de cron-job.org** que
+  te pedí antes. Coste: unas 43 000 invocaciones al mes, céntimos.
+- **Los agentes ya no esperan dos consultas en serie** antes de cada página y
+  cada acción (perfil y luego fila de agente): ahora van juntas. Dos de cada
+  cinco usuarios tienen ese rol.
+
+**La solución de fondo sigue siendo el compute:** Micro (1 GB) sale en
+Supabase Pro, que además trae backups. No puedo garantizar que elimine el
+enfriamiento sin probarlo. Decide tras medir el efecto de este cambio.
+
+### 5f. El proxy añade un viaje a California en cada página  ·  sólo lo arregla la región
+
+`proxy.ts` (el guard de sesión) se ejecuta en la región de las funciones
+(`sfo1`). Cada carga de página y cada navegación pasa primero por ahí. Medido
+contra un preview con una página de prueba idéntica, con y sin proxy, desde
+Europa: el shell llega en ~80–140 ms sin proxy y en ~250–300 ms con él, y la
+parte dinámica se retrasa lo mismo.
+
+- **Probado y descartado:** pasarlo a `middleware.ts` en runtime edge. Vercel
+  también lo ejecuta en la región de las funciones: el retraso no cambió.
+- **Lo que sí lo reduce:** la mudanza a `iad1` + `us-east-1` (5b). Desde
+  España el viaje pasaría de ~150 a ~90 ms; desde Virginia, de ~65 a ~5 ms. Y
+  aplica dos veces por página (shell y datos).
+
+### 5a. Cache Components (PPR)  ·  ✅ hecho (PR #279, 2026-10-05)
+
+El shell de cada página sale de la CDN y los datos llegan por streaming.
+Verificado el 2026-10-10 contra Vercel desde Node: el shell llega antes que la
+parte dinámica, como debe (ver 5d para cómo medirlo bien).
 
 ### 5b. Mudanza a `iad1` + `us-east-1`  ·  cuando decidas el día
 
@@ -278,8 +336,18 @@ vale la pena si la función y la base vuelven a separarse.
 ### 5d. Medir  ·  15 minutos, cuando quieras
 
 Entra en `app.itmano.com` en el navegador de una sesión de Claude Code con tu
-Magic Link y pide repetir la tabla de TTFB del informe. Así se compara cada
-paso (hoy, después de PPR, después de la mudanza) con el mismo método.
+Magic Link y pide repetir las mediciones del informe. Dos trampas que ya nos
+engañaron una vez:
+
+- **El navegador integrado de la app de Claude retiene las respuestas** hasta
+  tenerlas completas: ahí nunca se ve llegar el shell antes que los datos,
+  aunque en un Chrome normal sí llega. Para medir el streaming hay que usar
+  Node (`https`/`http2`) contra una página pública, o tu propio Chrome.
+- **El "primer byte" de Chrome puede ser el `103 Early Hints` de Vercel**, no
+  el shell. El dato bueno es `finalResponseHeadersStart` de Navigation Timing.
+
+Lo que sí es fiable en ese navegador es el tiempo total hasta tener todos los
+datos, que es lo que compara la tabla de 5e.
 
 ---
 

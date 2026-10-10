@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/score-decay",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/warm",
+      "schedule": "* * * * *"
     }
   ]
 }

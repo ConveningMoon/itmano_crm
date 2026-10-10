@@ -77,8 +77,29 @@ rendimiento (`docs/performance/`):
   `getShellData(ctx)` por su cuenta; los dos están en `cache()`, así que siguen
   siendo una lectura de contexto y una ola para el shell. No añadas lecturas
   al layout fuera de ese patrón.
+- La base (compute Nano de Supabase) se enfría: una consulta que con la base
+  activa tarda 32 ms tarda 67 ms tras 20-45 s sin tráfico y ~450 ms tras más
+  de 2,5 minutos (logs de la API de producción). Basta UNA consulta para
+  despertarla (experimento del 2026-10-10). `DbWarmer`
+  (`src/components/layout/db-warmer.tsx`, reglas en `src/lib/warm.ts`) manda un
+  GET a `/api/warm` cada ~10 s mientras alguien tiene el CRM a la vista y ha
+  hecho algo hace menos de 5 minutos, y el cron de `vercel.json` lo hace cada
+  minuto para los huecos sin nadie. No lo quites ni lo muevas fuera del layout
+  de `(dashboard)`. `/api/warm` sólo responde a una sesión o a `CRON_SECRET` y
+  cuenta filas sin leerlas.
+- `getCurrentTenantContext` lee perfil y fila de agente en la misma ola. No
+  vuelvas a esperar el rol para pedir algo que se puede pedir en paralelo y
+  descartar después.
+- `proxy.ts` corre en la región de las funciones (`sfo1`): cada carga y cada
+  navegación pagan un viaje usuario ↔ California antes del shell. No añadas
+  trabajo al proxy. Pasarlo a `middleware.ts` edge NO lo evita en Vercel
+  (medido el 2026-10-10).
 - Mide con `SUPABASE_TRACE=1` antes y después de tocar una página: compara
-  consultas y olas, no milisegundos.
+  consultas y olas, no milisegundos. Para medir producción, el navegador
+  integrado de la app de Claude retiene las respuestas hasta completarlas (no
+  sirve para ver el streaming) y el `responseStart` de Chrome puede ser el
+  `103 Early Hints`: usa `finalResponseHeadersStart`, o Node contra una página
+  pública.
 
 ## Cache Components
 

@@ -1130,3 +1130,164 @@ a cualquier usuario fuera de UTC.
 - Pendiente menor: "Entrar al CRM" del super_admin tarda ~4 s (espera al
   contexto, luego al tenant y renderiza `/dashboard` entero en la respuesta de
   la acción). No cambió con Cache Components.
+
+
+---
+
+# Fase 6 (Claude Sonnet 5.5) — 2026-10-10: la base se enfría
+
+Rama: `perf/db-warm`. Motivo: tras las fases 1–5 el shell sale en ~88 ms, pero
+Dylan percibe que el contenido aún tarda. Quedan 0,4–1,3 s entre el shell y
+los datos.
+
+## Dónde se va el tiempo
+
+- **Dentro de Postgres, casi nada.** `pg_stat_statements`: las consultas de
+  PostgREST promedian 1,9–7 ms. Lo lento de la lista (200–600 ms) son consultas
+  del propio panel de Supabase (extensiones, zonas horarias, privilegios).
+- **Las filas son pequeñas** (`tenants` 680 B, `properties` 6 kB): no es payload.
+- **Sí hay un recargo por enfriamiento.** Logs de borde de la API
+  (`query_logs`, `edge_logs`, 24 h, sólo llamadas del servidor de Vercel desde
+  el colo SJC), mediana de `origin_time` según la pausa desde la petición
+  anterior a `/rest/v1`:
+
+  | Pausa | n | origin p50 | upstream p50 |
+  |---|---|---|---|
+  | < 3 s | 717 | 32 ms | 14 ms |
+  | 3–20 s | 38 | 36 ms | 10 ms |
+  | 20–45 s | 19 | 67 ms | 37 ms |
+  | 45–90 s | 13 | 119 ms | 54 ms |
+  | 90–150 s | 29 | 210 ms | 90 ms |
+  | 150–240 s | 25 | 432 ms | 229 ms |
+  | 240–330 s | 209 | 458 ms | 264 ms |
+
+  Los de 240–330 s son casi todos el monitor de `/api/health` (cada 5 min):
+  ninguno mantiene caliente la base. Los 394 `GET /rest/v1/tenants` del día
+  (de 1 110 llamadas) son en gran parte ese monitor.
+- **Pool de PostgREST estable:** 10 conexiones, la más joven de 44 s: no hay
+  reconexión constante. El recargo afecta tanto al tramo previo al upstream
+  (~+180 ms) como al propio upstream (~+240 ms), lo que apunta a la instancia
+  (compute Nano, 0,5 GB, CPU compartida) y no a una consulta concreta.
+- **La función de Vercel no se enfría a esa escala:** medido en el navegador de
+  la sesión con `/api/version` (sin base), tiempo de espera 251–262 ms tras
+  pausas de 20, 60 y 120 s, igual que en caliente. (Desde mi PC los sondeos con
+  Node daban +240 ms en la primera petición: era la conexión nueva por el proxy
+  local, no la función.)
+- Otras colas: `/auth/v1/.well-known/jwks.json` se pide 35 veces al día (176 ms
+  de mediana; la caché de supabase-js dura 10 min por instancia) y las lecturas
+  de Storage de las imágenes originales tardan 832 ms de mediana.
+
+## Qué se implementó
+
+- `/api/warm` (`src/app/api/warm/route.ts`): un conteo `HEAD` sobre `tenants`
+  con `service_role` por el mismo camino que una página. Sólo responde a una
+  sesión válida o a `Authorization: Bearer <CRON_SECRET>`; sin ellos, 401 sin
+  tocar la base. Verificado en local: sin sesión 401, con secreto erróneo 401,
+  con sesión 204.
+- `DbWarmer` (`src/components/layout/db-warmer.tsx`) y sus reglas puras
+  (`src/lib/warm.ts`, 5 tests): latido cada ~10 s con la pestaña a la vista y
+  actividad en los últimos 5 minutos; se detiene solo. Se monta sólo con
+  `VERCEL_ENV=production`, en el layout de `(dashboard)`. Verificado en local
+  (latidos a los 12 s y 35 s, estado 204). Build con
+  `VERCEL_ENV=production npm run build` correcto.
+- Documentado en `docs/agents/architecture.md` ("Rendimiento de lecturas").
+
+## Qué falta y quién lo hace
+
+- Dylan: job de cron-job.org cada minuto a `/api/warm` con el secreto, para
+  cubrir las pausas sin nadie conectado (ver `ACCIONES-DYLAN.md`, 5e).
+- Tras desplegar, repetir la tabla de arriba con los mismos filtros y comparar
+  la mediana en la banda de más de 90 s.
+- Si no basta, probar el compute Micro (Supabase Pro). Sin garantía.
+
+## Corrección a la fase 4
+
+La conclusión "Supabase Pro no acelera nada hoy" era incompleta. Se basaba en
+los 0,5–7 ms de las consultas dentro de Postgres y no medía la latencia de la
+API tras una pausa.
+
+## Segunda revisión (Claude Opus 5.5, 2026-10-10, misma rama)
+
+Dylan pidió revisar todo otra vez antes de mergear. Resultado: el
+enfriamiento era el diagnóstico correcto y el latido es lo que hace falta. La
+revisión encontró además un arreglo de código y un coste de infraestructura.
+También corrigió una medición de la fase 5.
+
+### ¿Instancia o conexiones? Experimento controlado
+
+`pg_stat_activity` mostró que el pool de PostgREST se recrea (todas sus
+conexiones tenían ~2 minutos) y sus logs registran conexiones cerradas por
+inactividad. Si la causa fuera abrir conexiones, un latido de una consulta no
+bastaría para una página que lanza diez en paralelo. Se midió, en
+`upstream_service_time` de los logs de borde y con la clave anon:
+
+| Paso | Tiempo |
+|---|---|
+| E1: 1 consulta tras 200 s sin tráfico | 300 ms |
+| E2: 10 en paralelo justo después | 9–47 ms (mediana 24) |
+| E3: 10 en paralelo 5 s después | 2–5 ms |
+| E4: 10 en paralelo tras 40 s | 4–39 ms (mediana 30) |
+| E5: 10 en paralelo tras 200 s | 157–179 ms (mediana 172) |
+| E6: 10 en paralelo 5 s después | 2–6 ms |
+
+Lo caro es despertar la instancia (E1, E5); abrir conexiones nuevas con la
+instancia despierta cuesta ~25 ms (E2, E4). Basta una consulta para
+despertarla: el latido de una consulta es suficiente.
+
+### Página real con y sin latido
+
+`/dashboard` completo, pedido desde un Web Worker del navegador de la sesión
+(tiempo total hasta tener todos los datos): 1 119 ms tras 200 s sin tráfico,
+635 ms en caliente, **549 ms tras 200 s con un latido cada 10 s** a
+`/api/health`. (La segunda ronda, sobre `/leads`, quedó contaminada por
+peticiones propias justo antes de la carga fría y se descarta.)
+
+### Arreglo: una ola menos para los agentes
+
+`getCurrentTenantContext` esperaba el perfil para, si el rol era `agent`,
+pedir después su fila de `agents`: dos consultas en serie antes de cada página
+y cada action para 2 de los 5 usuarios de producción. Las mediciones de olas
+de las fases 1–5 se hicieron como agent_owner y super_admin, por eso no se vio.
+Ahora van en paralelo (`agents.user_id` es único) y el tenant se valida en
+memoria. 6 tests nuevos en `tests/auth/tenant-context.test.ts`, incluido uno
+que falla si las consultas vuelven a ir en serie.
+
+### Coste del proxy
+
+Preview temporal del sandbox (rama `exp/ppr-stream`, borrada) con una página
+mínima de PPR (shell estático + 2 s dinámicos), sin y con el proxy. Desde
+Node, desde Europa:
+
+- Sin proxy: primer byte del shell en 78–140 ms; lo dinámico a ~2,25 s.
+- Con `proxy.ts`: shell en 248–302 ms; lo dinámico a ~2,43 s.
+- Con el guard como `middleware.ts` edge: igual que con `proxy.ts` (250–300 ms).
+
+`proxy.ts` corre en `sfo1` y Vercel ejecuta también el middleware edge en la
+región de las funciones: cada carga y cada navegación pagan un viaje
+usuario ↔ California. Sólo lo reduce la mudanza de región.
+
+### Corrección a la fase 5: cómo se medía el primer byte
+
+- El "primer byte del documento ~88 ms" era el `103 Early Hints` de Vercel:
+  Chrome lo cuenta en `responseStart`. El dato real es
+  `finalResponseHeadersStart`.
+- El navegador integrado de la app de Claude retiene las respuestas hasta
+  completarlas: ahí el shell parece llegar a la vez que los datos (FCP 2,06 s
+  en frío), aunque desde Node el mismo preview entrega el shell primero, con
+  `identity`, gzip o Brotli, por HTTP/1.1 o HTTP/2, y con el mismo User-Agent
+  que el navegador integrado. Un servidor externo que envía 1 byte cada 0,5 s
+  sí llegó por partes, así que la retención es selectiva de esa capa. En un
+  navegador normal el shell de Cache Components funciona.
+
+### Cambios finales de la rama
+
+- Cron de Vercel cada minuto a `/api/warm` (`vercel.json`): sustituye el job
+  manual de cron-job.org que se proponía. Vercel envía `CRON_SECRET`.
+- `DbWarmer` late también con `pointermove` y `focus`: tras una pausa larga
+  despierta la base cuando la persona vuelve, antes de su primer clic.
+
+### Observación aparte (no es de velocidad)
+
+`vercel.json` programa `/api/cron/score-decay` a diario, pero esa ruta sólo
+exporta `POST` y Vercel Cron llama con `GET`: esa entrada responde 405. Si el
+decay corre, lo dispara otro programador (cron-job.org). Conviene comprobarlo.

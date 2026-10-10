@@ -2,7 +2,14 @@ import 'server-only'
 import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { columns } from '@/lib/supabase/columns'
 import { getSelectedTenant } from './admin-tenant'
+
+const PROFILE_COLUMNS    = columns('user_profiles', ['tenant_id', 'role'])
+const AGENT_LINK_COLUMNS = columns('agents', ['id', 'tenant_id'])
+
+interface ProfileRow   { tenant_id: string | null; role: string }
+interface AgentLinkRow { id: string; tenant_id: string | null }
 
 export type TenantRole = 'super_admin' | 'agent_owner' | 'agent'
 
@@ -54,11 +61,33 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
   const userId = claims.claims.sub
   const email  = (claims.claims.email as string | undefined) ?? ''
 
-  const { data: profile, error: profileError } = await supabase
-    .from('user_profiles')
-    .select('tenant_id, role')
-    .eq('id', userId)
-    .single()
+  // Perfil y fila de agente en la MISMA ola. La fila de agente sólo importa si
+  // el rol resulta ser 'agent', pero esperar al rol para pedirla era una ola
+  // entera más en cada página y cada action de los agentes (dos de cada cinco
+  // usuarios en producción). `agents.user_id` es único (`agents_user_id_key`),
+  // así que se pide por el uid y el tenant se comprueba abajo, en memoria. Para
+  // los demás roles la respuesta se ignora: una lectura más en paralelo, sin
+  // coste de espera.
+  const [
+    { data: profileData, error: profileError },
+    { data: agentData },
+  ] = await Promise.all([
+    supabase
+      .from('user_profiles')
+      .select(PROFILE_COLUMNS)
+      .eq('id', userId)
+      .single(),
+    supabase
+      .from('agents')
+      .select(AGENT_LINK_COLUMNS)
+      .eq('user_id', userId)
+      .maybeSingle(),
+  ])
+  // `columns()` devuelve un string, así que supabase-js no infiere la fila: se
+  // tipa aquí, igual que en `getTenantRow`. Las listas sí están validadas
+  // contra el esquema.
+  const profile  = profileData as unknown as ProfileRow | null
+  const agentRow = agentData as unknown as AgentLinkRow | null
 
   if (profileError || !profile) {
     // Valid session but no profile (e.g. a deprovisioned or never-provisioned
@@ -70,26 +99,21 @@ export const getCurrentTenantContext = cache(async (): Promise<TenantContext> =>
 
   const role = profile.role as TenantRole
 
-  // Resolve agent_id only for role 'agent' — the one extra query is scoped to that
-  // case so super_admin / agent_owner pay no overhead. super_admin and agent_owner
-  // are not agent records, so their agent_id is null.
+  // agent_id sólo para el rol 'agent'. super_admin y agent_owner no son filas
+  // de agente: el suyo es null aunque exista una fila con su uid.
   let agent_id: string | null = null
   if (role === 'agent') {
-    const { data: agent, error: agentError } = await supabase
-      .from('agents')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('tenant_id', profile.tenant_id ?? '')
-      .single()
-
-    if (agentError || !agent) {
+    // La fila tiene que ser del MISMO tenant que el perfil, como exigía el
+    // filtro `tenant_id` de la consulta que esperaba al rol.
+    const agent = agentRow
+    if (!agent || agent.tenant_id !== (profile.tenant_id ?? '')) {
       throw new Error(
         `User ${userId} has role 'agent' but no linked agents row ` +
         `(agents.user_id = '${userId}' in tenant '${profile.tenant_id}'). ` +
         `Invalid provisioning: link an agent record before granting the 'agent' role.`
       )
     }
-    agent_id = agent.id as string
+    agent_id = agent.id
   }
 
   // Super admin: honrar la cookie de tenant seleccionado (validada contra la

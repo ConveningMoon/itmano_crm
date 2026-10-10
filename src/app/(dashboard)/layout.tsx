@@ -5,6 +5,7 @@ import { NavList } from '@/components/layout/nav-list'
 import { MobileNavTriggerFallback } from '@/components/layout/mobile-nav'
 import { NewLeadButton } from '@/components/layout/new-lead-button'
 import { SpeedInsights } from '@/components/layout/speed-insights'
+import { DbWarmer } from '@/components/layout/db-warmer'
 import {
   AiLimitSlot, BrandFallback, BrandSlot, MobileNavSlot, NewLeadSlot, NewVersionNoticeSlot, SidebarNavSlot,
   SidebarUserFallback, SidebarUserSlot, SubscriptionBannerSlot, TenantSwitcherSlot,
@@ -129,6 +130,11 @@ export default function DashboardLayout({
           <SpeedInsights />
         </Suspense>
       )}
+      {/* Latido que mantiene caliente la base mientras se usa el CRM (ver
+          src/lib/warm.ts). Sólo en producción, como Speed Insights: en local y
+          en los previews no aporta y sólo añadiría peticiones. No lee nada de
+          la ruta ni de la sesión, así que forma parte del shell estático. */}
+      {process.env.VERCEL_ENV === 'production' && <DbWarmer />}
     </div>
   )
 }
