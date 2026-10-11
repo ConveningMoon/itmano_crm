@@ -1598,3 +1598,23 @@ página vacía con un hueco dinámico (`connection()`) dentro del matcher, en
 paralelo con `/api/warm`. `/warm` desaparece: `/latido` calienta el proxy y,
 además, el camino de las páginas. Pendiente de medir en producción con el
 mismo protocolo: 12 minutos sin tráfico, con latido y sin latido.
+
+### Medición en producción del latido con `/latido` (#289, 2026-10-11)
+
+Mismo protocolo: navegador integrado con la sesión de Dylan desde Europa, 12
+minutos sin peticiones a producción antes de cada caso. En ambas ventanas se
+comprobó en los logs que nadie más cargó páginas.
+
+| Caso | Latido de vuelta (`/api/warm` + `/latido`) | `/dashboard` 1ª | `/dashboard` 2ª |
+|---|---|---|---|
+| Con latido, la página 1,5 s después | 2 173 ms | **804 ms** | 657 ms |
+| Sin latido (control) | — | 3 079 ms | 632 ms |
+
+El latido absorbe el arranque en frío completo: el proxy y el camino de las
+páginas. La primera página tras una pausa queda casi como una en caliente. Con
+`/warm` (#286) el ahorro había sido de ~0,4 s, porque un Route Handler no
+calienta el camino de las páginas.
+
+Sigue sin cubrirse abrir el CRM desde cero, porque antes de esa primera página
+no hay latido. Tampoco hay ahorro si el clic llega antes de que termine el
+latido (~2 s tras una pausa larga).
