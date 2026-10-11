@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { EVALUAR_CADA_MS, debeLatir } from '@/lib/warm'
+import { EVALUAR_CADA_MS, debeLatir, rutaDelLatido } from '@/lib/warm'
 
 /**
  * Latido que mantiene caliente la base mientras se usa el CRM (reglas y motivo
@@ -22,9 +22,12 @@ export function DbWarmer() {
     async function latir() {
       if (enCurso) return
       enCurso = true
+      const ruta = rutaDelLatido(Date.now(), ultimoLatido)
       ultimoLatido = Date.now()
       try {
-        await fetch('/api/warm', { cache: 'no-store', credentials: 'same-origin' })
+        // `manual`: sin sesión, /warm devuelve la redirección del proxy a /login
+        // y no hace falta descargar esa página.
+        await fetch(ruta, { cache: 'no-store', credentials: 'same-origin', redirect: 'manual' })
       } catch {
         // Sin red o servidor caído: se reintenta en el siguiente ciclo.
       } finally {

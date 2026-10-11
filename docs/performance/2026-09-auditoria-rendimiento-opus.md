@@ -1551,10 +1551,14 @@ Tras una pausa se enfrían tres cosas, cada una por su lado:
 
 La base y las claves de sesión ya no aparecen en este recargo.
 
-**Siguiente experimento propuesto (sin hacer):** al volver de una pausa,
-`DbWarmer` ya lanza un latido con el primer movimiento del ratón o al volver a
-la pestaña, antes del primer clic. Si ese latido de vuelta pasara por el
-proxy (una ruta dentro del matcher, por ejemplo `/warm`, con la misma lógica
-que `/api/warm`), calentaría el proxy del borde de esa persona justo antes de
-que lo necesite. El cron seguiría en `/api/warm`. Sólo se puede medir en
-producción, porque los previews ejecutan el proxy en `sfo1`.
+**Cambio (rama `perf/latido-proxy`):** al volver de una pausa, `DbWarmer` ya
+lanza un latido con el primer movimiento del ratón o al volver a la pestaña,
+antes del primer clic. Si el último latido fue hace 3 minutos o más, ese
+latido va a `/warm`: la misma lógica que `/api/warm` (`src/lib/warm-handler.ts`)
+pero dentro del matcher del proxy. Así calienta el proxy del borde de esa
+persona, esté en Madrid o en Nueva York, justo antes de que lo necesite. El
+cron y los latidos seguidos siguen yendo a `/api/warm`, así que no se añaden
+invocaciones mientras alguien está activo. No cubre abrir el CRM desde cero
+(no hay latido antes de la primera página) ni el tramo hasta la función de las
+páginas. Sólo se puede medir en producción, porque los previews ejecutan el
+proxy en `sfo1`.
