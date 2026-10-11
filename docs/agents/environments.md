@@ -143,6 +143,14 @@ grant select, insert, update, delete on public.tabla to service_role;
   pero ese rol tiene CRUD completo en ambas bases. Para limitar un rol, haz
   `revoke` explícito; no basta con omitir el privilegio.
 
+Las 43 tablas que existían el 2026-10-11 tienen sus grants escritos en
+`supabase/migrations/`. Las 32 que dependían del default ACL los reciben en
+`20261011092325_grants_explicitos_tablas_existentes.sql`, así que una base
+reconstruida desde las migraciones sigue funcionando. Hay una diferencia
+deliberada: en las bases actuales `anon` conserva los grants que el default ACL
+le dio en esas tablas, y una base reconstruida no los tiene. RLS no le deja usar
+ninguno. Retirarlos de sandbox y producción requiere un `revoke` aparte.
+
 **Sandbox ya aplica el comportamiento nuevo** desde el 2026-10-11 (opt-in
 anticipado, ejecutado con `execute_sql`; no es una migración y no se replica a
 producción). Una migración sin grants falla allí antes de llegar a producción:
