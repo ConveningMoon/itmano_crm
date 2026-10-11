@@ -92,12 +92,14 @@ rendimiento (`docs/performance/`):
   sin esa renovación anticipada, quien vuelve de una pausa lo encuentra
   caducado y cada petición en paralelo (navegación y prefetch de cada enlace
   del menú) lo renueva por su cuenta en el proxy.
-- El latido de vuelta tras una pausa de 3 minutos o más va a `/warm`, que pasa
-  por el proxy (`rutaDelLatido` en `src/lib/warm.ts`). Así calienta el proxy
-  del borde de esa persona antes de su primer clic: tras ~10 minutos sin
-  tráfico, la primera petición al proxy tarda ~0,9 s. Los demás latidos y el
-  cron van a `/api/warm`, fuera del matcher. Las dos rutas comparten
-  `src/lib/warm-handler.ts`.
+- El latido de vuelta tras una pausa de 3 minutos o más pide además
+  `/latido` (`esLatidoDeVuelta` en `src/lib/warm.ts`). Es una página vacía
+  dentro del matcher: calienta el proxy del borde de esa persona y la función
+  de las páginas antes de su primer clic. Tras ~10 minutos sin tráfico, la
+  primera página pagaba ~2 s antes de su primera consulta, y un Route Handler
+  como `/api/warm` no calienta el camino de las páginas. Si cambias la forma de
+  calentar algo, mídelo en producción: los previews ejecutan el proxy en
+  `sfo1`.
 - `getCurrentTenantContext` lee perfil y fila de agente en la misma ola. No
   vuelvas a esperar el rol para pedir algo que se puede pedir en paralelo y
   descartar después.
