@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { INACTIVIDAD_MAX_MS, LATIDO_MS, debeLatir } from '@/lib/warm'
+import { INACTIVIDAD_MAX_MS, LATIDO_MS, RENOVAR_SESION_MS, debeLatir, debeRenovarSesion } from '@/lib/warm'
 
 const base = { ahora: 1_000_000, ultimoLatido: 0, ultimaActividad: 1_000_000, visible: true, enLinea: true }
 
@@ -27,5 +27,27 @@ describe('debeLatir', () => {
     const parado = { ...base, ultimoLatido: base.ahora - 10 * 60_000, ultimaActividad: base.ahora - 10 * 60_000 }
     expect(debeLatir(parado)).toBe(false)
     expect(debeLatir({ ...parado, ultimaActividad: base.ahora })).toBe(true)
+  })
+})
+
+describe('debeRenovarSesion', () => {
+  const ahora = 1_800_000_000_000
+  const expDentroDe = (ms: number) => (ahora + ms) / 1000
+
+  it('un token recién emitido (1 h) no se renueva', () => {
+    expect(debeRenovarSesion(expDentroDe(60 * 60_000), ahora)).toBe(false)
+  })
+
+  it('se renueva en cuanto le quedan menos de 45 minutos', () => {
+    expect(debeRenovarSesion(expDentroDe(RENOVAR_SESION_MS), ahora)).toBe(false)
+    expect(debeRenovarSesion(expDentroDe(RENOVAR_SESION_MS - 1000), ahora)).toBe(true)
+  })
+
+  it('un token caducado también se renueva', () => {
+    expect(debeRenovarSesion(expDentroDe(-60_000), ahora)).toBe(true)
+  })
+
+  it('sin exp no se renueva', () => {
+    expect(debeRenovarSesion(undefined, ahora)).toBe(false)
   })
 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, connection } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { opcionesClaims } from '@/lib/supabase/jwks'
+import { debeRenovarSesion } from '@/lib/warm'
 
 // Toca la base por el mismo camino que una página (API REST → PostgREST →
 // Postgres, con service_role) para que no se enfríe. Lo llama DbWarmer desde el
@@ -15,6 +16,9 @@ import { opcionesClaims } from '@/lib/supabase/jwks'
 //
 // La consulta es un conteo (HEAD): no devuelve ni lee filas de ningún tenant.
 //
+// Con sesión, además, renueva el token antes de que caduque (por qué, en
+// src/lib/warm.ts). Las cookies nuevas salen en esta misma respuesta.
+//
 // `connection()`: con Cache Components un GET que no lee nada del request se
 // prerenderiza en el build y respondería desde la caché sin tocar la base.
 export async function GET(request: NextRequest) {
@@ -27,6 +31,8 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { data: claims } = await supabase.auth.getClaims(undefined, opcionesClaims)
     if (!claims) return respuesta(401)
+    // Si falla (Auth caído), el siguiente latido lo vuelve a intentar.
+    if (debeRenovarSesion(claims.claims.exp, Date.now())) await supabase.auth.refreshSession()
   }
 
   const { error } = await createAdminClient()

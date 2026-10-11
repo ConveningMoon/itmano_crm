@@ -1454,3 +1454,107 @@ primera carga tras una pausa con la de la fase 6.
 **Cache Components:** no aplica aquí. El proxy no puede usar `use cache` y la
 sesión no va en caché compartida. Las claves en el build son el equivalente
 estático, sin E/S.
+
+## Medición en producción tras el merge (#284, deploy de las 21:34 UTC del 2026-10-10)
+
+- **Build:** `[jwks] claves de sesión en el bundle: dbaecc7d-… (ES256)`, la
+  clave de producción. `next.config.ts` tardó 457 ms.
+- **Descargas del JWKS:** ninguna desde el servidor tras el deploy. La única
+  petición al JWKS fue la del propio build (IAD, sin cliente de Supabase). En
+  las 24 h anteriores hubo 102.
+- **Cargas de `/dashboard`** con el método de la fase 6: Worker del navegador
+  con la sesión de Dylan, desde Europa, sólo el cron activo y 200 s sin
+  páginas antes de cada primera carga (21:45–21:52 UTC):
+
+  | Ronda | Primera carga | En caliente |
+  |---|---|---|
+  | R1 (9 min sin peticiones a `/dashboard`) | 2 574 ms | 888, 691 ms |
+  | R2 | 890 ms | 693, 704 ms |
+  | R3 | 1 088 ms | 711, 413 ms |
+
+  En toda la ventana hubo 0 descargas del JWKS y 0 renovaciones de sesión. En
+  caliente las cargas tardan ~200 ms más que en la fase 6, donde tampoco había
+  descarga del JWKS: es la red de esta medición, no el código. Lo comparable es
+  el recargo de la primera carga sobre la caliente. Quedó en ~190 ms (R2) y
+  ~380 ms (R3, con una consulta de 637 ms en origen, de la base), frente a
+  344–679 ms en la fase 6. En R1 pasaron ~2,3 s antes de la primera consulta:
+  arranque en frío del lado de Vercel tras 9 minutos sin peticiones a
+  `/dashboard` (abajo).
+
+### Hallazgo: renovaciones de la sesión en ráfaga
+
+El token de sesión dura 3 600 s (`expires_at - issued_at` en los logs). En 24 h
+el proxy lo renovó 25 veces (`POST /auth/v1/token` desde CDG y FRA). Origen:
+mediana 195–239 ms, p90 565–722 ms, máximo 998 ms. Las renovaciones llegaban
+en ráfagas de 4–9 casi simultáneas (12:03, 14:55 y 16:28 UTC) sin ninguna
+página renderizada en ese minuto. Eran el prefetch de los enlaces del menú al
+volver a una pestaña abierta con el token caducado, tras 60–110 minutos sin
+actividad: cada petición en paralelo lo renovaba por su cuenta. A las 16:28 el
+latido también lo renovó, desde SJC.
+
+**Cambio (rama `perf/renovar-sesion`):** `/api/warm` renueva el token cuando le
+quedan menos de 45 minutos (`debeRenovarSesion` en `src/lib/warm.ts`). Mientras
+alguien usa el CRM, el token tiene siempre 45–60 minutos por delante, así que
+una pausa de menos de 45 minutos ya no paga ninguna renovación. Una pausa de
+más de una hora sigue renovando al volver. Alargar el token en Supabase lo
+evitaría, pero un token robado o de una sesión cerrada seguiría valiendo hasta
+caducar: no se recomienda.
+
+Verificado en un preview de sandbox con una sesión de prueba (creada sin
+correo y revocada al terminar). Con el token recién emitido (60 min),
+`/api/warm` respondió 204 sin renovar. A los 16 minutos (44 min de vida)
+respondió 204 con la cookie nueva (60 min), y la llamada siguiente ya no
+renovó. En los logs de sandbox hubo un único `POST /auth/v1/token` (200, desde
+SJC, 265 ms en origen).
+
+### Dónde se va ahora el tiempo de una carga
+
+Con los relojes calibrados (navegador y logs de Supabase coinciden con un
+margen de ±0,2 s), una carga en caliente de `/dashboard` desde Europa (R2) se
+reparte así:
+
+| Tramo | Tiempo |
+|---|---|
+| Desde la petición hasta la primera consulta | ~470 ms |
+| Las dos olas de consultas (contexto y datos) | ~90 ms |
+| Desde la última consulta hasta tener la respuesta entera | ~110 ms |
+
+La base ya no es el coste principal. Lo es el camino hasta `sfo1`: navegador →
+borde (`cdg1`/`fra1`) → proxy → render con PPR en `sfo1`. Sólo la ida desde
+Europa son ~75 ms; el resto del tramo previo lo pone Vercel antes de que la
+función llegue a la primera consulta.
+
+**Tras ~10 minutos sin peticiones (22:02 UTC):** el proxy solo (307 sin
+sesión, `fra1`) tardó 918, 452 y 101 ms. Justo después, con el proxy ya
+caliente, dos cargas con sesión tardaron 2 031 y 1 378 ms, con ~1,6 s y
+~1,15 s antes de la primera consulta. Tras una pausa así, la primera página
+paga ~1–2 s de arranques en frío de Vercel (proxy en el borde y función de las
+páginas), aunque el cron llame a `/api/warm` cada minuto.
+
+**Separado por tramos (22:12 UTC, otros 10 minutos sin tráfico, todo desde el
+navegador):**
+
+| Paso | Tiempo |
+|---|---|
+| `/api/warm` (no pasa por el proxy) | 883 ms; su consulta, al final |
+| Proxy solo (307 sin sesión), 1ª y 2ª | 923 y 102 ms |
+| `/dashboard` 1, con el proxy ya caliente | 1 347 ms (~1,09 s antes de la primera consulta) |
+| `/dashboard` 2 y 3 | 593 y 836 ms (0,38–0,51 s antes de la primera consulta) |
+
+Tras una pausa se enfrían tres cosas, cada una por su lado:
+
+- **El proxy en el borde de quien navega:** ~0,8 s la primera vez.
+- **El camino hasta la función de las páginas:** ~0,6 s más.
+- **`/api/warm`:** también tarda la primera vez, aunque el cron lo llamó 41 s
+  antes. Así que parte del recargo está en la conexión del borde europeo con
+  `sfo1`, no en la función.
+
+La base y las claves de sesión ya no aparecen en este recargo.
+
+**Siguiente experimento propuesto (sin hacer):** al volver de una pausa,
+`DbWarmer` ya lanza un latido con el primer movimiento del ratón o al volver a
+la pestaña, antes del primer clic. Si ese latido de vuelta pasara por el
+proxy (una ruta dentro del matcher, por ejemplo `/warm`, con la misma lógica
+que `/api/warm`), calentaría el proxy del borde de esa persona justo antes de
+que lo necesite. El cron seguiría en `/api/warm`. Sólo se puede medir en
+producción, porque los previews ejecutan el proxy en `sfo1`.

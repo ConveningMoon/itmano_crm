@@ -291,6 +291,8 @@ europeos. Los dos costes medidos siguen siendo reales:
   **Lo único que te toca:** si un día **revocas** una clave de firma en
   Supabase (Settings → JWT Keys), redeploya producción y sandbox justo
   después. Rotar no pide nada. Detalle en `docs/agents/environments.md`.
+  **Medido en producción (#284, 2026-10-10):** cero descargas desde el
+  deploy, frente a 102 en las 24 h anteriores.
 - **Con el proxy delante, el shell no sale de la CDN cercana:** en un preview
   con una página idéntica, el shell llegó en ~80–140 ms sin proxy y en
   ~250–300 ms con él (también con `middleware.ts` edge). Es un viaje de ida y
@@ -300,6 +302,22 @@ europeos. Los dos costes medidos siguen siendo reales:
   `sfo1` y producción en el borde, así que este coste puede ser menor en
   producción. Hay que medirlo allí con tu sesión antes de decidir la mudanza
   por este motivo.
+
+### 5g. Renovación de la sesión  ·  mejorada en código (2026-10-10)
+
+El token de sesión dura una hora. En 24 h hubo 25 renovaciones dentro del
+proxy, en ráfagas de 4–9 casi simultáneas. Pasaba al volver a una pestaña
+abierta tras más de una hora: la navegación y el prefetch de cada enlace del
+menú renovaban el token cada uno por su cuenta, a 170–720 ms cada una contra
+la base Nano.
+
+- **Hecho (rama `perf/renovar-sesion`):** el latido renueva el token cuando le
+  quedan menos de 45 minutos. Una pausa de menos de 45 minutos ya no paga
+  ninguna renovación.
+- **Lo que queda:** tras más de una hora sin usar el CRM, la primera página
+  sigue renovando el token (~200 ms, más con la base fría). Se podría alargar
+  la duración del token en Supabase, pero **no lo recomiendo**: un token robado
+  o de una sesión ya cerrada sigue valiendo hasta que caduca.
 
 ### 5a. Cache Components (PPR)  ·  ✅ hecho (PR #279, 2026-10-05)
 
