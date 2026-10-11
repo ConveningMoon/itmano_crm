@@ -143,6 +143,21 @@ grant select, insert, update, delete on public.tabla to service_role;
   pero ese rol tiene CRUD completo en ambas bases. Para limitar un rol, haz
   `revoke` explícito; no basta con omitir el privilegio.
 
+**Sandbox ya aplica el comportamiento nuevo** desde el 2026-10-11 (opt-in
+anticipado, ejecutado con `execute_sql`; no es una migración y no se replica a
+producción). Una migración sin grants falla allí antes de llegar a producción:
+
+```sql
+alter default privileges for role postgres in schema public
+  revoke select, insert, update, delete on tables from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+  revoke usage, select on sequences from anon, authenticated, service_role;
+```
+
+Para revertirlo en sandbox, los mismos dos `alter default privileges` con
+`grant … to anon, authenticated, service_role`. Desde el 2026-10-30 producción
+se comporta igual y esta diferencia desaparece.
+
 `tests/schema/grants.test.ts` (dentro de `test:schema`) falla si una tabla de
 `public` no tiene RLS, si `service_role` no tiene CRUD completo, si
 `authenticated` no puede leerla, o si un rol que inserta no tiene `USAGE` sobre
