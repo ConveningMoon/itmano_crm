@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { INACTIVIDAD_MAX_MS, LATIDO_MS, RENOVAR_SESION_MS, VUELTA_MS, debeLatir, debeRenovarSesion, rutaDelLatido } from '@/lib/warm'
+import { INACTIVIDAD_MAX_MS, LATIDO_MS, RENOVAR_SESION_MS, VUELTA_MS, debeLatir, debeRenovarSesion, esLatidoDeVuelta } from '@/lib/warm'
 
 const base = { ahora: 1_000_000, ultimoLatido: 0, ultimaActividad: 1_000_000, visible: true, enLinea: true }
 
@@ -52,20 +52,20 @@ describe('debeRenovarSesion', () => {
   })
 })
 
-describe('rutaDelLatido', () => {
+describe('esLatidoDeVuelta', () => {
   const ahora = 1_800_000_000_000
 
-  it('el primer latido tras cargar la página va directo: la carga ya pasó por el proxy', () => {
-    expect(rutaDelLatido(ahora, 0)).toBe('/api/warm')
+  it('el primer latido tras cargar la página no lo es: la carga ya hizo ese camino', () => {
+    expect(esLatidoDeVuelta(ahora, 0)).toBe(false)
   })
 
-  it('los latidos seguidos van directos', () => {
-    expect(rutaDelLatido(ahora, ahora - LATIDO_MS)).toBe('/api/warm')
-    expect(rutaDelLatido(ahora, ahora - (VUELTA_MS - 1))).toBe('/api/warm')
+  it('los latidos seguidos no lo son', () => {
+    expect(esLatidoDeVuelta(ahora, ahora - LATIDO_MS)).toBe(false)
+    expect(esLatidoDeVuelta(ahora, ahora - (VUELTA_MS - 1))).toBe(false)
   })
 
-  it('el latido de vuelta tras una pausa pasa por el proxy', () => {
-    expect(rutaDelLatido(ahora, ahora - VUELTA_MS)).toBe('/warm')
-    expect(rutaDelLatido(ahora, ahora - 60 * 60_000)).toBe('/warm')
+  it('el primer latido tras una pausa sí lo es', () => {
+    expect(esLatidoDeVuelta(ahora, ahora - VUELTA_MS)).toBe(true)
+    expect(esLatidoDeVuelta(ahora, ahora - 60 * 60_000)).toBe(true)
   })
 })

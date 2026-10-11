@@ -56,24 +56,28 @@ export function debeLatir(e: EstadoLatido): boolean {
 // minutos de token por delante, y una pausa de menos de 45 minutos ya no paga
 // nada. Una pausa de más de una hora sigue renovando al volver, como antes.
 
-// El latido de vuelta pasa por el proxy. Tras ~10 minutos sin tráfico, el
-// proxy del borde de cada persona se enfría: en producción la primera
-// petición tardó ~0,9 s y la siguiente ~0,1 s (2026-10-10). /api/warm queda
-// fuera del matcher, así que el latido no lo calentaba. Al volver de una
-// pausa, el primer latido sale con el primer movimiento del ratón o al volver
-// a la pestaña, antes del clic. Por eso ese latido va a /warm, la misma ruta
-// pero dentro del matcher. El proxy que calienta es el del borde de esa
-// persona, esté donde esté. Los latidos seguidos van directos, porque las
-// propias navegaciones ya mantienen caliente el proxy. Abrir el CRM desde cero
-// no lo cubre: antes de esa primera página no hay latido.
+// El latido de vuelta también calienta el camino de las páginas. Tras ~10
+// minutos sin tráfico, en producción la primera página pagaba ~2 s antes de su
+// primera consulta (medido el 2026-10-11):
+//   - ~0,4-0,9 s por el proxy del borde de esa persona;
+//   - el resto por el camino propio de las páginas, que un Route Handler como
+//     /api/warm no calienta.
+// Al volver de una pausa, el primer latido sale con el primer movimiento del
+// ratón o al volver a la pestaña, antes del clic. Por eso ese latido pide
+// además /latido, una página vacía dentro del matcher. Así calienta el proxy
+// del borde de esa persona, esté donde esté, y la función de las páginas.
+//
+// Los latidos seguidos van sólo a /api/warm, porque las propias navegaciones ya
+// mantienen caliente ese camino. Abrir el CRM desde cero no lo cubre: antes de
+// esa primera página no hay latido.
 
-/** Tras esta pausa sin latidos, el siguiente pasa por el proxy. */
+/** Tras esta pausa sin latidos, el siguiente también calienta el camino de las páginas. */
 export const VUELTA_MS = 3 * 60_000
 
-/** A qué ruta va el latido. `ultimoLatido` es 0 si aún no ha habido ninguno. */
-export function rutaDelLatido(ahora: number, ultimoLatido: number): '/warm' | '/api/warm' {
-  // Sin latidos previos, la página acaba de cargar y su petición ya pasó por el proxy.
-  return ultimoLatido > 0 && ahora - ultimoLatido >= VUELTA_MS ? '/warm' : '/api/warm'
+/** ¿Es este latido el de vuelta tras una pausa? `ultimoLatido` es 0 si aún no hubo ninguno. */
+export function esLatidoDeVuelta(ahora: number, ultimoLatido: number): boolean {
+  // Sin latidos previos, la página acaba de cargar y su petición ya hizo ese camino.
+  return ultimoLatido > 0 && ahora - ultimoLatido >= VUELTA_MS
 }
 
 /** Con menos vida que esto por delante, el latido renueva la sesión. */

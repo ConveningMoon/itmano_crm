@@ -1592,3 +1592,9 @@ Conclusión, con una muestra por caso:
 dinámica mínima, fuera del layout del dashboard y dentro del matcher. Así la
 sirve la misma función que las páginas. La renovación de la sesión seguiría en
 `/warm`, porque una página no puede escribir cookies.
+
+**Cambio (rama `perf/latido-pagina`):** el latido de vuelta pide `/latido`, una
+página vacía con un hueco dinámico (`connection()`) dentro del matcher, en
+paralelo con `/api/warm`. `/warm` desaparece: `/latido` calienta el proxy y,
+además, el camino de las páginas. Pendiente de medir en producción con el
+mismo protocolo: 12 minutos sin tráfico, con latido y sin latido.

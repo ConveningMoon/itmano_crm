@@ -106,8 +106,8 @@ describe('middleware matcher — dashboard pages ARE protected', () => {
     '/settings',
     '/admin',
     '/notifications',
-    // El latido de vuelta de DbWarmer: tiene que pasar por el proxy (src/lib/warm.ts).
-    '/warm',
+    // La página que DbWarmer pide al volver de una pausa: tiene que pasar por el proxy (src/lib/warm.ts).
+    '/latido',
   ]
 
   for (const p of protectedPaths) {

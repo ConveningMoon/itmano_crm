@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { EVALUAR_CADA_MS, debeLatir, rutaDelLatido } from '@/lib/warm'
+import { EVALUAR_CADA_MS, debeLatir, esLatidoDeVuelta } from '@/lib/warm'
 
 /**
  * Latido que mantiene caliente la base mientras se usa el CRM (reglas y motivo
@@ -11,7 +11,8 @@ import { EVALUAR_CADA_MS, debeLatir, rutaDelLatido } from '@/lib/warm'
  * renueva la sesión antes de que caduque. Se hace cada ~10 s con la pestaña a
  * la vista y actividad reciente; al volver a la pestaña o al tocar algo tras
  * una pausa, se lanza enseguida si ya toca, para que el recargo de una base
- * fría lo pague el latido y no el siguiente clic.
+ * fría lo pague el latido y no el siguiente clic. Ese latido de vuelta pide
+ * además /latido, que calienta el proxy y la función de las páginas.
  */
 export function DbWarmer() {
   useEffect(() => {
@@ -22,12 +23,16 @@ export function DbWarmer() {
     async function latir() {
       if (enCurso) return
       enCurso = true
-      const ruta = rutaDelLatido(Date.now(), ultimoLatido)
+      const deVuelta = esLatidoDeVuelta(Date.now(), ultimoLatido)
       ultimoLatido = Date.now()
+      const opciones: RequestInit = { cache: 'no-store', credentials: 'same-origin' }
       try {
-        // `manual`: sin sesión, /warm devuelve la redirección del proxy a /login
-        // y no hace falta descargar esa página.
-        await fetch(ruta, { cache: 'no-store', credentials: 'same-origin', redirect: 'manual' })
+        await Promise.all([
+          fetch('/api/warm', opciones),
+          // `manual`: sin sesión, el proxy redirige /latido a /login y no hace
+          // falta descargar esa página.
+          deVuelta ? fetch('/latido', { ...opciones, redirect: 'manual' }) : null,
+        ])
       } catch {
         // Sin red o servidor caído: se reintenta en el siguiente ciclo.
       } finally {

@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { opcionesClaims } from '@/lib/supabase/jwks'
 import { debeRenovarSesion } from '@/lib/warm'
 
-// El latido que sirven /api/warm y /warm (reglas y motivo en src/lib/warm.ts).
+// El latido que sirve /api/warm (reglas y motivo en src/lib/warm.ts).
 //
 // Toca la base por el mismo camino que una página (API REST → PostgREST →
 // Postgres, con service_role) para que no se enfríe. Sólo responde a una
