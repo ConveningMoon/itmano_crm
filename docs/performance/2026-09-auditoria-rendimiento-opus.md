@@ -1562,3 +1562,33 @@ invocaciones mientras alguien está activo. No cubre abrir el CRM desde cero
 (no hay latido antes de la primera página) ni el tramo hasta la función de las
 páginas. Sólo se puede medir en producción, porque los previews ejecutan el
 proxy en `sfo1`.
+
+### Medición en producción del latido por el proxy (#286, 2026-10-11)
+
+Navegador integrado con la sesión de Dylan desde Europa. Cada caso, tras 12
+minutos sin peticiones a producción:
+
+| Caso | `/warm` | `/dashboard` 1ª | Antes de la 1ª consulta | `/dashboard` 2ª |
+|---|---|---|---|---|
+| Con latido (`/warm` y 1,5 s después la página) | 2 127 ms (incluye una renovación de 0,6 s) | 2 636 ms | ~1,7 s | 615 ms |
+| Sin latido (control) | — | 2 335 ms | ~2,1 s | 471 ms |
+
+En el caso con latido la base además tuvo un parón: las consultas del
+dashboard tardaron 640–705 ms en origen. Sin ese parón, la carga habría
+rondado los 2,0 s.
+
+Uso real a las 06:08: al volver a la pestaña, el latido salió a `/warm` y
+tardó 1 126 ms. Ese arranque en frío lo pagó el latido y no un clic.
+
+Conclusión, con una muestra por caso:
+
+- El latido calienta el proxy y ahorra ~0,4 s del tramo previo a la primera
+  consulta.
+- El grueso del arranque en frío, ~1,2–1,7 s, está en el camino de la página
+  y no se calienta con `/warm`. Eso confirma que las páginas y los Route
+  Handlers no comparten instancia caliente.
+
+**Siguiente paso posible:** que el latido de vuelta también pida una página
+dinámica mínima, fuera del layout del dashboard y dentro del matcher. Así la
+sirve la misma función que las páginas. La renovación de la sesión seguiría en
+`/warm`, porque una página no puede escribir cookies.
