@@ -41,6 +41,13 @@ const SOLO_SERVICE_ROLE: Record<string, string> = {}
 // tabla de datos de aplicación.
 const SIN_RLS: Record<string, string> = {}
 
+// Tablas en las que `anon` puede tener privilegios de TABLA. Vacía a propósito:
+// lo que leen las webs de clientes va por columna (properties,
+// newsletter_editions, open_houses) y /api/health sólo lee tenants.id. Sin
+// privilegios de tabla, una policy `to public` escrita con un descuido no basta
+// para abrir una tabla a cualquiera.
+const ANON_CON_TABLA: Record<string, string> = {}
+
 /** Lista legible de lo que falta. Vacía si todo está en orden. */
 function faltantes(objetos: ObjetoConGrants[]): string[] {
   const tablas = new Map(objetos.filter(o => o.tipo === 'tabla').map(o => [o.nombre, o]))
@@ -54,6 +61,10 @@ function faltantes(objetos: ObjetoConGrants[]): string[] {
 
     if (!(t.nombre in SOLO_SERVICE_ROLE) && !t.privilegios.authenticated.includes('SELECT')) {
       errores.push(`${t.nombre}: authenticated sin SELECT`)
+    }
+
+    if (t.privilegios.anon.length && !(t.nombre in ANON_CON_TABLA)) {
+      errores.push(`${t.nombre}: anon con ${t.privilegios.anon.join(', ')} de tabla`)
     }
   }
 
@@ -98,6 +109,13 @@ describe('grants: el verificador detecta una tabla sin GRANT', () => {
     ])).toEqual([])
   })
 
+  it('anon con privilegios de tabla falla; por columna no cuenta', () => {
+    expect(faltantes([
+      tabla('leads', { anon: ['INSERT', 'SELECT'], authenticated: CRUD, service_role: CRUD }),
+      tabla('properties', { authenticated: CRUD, service_role: CRUD }),
+    ])).toEqual(['leads: anon con INSERT, SELECT de tabla'])
+  })
+
   it('una tabla sin RLS falla aunque tenga grants', () => {
     expect(faltantes([tabla('abierta', { authenticated: CRUD, service_role: CRUD }, false)]))
       .toEqual(['abierta: sin RLS'])
@@ -136,6 +154,8 @@ describe.skipIf(!URL || !KEY)('grants: las tablas de public tienen sus GRANT', (
     // en una migración correctiva, junto a `enable row level security`:
     //   grant select, insert, update, delete on public.<tabla> to authenticated;
     //   grant select, insert, update, delete on public.<tabla> to service_role;
+    // Y si es `anon` con privilegios de tabla: `revoke all on public.<tabla>
+    // from anon;` y, si una web la lee sin sesión, grant select (columnas).
     expect(faltantes(objetos), 'Tablas o secuencias de public sin los GRANT esperados').toEqual([])
   })
 })

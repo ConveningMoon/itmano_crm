@@ -133,8 +133,10 @@ grant select, insert, update, delete on public.tabla to service_role;
 - `authenticated` recibe al menos `SELECT`; reduce los demás si la tabla sólo
   se escribe desde el servidor (patrón de `116_lead_tags`). RLS sigue siendo la
   que decide qué filas ve cada tenant.
-- `anon` sólo cuando la tabla se lee sin sesión, preferiblemente por columna
-  (`047`, `105`, open houses).
+- `anon` nunca recibe privilegios de TABLA. Si una web lee la tabla sin sesión,
+  recibe `SELECT` por columna (`047`, `105`, open houses, `tenants.id` para
+  `/api/health`). Así una policy `to public` escrita con un descuido no basta
+  para abrir una tabla a cualquiera.
 - Un `serial` o un `nextval()` explícito necesita además
   `grant usage, select on sequence … to` cada rol que inserte. Las columnas
   `identity` y los `uuid` no.
@@ -146,10 +148,12 @@ grant select, insert, update, delete on public.tabla to service_role;
 Las 43 tablas que existían el 2026-10-11 tienen sus grants escritos en
 `supabase/migrations/`. Las 32 que dependían del default ACL los reciben en
 `20261011092325_grants_explicitos_tablas_existentes.sql`, así que una base
-reconstruida desde las migraciones sigue funcionando. Hay una diferencia
-deliberada: en las bases actuales `anon` conserva los grants que el default ACL
-le dio en esas tablas, y una base reconstruida no los tiene. RLS no le deja usar
-ninguno. Retirarlos de sandbox y producción requiere un `revoke` aparte.
+reconstruida desde las migraciones sigue funcionando.
+`20261011140307_anon_sin_privilegios_de_tabla.sql` retiró a `anon` los
+privilegios de tabla que el default ACL le había dado en 32 tablas, incluidos
+`INSERT`, `UPDATE`, `DELETE` y `TRUNCATE`. Se aplicó en sandbox y producción el
+2026-10-11. Las lecturas por columna de las webs y de `/api/health` siguen
+igual.
 
 **Sandbox ya aplica el comportamiento nuevo** desde el 2026-10-11 (opt-in
 anticipado, ejecutado con `execute_sql`; no es una migración y no se replica a
@@ -168,8 +172,8 @@ se comporta igual y esta diferencia desaparece.
 
 `tests/schema/grants.test.ts` (dentro de `test:schema`) falla si una tabla de
 `public` no tiene RLS, si `service_role` no tiene CRUD completo, si
-`authenticated` no puede leerla, o si un rol que inserta no tiene `USAGE` sobre
-la secuencia. Lee el catálogo mediante `table_grants_snapshot()`. Las excepciones deliberadas se
+`authenticated` no puede leerla, si `anon` tiene algún privilegio de tabla, o si
+un rol que inserta no tiene `USAGE` sobre la secuencia. Lee el catálogo mediante `table_grants_snapshot()`. Las excepciones deliberadas se
 declaran en ese mismo archivo, con su motivo.
 
 No reescribas una migración que ya pudo aplicarse. Añade una migración correctiva.
