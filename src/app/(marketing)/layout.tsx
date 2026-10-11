@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Bodoni_Moda } from 'next/font/google'
+import { Archivo } from 'next/font/google'
 import { MarketingNav } from '@/components/marketing/nav'
 import { MarketingFooter } from '@/components/marketing/footer'
 
@@ -15,13 +15,14 @@ export const metadata: Metadata = {
   },
 }
 
-// Voz display de las páginas públicas: una Didone de óptica variable, la
-// tradición tipográfica de los folletos inmobiliarios de lujo. Sólo titulares
-// y cifras grandes; el texto corrido y la interfaz siguen en Inter. Se
-// autohospeda con next/font y sólo carga en las rutas (marketing).
-const display = Bodoni_Moda({
+// Voz display de las páginas públicas: Archivo en su ancho expandido, la
+// grotesca de letrero y de plano arquitectónico. Se lee de un vistazo, como un
+// cartel de "Se vende". Sólo titulares y cifras grandes; el texto corrido y la
+// interfaz siguen en Inter, la letra del CRM. Se autohospeda con next/font y
+// sólo carga en las rutas (marketing).
+const display = Archivo({
   subsets: ['latin'],
-  axes: ['opsz'],
+  axes: ['wdth'],
   variable: '--font-display',
   display: 'swap',
 })
@@ -65,20 +66,22 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           font-size: 11px; font-weight: 500; letter-spacing: 0.18em;
           text-transform: uppercase; color: var(--accent-gold);
         }
+        /* Archivo expandido (wdth 116). Tracking negativo moderado: la letra ancha
+           ya separa; más cerrado empieza a pegar las mayúsculas. */
         .mk-display, .mk-h1, .mk-h2 {
-          font-family: var(--font-display), Georgia, serif;
-          font-optical-sizing: auto; font-weight: 400;
+          font-family: var(--font-display), var(--font-sans);
+          font-weight: 700; font-variation-settings: 'wdth' 116;
           color: var(--text-primary); text-wrap: balance;
         }
         .mk-display {
-          font-size: clamp(44px, 6.4vw, 88px); line-height: 1.02; letter-spacing: -0.025em;
+          font-size: clamp(38px, 5.4vw, 74px); line-height: 1.02; letter-spacing: -0.03em;
         }
         .mk-h1 {
-          font-size: clamp(36px, 5.2vw, 64px); line-height: 1.05;
-          letter-spacing: -0.02em; max-width: 800px;
+          font-size: clamp(34px, 4.6vw, 58px); line-height: 1.05;
+          letter-spacing: -0.028em; max-width: 820px;
         }
         .mk-h2 {
-          font-size: clamp(32px, 4.2vw, 54px); line-height: 1.08; letter-spacing: -0.02em;
+          font-size: clamp(28px, 3.5vw, 46px); line-height: 1.08; letter-spacing: -0.025em;
         }
         .mk-h3 { font-size: 19px; font-weight: 500; line-height: 1.3; color: var(--text-primary); letter-spacing: -0.005em; }
         .mk-lead { font-size: 18px; line-height: 1.6; color: var(--text-secondary); text-wrap: pretty; }

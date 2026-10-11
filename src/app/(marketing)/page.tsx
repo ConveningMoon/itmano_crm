@@ -1,67 +1,38 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { HeroStage } from '@/components/marketing/landing/hero-stage'
-import { LeadCooling } from '@/components/marketing/landing/lead-cooling'
-import { LeadJourney } from '@/components/marketing/landing/lead-journey'
-import { PlatformPlan } from '@/components/marketing/landing/platform'
-import { MarketScale } from '@/components/marketing/landing/market-scale'
-import { DrawRule, StruckList } from '@/components/marketing/landing/struck-list'
+import { LiveCRM } from '@/components/marketing/landing/live-crm'
+import { LeadFile } from '@/components/marketing/landing/lead-file'
+import { FollowUp } from '@/components/marketing/landing/follow-up'
+import { PropertyWeb } from '@/components/marketing/landing/property-web'
+import { NewsletterEdition } from '@/components/marketing/landing/newsletter-edition'
+import { QualityMarket } from '@/components/marketing/landing/quality-market'
+import { MoreGrid } from '@/components/marketing/landing/more-grid'
+import { StruckList } from '@/components/marketing/landing/struck-list'
 import { ContactForm } from '@/components/marketing/contact-form'
 import { PLANS, PLAN_ORDER, TRIAL } from '@/lib/plans'
 import './landing.css'
 
 // ─── Contenido ────────────────────────────────────────────────────────────────
-// El copy de las secciones vive aquí arriba, no esparcido por el JSX (el de las
-// escenas animadas vive junto a cada escena). Regla de la landing: beneficio y
-// consecuencia para el agente inmobiliario — nunca el mecanismo interno. Nada
-// de "scoring", "banda", "fit" ni nombres de campos.
+// La página se arma con el producto: cada sección muestra una pantalla del CRM
+// (réplicas con datos ficticios, con el vocabulario y los colores reales de
+// src/lib/scoring/priority.ts). El copy va corto y concreto: beneficio y
+// consecuencia para el agente, nunca el mecanismo interno.
 //
 // Página 100 % estática: no lee sesión ni base, así que sale entera en el
 // shell prerenderizado del CDN. Las escenas son islas cliente.
 
-const MORE_PROBLEMS = [
-  {
-    title: 'Las horas que no vuelven',
-    body: 'Ordenar la planilla, recordar a quién le tocaba seguimiento, redactar el mismo correo por décima vez. Es media jornada por semana en la que no estuviste vendiendo.',
-  },
-  {
-    title: 'El sistema que nadie abre',
-    body: 'Lo contrataste, te entregaron cuarenta módulos y tres semanas de configuración. Tu equipo volvió al chat y a la libreta.',
-  },
-]
-
-const ABSENT = [
-  {
-    title: 'Cuarenta módulos que nunca abres',
-    body: 'No hay tickets de soporte, ni inventario de bodega, ni un constructor de flujos con doscientos bloques. Hay leads, propiedades, correos y números.',
-  },
-  {
-    title: 'Tres semanas de configuración',
-    body: 'No hay que diseñar el embudo ni inventar los campos. El sistema ya sabe cómo trabaja una inmobiliaria, porque no sabe hacer otra cosa.',
-  },
-  {
-    title: 'Un consultor certificado',
-    body: 'No necesitas contratar a nadie para implementarlo. Lo dejamos operando nosotros y tu equipo entra a usarlo.',
-  },
-  {
-    title: 'Campos que no aplican a una casa',
-    body: 'Nada de forzar un sistema genérico a punta de campos personalizados que después nadie llena.',
-  },
+const WITHOUT = [
+  { title: 'cuarenta módulos que nunca abres' },
+  { title: 'tres semanas de configuración' },
+  { title: 'un consultor certificado' },
+  { title: 'campos que no aplican a una casa' },
 ]
 
 const STEPS = [
-  {
-    title: 'Nos cuentas cómo trabajan hoy',
-    body: 'Cuántos agentes son, de dónde llegan sus leads y qué se les escapa. Media hora de conversación.',
-  },
-  {
-    title: 'Lo dejamos montado',
-    body: 'Tus fuentes, tu equipo, tus secuencias y tu inventario, con tu marca. El trabajo de configuración es nuestro, no tuyo.',
-  },
-  {
-    title: 'Tu equipo entra y vende',
-    body: 'Abren la lista del día y empiezan a llamar. Sin tres sesiones de capacitación.',
-  },
+  { title: 'Nos cuentas cómo trabajan hoy', body: 'Cuántos agentes son, de dónde llegan sus leads y qué se les escapa. Media hora.' },
+  { title: 'Lo dejamos montado', body: 'Tus fuentes, tu equipo, tus secuencias y tu inventario, con tu marca. La configuración es trabajo nuestro.' },
+  { title: 'Tu equipo entra y vende', body: 'Abren la cola del día y empiezan a llamar. Sin tres sesiones de capacitación.' },
 ]
 
 const ENTRY_PRICE = `$${PLANS.esencial.priceUsd}`
@@ -72,125 +43,117 @@ const TRIAL_PLAN = PLANS[TRIAL.plan].label
 export default function LandingPage() {
   return (
     <>
-      {/* HERO — el mercado de noche y la lista del día */}
-      <section className="mk-hero" aria-labelledby="mk-hero-title">
-        <HeroStage>
-          <h1 id="mk-hero-title" className="mk-display">
-            Abre el CRM y ya sabes a quién llamar <span className="mk-gold">hoy</span>.
-          </h1>
-          <p className="mk-lead mk-hero-lead">
-            La inteligencia artificial lee cada lead que entra, ordena tu lista del día
-            y te dice qué decirle antes de levantar el teléfono. Captación, seguimiento,
-            newsletters, open houses y propiedades, en un CRM hecho sólo para bienes raíces.
-          </p>
-          <div className="mk-hero-cta">
-            <a href="#contacto" className="mk-btn-gold btn-cta">
-              Empieza tu prueba de {TRIAL.days} días
-            </a>
-            <a href="#recorrido" className="mk-btn-ghost">
-              Ver el recorrido
-            </a>
-          </div>
-          <p className="mk-fineprint">
-            Gratis · sin tarjeta de crédito · la experiencia {TRIAL_PLAN} completa
-          </p>
-        </HeroStage>
-      </section>
-
-      {/* EL PROBLEMA — la semana de un lead que nadie llamó */}
-      <section id="problema" className="mk-container mk-section mk-problem">
-        <h2 className="mk-h2 mk-problem-title">
-          El dinero no se pierde en la negociación. Se pierde antes.
-        </h2>
-        <LeadCooling />
-        <div className="mk-problem-more">
-          {MORE_PROBLEMS.map(p => (
-            <div key={p.title}>
-              <h3 className="mk-h3">{p.title}</h3>
-              <p className="mk-body" style={{ marginTop: '10px' }}>{p.body}</p>
-            </div>
-          ))}
+      {/* HERO — el CRM funcionando, sobre una casa de noche */}
+      <section className="lp-hero" aria-labelledby="lp-hero-title">
+        <div className="lp-hero-photo" aria-hidden>
+          <Image src="/landing/casa-noche.webp" alt="" fill priority sizes="100vw" />
         </div>
-        <p className="mk-problem-close">
-          Ninguno es un problema de esfuerzo. Es no saber, cada mañana, por dónde empezar.
-        </p>
+        <div className="lp-hero-veil" aria-hidden />
+        <div className="mk-container lp-hero-inner">
+          <div className="lp-hero-head">
+            <h1 id="lp-hero-title" className="mk-display">
+              Abre el CRM y ya sabes a quién llamar <span className="mk-gold">hoy</span>.
+            </h1>
+            <div className="lp-hero-side">
+              <p className="mk-lead">
+                El CRM inmobiliario con IA que lee cada lead que entra, lo ubica en tu cola del día
+                y te dice qué decirle. Captación, seguimiento, propiedades y newsletters, con tu marca.
+              </p>
+              <div className="lp-cta">
+                <a href="#contacto" className="mk-btn-gold btn-cta">
+                  Empieza tu prueba de {TRIAL.days} días
+                </a>
+                <Link href="/planes" className="mk-btn-ghost">
+                  Ver planes
+                </Link>
+              </div>
+              <p className="lp-fine">Gratis · sin tarjeta · la experiencia {TRIAL_PLAN} completa</p>
+            </div>
+          </div>
+          <LiveCRM />
+          <p className="lp-hint">Demostración con datos ficticios: toca un lead de la cola o cambia de vista en el menú.</p>
+        </div>
       </section>
 
-      {/* EL RECORRIDO — de formulario a seguimiento */}
-      <section id="recorrido" className="mk-band mk-section">
+      {/* HECHO SÓLO PARA BIENES RAÍCES */}
+      <section className="lp-without" aria-label="Lo que no vas a encontrar">
+        <div className="mk-container lp-without-inner">
+          <p className="lp-without-lead">Hecho sólo para bienes raíces. Sin</p>
+          <StruckList items={WITHOUT} compact />
+          <p className="lp-without-close">Hay leads, propiedades, correos y números.</p>
+        </div>
+      </section>
+
+      {/* LA IA DE CERCA */}
+      <section id="ia" className="mk-container mk-section">
+        <header className="lp-head">
+          <h2 className="mk-h2">La IA lee cada lead antes que tú.</h2>
+          <p className="mk-lead">
+            Abres la ficha y está todo lo que necesitas para llamar: su lugar en tu cartera, lo que
+            suma, lo que resta y qué decirle. Viene encendida desde el primer día, en todos los planes.
+          </p>
+        </header>
+        <LeadFile />
+      </section>
+
+      {/* SEGUIMIENTO */}
+      <section id="seguimiento" className="mk-band mk-section">
         <div className="mk-container">
-          <header className="mk-section-head">
-            <h2 className="mk-h2">Lo que pasa entre el formulario y la llamada</h2>
+          <header className="lp-head">
+            <h2 className="mk-h2">El seguimiento sale solo, con tu firma y en su idioma.</h2>
             <p className="mk-lead">
-              Sin que nadie mueva tarjetas, ordene una planilla ni se acuerde de a quién
-              le tocaba. Así recorre un lead tu operación.
+              Secuencias que se activan con un formulario o con una etiqueta, firmadas por el agente
+              que atiende a cada lead, en español, inglés o portugués. Las bajas y los rebotes se
+              respetan solos.
             </p>
           </header>
-          <LeadJourney />
+          <FollowUp />
         </div>
       </section>
 
-      {/* LA PLATAFORMA — todo lo que trae */}
-      <section id="plataforma" className="mk-container mk-section">
-        <header className="mk-section-head">
-          <h2 className="mk-h2">Captación, seguimiento, contenido y propiedades. Un solo lugar.</h2>
+      {/* PROPIEDADES → TU WEB */}
+      <section id="propiedades" className="mk-container mk-section">
+        <header className="lp-head">
+          <h2 className="mk-h2">La cargas una vez. Aparece en tu web, con su open house.</h2>
           <p className="mk-lead">
-            Cada pieza habla con las demás: quien confirma un open house entra a tu
-            lista, quien se suscribe a tu newsletter es un lead, la propiedad que cargas
-            aparece en tu web.
+            La IA arma la ficha desde el PDF del listado y tú decides qué se publica. El open house
+            trae su cuenta regresiva y la confirmación con un clic; quien confirma entra a tu CRM.
           </p>
         </header>
-        <PlatformPlan />
+        <PropertyWeb />
       </section>
 
-      {/* TU MERCADO — la vara local */}
-      <section id="mercado" className="mk-band mk-section">
-        <div className="mk-container mk-market-layout">
-          <div>
-            <h2 className="mk-h2">Un presupuesto alto en Virginia no es un presupuesto alto en Madrid</h2>
-            <p className="mk-lead" style={{ marginTop: '24px' }}>
-              La mayoría de los sistemas traen una vara importada y miden a todos tus
-              leads con ella. Aquí le dices cómo es tu mercado —en qué rangos se mueve,
-              cuáles son tus zonas, cuánto vale para ti cerrar una operación— y califica
-              con esa vara.
-            </p>
-            <p className="mk-body" style={{ marginTop: '16px' }}>
-              Y cuando algo no lo sabemos, no lo inventamos: un dato que falta nunca se
-              convierte en un punto en contra del lead.
-            </p>
-          </div>
-          <MarketScale />
+      {/* NEWSLETTER */}
+      <section id="newsletter" className="mk-band mk-section">
+        <div className="mk-container">
+          <header className="lp-head">
+            <h2 className="mk-h2">Una newsletter de tu mercado, escrita con IA y firmada por ti.</h2>
+            <p className="mk-lead">Incluida en los tres planes. Cada edición trabaja de captación: quien se suscribe, entra a tu cartera.</p>
+          </header>
+          <NewsletterEdition />
         </div>
       </section>
 
-      {/* EL ENFOQUE — lo que no tiene */}
-      <section id="enfoque" className="mk-container mk-section mk-focus">
-        <header className="mk-focus-head">
-          <h2 className="mk-h2">Hecho sólo para bienes raíces. Se nota en lo que no tiene.</h2>
+      {/* LA VARA DE TU MERCADO */}
+      <section id="mercado" className="mk-container mk-section">
+        <header className="lp-head">
+          <h2 className="mk-h2">Calidad medida con la vara de tu mercado.</h2>
           <p className="mk-lead">
-            Casi todos los CRM del mercado sirven para vender cualquier cosa, y por eso
-            hay que enseñarles el negocio. Este ya lo sabe.
+            Un presupuesto alto en Virginia no lo es en Madrid. Le dices al CRM en qué rangos se mueve
+            tu mercado, cuáles son tus zonas y cuánto vale cerrar una operación, y califica con esa
+            vara. Un dato que falta nunca cuenta en contra.
           </p>
         </header>
-        <StruckList items={ABSENT} />
+        <QualityMarket />
       </section>
 
-      {/* CÓMO EMPEZAMOS */}
-      <section id="como-empezamos" className="mk-container mk-section mk-start">
-        <h2 className="mk-h2" style={{ maxWidth: '760px' }}>
-          De la primera conversación a estar operando, en días
-        </h2>
-        <div className="mk-steps">
-          <DrawRule className="mk-steps-rule" />
-          <ol className="mk-steps-list">
-            {STEPS.map((s, i) => (
-              <li key={s.title} className="mk-step">
-                <span className="mk-step-n mk-num" aria-hidden>{i + 1}</span>
-                <h3 className="mk-h3">{s.title}</h3>
-                <p className="mk-body">{s.body}</p>
-              </li>
-            ))}
-          </ol>
+      {/* Y ADEMÁS */}
+      <section id="plataforma" className="mk-band mk-section">
+        <div className="mk-container">
+          <header className="lp-head">
+            <h2 className="mk-h2">Y lo demás que pide una operación inmobiliaria.</h2>
+          </header>
+          <MoreGrid />
         </div>
       </section>
 
@@ -202,10 +165,9 @@ export default function LandingPage() {
               Desde <span className="mk-num">{ENTRY_PRICE}</span> al&nbsp;mes
             </h2>
             <p className="mk-invest-text">
-              Tres planes, según trabajes solo o con equipo. Todos traen lo mismo por
-              dentro: la calificación de cada lead, el análisis con IA, las secuencias de
-              correo y la newsletter. Lo que cambia es la capacidad y cuántos agentes
-              tienen su propio acceso.
+              Tres planes, según trabajes solo o con equipo. Todos traen lo mismo por dentro: la
+              calificación de cada lead, el análisis con IA, las secuencias de correo y la newsletter.
+              Cambia la capacidad y cuántos agentes tienen su propio acceso.
             </p>
             <ul className="mk-invest-plans">
               {PLAN_ORDER.map(key => {
@@ -223,8 +185,7 @@ export default function LandingPage() {
               })}
             </ul>
             <p className="mk-invest-text" style={{ marginTop: '28px' }}>
-              Con la comisión de una sola operación cerrada, la inversión de un año entero
-              queda cubierta.
+              Con la comisión de una sola operación cerrada, la inversión de un año entero queda cubierta.
             </p>
           </div>
 
@@ -234,8 +195,7 @@ export default function LandingPage() {
             </p>
             <p className="mk-invest-trial-title">Pruébalo con tus propios leads, totalmente gratis.</p>
             <p className="mk-body" style={{ marginTop: '12px' }}>
-              La experiencia {TRIAL_PLAN} completa, sin tarjeta de crédito y con la IA
-              incluida de cortesía.
+              La experiencia {TRIAL_PLAN} completa, sin tarjeta de crédito y con la IA incluida de cortesía.
             </p>
             <a href="#contacto" className="mk-btn-gold btn-cta" style={{ marginTop: '28px', width: '100%' }}>
               Empieza tu prueba
@@ -248,20 +208,31 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CONTACTO */}
-      <section id="contacto" className="mk-section mk-contact-section">
-        <div className="mk-container mk-contact">
-          <div>
-            <h2 className="mk-h2">Hablemos de tu operación</h2>
-            <p className="mk-lead" style={{ marginTop: '20px', maxWidth: '440px' }}>
-              Cuéntanos cómo trabaja tu equipo hoy y te mostramos, en una llamada, cómo se
-              vería operando aquí.
-            </p>
-            <p className="mk-body" style={{ marginTop: '14px' }}>
-              Respondemos en menos de 24 horas hábiles.
-            </p>
+      {/* CÓMO EMPEZAMOS + CONTACTO */}
+      <section id="contacto" className="mk-section lp-contact">
+        <div className="mk-container">
+          <ol className="lp-steps">
+            {STEPS.map((s, i) => (
+              <li key={s.title} className="lp-step">
+                <span className="lp-step-n mk-num" aria-hidden>
+                  {i + 1}
+                </span>
+                <h3 className="mk-h3">{s.title}</h3>
+                <p className="mk-body">{s.body}</p>
+              </li>
+            ))}
+          </ol>
+
+          <div className="lp-contact-grid">
+            <div>
+              <h2 className="mk-h2">Hablemos de tu operación</h2>
+              <p className="mk-lead" style={{ marginTop: '20px', maxWidth: '440px' }}>
+                Cuéntanos cómo trabaja tu equipo hoy y te mostramos, en una llamada, cómo se vería
+                operando aquí. Respondemos en menos de 24 horas hábiles.
+              </p>
+            </div>
+            <ContactForm />
           </div>
-          <ContactForm />
         </div>
       </section>
     </>
