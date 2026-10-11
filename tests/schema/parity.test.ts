@@ -84,6 +84,9 @@ const APLICADAS_SIN_ARCHIVO_PROPIO: Record<string, string> = {
 // sin mergear, o una migración ya mergeada que sólo se aplicó a uno de los dos.
 // Vaciar la entrada al aplicarla a ambos.
 const SOLO_EN_UN_PROYECTO: Record<string, string> = {
+  // La excepción de table_grants_snapshot() se retiró el 2026-10-11: la
+  // migración está aplicada a los DOS proyectos, con la misma huella.
+
   // Las nueve excepciones de la 103 (agent_api) se retiraron el 2026-09-03: la
   // migración ya está aplicada a los DOS proyectos, así que el test vuelve a
   // vigilar esas tablas, esa policy y esas funciones de verdad.
