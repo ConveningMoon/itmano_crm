@@ -109,6 +109,46 @@ commits.
 6. Aplica el mismo archivo en producción sin otra confirmación cuando todos los
    gates anteriores hayan pasado.
 
+### Grants explícitos en `public`
+
+Desde el 2026-10-30 Supabase deja de conceder privilegios por defecto a las
+tablas y secuencias nuevas de `public` ([changelog 45329](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically)).
+Una tabla creada sin `GRANT` no existe para la Data API, ni siquiera para
+`service_role`: el admin client recibe `permission denied`. Las tablas
+existentes conservan sus grants.
+
+Toda tabla o secuencia nueva en `public` lleva sus `GRANT` explícitos en la
+misma migración que su RLS y sus policies:
+
+```sql
+alter table public.tabla enable row level security;
+-- policies…
+revoke all on public.tabla from anon;   -- salvo que la tabla sea pública
+grant select, insert, update, delete on public.tabla to authenticated;
+grant select, insert, update, delete on public.tabla to service_role;
+```
+
+- `service_role` recibe siempre los cuatro privilegios: crons, webhooks y
+  acciones con `createAdminClient()` dependen de ellos.
+- `authenticated` recibe al menos `SELECT`; reduce los demás si la tabla sólo
+  se escribe desde el servidor (patrón de `116_lead_tags`). RLS sigue siendo la
+  que decide qué filas ve cada tenant.
+- `anon` sólo cuando la tabla se lee sin sesión, preferiblemente por columna
+  (`047`, `105`, open houses).
+- Un `serial` o un `nextval()` explícito necesita además
+  `grant usage, select on sequence … to` cada rol que inserte. Las columnas
+  `identity` y los `uuid` no.
+- Hasta el 2026-10-30, `grant select` no quita lo que ya concedió el default
+  ACL. La migración de open houses concede sólo `SELECT` a `authenticated`,
+  pero ese rol tiene CRUD completo en ambas bases. Para limitar un rol, haz
+  `revoke` explícito; no basta con omitir el privilegio.
+
+`tests/schema/grants.test.ts` (dentro de `test:schema`) falla si una tabla de
+`public` no tiene RLS, si `service_role` no tiene CRUD completo, si
+`authenticated` no puede leerla, o si un rol que inserta no tiene `USAGE` sobre
+la secuencia. Lee el catálogo mediante `table_grants_snapshot()`. Las excepciones deliberadas se
+declaran en ese mismo archivo, con su motivo.
+
 No reescribas una migración que ya pudo aplicarse. Añade una migración correctiva.
 La 108 introdujo leads de demo en producción con direcciones de proveedores
 reales; la 114 los neutraliza con `example.com` sin alterar el historial.
