@@ -1,41 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { AnimatePresence, m, useInView } from 'motion/react'
-import { Bell, CornerDownLeft, Sparkles, UserPlus } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { AnimatePresence, m } from 'motion/react'
+import { Bell, CornerDownLeft, UserPlus } from 'lucide-react'
 import { EASE_OUT_PREMIUM } from '@/components/motion/primitives'
-import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { useArrived, useLive, useTicker } from './crm-bits'
 
-// La plataforma como un plano: celdas de distinto tamaño separadas por una
-// línea fina, cada una con una muestra del producto haciendo su trabajo. Las
+// "Y además": el resto de la plataforma en una grilla de celdas de distinto
+// tamaño, cada una con una muestra del producto haciendo su trabajo. Las
 // muestras que se mueven sólo corren mientras están en pantalla. Datos
 // ficticios, igual que el resto de la landing.
-
-/** true mientras el elemento está en pantalla y el visitante acepta movimiento. */
-function useLive(ref: React.RefObject<Element | null>) {
-  const inView = useInView(ref, { margin: '-10% 0px -10% 0px' })
-  const reduced = usePrefersReducedMotion()
-  return inView && !reduced
-}
-
-/** true desde la primera vez que entra en pantalla (y siempre con reduced motion). */
-function useArrived(ref: React.RefObject<Element | null>) {
-  const inView = useInView(ref, { once: true, amount: 0.4 })
-  const reduced = usePrefersReducedMotion()
-  return inView || reduced
-}
-
-function useTicker(live: boolean, every: number, onTick: () => void) {
-  const tick = useRef(onTick)
-  useEffect(() => {
-    tick.current = onTick
-  })
-  useEffect(() => {
-    if (!live) return
-    const id = window.setInterval(() => tick.current(), every)
-    return () => window.clearInterval(id)
-  }, [live, every])
-}
 
 // ── Captación ────────────────────────────────────────────────────────────────
 
@@ -141,102 +115,6 @@ function AlertsDemo() {
   )
 }
 
-// ── Newsletter ───────────────────────────────────────────────────────────────
-
-function NewsletterDemo() {
-  return (
-    <div className="mk-demo mk-edition">
-      <div className="mk-edition-mast">
-        <span>Tu agencia</span>
-        <span>El mercado este mes</span>
-      </div>
-      <p className="mk-edition-title">Por qué este otoño conviene listar antes de diciembre</p>
-      <p className="mk-edition-by">Laura Méndez · 4 min de lectura</p>
-      <div className="mk-edition-sub">
-        <span>tu@email.com</span>
-        <span className="mk-edition-btn">Suscribirme</span>
-      </div>
-      <p className="mk-edition-url">news.itmano.com/tu-agencia</p>
-    </div>
-  )
-}
-
-// ── Open house ───────────────────────────────────────────────────────────────
-
-const START_IN = 2 * 86400 + 14 * 3600 + 6 * 60 + 12
-
-function OpenHouseDemo() {
-  const ref = useRef<HTMLDivElement>(null)
-  const live = useLive(ref)
-  const [left, setLeft] = useState(START_IN)
-  useTicker(live, 1000, () => setLeft(s => (s > 0 ? s - 1 : START_IN)))
-
-  const d = Math.floor(left / 86400)
-  const h = Math.floor((left % 86400) / 3600)
-  const min = Math.floor((left % 3600) / 60)
-  const s = left % 60
-  const pad = (n: number) => String(n).padStart(2, '0')
-
-  return (
-    <div ref={ref} className="mk-demo mk-openhouse">
-      <div className="mk-openhouse-when">
-        <span className="mk-openhouse-day">Sábado</span>
-        <span>11:00 a 14:00 · Calle Olmo 12</span>
-      </div>
-      <div className="mk-openhouse-clock mk-num" aria-label="Cuenta regresiva de ejemplo">
-        {[
-          [d, 'días'],
-          [pad(h), 'horas'],
-          [pad(min), 'min'],
-          [pad(s), 'seg'],
-        ].map(([value, unit]) => (
-          <span key={unit} className="mk-openhouse-unit">
-            <strong>{value}</strong>
-            <span>{unit}</span>
-          </span>
-        ))}
-      </div>
-      <div className="mk-openhouse-rsvp">
-        <span className="mk-openhouse-faces" aria-hidden>
-          {['teal', 'coral', 'blue'].map(t => (
-            <span key={t} style={{ ['--tone' as string]: `var(--accent-${t})` }} />
-          ))}
-        </span>
-        <span>
-          <strong className="mk-num">18</strong> confirmaron asistencia
-        </span>
-      </div>
-    </div>
-  )
-}
-
-// ── Propiedad ────────────────────────────────────────────────────────────────
-
-function PropertyDemo() {
-  const ref = useRef<HTMLDivElement>(null)
-  const on = useArrived(ref)
-  return (
-    <div ref={ref} className="mk-demo mk-property">
-      <span className="mk-property-ai">
-        <Sparkles size={13} strokeWidth={1.75} aria-hidden /> Creada con IA desde el PDF
-      </span>
-      <p className="mk-property-price mk-num">$485,000</p>
-      <p className="mk-property-meta">3 habitaciones · 2 baños · 168 m²</p>
-      <div className="mk-property-media">
-        <span>Fotos</span>
-        <span>Tour 3D</span>
-        <span>Video</span>
-      </div>
-      <div className="mk-property-toggle" data-on={on || undefined}>
-        <span className="mk-switch" aria-hidden>
-          <span />
-        </span>
-        Publicada en tu web
-      </div>
-    </div>
-  )
-}
-
 // ── Analytics ────────────────────────────────────────────────────────────────
 
 const CHANNELS = [
@@ -283,46 +161,6 @@ function AnalyticsDemo() {
   )
 }
 
-// ── Idiomas ──────────────────────────────────────────────────────────────────
-
-const LANGS = [
-  { code: 'ES', subject: 'Tu valoración está lista' },
-  { code: 'EN', subject: 'Your home valuation is ready' },
-  { code: 'PT', subject: 'Sua avaliação está pronta' },
-]
-
-function LanguagesDemo() {
-  const ref = useRef<HTMLDivElement>(null)
-  const live = useLive(ref)
-  const [i, setI] = useState(0)
-  useTicker(live, 2200, () => setI(v => (v + 1) % LANGS.length))
-  return (
-    <div ref={ref} className="mk-demo mk-langs">
-      <div className="mk-langs-codes" role="presentation">
-        {LANGS.map((l, k) => (
-          <span key={l.code} data-on={k === i || undefined}>
-            {l.code}
-          </span>
-        ))}
-      </div>
-      <div className="mk-langs-subject">
-        <AnimatePresence mode="wait" initial={false}>
-          <m.span
-            key={LANGS[i].code}
-            initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, y: -8, filter: 'blur(4px)' }}
-            transition={{ duration: 0.35, ease: EASE_OUT_PREMIUM }}
-          >
-            {LANGS[i].subject}
-          </m.span>
-        </AnimatePresence>
-      </div>
-      <p className="mk-langs-from">Laura Méndez · tu agencia</p>
-    </div>
-  )
-}
-
 // ── Marca ────────────────────────────────────────────────────────────────────
 
 function BrandDemo() {
@@ -359,76 +197,48 @@ function StudioDemo() {
   )
 }
 
-// ── Plano ────────────────────────────────────────────────────────────────────
+// ── Grilla ───────────────────────────────────────────────────────────────────
 
 const CELLS = [
   {
     key: 'captacion',
     area: 'a',
     title: 'Todo lo que captas, en un solo lugar',
-    body: 'Páginas de captura alojadas, guías descargables, eventos y los formularios de tu web. Cada lead entra con su fuente: sin copiar, pegar ni exportar.',
+    body: 'Páginas de captura alojadas, guías, eventos, los formularios de tu web e importación desde planilla. Cada lead entra con su fuente.',
     demo: SourcesDemo,
   },
   {
     key: 'avisos',
     area: 'b',
     title: 'El aviso llega antes que la competencia',
-    body: 'Cuando un lead se calienta, el agente que lo atiende lo sabe en segundos, en la aplicación y en Telegram.',
+    body: 'Cuando un lead se calienta o responde, su agente lo sabe en segundos, en la aplicación y en Telegram.',
     demo: AlertsDemo,
   },
   {
-    key: 'newsletters',
-    area: 'c',
-    title: 'Una newsletter con tu firma, escrita con IA',
-    body: 'La IA investiga tu mercado y redacta la edición; tú la revisas y la publicas. Cada suscriptor entra como lead.',
-    demo: NewsletterDemo,
-  },
-  {
-    key: 'open-houses',
-    area: 'd',
-    title: 'Open houses con confirmación y cuenta regresiva',
-    body: 'Anuncio con fotos a los leads que elijas por etiqueta, confirmación con un clic y recordatorio. Quien confirma, sube en tu lista.',
-    demo: OpenHouseDemo,
-  },
-  {
-    key: 'propiedades',
-    area: 'e',
-    title: 'La cargas una vez. Aparece en tu web.',
-    body: 'O la arma la IA desde el PDF del listado. Tú decides qué es público y qué queda para el equipo.',
-    demo: PropertyDemo,
-  },
-  {
     key: 'analytics',
-    area: 'f',
+    area: 'c',
     title: 'Sabes qué fuente vale la pena',
-    body: 'Qué canal trae gente que avanza y cuál sólo trae volumen, con lo que de verdad pasó después.',
+    body: 'Qué canal trae gente que avanza y cuál sólo trae volumen.',
     demo: AnalyticsDemo,
   },
   {
-    key: 'idiomas',
-    area: 'g',
-    title: 'En el idioma de cada lead',
-    body: 'Español, inglés y portugués, firmado por el agente que lo atiende.',
-    demo: LanguagesDemo,
-  },
-  {
     key: 'marca',
-    area: 'h',
+    area: 'd',
     title: 'Tu marca, tu dominio',
-    body: 'Logo, colores y dominio tuyos. En ningún lugar donde mire tu cliente dice ITMANO.',
+    body: 'En ningún lugar donde mire tu cliente dice ITMANO.',
     demo: BrandDemo,
   },
   {
     key: 'estudio',
-    area: 'i',
-    title: 'Estudio: piezas para redes con tus propiedades',
-    body: 'Diseños con tu marca para cada momento de una propiedad, listos para publicar.',
+    area: 'e',
+    title: 'Estudio: piezas para redes',
+    body: 'Diseños con tu marca para cada momento de una propiedad.',
     demo: StudioDemo,
     soon: true,
   },
 ] as const
 
-export function PlatformPlan() {
+export function MoreGrid() {
   return (
     <div className="mk-plan">
       {CELLS.map(cell => {

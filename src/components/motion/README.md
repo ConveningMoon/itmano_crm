@@ -38,21 +38,23 @@ con la receta más parecida — no se inventan duraciones nuevas.
 
 ## Landing pública
 
-La home (`src/app/(marketing)/page.tsx`) es la única superficie con motion de
-autor; sus escenas viven en `src/components/marketing/landing/`. Sigue estas
-reglas además de las de arriba:
+La home (`src/app/(marketing)/page.tsx`) se arma con el producto: cada sección
+es una réplica de una pantalla del CRM con datos ficticios. Sus escenas viven en
+`src/components/marketing/landing/`. Sigue estas reglas además de las de arriba:
 
-- Un solo material: la luz. `CityLights` (canvas 2D, sin dependencias) pinta el
-  mercado de noche; la misma luz dorada reaparece en "Se pierde antes", en el
-  riel del recorrido y en la regla del mercado. No se agregan efectos que no
-  salgan de ese mundo.
-- Todo lo que corre en bucle se detiene fuera de pantalla y con la pestaña
-  oculta (`IntersectionObserver` + `visibilitychange`, o `useInView` en las
-  muestras de la plataforma).
-- El estado final viene en el HTML: sin JS o con reduced motion se ve la lista
-  completa, la ciudad quieta y cada escena en su último cuadro.
-- Nada de `Math.random()` ni de reloj en el render: la ciudad usa un PRNG con
-  semilla y la cuenta regresiva arranca de una constante, para no romper el
-  prerender de Cache Components ni la hidratación.
-- Los datos de las escenas son ficticios (`demo-data.ts`, correos en
-  example.com) y la página lo dice junto a cada muestra.
+- La réplica usa el vocabulario real: etapas, calidades y urgencias salen de
+  `src/lib/scoring/priority.ts` (`STAGE_CONFIG`, `QUALITY_CONFIG`,
+  `URGENCY_CONFIG`). No se copian etiquetas ni colores a mano.
+- Sólo se muestra lo que el producto hace hoy. La etapa la mueve una persona
+  (el kanban lo muestra así); calidad y urgencia las calcula el sistema.
+- Todo lo que corre en bucle se detiene fuera de pantalla y con reduced motion
+  (`useLive` / `useTicker` de `crm-bits.tsx`). Un único juego de hooks: no se
+  duplican por componente.
+- El estado final viene en el HTML: sin JS o con reduced motion cada escena se
+  ve completa y legible.
+- Nada de `Math.random()` ni de reloj en el render: los recorridos son fijos y
+  la cuenta regresiva arranca de una constante, para no romper el prerender de
+  Cache Components ni la hidratación.
+- Los datos son ficticios (`demo-data.ts`, correos en example.com) y la página
+  lo dice junto a la demo. Las fotos son de Unsplash; su origen está anotado en
+  `demo-data.ts`.
