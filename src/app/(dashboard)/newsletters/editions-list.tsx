@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ExternalLink, Pencil, Archive, ArchiveRestore, Trash2, Plus, Code2, Copy, Check,
+  Users, FileCheck2, FilePen, Eye, EyeOff,
 } from 'lucide-react'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { LANGUAGE_CONFIG } from '@/lib/config'
@@ -18,6 +19,9 @@ import {
 } from './actions'
 import { FechaLocal } from '@/components/ui/local-date'
 import { PageHeader } from '@/components/ui/page-header'
+import { StatCard } from '@/components/ui/stat-card'
+import { RowMenu } from '@/components/ui/row-menu'
+import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui/data-table'
 
 // Pantalla única de la newsletter: tira de totales, aviso de secuencia vacía y
 // la tabla de ediciones con sus acciones. Sustituye a series-list.tsx +
@@ -40,21 +44,14 @@ interface Props {
   isAgent:       boolean
 }
 
-const STATUS_LABEL: Record<NewsletterStatus, { label: string; color: string; bg: string }> = {
-  draft:     { label: 'Borrador',  color: 'var(--text-muted)',    bg: 'var(--bg-overlay)' },
-  published: { label: 'Publicada', color: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.12)' },
-  archived:  { label: 'Archivada', color: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.12)' },
+const STATUS_LABEL: Record<NewsletterStatus, { label: string; tone: 'mute' | 'green' | 'coral' }> = {
+  draft:     { label: 'Borrador',  tone: 'mute' },
+  published: { label: 'Publicada', tone: 'green' },
+  archived:  { label: 'Archivada', tone: 'coral' },
 }
 
 function fmtDate(iso: string) {
   return <FechaLocal fecha={iso} locale="es" opciones={{ day: 'numeric', month: 'short', year: 'numeric' }} />
-}
-
-const GHOST_BTN: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: '5px',
-  padding: '6px 12px', fontSize: '12px', fontWeight: 500,
-  background: 'var(--bg-surface)', color: 'var(--text-secondary)',
-  border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
 }
 
 /** Confirmación de un paso irreversible o casi. `detail` explica el efecto. */
@@ -79,29 +76,15 @@ function ConfirmDialog({
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 20px' }}>
           {detail}
         </p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{
-              padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
-              background: 'transparent', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-muted)', cursor: 'pointer',
-            }}
-          >
-            Cancelar
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button type="button" onClick={onCancel} className="btn btn-ghost">Cancelar</button>
           <button
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            style={{
-              padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-              background: danger ? 'var(--accent-coral)' : 'var(--accent-gold)',
-              color: 'var(--bg-base)', border: 'none',
-              cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
-            }}
+            className={danger ? 'btn btn-danger' : 'btn btn-primary'}
           >
+            {pending && <span className="loading-spinner" aria-hidden="true" />}
             {pending ? 'Procesando…' : confirmLabel}
           </button>
         </div>
@@ -116,6 +99,8 @@ export function EditionsList({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // Edición cuya acción está en curso: su fila muestra el spinner.
+  const [busyId, setBusyId] = useState<string | null>(null)
   // Prompt de integración: se pide al abrirlo, no al cargar la página — casi
   // nadie lo necesita y armarlo lee tres filas más.
   const [integration, setIntegration] = useState<string | null>(null)
@@ -129,10 +114,12 @@ export function EditionsList({
   >(null)
 
   /** Corre una action y refresca; deja el error a la vista si falla. */
-  function run(fn: () => Promise<{ ok: true; data: null } | { ok: false; error: string }>) {
+  function run(id: string, fn: () => Promise<{ ok: true; data: null } | { ok: false; error: string }>) {
     setError(null)
+    setBusyId(id)
     start(async () => {
       const res = await fn()
+      setBusyId(null)
       if (res.ok) {
         setConfirm(null)
         router.refresh()
@@ -144,14 +131,6 @@ export function EditionsList({
 
   return (
     <>
-      <style>{`
-        .nl-row { transition: background 0.15s; }
-        .nl-row:hover { background: var(--bg-overlay); }
-        .nl-ghost:hover { border-color: var(--border-hover) !important; color: var(--text-primary) !important; }
-        .nl-danger:hover { border-color: var(--accent-coral) !important; color: var(--accent-coral) !important; }
-        @media (prefers-reduced-motion: reduce) { .nl-row { transition: none !important; } }
-      `}</style>
-
       {/* Cabecera */}
       <PageHeader
         title="Newsletter"
@@ -192,14 +171,11 @@ export function EditionsList({
       )}
 
       {/* Tira de totales */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-        gap: '12px', marginBottom: '20px',
-      }}>
-        <StatTile label="Suscriptores" value={stats.totals.subscribers} />
-        <StatTile label="Publicadas" value={stats.totals.published} />
-        <StatTile label="Borradores" value={stats.totals.drafts} />
-        <StatTile label="Vistas" value={stats.totals.views} />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+        <StatCard label="Suscriptores" value={stats.totals.subscribers} icon={<Users size={16} />} tone="var(--accent-blue)" />
+        <StatCard label="Publicadas"   value={stats.totals.published}   icon={<FileCheck2 size={16} />} tone="var(--accent-green)" />
+        <StatCard label="Borradores"   value={stats.totals.drafts}      icon={<FilePen size={16} />} tone="var(--text-secondary)" />
+        <StatCard label="Vistas"       value={stats.totals.views}       icon={<Eye size={16} />} tone="var(--accent-teal)" />
       </div>
 
       {/* Aviso de secuencia vacía */}
@@ -219,16 +195,18 @@ export function EditionsList({
       )}
 
       {/* Ediciones */}
-      <div style={{
-        background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-        borderRadius: '12px', overflow: 'hidden',
-      }}>
-        {editions.length === 0 ? (
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '28px 20px', margin: 0, textAlign: 'center' }}>
-            Todavía no hay ninguna edición.
-          </p>
-        ) : (
-          <div>
+      {editions.length === 0 ? (
+        <div style={{
+          background: 'var(--bg-surface)', border: '1px dashed var(--border-hover)',
+          borderRadius: '12px', padding: '48px 20px', textAlign: 'center',
+          fontSize: '13px', color: 'var(--text-secondary)',
+        }}>
+          Todavía no hay ninguna edición.
+        </div>
+      ) : (
+        <DataScope cols={COLS} colsMd={COLS_MD} colsSm={COLS_SM}>
+          <DataHead columns={COLUMNS} />
+          <DataBlock>
             {editions.map(ed => (
               <EditionRow
                 key={ed.id}
@@ -237,15 +215,16 @@ export function EditionsList({
                 edStats={stats.byEdition[ed.id]}
                 canWrite={!isAgent || ed.createdByUserId === myUserId}
                 pending={pending}
-                onUnpublish={() => run(() => unpublishEdition(ed.id))}
-                onRestore={() => run(() => restoreEdition(ed.id))}
+                busy={busyId === ed.id}
+                onUnpublish={() => run(ed.id, () => unpublishEdition(ed.id))}
+                onRestore={() => run(ed.id, () => restoreEdition(ed.id))}
                 onArchive={() => setConfirm({ kind: 'archive_edition', edition: ed })}
                 onDelete={() => setConfirm({ kind: 'delete_edition', edition: ed })}
               />
             ))}
-          </div>
-        )}
-      </div>
+          </DataBlock>
+        </DataScope>
+      )}
 
       <ConfirmDialog
         open={confirm?.kind === 'archive_edition'}
@@ -258,7 +237,7 @@ export function EditionsList({
         pending={pending}
         danger
         onCancel={() => setConfirm(null)}
-        onConfirm={() => confirm?.kind === 'archive_edition' && run(() => archiveEdition(confirm.edition.id))}
+        onConfirm={() => confirm?.kind === 'archive_edition' && run(confirm.edition.id, () => archiveEdition(confirm.edition.id))}
       />
 
       <ModalShell open={showIntegration} onClose={() => { setShowIntegration(false); setCopied(false) }} maxWidth={720}>
@@ -288,8 +267,7 @@ export function EditionsList({
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
                 <button
                   type="button"
-                  className="nl-ghost"
-                  style={GHOST_BTN}
+                  className="btn btn-ghost"
                   onClick={() => { setShowIntegration(false); setCopied(false) }}
                 >
                   Cerrar
@@ -302,12 +280,7 @@ export function EditionsList({
                       () => setError('Tu navegador no dejó copiar. Selecciona el texto y cópialo a mano.'),
                     )
                   }}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    padding: '6px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
-                    background: 'var(--accent-gold)', color: 'var(--bg-base)',
-                    border: 'none', cursor: 'pointer',
-                  }}
+                  className="btn btn-primary"
                 >
                   {copied ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
                 </button>
@@ -328,26 +301,26 @@ export function EditionsList({
         pending={pending}
         danger
         onCancel={() => setConfirm(null)}
-        onConfirm={() => confirm?.kind === 'delete_edition' && run(() => deleteEdition(confirm.edition.id))}
+        onConfirm={() => confirm?.kind === 'delete_edition' && run(confirm.edition.id, () => deleteEdition(confirm.edition.id))}
       />
     </>
   )
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div style={{
-      padding: '14px 16px', borderRadius: '10px',
-      border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
-    }}>
-      <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)' }}>{value}</div>
-      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{label}</div>
-    </div>
-  )
-}
+const COLS    = 'minmax(0, 3fr) 112px 80px 104px 44px'
+const COLS_MD = 'minmax(0, 2.6fr) 112px 104px 44px'
+const COLS_SM = 'minmax(0, 1fr) 112px 44px'
+
+const COLUMNS: DataColumn[] = [
+  { label: 'Edición' },
+  { label: 'Estado' },
+  { label: 'Vistas', right: true, hideMd: true, hideSm: true },
+  { label: 'Suscriptores', right: true, hideSm: true },
+  { label: '' },
+]
 
 function EditionRow({
-  edition, tenantSlug, edStats, canWrite, pending,
+  edition, tenantSlug, edStats, canWrite, pending, busy,
   onUnpublish, onRestore, onArchive, onDelete,
 }: {
   edition:     NewsletterEdition
@@ -355,6 +328,7 @@ function EditionRow({
   edStats:     EditionStats | undefined
   canWrite:    boolean
   pending:     boolean
+  busy:        boolean
   onUnpublish: () => void
   onRestore:   () => void
   onArchive:   () => void
@@ -365,96 +339,57 @@ function EditionRow({
   const publicUrl = tenantSlug && edition.status === 'published'
     ? hostedNewsletterUrl(tenantSlug, edition.slug)
     : null
+  // Las dos firmas, en el mismo orden que la página pública. Desde la 113
+  // cualquiera de las dos puede faltar, así que se filtra en vez de asumir
+  // que hay una.
+  const byline = [edition.authorName, edition.authorOrgName].filter(Boolean).join(' · ')
 
   return (
-    <div
-      className="nl-row"
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: '12px', padding: '14px 20px', borderTop: '1px solid var(--border-subtle)',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div style={{ minWidth: '220px', flex: '1 1 auto' }}>
-        <Link
-          href={`/newsletters/${edition.id}`}
-          style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', textDecoration: 'none' }}
-        >
-          {edition.title}
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px', flexWrap: 'wrap' }}>
-          <span style={{
-            fontSize: '10px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
-            color: cfg.color, background: cfg.bg, padding: '2px 8px', borderRadius: '10px',
-          }}>
-            {cfg.label}
-          </span>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            {CATEGORY_LABELS[edition.category]}
-          </span>
-          {/* Las dos firmas, en el mismo orden que la página pública. Desde
-              la 113 cualquiera de las dos puede faltar, así que se filtra en
-              vez de asumir que hay una. */}
-          {[edition.authorName, edition.authorOrgName].filter(Boolean).length > 0 && (
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {[edition.authorName, edition.authorOrgName].filter(Boolean).join(' · ')}
-            </span>
-          )}
-          {lang && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lang.label}</span>
-          )}
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+    <div className="dt-grid dt-row" aria-busy={busy || undefined} style={busy ? { opacity: 0.6 } : undefined}>
+      <div className="dt-cell-main">
+        <Link href={`/newsletters/${edition.id}`} className="dt-title">{edition.title}</Link>
+        <div className="dt-meta">
+          <span>{CATEGORY_LABELS[edition.category]}</span>
+          {byline && <span>{byline}</span>}
+          {lang && <span>{lang.label}</span>}
+          <span>
             {edition.publishedAt
               ? <>Publicada el {fmtDate(edition.publishedAt)}</>
               : <>Creada el {fmtDate(edition.createdAt)}</>}
           </span>
-          {edStats && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              · {edStats.views} {edStats.views === 1 ? 'vista' : 'vistas'} · {edStats.subscribers} {edStats.subscribers === 1 ? 'suscriptor' : 'suscriptores'}
-            </span>
-          )}
-          {edition.aiGenerated && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>· Generada con IA</span>
-          )}
+          {edition.aiGenerated && <span>Generada con IA</span>}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {publicUrl && (
-          <a
-            href={publicUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="nl-ghost"
-            style={{ ...GHOST_BTN, textDecoration: 'none' }}
-          >
-            <ExternalLink size={13} /> Ver
-          </a>
-        )}
-        <Link href={`/newsletters/${edition.id}`} className="nl-ghost" style={{ ...GHOST_BTN, textDecoration: 'none' }}>
-          <Pencil size={13} /> Editar
-        </Link>
+      <span className="pill pill-dot" data-tone={cfg.tone} style={{ justifySelf: 'start' }}>{cfg.label}</span>
 
-        {canWrite && edition.status === 'published' && (
-          <button className="nl-ghost" style={GHOST_BTN} disabled={pending} onClick={onUnpublish}>
-            Despublicar
-          </button>
-        )}
-        {canWrite && edition.status !== 'archived' && (
-          <button className="nl-danger" style={GHOST_BTN} disabled={pending} onClick={onArchive}>
-            <Archive size={13} /> Archivar
-          </button>
-        )}
-        {canWrite && edition.status === 'archived' && (
-          <>
-            <button className="nl-ghost" style={GHOST_BTN} disabled={pending} onClick={onRestore}>
-              <ArchiveRestore size={13} /> Restaurar
-            </button>
-            <button className="nl-danger" style={GHOST_BTN} disabled={pending} onClick={onDelete}>
-              <Trash2 size={13} /> Eliminar
-            </button>
-          </>
-        )}
+      <span className="dt-num dt-hide-md dt-hide-sm dt-r">{edStats?.views ?? 0}</span>
+      <span className="dt-num dt-hide-sm dt-r">{edStats?.subscribers ?? 0}</span>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+        {busy && <span className="loading-spinner" role="status" aria-label="Procesando" />}
+        <RowMenu
+          label={edition.title}
+          entries={[
+            { type: 'item', label: 'Editar', icon: <Pencil size={14} />, href: `/newsletters/${edition.id}` },
+            ...(publicUrl
+              ? [{ type: 'item' as const, label: 'Ver publicada', icon: <ExternalLink size={14} />, href: publicUrl, external: true }]
+              : []),
+            ...(canWrite ? [{ type: 'separator' as const }] : []),
+            ...(canWrite && edition.status === 'published'
+              ? [{ type: 'item' as const, label: 'Despublicar', icon: <EyeOff size={14} />, disabled: pending, onSelect: onUnpublish }]
+              : []),
+            ...(canWrite && edition.status !== 'archived'
+              ? [{ type: 'item' as const, label: 'Archivar', icon: <Archive size={14} />, tone: 'danger' as const, disabled: pending, onSelect: onArchive }]
+              : []),
+            ...(canWrite && edition.status === 'archived'
+              ? [
+                  { type: 'item' as const, label: 'Restaurar', icon: <ArchiveRestore size={14} />, disabled: pending, onSelect: onRestore },
+                  { type: 'item' as const, label: 'Eliminar', icon: <Trash2 size={14} />, tone: 'danger' as const, disabled: pending, onSelect: onDelete },
+                ]
+              : []),
+          ]}
+        />
       </div>
     </div>
   )
