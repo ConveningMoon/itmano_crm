@@ -17,6 +17,7 @@ import { Users, Inbox, TrendingUp, Activity, GitBranch, Mail } from 'lucide-reac
 import Link from 'next/link'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { Tabs } from '@/components/ui/tabs'
+import { ChartFrame } from '@/components/ui/chart-frame'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // Colorea el tiempo, no lo puntua: responder en la primera hora es el estandar
@@ -357,7 +358,14 @@ async function AnalyticsPage() {
               <FadeIn delay={0.05} style={{ ...CARD, marginBottom: '24px' }}>
                 <div style={CARD_HEADER}>Leads por Fuente</div>
                 <div style={CARD_SUBTITLE}>Volumen y calidad media de cada canal</div>
-                <LeadsDonutChart data={sourceData} total={totalLeads} />
+                <ChartFrame
+                  height={260}
+                  empty={sourceData.length === 0}
+                  emptyText="Todavía no hay leads con fuente en esta ventana."
+                  label={`Leads por fuente, ${totalLeads} en total: ${sourceData.map(d => `${d.name} ${d.value}`).join(', ')}`}
+                >
+                  <LeadsDonutChart data={sourceData} total={totalLeads} />
+                </ChartFrame>
                 {/* Calidad media por canal: responde "¿qué fuente trae MEJORES
                     leads?", que hasta ahora no se podía saber — sólo cuál traía más. */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px' }}>
@@ -376,7 +384,14 @@ async function AnalyticsPage() {
                 <div style={CARD_SUBTITLE}>
                   Leads por mes de alta y la etapa en la que están hoy · {monthlyRangeLabel}
                 </div>
-                <LeadsOverTimeChart data={enrichedMonthlyData} />
+                <ChartFrame
+                  height={280}
+                  empty={enrichedMonthlyData.every(m => m.nuevo + m.nutricion + m.enProceso + m.cerrado + m.perdido === 0)}
+                  emptyText="Todavía no hay leads en estos meses."
+                  label={`Leads por mes de alta, ${monthlyRangeLabel}: ${enrichedMonthlyData.map(m => `${m.month} ${m.nuevo + m.nutricion + m.enProceso + m.cerrado + m.perdido}`).join(', ')}`}
+                >
+                  <LeadsOverTimeChart data={enrichedMonthlyData} />
+                </ChartFrame>
               </FadeIn>
             </>
           ),
@@ -447,14 +462,28 @@ async function AnalyticsPage() {
               <div style={{ ...CARD, marginBottom: '24px' }}>
                 <div style={CARD_HEADER}>Leads por Agente</div>
                 <div style={CARD_SUBTITLE}>Comparativa de captación del equipo</div>
-                <LeadsByAgentChart data={agentData} />
+                <ChartFrame
+                  height={220}
+                  empty={agentData.every(a => a.total === 0)}
+                  emptyText="Todavía no hay leads asignados a agentes."
+                  label={`Leads por agente: ${agentData.map(a => `${a.fullName} ${a.total}`).join(', ')}`}
+                >
+                  <LeadsByAgentChart data={agentData} />
+                </ChartFrame>
               </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div style={CARD}>
           <div style={CARD_HEADER}>Etapas por Agente</div>
           <div style={CARD_SUBTITLE}>En qué punto del embudo tiene su cartera cada agente</div>
-          <StageDistributionChart data={stageData} />
+          <ChartFrame
+            height={220}
+            empty={stageData.every(a => a.nuevo + a.nutricion + a.enProceso + a.cerrado + a.perdido === 0)}
+            emptyText="Todavía no hay leads repartidos por etapa."
+            label={`Etapas por agente: ${stageData.map(a => `${a.agent}: ${a.nuevo} nuevos, ${a.nutricion} en nutrición, ${a.enProceso} en proceso, ${a.cerrado} cerrados, ${a.perdido} perdidos`).join('; ')}`}
+          >
+            <StageDistributionChart data={stageData} />
+          </ChartFrame>
         </div>
 
         {/* Dense table — out of redesign scope; defensive horizontal scroll on phones only. */}
