@@ -271,12 +271,12 @@ a.dt-title:hover { color: var(--accent-gold); }
   font-size: 11px;
   color: var(--text-muted);
 }
-.dt-meta > span { display: inline-flex; align-items: center; gap: 4px; }
-.dt-show-md { display: none; }
+.dt-meta > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.dt-show-md { display: none !important; }
 @media (max-width: 1170px) {
   .dt-grid { grid-template-columns: var(--dt-cols-md, var(--dt-cols)); }
   .dt-hide-md { display: none !important; }
-  .dt-show-md { display: inline-flex; }
+  .dt-show-md { display: inline-flex !important; }
 }
 @media (max-width: 652px), (min-width: 768px) and (max-width: 890px) {
   .dt-grid { grid-template-columns: var(--dt-cols-sm, var(--dt-cols-md, var(--dt-cols))); }
@@ -434,6 +434,10 @@ a.dt-title:hover { color: var(--accent-gold); }
 .tabs-bar {
   display: flex;
   gap: 4px;
+  /* La base 320px hace que, en pantallas estrechas, el selector de ventana
+     baje a su propia línea en vez de encimarse sobre las pestañas. */
+  flex: 1 1 320px;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }

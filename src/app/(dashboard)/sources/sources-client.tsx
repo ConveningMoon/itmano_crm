@@ -111,7 +111,7 @@ function NoPageModal({ open, channelName, managedByItmano, onClose }: {
 // menú ⋯; la acción principal es el clic en la fila.
 const COLS    = 'minmax(0, 2.6fr) minmax(0, 1.5fr) 72px 96px 72px 96px 44px'
 const COLS_MD = 'minmax(0, 2.4fr) minmax(0, 1.4fr) 72px 96px 96px 44px'
-const COLS_SM = 'minmax(0, 1fr) 80px 88px 44px'
+const COLS_SM = 'minmax(0, 1fr) 80px 44px'
 
 const COLUMNS: DataColumn[] = [
   { label: 'Fuente' },
@@ -119,7 +119,7 @@ const COLUMNS: DataColumn[] = [
   { label: 'Envíos', right: true, hideSm: true },
   { label: 'Leads nuevos', right: true },
   { label: 'Vistas', right: true, hideMd: true, hideSm: true },
-  { label: 'Conversión', right: true },
+  { label: 'Conversión', right: true, hideSm: true },
   { label: '' },
 ]
 
@@ -197,7 +197,7 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
 
       {/* Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió. */}
       <span className="dt-num dt-hide-md dt-hide-sm dt-r">{ch.metrics.pageViewsInWindow || '—'}</span>
-      <span className="dt-num dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+      <span className="dt-num dt-hide-sm dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
         {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
       </span>
 
@@ -974,7 +974,7 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
 
       {/* Tipo de fuente (izquierda) y ventana de tiempo (derecha) */}
       <div className="toolbar" style={{ borderBottom: '1px solid var(--border-subtle)', marginBottom: '20px' }}>
-        <div className="tabs-bar" role="tablist" style={{ border: 'none', flex: 1 }}>
+        <div className="tabs-bar" role="tablist">
           {TAB_FILTERS.map(t => (
             <button
               key={t.value}
