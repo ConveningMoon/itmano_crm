@@ -11,6 +11,7 @@ import { TagSequencesPanel } from './tag-sequences-panel'
 import { SequencesTable } from './sequences-table'
 import { NewFolderButton } from '@/components/dashboard/folders'
 import { Tabs } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/ui/page-header'
 import { Plus, Mail } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
@@ -73,52 +74,42 @@ async function EmailsPage({
 
   const sequencesTab = (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginBottom: '16px' }}>
-        <NewFolderButton kind="sequence" />
-        <Link
-          href="/emails/new"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-            background: 'var(--accent-gold)', color: 'var(--bg-base)',
-            borderRadius: '8px', textDecoration: 'none', border: 'none',
-          }}
-        >
-          <Plus size={14} />
-          Nueva Secuencia
-        </Link>
+      <div className="toolbar">
+        <span className="toolbar-meta">
+          {sequences.length === 0
+            ? 'Sin secuencias todavía'
+            : `${sequences.length} ${sequences.length === 1 ? 'secuencia' : 'secuencias'}`}
+        </span>
+        <div className="page-actions">
+          <NewFolderButton kind="sequence" />
+          <Link href="/emails/new" className="btn btn-primary btn-cta">
+            <Plus size={14} />
+            Nueva secuencia
+          </Link>
+        </div>
       </div>
 
       {sequences.length === 0 ? (
         <div style={{
-          background: 'var(--bg-surface)', border: '1px dashed rgba(255,255,255,0.1)',
-          borderRadius: '12px', padding: '64px 48px',
-          textAlign: 'center',
+          background: 'var(--bg-surface)', border: '1px dashed var(--border-hover)',
+          borderRadius: '12px', padding: '64px 24px', textAlign: 'center',
         }}>
           <div style={{
-            width: '40px', height: '40px', borderRadius: '10px',
-            background: 'rgba(201,169,110,0.1)', margin: '0 auto 16px',
+            width: '44px', height: '44px', borderRadius: '12px',
+            background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)', margin: '0 auto 16px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Mail size={18} color="var(--accent-gold)" />
+            <Mail size={20} color="var(--accent-gold)" />
           </div>
-          <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>
-            Sin secuencias configuradas
+          <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            Crea tu primera secuencia
           </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px', maxWidth: '360px', margin: '0 auto 20px' }}>
-            Crea tu primera secuencia para empezar a nutrir leads automáticamente con emails enviados por Resend.
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '380px', margin: '0 auto 20px', lineHeight: 1.6 }}>
+            Nutre a tus leads automáticamente con una serie de emails enviados por Resend.
           </div>
-          <Link
-            href="/emails/new"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '9px 18px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--accent-gold)', color: 'var(--bg-base)',
-              borderRadius: '8px', textDecoration: 'none',
-            }}
-          >
-            <Plus size={13} />
-            Crear primera secuencia
+          <Link href="/emails/new" className="btn btn-primary btn-cta">
+            <Plus size={14} />
+            Nueva secuencia
           </Link>
         </div>
       ) : (
@@ -134,7 +125,7 @@ async function EmailsPage({
 
   const closingTab = (
     <>
-      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 18px', lineHeight: 1.55, maxWidth: '680px' }}>
+      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 18px', lineHeight: 1.6, maxWidth: '680px' }}>
         Cada agente tiene sus 3 correos de hitos del proceso de compra (inicio, pre-cierre,
         completado) por cada idioma que atiende. Los idiomas se gestionan en
         Configuración → Agentes.
@@ -185,20 +176,10 @@ async function EmailsPage({
 
   return (
     <>
-      <style>{`
-        .seq-row { transition: background 0.1s; }
-        .seq-row:hover { background: var(--bg-elevated) !important; }
-      `}</style>
-
-      {/* Header */}
-      <div style={{ marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '2px' }}>
-          Email
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          Campañas de nutrición y los correos obligatorios que dispara el CRM.
-        </p>
-      </div>
+      <PageHeader
+        title="Email"
+        description="Campañas de nutrición y los correos obligatorios que dispara el CRM."
+      />
 
       {/* El id se conserva para los enlaces viejos a /emails#emails-de-cierre. */}
       <div id="emails-de-cierre" style={{ scrollMarginTop: '80px' }}>
