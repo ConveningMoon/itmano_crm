@@ -37,7 +37,7 @@ function CenterLabel({ viewBox, total }: CenterLabelProps) {
       <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fill="#E8E6E1" fontSize={26} fontWeight={600}>
         {total}
       </text>
-      <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle" fill="#6B6860" fontSize={12}>
+      <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle" fill="#8A877F" fontSize={12}>
         leads
       </text>
     </g>

@@ -490,3 +490,13 @@ a.dt-title:hover { color: var(--accent-gold); }
   background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
   color: var(--accent-gold);
 }
+
+/* Dispositivos táctiles: áreas de toque de 44px (Apple HIG) sin engordar el
+   escritorio, donde 32–34px es lo habitual con ratón. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .icon-btn { width: 44px; height: 44px; }
+  .segmented > button { height: 36px; }
+  .filter-tab { height: 44px; }
+  .menu-item { padding-block: 12px; }
+}
