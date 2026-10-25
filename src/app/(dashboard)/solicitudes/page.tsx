@@ -3,6 +3,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { listPlatformRequests } from './actions'
 import { RequestsClient } from './requests-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 // Bandeja de solicitudes de plataforma — solo super_admin. Reúne el formulario
 // de contacto de la landing (kind='contact') y el soporte del CRM
@@ -16,14 +17,7 @@ async function SolicitudesPage() {
 
   return (
     <>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Solicitudes
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          Contacto de la landing y soporte de los equipos — marca cada una como respondida al gestionarla.
-        </p>
-      </div>
+      <PageHeader title="Solicitudes" description="Contacto de la landing y soporte de los equipos — marca cada una como respondida al gestionarla." />
 
       <RequestsClient requests={requests} />
     </>

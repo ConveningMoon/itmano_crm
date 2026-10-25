@@ -10,6 +10,7 @@ import { getTenantRow } from '@/lib/data/tenants'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 // Pantalla única de la newsletter del tenant — ya no hay series que elegir
 // antes: el canal implícito se prepara aquí, ANTES de leer nada, para que
@@ -54,12 +55,7 @@ async function NewslettersPage() {
   if (!canUseNewsletters({ role }, plan)) {
     return (
       <div style={{ maxWidth: '640px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Newsletters
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 24px' }}>
-          Contenido editorial con captación de suscriptores, publicado con tu marca.
-        </p>
+        <PageHeader title="Newsletters" description="Contenido editorial con captación de suscriptores, publicado con tu marca." />
         <div style={{
           padding: '20px',
           borderRadius: '12px',

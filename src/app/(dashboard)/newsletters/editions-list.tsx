@@ -17,6 +17,7 @@ import {
   getNewsletterIntegrationPrompt,
 } from './actions'
 import { FechaLocal } from '@/components/ui/local-date'
+import { PageHeader } from '@/components/ui/page-header'
 
 // Pantalla única de la newsletter: tira de totales, aviso de secuencia vacía y
 // la tabla de ediciones con sus acciones. Sustituye a series-list.tsx +
@@ -152,50 +153,34 @@ export function EditionsList({
       `}</style>
 
       {/* Cabecera */}
-      <div style={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        gap: '12px', flexWrap: 'wrap', marginBottom: '24px',
-      }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Newsletter
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Contenido editorial con captación de suscriptores, publicado con tu marca.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <Link
-            href="/newsletters/nueva"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--accent-gold)', color: 'var(--bg-base)',
-              borderRadius: '8px', border: 'none', textDecoration: 'none',
-            }}
-          >
-            <Plus size={14} />
-            Nueva edición
-          </Link>
-          <button
-            className="nl-ghost"
-            style={GHOST_BTN}
-            disabled={pending}
-            onClick={() => {
-              setShowIntegration(true)
-              if (integration !== null) return
-              setError(null)
-              start(async () => {
-                const res = await getNewsletterIntegrationPrompt()
-                if (res.ok) setIntegration(res.data.prompt)
-                else { setError(res.error); setShowIntegration(false) }
-              })
-            }}
-          >
-            <Code2 size={13} /> Integración
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Newsletter"
+        description="Contenido editorial con captación de suscriptores, publicado con tu marca."
+        actions={
+          <>
+            <Link href="/newsletters/nueva" className="btn btn-primary btn-cta">
+              <Plus size={14} />
+              Nueva edición
+            </Link>
+            <button
+              className="btn btn-ghost"
+              disabled={pending}
+              onClick={() => {
+                setShowIntegration(true)
+                if (integration !== null) return
+                setError(null)
+                start(async () => {
+                  const res = await getNewsletterIntegrationPrompt()
+                  if (res.ok) setIntegration(res.data.prompt)
+                  else { setError(res.error); setShowIntegration(false) }
+                })
+              }}
+            >
+              <Code2 size={14} /> Integración
+            </button>
+          </>
+        }
+      />
 
       {error && (
         <p style={{

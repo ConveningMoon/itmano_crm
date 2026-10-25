@@ -4,6 +4,7 @@ import { NewSequenceForm } from './new-sequence-form'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 async function NewSequencePage() {
   const { tenant_id, role } = await requireTenantContext()
@@ -43,12 +44,7 @@ async function NewSequencePage() {
       </div>
 
       <div style={{ maxWidth: '520px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Nueva Secuencia
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '28px' }}>
-          Después de crearla podrás agregar los pasos y vincularla a un canal de adquisición.
-        </p>
+        <PageHeader title="Nueva secuencia" description="Después de crearla podrás agregar los pasos y vincularla a un canal de adquisición." />
 
         <NewSequenceForm
           isSuperAdmin={needsTenantPicker}

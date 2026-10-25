@@ -10,6 +10,7 @@ import { generatePropertyFromPdf } from './ai-actions'
 import { PropertyFormModal, TYPE_LABELS, STATUS_CONFIG, type AiInit } from './property-form-modal'
 import { AiCreateModal } from './ai-create-modal'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
+import { PageHeader } from '@/components/ui/page-header'
 
 // Lista de propiedades: tarjetas clickeables → detalle. El formulario de
 // crear/editar vive en property-form-modal.tsx (compartido con el detalle).
@@ -84,46 +85,29 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
       `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Propiedades
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            {properties.length} {properties.length === 1 ? 'propiedad' : 'propiedades'} en el inventario
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {/* Crear con IA — abre el popup (PDF + idiomas). */}
-          {AI_ENABLED && (
-            <button
-              onClick={() => setShowAiModal(true)}
-              title="Sube el PDF del listado y la IA prellena el formulario"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '8px 14px', fontSize: '13px', fontWeight: 500,
-                background: 'var(--bg-surface)', color: 'var(--text-secondary)',
-                border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
-              }}
-            >
-              <Sparkles size={14} color="var(--accent-gold)" />
-              Crear con IA
+      <PageHeader
+        title="Propiedades"
+        description={`${properties.length} ${properties.length === 1 ? 'propiedad' : 'propiedades'} en el inventario`}
+        actions={
+          <>
+            {/* Crear con IA — abre el popup (PDF + idiomas). */}
+            {AI_ENABLED && (
+              <button
+                onClick={() => setShowAiModal(true)}
+                title="Sube el PDF del listado y la IA prellena el formulario"
+                className="btn btn-ghost"
+              >
+                <Sparkles size={14} color="var(--accent-gold)" />
+                Crear con IA
+              </button>
+            )}
+            <button onClick={() => openModal({})} className="btn btn-primary btn-cta">
+              <Plus size={14} />
+              Nueva propiedad
             </button>
-          )}
-          <button
-            onClick={() => openModal({})}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--accent-gold)', color: 'var(--bg-base)',
-              borderRadius: '8px', border: 'none', cursor: 'pointer',
-            }}
-          >
-            <Plus size={14} />
-            Nueva propiedad
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>

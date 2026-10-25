@@ -431,7 +431,7 @@ a.dt-title:hover { color: var(--accent-gold); }
 }
 
 /* Pestañas de filtro (subrayado dorado que crece desde el centro) */
-.tabs-bar {
+.filter-tabs {
   display: flex;
   gap: 4px;
   /* La base 320px hace que, en pantallas estrechas, el selector de ventana
@@ -441,7 +441,7 @@ a.dt-title:hover { color: var(--accent-gold); }
   overflow-x: auto;
   scrollbar-width: none;
 }
-.tab-btn {
+.filter-tab {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -457,8 +457,8 @@ a.dt-title:hover { color: var(--accent-gold); }
   cursor: pointer;
   transition: color var(--dur-fast);
 }
-.tab-btn:hover { color: var(--text-primary); }
-.tab-btn::after {
+.filter-tab:hover { color: var(--text-primary); }
+.filter-tab::after {
   content: '';
   position: absolute;
   left: 10px;
@@ -470,9 +470,9 @@ a.dt-title:hover { color: var(--accent-gold); }
   transform: scaleX(0);
   transition: transform var(--dur-base) var(--ease-out-premium);
 }
-.tab-btn[aria-selected='true'] { color: var(--accent-gold); font-weight: 500; }
-.tab-btn[aria-selected='true']::after { transform: scaleX(1); }
-.tab-count {
+.filter-tab[aria-selected='true'] { color: var(--accent-gold); font-weight: 500; }
+.filter-tab[aria-selected='true']::after { transform: scaleX(1); }
+.filter-tab-count {
   min-width: 20px;
   padding: 1px 6px;
   border-radius: 999px;
@@ -483,7 +483,7 @@ a.dt-title:hover { color: var(--accent-gold); }
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.tab-btn[aria-selected='true'] .tab-count {
+.filter-tab[aria-selected='true'] .filter-tab-count {
   background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
   color: var(--accent-gold);
 }

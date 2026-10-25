@@ -974,17 +974,17 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
 
       {/* Tipo de fuente (izquierda) y ventana de tiempo (derecha) */}
       <div className="toolbar" style={{ borderBottom: '1px solid var(--border-subtle)', marginBottom: '20px' }}>
-        <div className="tabs-bar" role="tablist">
+        <div className="filter-tabs" role="tablist">
           {TAB_FILTERS.map(t => (
             <button
               key={t.value}
               role="tab"
               aria-selected={activeTab === t.value}
               onClick={() => setActiveTab(t.value)}
-              className="tab-btn"
+              className="filter-tab"
             >
               {t.label}
-              <span className="tab-count">{countOf(t.value)}</span>
+              <span className="filter-tab-count">{countOf(t.value)}</span>
             </button>
           ))}
         </div>

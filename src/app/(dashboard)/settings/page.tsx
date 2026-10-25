@@ -18,6 +18,7 @@ import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-i
 import { domainOf } from '@/lib/email/sender-address'
 import { SettingsClient } from './settings-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 async function SettingsPage() {
   const ctx      = await requireTenantContext()
@@ -143,14 +144,7 @@ async function SettingsPage() {
 
   return (
     <>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Configuración
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          Perfil del equipo · Agentes · Cuenta
-        </p>
-      </div>
+      <PageHeader title="Configuración" description="Perfil del equipo · Agentes · Cuenta" />
 
       <SettingsClient
         tenant={tenant}
