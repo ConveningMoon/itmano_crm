@@ -25,7 +25,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node scripts/check-sharp-tracing.mjs",
+    "build": "next build && node scripts/check-sharp-tracing.mjs && node scripts/check-css-bundle.mjs",
     "start": "next start",
     "lint": "eslint",
     "test:unit": "vitest run tests/actions tests/leads tests/visibility tests/import tests/routing tests/billing tests/auth tests/studio tests/access tests/email tests/email-blocking tests/notifications tests/purchase-emails tests/business tests/sources/page-link.test.ts tests/agent-api/ tests/newsletters tests/folders tests/tags tests/open-houses tests/marketing",

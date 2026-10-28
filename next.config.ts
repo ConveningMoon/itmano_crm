@@ -114,6 +114,21 @@ const nextConfig: NextConfig = {
     "/api/properties/media": SHARP_NATIVE,
   },
   experimental: {
+    // Sin caché de disco de Turbopack en `next build`. Desde Next 16.3 viene
+    // activa y Vercel restaura `.next/cache` del deploy anterior, así que el
+    // build arrancaba sobre el CSS ya compilado del anterior.
+    //
+    // En producción eso sirvió el CSS previo al PR #293 con el markup nuevo: el
+    // bundle quedó en 47 KB sin una sola regla de dashboard-ui.css y el CRM
+    // entero se veía como texto plano. Se reproduce en local construyendo el
+    // commit anterior y encima el nuevo; con `.next/cache` borrado el CSS sale
+    // bien (58 KB). Un CSS viejo no rompe el build ni los tipos, y el deploy
+    // sale en verde.
+    //
+    // El coste es un build más lento; el dev server conserva su caché. Si
+    // algún día se reactiva, `scripts/check-css-bundle.mjs` (al final de
+    // `npm run build`) tiene que seguir en verde en un build sobre caché fría.
+    turbopackFileSystemCacheForBuild: false,
     // Cache del router en el cliente. Desde Next 15 `dynamic` viene en 0, así
     // que CADA navegación a una página dinámica —incluido volver atrás a una que
     // se acaba de ver— dispara un round-trip completo al servidor. Todo el CRM es

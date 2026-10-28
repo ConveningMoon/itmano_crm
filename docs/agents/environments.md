@@ -201,3 +201,18 @@ desde el repositorio ni volver a mostrarse desde GitHub.
 proyectos, usa `schema_snapshot()` para evitar falsos positivos causados por
 `search_path`. Las excepciones de paridad son temporales y se retiran al cerrar
 la migración.
+
+## Build en Vercel y guardas post-build
+
+`npm run build` termina con dos guardas que rompen el build en vez de desplegar
+algo que sólo falla en producción: `check-sharp-tracing` (libvips en el bundle de
+cada función que usa sharp) y `check-css-bundle` (las clases de
+`src/app/dashboard-ui.css` están en el CSS emitido).
+
+`next.config.ts` fija `experimental.turbopackFileSystemCacheForBuild: false`.
+Desde Next 16.3 esa caché viene activa y Vercel restaura `.next/cache` del deploy
+anterior; el deploy del PR #293 salió con el markup nuevo y el CSS previo (47 KB
+sin una regla de `dashboard-ui.css`, el CRM entero como texto plano) con el build
+en verde. No reactivarla sin comprobar que `check-css-bundle` pasa en un build
+sobre la caché de otro commit. Si un deploy sale roto igualmente, redesplegar sin
+"Use existing Build Cache".
