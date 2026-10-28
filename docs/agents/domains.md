@@ -92,6 +92,17 @@ Los medios están en `property-media` y las subidas privilegiadas pasan por
 servidor. Cuando otro host consuma imágenes, añádelo deliberadamente a
 `images.remotePatterns` del proyecto correspondiente.
 
+Vercel rechaza con `413` (texto plano, antes de ejecutar el código) todo cuerpo
+de función de más de 4.5 MB. Por eso las subidas a `/api/properties/media` y
+`/api/newsletters/media` usan `postMedia` y `prepareImageForUpload`
+(`src/lib/uploads/`): el navegador reduce las fotos pesadas a WebP de 2560 px
+antes de enviar y los errores dicen la verdad. El máximo por archivo es
+`MAX_FILE_BYTES_PER_REQUEST` (4 MB); un PDF o GIF que lo supere se rechaza con un
+mensaje claro. No hagas `fetch` directo a esas rutas (`tests/uploads` lo vigila).
+Pasar de 4 MB exige saltarse la función con una URL firmada de Storage. Las Server
+Actions con archivos (PDF de IA, secuencias, fuentes, estudio) tienen el mismo
+techo aunque sus mensajes digan 10 MB.
+
 ## Newsletters
 
 Cada tenant tiene una newsletter implícita: una fila de

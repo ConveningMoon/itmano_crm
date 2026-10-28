@@ -10,6 +10,9 @@ import type { AiPropertyDraft } from './ai-actions'
 import { FormSection } from '@/components/ui/form-section'
 import { Switch } from '@/components/ui/switch'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { MAX_FILE_BYTES_PER_REQUEST } from '@/lib/uploads/limits'
+import { mensajeArchivoGrande, postMedia, type UploadResult } from '@/lib/uploads/media-upload'
+import { prepareImageForUpload } from '@/lib/uploads/prepare-image'
 import {
   parseEmbedInput, commitEmbedDraft, replaceEmbedDraft, EMBED_PLACEMENTS, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
   PLACEMENT_LABEL, PLACEMENT_HINT, PROVIDER_LABEL,
@@ -258,22 +261,27 @@ export function PropertyFormModal({
   // intercepts — and passing a binary File through that layer corrupted the
   // upload. /api/* is excluded from the proxy matcher, so the route handler
   // receives the raw multipart body untouched.
-  async function uploadOne(
-    file: File,
-    kind: 'image' | 'pdf',
-  ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  //
+  // Vercel rechaza (413, texto plano) cualquier cuerpo de más de 4.5 MB antes de
+  // que corra el handler, así que las fotos pesadas se reducen aquí, antes de
+  // enviar, y los PDF que no caben se avisan sin gastar la subida. Ver
+  // src/lib/uploads/limits.ts.
+  async function uploadOne(file: File, kind: 'image' | 'pdf'): Promise<UploadResult> {
+    let toSend = file
+    if (kind === 'image') {
+      const prepared = await prepareImageForUpload(file)
+      if (!prepared.ok) return prepared
+      toSend = prepared.file
+    } else if (file.size > MAX_FILE_BYTES_PER_REQUEST) {
+      return { ok: false, error: `${mensajeArchivoGrande(file.size)} Comprime el PDF e inténtalo de nuevo.` }
+    }
     const fd = new FormData()
-    fd.set('file', file)
+    fd.set('file', toSend)
     fd.set('kind', kind)
     if (form.tenant_id) fd.set('tenant_id', form.tenant_id)
     // Media is stored per-property under a folder named by the slug.
     fd.set('slug', form.slug ?? '')
-    const res = await fetch('/api/properties/media', { method: 'POST', body: fd })
-    try {
-      return await res.json()
-    } catch {
-      return { ok: false, error: 'No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.' }
-    }
+    return postMedia('/api/properties/media', fd)
   }
 
   // Uploads the selected files right away and stores their URLs on the form.
@@ -302,7 +310,7 @@ export function PropertyFormModal({
         setSessionUrls(prev => [...prev, r.url])
       } catch (err) {
         console.error('[properties] upload threw', err)
-        setFormError('No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.')
+        setFormError('Ocurrió un error inesperado al subir el archivo. Intenta de nuevo.')
       } finally {
         setUploadingField(null)
       }
@@ -363,7 +371,7 @@ export function PropertyFormModal({
       setDirty(true)
     } catch (err) {
       console.error('[properties] batch upload threw', err)
-      setFormError('No se pudieron subir los archivos. Verifica tu conexión e intenta de nuevo.')
+      setFormError('Ocurrió un error inesperado al subir los archivos. Intenta de nuevo.')
     } finally {
       setUploadingField(null)
       setUploadProgress(null)
@@ -825,7 +833,7 @@ export function PropertyFormModal({
             ))}
             </FormSection>
 
-            <FormSection title="Multimedia" description="Cada archivo se sube al seleccionarlo. Acepta JPG, PNG, WebP, GIF, AVIF, BMP, TIFF (máx 10 MB) y PDF — las imágenes se optimizan y convierten a WebP automáticamente.">
+            <FormSection title="Multimedia" description="Cada archivo se sube al seleccionarlo. Acepta JPG, PNG, WebP, GIF, AVIF, BMP, TIFF y PDF. Las imágenes se reducen y convierten a WebP automáticamente, sin importar su peso; los PDF y GIF no pueden pasar de 4 MB.">
             {/* Cover image */}
             <div style={labelStyle}>
               <span style={labelTextStyle}>Imagen de portada</span>

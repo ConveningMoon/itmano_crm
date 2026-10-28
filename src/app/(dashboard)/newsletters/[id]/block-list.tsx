@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { Plus, Trash2, ChevronUp, ChevronDown, X, Upload, Loader2 } from 'lucide-react'
 import { sourceLabel } from '@/lib/newsletters/content'
 import type { NewsletterBlock, NewsletterContent, NewsletterSource } from '@/lib/newsletters/content'
+import { postMedia, type UploadResult } from '@/lib/uploads/media-upload'
+import { prepareImageForUpload } from '@/lib/uploads/prepare-image'
 
 // Columna izquierda: bloques editables. Columna derecha: vista previa en JSX
 // que espeja renderNewsletterHtml (src/lib/newsletters/render.ts) — MISMAS
@@ -19,15 +21,15 @@ import type { NewsletterBlock, NewsletterContent, NewsletterSource } from '@/lib
 // Route Handler, no Server Action — ver src/app/api/newsletters/media/route.ts:
 // una Server Action POSTea a la ruta de la página, que src/proxy.ts intercepta
 // y corrompe el File binario. /api/* queda fuera de ese guard.
-async function uploadBlockImage(file: File): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+//
+// Vercel rechaza con 413 (texto plano) todo cuerpo de más de 4.5 MB, así que la
+// foto pesada se reduce antes de enviar. Ver src/lib/uploads/limits.ts.
+async function uploadBlockImage(file: File): Promise<UploadResult> {
+  const prepared = await prepareImageForUpload(file)
+  if (!prepared.ok) return prepared
   const fd = new FormData()
-  fd.set('file', file)
-  const res = await fetch('/api/newsletters/media', { method: 'POST', body: fd })
-  try {
-    return await res.json()
-  } catch {
-    return { ok: false, error: 'No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.' }
-  }
+  fd.set('file', prepared.file)
+  return postMedia('/api/newsletters/media', fd)
 }
 
 interface Props {

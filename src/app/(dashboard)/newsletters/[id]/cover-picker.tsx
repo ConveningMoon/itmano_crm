@@ -5,6 +5,8 @@ import { Upload, Image as ImageIcon, Sparkles, Loader2 } from 'lucide-react'
 import type { StudioImage } from '@/lib/studio/types'
 import type { NewsletterCoverSource } from '@/lib/data/newsletters'
 import { generateCoverForEdition } from '../actions'
+import { postMedia, type UploadResult } from '@/lib/uploads/media-upload'
+import { prepareImageForUpload } from '@/lib/uploads/prepare-image'
 
 // Portada de la edición. Tres vías: subir archivo, biblioteca del Estudio, o
 // generar con IA (src/lib/newsletters/ai/cover.ts). Las tres terminan igual
@@ -43,15 +45,15 @@ const GENERATE_FALLBACK_ERROR = 'No se pudo generar la portada. Verifica tu cone
 // Route Handler, no Server Action — ver src/app/api/newsletters/media/route.ts:
 // una Server Action POSTea a la ruta de la página, que src/proxy.ts intercepta
 // y corrompe el File binario. /api/* queda fuera de ese guard.
-async function uploadCoverFile(file: File): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+//
+// Vercel rechaza con 413 (texto plano) todo cuerpo de más de 4.5 MB, así que la
+// foto pesada se reduce antes de enviar. Ver src/lib/uploads/limits.ts.
+async function uploadCoverFile(file: File): Promise<UploadResult> {
+  const prepared = await prepareImageForUpload(file)
+  if (!prepared.ok) return prepared
   const fd = new FormData()
-  fd.set('file', file)
-  const res = await fetch('/api/newsletters/media', { method: 'POST', body: fd })
-  try {
-    return await res.json()
-  } catch {
-    return { ok: false, error: 'No se pudo subir el archivo. Verifica tu conexión e intenta de nuevo.' }
-  }
+  fd.set('file', prepared.file)
+  return postMedia('/api/newsletters/media', fd)
 }
 
 export function CoverPicker({
@@ -194,7 +196,7 @@ export function CoverPicker({
                 style={{ display: 'none' }}
               />
               <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-                PNG, JPG o WebP. Máximo 8 MB.
+                PNG, JPG o WebP. Las fotos pesadas se reducen solas.
               </p>
             </div>
           )}

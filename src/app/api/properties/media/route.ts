@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { resolveTargetTenant } from '@/lib/auth/guards'
+import { mensajeArchivoGrande } from '@/lib/uploads/media-upload'
 import {
   MAX_UPLOAD_BYTES,
   IMAGE_MIME_PREFIX,
@@ -51,7 +52,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ ok: false, error: 'El archivo supera el límite de 10 MB' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: mensajeArchivoGrande(file.size) }, { status: 400 })
   }
 
   // Tenant folder — resolved for hygiene; the bucket is public either way.
