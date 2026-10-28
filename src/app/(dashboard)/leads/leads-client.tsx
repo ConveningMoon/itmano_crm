@@ -24,6 +24,7 @@ import type { ChannelOption } from './new/page'
 import { tagChipStyle, type LeadTag } from '@/lib/leads/tags'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
+import { PageHeader } from '@/components/ui/page-header'
 import { FechaLocal } from '@/components/ui/local-date'
 
 // Source kind → icon (reuses the leads/new source icons; brand icons unavailable in
@@ -496,7 +497,7 @@ export function LeadsClient({
   }
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div>
       <NavLoadingOverlay show={navPending} />
       <style>{`
         .kanban-card { transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
@@ -507,62 +508,45 @@ export function LeadsClient({
       `}</style>
 
       {/* ── ZONA 1: Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div>
-          <div style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>Leads</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {total} {total === 1 ? 'lead' : 'leads'} · {highQualityCount} de calidad alta{urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}
-          </div>
-        </div>
+      <PageHeader
+        title="Leads"
+        description={`${total} ${total === 1 ? 'lead' : 'leads'} · ${highQualityCount} de calidad alta${urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}`}
+        actions={
+          <>
+            {/* Sort: recientes / prioridad / valor */}
+            <div className="segmented" role="group" aria-label="Orden">
+              {([['recientes', 'Recientes'], ['prioridad', 'Prioridad'], ['valor', 'Valor']] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => pushFilters({ sort: v })}
+                  aria-pressed={filters.sort === v}
+                  title={v === 'prioridad'
+                    ? 'Primero lo que caduca, y dentro de eso lo de mejor calidad'
+                    : v === 'valor'
+                    ? 'Por el monto que declaró el lead. Los que no lo declararon van al final'
+                    : 'Orden por fecha de registro'}
+                >
+                  {v === 'prioridad' && <Clock size={13} />}{label}
+                </button>
+              ))}
+            </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Sort: recientes / prioridad / valor */}
-        <div style={{ display: 'flex', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-          {([['recientes', 'Recientes'], ['prioridad', 'Prioridad'], ['valor', 'Valor']] as const).map(([v, label], i) => (
-            <button
-              key={v}
-              onClick={() => pushFilters({ sort: v })}
-              title={v === 'prioridad'
-                ? 'Primero lo que caduca, y dentro de eso lo de mejor calidad'
-                : v === 'valor'
-                ? 'Por el monto que declaró el lead. Los que no lo declararon van al final'
-                : 'Orden por fecha de registro'}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                height: '32px', padding: '0 14px', justifyContent: 'center',
-                fontSize: '13px', cursor: 'pointer', border: 'none',
-                borderRight: i < 2 ? '1px solid var(--border-subtle)' : 'none',
-                background: filters.sort === v ? 'var(--bg-elevated)' : 'transparent',
-                color: filters.sort === v ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              {v === 'prioridad' && <Clock size={14} />}{label}
-            </button>
-          ))}
-        </div>
-
-        {/* View toggle */}
-        <div style={{ display: 'flex', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden' }}>
-          {(['table', 'kanban'] as const).map((v, i) => (
-            <button
-              key={v}
-              onClick={() => pushFilters({ view: v })}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                width: '80px', height: '32px', justifyContent: 'center',
-                fontSize: '13px', cursor: 'pointer', border: 'none',
-                borderRight: i < 2 ? '1px solid var(--border-subtle)' : 'none',
-                background: filters.view === v ? 'var(--bg-elevated)' : 'transparent',
-                color: filters.view === v ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              {v === 'table' ? <List size={16} /> : <LayoutGrid size={16} />}
-              {v === 'table' ? 'Tabla' : 'Kanban'}
-            </button>
-          ))}
-        </div>
-        </div>
-      </div>
+            {/* View toggle */}
+            <div className="segmented" role="group" aria-label="Vista">
+              {(['table', 'kanban'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => pushFilters({ view: v })}
+                  aria-pressed={filters.view === v}
+                >
+                  {v === 'table' ? <List size={14} /> : <LayoutGrid size={14} />}
+                  {v === 'table' ? 'Tabla' : 'Kanban'}
+                </button>
+              ))}
+            </div>
+          </>
+        }
+      />
 
       {/* ── ZONA 2: Filter bar ── */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -714,26 +698,10 @@ export function LeadsClient({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-            <button
-              onClick={clearFilters}
-              disabled={!hasFilters}
-              style={{
-                padding: '8px 14px', fontSize: '13px', borderRadius: '8px',
-                background: 'transparent', border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)', cursor: hasFilters ? 'pointer' : 'not-allowed',
-                opacity: hasFilters ? 1 : 0.5,
-              }}
-            >
+            <button onClick={clearFilters} disabled={!hasFilters} className="btn btn-ghost">
               Limpiar todo
             </button>
-            <button
-              onClick={() => setShowFilters(false)}
-              className="btn-cta"
-              style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
-              }}
-            >
+            <button onClick={() => setShowFilters(false)} className="btn btn-primary btn-cta">
               Aplicar
             </button>
           </div>

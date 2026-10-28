@@ -16,6 +16,7 @@ import { AdminClient } from './admin-client'
 import { TenantCard } from './tenant-card'
 import { HubFeed } from './hub-feed'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 // Centro de control del super_admin: pulso de la plataforma, entrada al CRM de
 // cada tenant y gestión (crear tenant / provisionar owner). Guarded server-side.
@@ -42,14 +43,7 @@ async function AdminPage() {
 
   return (
     <>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Centro de control
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          Plataforma ITMANO · {kpis.tenants} {kpis.tenants === 1 ? 'tenant' : 'tenants'}
-        </p>
-      </div>
+      <PageHeader title="Centro de control" description={<>Plataforma ITMANO · {kpis.tenants} {kpis.tenants === 1 ? 'tenant' : 'tenants'}</>} />
 
       {/* KPIs de plataforma — siempre visibles, encima de los tabs */}
       <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>

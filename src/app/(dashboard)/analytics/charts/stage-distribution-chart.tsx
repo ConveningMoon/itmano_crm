@@ -46,7 +46,7 @@ export function StageDistributionChart({ data }: Props) {
           tickLine={false}
         />
         <YAxis
-          tick={{ fill: '#6B6860', fontSize: 11 }}
+          tick={{ fill: '#8A877F', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
         />
@@ -60,7 +60,7 @@ export function StageDistributionChart({ data }: Props) {
         <Bar {...anim} dataKey="nutricion" stackId="a" fill="#C9A96E" name="En nutrición" />
         <Bar {...anim} dataKey="enProceso" stackId="a" fill="#9B72CF" name="En proceso"   />
         <Bar {...anim} dataKey="cerrado"   stackId="a" fill="#6BA368" name="Cerrado"      />
-        <Bar {...anim} dataKey="perdido"   stackId="a" fill="#6B6860" name="Perdido"      radius={[4, 4, 0, 0]} />
+        <Bar {...anim} dataKey="perdido"   stackId="a" fill="#8A877F" name="Perdido"      radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )

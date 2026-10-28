@@ -51,7 +51,7 @@ export function LeadsByAgentChart({ data }: Props) {
       <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16, top: 8, bottom: 0 }}>
         <XAxis
           type="number"
-          tick={{ fill: '#6B6860', fontSize: 11 }}
+          tick={{ fill: '#8A877F', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
         />

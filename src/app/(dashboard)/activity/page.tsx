@@ -5,6 +5,7 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getAllActivity } from '@/lib/data/activity'
 import { ActivityRow } from './activity-ui'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 const PAGE = 30
 
@@ -37,9 +38,7 @@ async function ActivityPage({
         </Link>
       </div>
 
-      <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '16px' }}>
-        Actividad
-      </h1>
+      <PageHeader title="Actividad" />
 
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '8px 20px' }}>
         {visible.length === 0 ? (

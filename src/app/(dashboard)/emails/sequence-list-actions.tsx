@@ -2,22 +2,32 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react'
-import Link from 'next/link'
+import { Eye, Power, PowerOff, Trash2 } from 'lucide-react'
+import type { Folder } from '@/lib/data/folders'
+import { useFolderMenu } from '@/components/dashboard/folders'
+import { ModalShell } from '@/components/motion/modal-shell'
+import { RowMenu } from '@/components/ui/row-menu'
 import { toggleSequenceActive, deleteSequence } from './actions'
 
 interface Props {
-  sequenceId:     string
-  sequenceName:   string
-  active:         boolean
-  activeRunCount: number
+  sequenceId:      string
+  sequenceName:    string
+  active:          boolean
+  activeRunCount:  number
+  folders:         Folder[]
+  currentFolderId: string | null
 }
 
-export function SequenceListActions({ sequenceId, sequenceName, active, activeRunCount }: Props) {
-  const router  = useRouter()
-  const [mode,    setMode]    = useState<'idle' | 'confirm_delete'>('idle')
+// Todo lo que se puede hacer con una secuencia desde la lista, en un menú ⋯. La
+// acción principal (abrir el detalle) es el clic en el nombre; aquí quedan las
+// demás, con el borrado separado y confirmado en un modal.
+export function SequenceListActions({ sequenceId, sequenceName, active, activeRunCount, folders, currentFolderId }: Props) {
+  const router = useRouter()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
   const [pending, start]      = useTransition()
+  const folderMenu = useFolderMenu('sequence', sequenceId, folders, currentFolderId)
+  const busy = pending || folderMenu.pending
 
   function handleToggle() {
     setError(null)
@@ -33,122 +43,68 @@ export function SequenceListActions({ sequenceId, sequenceName, active, activeRu
     start(async () => {
       const res = await deleteSequence(sequenceId)
       if (!res.ok) { setError(res.error); return }
-      setMode('idle')
+      setConfirmDelete(false)
       router.refresh()
     })
   }
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <Link
-          href={`/emails/${sequenceId}`}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '28px', height: '28px', borderRadius: '6px',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            color: 'var(--text-secondary)', textDecoration: 'none',
-          }}
-          title="Ver detalle"
-        >
-          <Eye size={13} />
-        </Link>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+      {busy && <span className="loading-spinner" role="status" aria-label="Guardando" />}
+      <RowMenu
+        label={sequenceName}
+        entries={[
+          { type: 'item', label: 'Ver detalle', icon: <Eye size={14} />, href: `/emails/${sequenceId}` },
+          { type: 'item', label: active ? 'Desactivar' : 'Activar', icon: active ? <PowerOff size={14} /> : <Power size={14} />, onSelect: handleToggle },
+          folderMenu.entry,
+          { type: 'separator' },
+          { type: 'item', label: 'Eliminar', icon: <Trash2 size={14} />, tone: 'danger', onSelect: () => { setError(null); setConfirmDelete(true) } },
+        ]}
+      />
 
-        <button
-          onClick={handleToggle}
-          disabled={pending}
-          title={active ? 'Desactivar' : 'Activar'}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '28px', height: '28px', borderRadius: '6px',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            color: active ? 'var(--accent-green)' : 'var(--text-muted)',
-            cursor: pending ? 'not-allowed' : 'pointer',
-            opacity: pending ? 0.6 : 1,
-          }}
-        >
-          {active ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-        </button>
+      {folderMenu.modal}
 
-        <button
-          onClick={() => setMode('confirm_delete')}
-          title="Eliminar"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '28px', height: '28px', borderRadius: '6px',
-            background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
-            color: 'var(--accent-coral)', cursor: 'pointer',
-          }}
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
+      <ModalShell open={confirmDelete} onClose={() => setConfirmDelete(false)} maxWidth={440}>
+        <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar secuencia</div>
 
-      {/* Delete confirmation modal */}
-      {mode === 'confirm_delete' && (
-        <>
-          <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }}
-            onClick={() => setMode('idle')}
-          />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
-            borderRadius: '16px', padding: '24px', width: '420px', maxWidth: '90vw', zIndex: 51,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar secuencia</span>
-              <button onClick={() => setMode('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-                <X size={18} />
-              </button>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            ¿Eliminar <strong style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{sequenceName}</strong>?
+            Se eliminan la secuencia y todos sus pasos.
+          </p>
+
+          {activeRunCount > 0 && (
+            <div style={{
+              background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+              borderRadius: '8px', padding: '10px 12px',
+              fontSize: '12px', color: 'var(--accent-coral)', lineHeight: 1.5,
+            }}>
+              Tiene <strong style={{ fontWeight: 500 }}>{activeRunCount}</strong> run{activeRunCount !== 1 ? 's' : ''} activo{activeRunCount !== 1 ? 's' : ''}.
+              Si la eliminas, se cancelan y esos leads dejan de recibir emails de esta secuencia.
             </div>
+          )}
 
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: activeRunCount > 0 ? '10px' : '20px' }}>
-              ¿Eliminar <strong style={{ color: 'var(--text-primary)' }}>{sequenceName}</strong>?
-              Esta acción eliminará la secuencia y todos sus pasos.
-            </p>
-
-            {activeRunCount > 0 && (
-              <div style={{
-                background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
-                borderRadius: '8px', padding: '10px 12px', marginBottom: '20px',
-                fontSize: '12px', color: 'var(--accent-coral)', lineHeight: 1.5,
-              }}>
-                Esta secuencia tiene <strong>{activeRunCount}</strong> run{activeRunCount !== 1 ? 's' : ''} activo{activeRunCount !== 1 ? 's' : ''}.
-                Si la eliminas, esos runs se cancelarán y los leads dejarán de recibir emails de esta secuencia.
-              </div>
-            )}
-
-            {error && (
-              <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
-                {error}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                onClick={() => setMode('idle')}
-                style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={pending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
-                  border: '1px solid rgba(201,123,107,0.3)',
-                  cursor: pending ? 'not-allowed' : 'pointer',
-                  opacity: pending ? 0.7 : 1,
-                }}
-              >
-                {pending ? 'Eliminando...' : 'Eliminar'}
-              </button>
+          {error && (
+            <div role="alert" style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '8px 10px', background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)', borderRadius: '8px' }}>
+              {error}
             </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button onClick={() => setConfirmDelete(false)} className="btn btn-ghost">Cancelar</button>
+            <button onClick={handleDelete} disabled={pending} className="btn btn-danger">
+              {pending && <span className="loading-spinner" aria-hidden="true" />}
+              {pending ? 'Eliminando…' : 'Eliminar'}
+            </button>
           </div>
-        </>
+        </div>
+      </ModalShell>
+
+      {/* Un error del interruptor (no del borrado) no tiene modal donde caer. */}
+      {error && !confirmDelete && (
+        <span role="alert" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{error}</span>
       )}
-    </>
+    </div>
   )
 }

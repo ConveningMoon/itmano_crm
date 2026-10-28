@@ -78,7 +78,7 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
               <XAxis
                 dataKey="date"
                 tickFormatter={fmtDay}
-                tick={{ fill: '#6B6860', fontSize: 10 }}
+                tick={{ fill: '#8A877F', fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -86,7 +86,7 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
               />
               <YAxis
                 tickFormatter={(v: number) => `$${v}`}
-                tick={{ fill: '#6B6860', fontSize: 10 }}
+                tick={{ fill: '#8A877F', fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 width={44}

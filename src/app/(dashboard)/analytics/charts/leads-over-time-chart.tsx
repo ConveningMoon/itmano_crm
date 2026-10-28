@@ -51,7 +51,7 @@ export function LeadsOverTimeChart({ data }: Props) {
     { key: 'nutricion', name: 'En nutrición', color: '#C9A96E' },
     { key: 'enProceso', name: 'En proceso',   color: '#9B72CF' },
     { key: 'cerrado',   name: 'Cerrado',      color: '#6BA368' },
-    { key: 'perdido',   name: 'Perdido',      color: '#6B6860' },
+    { key: 'perdido',   name: 'Perdido',      color: '#8A877F' },
   ]
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -59,12 +59,12 @@ export function LeadsOverTimeChart({ data }: Props) {
         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
         <XAxis
           dataKey="month"
-          tick={{ fill: '#6B6860', fontSize: 11 }}
+          tick={{ fill: '#8A877F', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tick={{ fill: '#6B6860', fontSize: 11 }}
+          tick={{ fill: '#8A877F', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
         />

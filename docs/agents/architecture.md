@@ -263,3 +263,14 @@ cliente. Pasaba en producción en la ficha del lead.
   reduced motion y entradas sobrias en el CRM.
 - No uses AOS, jQuery ni librerías que muten el DOM fuera de React.
 - Reutiliza `STATUS_CONFIG`, `LANGUAGE_CONFIG`, tipos y componentes existentes.
+- Las superficies del dashboard (encabezado, botones, pills, tablas, menús,
+  pestañas de filtro) viven en `src/app/dashboard-ui.css` y se usan con
+  `PageHeader`, `StatCard`, `DataScope`/`DataHead`/`DataBlock` y `RowMenu`
+  (`src/components/ui/`). Una pantalla nueva no escribe esos estilos inline.
+  Las columnas de una tabla se declaran una vez (`DataScope`) y las secundarias
+  se ocultan con `dt-hide-md`/`dt-hide-sm`; la acción principal de una fila es
+  el clic en ella y el resto va en un menú ⋯.
+- Cada gráfica de recharts va dentro de `ChartFrame`: resumen en texto para
+  lectores de pantalla y estado vacío.
+- El texto atenuado (`--text-muted`) debe mantener 4.5:1 de contraste sobre
+  `--bg-surface` y `--bg-elevated`; si cambias el token, vuelve a medirlo.

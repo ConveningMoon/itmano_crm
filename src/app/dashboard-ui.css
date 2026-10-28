@@ -1,0 +1,502 @@
+/* ─── Sistema de superficies del dashboard ───────────────────────────────────
+   Tablas, botones, pills, menús y encabezados compartidos. Todo CSS puro sobre
+   los tokens de :root en globals.css (cero JS, cero librerías): una pantalla
+   nueva no escribe estilos inline para esto, usa estas clases.
+
+   Va sin @layer a propósito, igual que el resto de globals.css (ver "App-shell
+   layout" allí): las reglas con clase (0,1,0) ganan limpiamente al reset `*`. */
+
+/* Encabezado de página */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 24px;
+}
+.page-title {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+.page-desc {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Barra de herramientas sobre una lista */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.toolbar-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Botones */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast),
+    border-color var(--dur-fast),
+    color var(--dur-fast),
+    filter var(--dur-fast),
+    transform var(--dur-fast);
+}
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--accent-gold); color: var(--bg-base); }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+.btn-danger {
+  background: color-mix(in srgb, var(--accent-coral) 14%, transparent);
+  color: var(--accent-coral);
+  border-color: color-mix(in srgb, var(--accent-coral) 30%, transparent);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-coral) 22%, transparent);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+.icon-btn:hover,
+.icon-btn[data-popup-open],
+.icon-btn[aria-expanded='true'] {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
+/* Pills de estado. --tone se fija con data-tone; fondo y texto salen de él. */
+.pill {
+  --tone: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+}
+.pill[data-tone='gold']  { --tone: var(--accent-gold); }
+.pill[data-tone='green'] { --tone: var(--accent-green); }
+.pill[data-tone='blue']  { --tone: var(--accent-blue); }
+.pill[data-tone='teal']  { --tone: var(--accent-teal); }
+.pill[data-tone='coral'] { --tone: var(--accent-coral); }
+.pill[data-tone='mute']  { --tone: var(--text-muted); background: var(--bg-overlay); }
+.pill-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Tarjeta de KPI */
+.stat-card {
+  --tone: var(--accent-gold);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--highlight-top);
+  padding: 16px 18px;
+  transition: border-color var(--dur-fast);
+}
+.stat-card:hover { border-color: var(--border-hover); }
+.stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.stat-card-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.stat-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+}
+.stat-card-value {
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabla de datos.
+   .dt-scope fija las columnas por variable. Las columnas secundarias se ocultan
+   al estrecharse el contenido y la tabla nunca necesita scroll lateral. Son media
+   queries y no container queries a propósito: `container-type` aplica contención
+   de layout y volvería al contenedor el bloque de contención de los modales
+   `position: fixed` que cuelgan de una fila. Los umbrales descuentan el sidebar
+   (220px) y los gutters del app-shell: contenido ≤ 900px ⇒ viewport ≤ 1170px;
+   contenido ≤ 620px ⇒ viewport ≤ 652px, o entre 768px y 890px. */
+.dt-grid {
+  display: grid;
+  grid-template-columns: var(--dt-cols);
+  column-gap: 16px;
+  align-items: center;
+  padding-inline: 20px;
+}
+.dt-head {
+  min-height: 40px;
+  margin-bottom: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.dt {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--highlight-top);
+  overflow: hidden;
+}
+.dt-row {
+  min-height: 64px;
+  padding-block: 12px;
+  border-top: 1px solid var(--border-subtle);
+  transition: background-color var(--dur-fast);
+}
+.dt-row:first-child { border-top: none; }
+.dt-row:hover { background: var(--bg-elevated); }
+.dt-row[data-clickable] { cursor: pointer; }
+.dt-r { text-align: right; justify-content: flex-end; }
+.dt-num {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.dt-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.dt-cell-main { min-width: 0; }
+.dt-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-primary);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.dt-title:hover { color: var(--accent-gold); }
+.dt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dt-meta > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.dt-show-md { display: none !important; }
+@media (max-width: 1170px) {
+  .dt-grid { grid-template-columns: var(--dt-cols-md, var(--dt-cols)); }
+  .dt-hide-md { display: none !important; }
+  .dt-show-md { display: inline-flex !important; }
+}
+@media (max-width: 652px), (min-width: 768px) and (max-width: 890px) {
+  .dt-grid { grid-template-columns: var(--dt-cols-sm, var(--dt-cols-md, var(--dt-cols))); }
+  .dt-hide-sm { display: none !important; }
+}
+
+/* Mini-medidor de tasa: transform en vez de width, una sola entrada. */
+.meter {
+  position: relative;
+  width: 56px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-overlay);
+  overflow: hidden;
+}
+.meter > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: var(--tone, var(--accent-teal));
+  transform-origin: left center;
+  animation: meter-grow 600ms var(--ease-out-premium) both;
+}
+@keyframes meter-grow { from { transform: scaleX(0); } }
+
+/* Cabecera de carpeta y cuerpo plegable */
+.folder-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 2px 2px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  transition: background-color var(--dur-fast);
+}
+.folder-head:hover { background: var(--bg-surface); }
+.folder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.folder-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--dur-base) var(--ease-out-premium);
+}
+.folder-toggle[aria-expanded='true'] .folder-chevron { transform: rotate(90deg); }
+.folder-body { animation: folder-open var(--dur-base) var(--ease-out-premium); }
+@keyframes folder-open {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+/* Menú desplegable (Base UI Menu). Entra/sale con opacity + scale; el origen
+   lo da el posicionador, así que nace del botón que lo abrió. */
+.menu-positioner { z-index: 60; }
+.menu-popup {
+  min-width: 208px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hover);
+  border-radius: 10px;
+  box-shadow: var(--highlight-top), var(--shadow-lg);
+  transform-origin: var(--transform-origin);
+  transition: opacity var(--dur-fast) ease-out, transform var(--dur-fast) var(--ease-out-premium);
+}
+.menu-popup[data-starting-style],
+.menu-popup[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+.menu-item[data-highlighted] {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+.menu-item[data-disabled] { opacity: 0.45; cursor: default; }
+.menu-item[data-tone='danger'] { color: var(--accent-coral); }
+.menu-item[data-tone='danger'][data-highlighted] {
+  background: color-mix(in srgb, var(--accent-coral) 14%, transparent);
+  color: var(--accent-coral);
+}
+.menu-item[data-current] { color: var(--accent-gold); }
+.menu-item-end { margin-left: auto; display: flex; color: var(--text-muted); }
+.menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border-subtle);
+}
+.menu-label {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Segmentado (ventana de tiempo, filtros cortos) */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.segmented > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.segmented > button:hover { color: var(--text-primary); }
+.segmented > button[aria-pressed='true'] {
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Pestañas de filtro (subrayado dorado que crece desde el centro) */
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  /* La base 320px hace que, en pantallas estrechas, el selector de ventana
+     baje a su propia línea en vez de encimarse sobre las pestañas. */
+  flex: 1 1 320px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-fast);
+}
+.filter-tab:hover { color: var(--text-primary); }
+.filter-tab::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-gold);
+  transform: scaleX(0);
+  transition: transform var(--dur-base) var(--ease-out-premium);
+}
+.filter-tab[aria-selected='true'] { color: var(--accent-gold); font-weight: 500; }
+.filter-tab[aria-selected='true']::after { transform: scaleX(1); }
+.filter-tab-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.filter-tab[aria-selected='true'] .filter-tab-count {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  color: var(--accent-gold);
+}
+
+/* Dispositivos táctiles: áreas de toque de 44px (Apple HIG) sin engordar el
+   escritorio, donde 32–34px es lo habitual con ratón. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .icon-btn { width: 44px; height: 44px; }
+  .segmented > button { height: 36px; }
+  .filter-tab { height: 44px; }
+  .menu-item { padding-block: 12px; }
+}

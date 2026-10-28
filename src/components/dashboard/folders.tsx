@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
-import { ChevronRight, Folder as FolderIcon, FolderPlus, MoreVertical, Pencil, Trash2, X } from 'lucide-react'
+import { useEffect, useState, useSyncExternalStore, useTransition } from 'react'
+import { Check, Folder as FolderIcon, FolderInput, FolderPlus, Pencil, Trash2, ChevronRight } from 'lucide-react'
 import type { Folder, FolderKind } from '@/lib/data/folders'
 import { createFolder, createFolderAndMove, renameFolder, deleteFolder, moveToFolder } from '@/app/(dashboard)/folder-actions'
+import { ModalShell } from '@/components/motion/modal-shell'
+import { RowMenu, type MenuEntry } from '@/components/ui/row-menu'
 
 // ─── Carpetas: la UI compartida entre /sources y /emails ──────────────────────
 //
@@ -11,66 +13,36 @@ import { createFolder, createFolderAndMove, renameFolder, deleteFolder, moveToFo
 // gestos: crear una carpeta, plegarla, renombrarla, borrarla y mover un
 // elemento. Vive aquí para que no haya dos copias que se separen con el tiempo.
 //
-// El estado plegado/desplegado es de cada navegador (localStorage): es una
-// preferencia de vista, no un dato del negocio, y guardarlo en la base sería
-// un viaje al servidor por cada click en una flecha.
+// Las carpetas nacen CERRADAS: la lista abre limpia y cada quien despliega lo
+// que quiere ver. Qué carpetas dejó abiertas es una preferencia de vista de cada
+// navegador (localStorage): guardarla en la base sería un viaje al servidor por
+// cada click en una flecha.
 
-const BTN_GHOST: React.CSSProperties = {
-  padding: '8px 14px',
-  fontSize: '12px',
-  color: 'var(--text-muted)',
-  background: 'transparent',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-}
-
-const INPUT: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px',
-  padding: '9px 12px',
-  fontSize: '13px',
-  color: 'var(--text-primary)',
-  outline: 'none',
-  boxSizing: 'border-box',
-}
-
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '9px 18px',
-  fontSize: '13px',
-  fontWeight: 500,
-  color: 'var(--bg-base)',
-  background: 'var(--accent-gold)',
-  border: 'none',
-  borderRadius: '8px',
-  cursor: 'pointer',
-}
+type ActionResult = { ok: true } | { ok: false; error: string }
 
 const ERROR_BOX: React.CSSProperties = {
   fontSize: '12px',
   color: 'var(--accent-coral)',
-  padding: '6px 10px',
-  background: 'rgba(201,123,107,0.10)',
-  borderRadius: '6px',
+  padding: '8px 10px',
+  background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+  borderRadius: '8px',
 }
 
 // ─── Modal de nombre (crear y renombrar) ──────────────────────────────────────
 
-function NameModal({ title, initial, confirmLabel, onConfirm, onClose }: {
+// El formulario vive DENTRO de ModalShell: AnimatePresence conserva este hijo
+// durante la salida y lo desmonta al terminar, así que cada apertura empieza con
+// el estado limpio sin tener que reiniciarlo a mano.
+function NameForm({ title, initial, confirmLabel, onConfirm, onClose }: {
   title:        string
   initial:      string
   confirmLabel: string
-  onConfirm:    (name: string) => Promise<{ ok: true } | { ok: false; error: string }>
+  onConfirm:    (name: string) => Promise<ActionResult>
   onClose:      () => void
 }) {
-  const [name,    setName]    = useState(initial)
-  const [error,   setError]   = useState<string | null>(null)
-  const [pending, start]      = useTransition()
+  const [name,    setName]  = useState(initial)
+  const [error,   setError] = useState<string | null>(null)
+  const [pending, start]    = useTransition()
 
   // Un <form> de verdad y no un onKeyDown: así Enter envía por comportamiento
   // nativo del navegador, que es lo que espera cualquiera que escriba el nombre
@@ -87,46 +59,30 @@ function NameModal({ title, initial, confirmLabel, onConfirm, onClose }: {
   }
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.55)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
+    <form onSubmit={submit} style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)' }}>{title}</div>
+      <input
+        value={name}
+        autoFocus
+        maxLength={60}
+        onChange={e => setName(e.target.value)}
+        aria-label="Nombre de la carpeta"
+        placeholder="Campañas 2026"
         style={{
-          background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-          borderRadius: '16px', width: '100%', maxWidth: '420px',
+          width: '100%', height: '40px', padding: '0 12px', fontSize: '14px',
+          color: 'var(--text-primary)', background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)', borderRadius: '8px', outline: 'none',
         }}
-      >
-        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>{title}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={submit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <input
-            value={name}
-            autoFocus
-            maxLength={60}
-            onChange={e => setName(e.target.value)}
-            style={INPUT}
-            placeholder="Ej. Campañas 2026"
-          />
-          {error && <div style={ERROR_BOX}>{error}</div>}
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button type="button" onClick={onClose} style={{ ...BTN_GHOST, fontSize: '13px' }}>Cancelar</button>
-            <button type="submit" disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
-              {pending ? 'Guardando…' : confirmLabel}
-            </button>
-          </div>
-        </form>
+      />
+      {error && <div role="alert" style={ERROR_BOX}>{error}</div>}
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+        <button type="button" onClick={onClose} className="btn btn-ghost">Cancelar</button>
+        <button type="submit" disabled={pending} className="btn btn-primary">
+          {pending && <span className="loading-spinner" aria-hidden="true" />}
+          {pending ? 'Guardando…' : confirmLabel}
+        </button>
       </div>
-    </div>
+    </form>
   )
 }
 
@@ -137,21 +93,21 @@ export function NewFolderButton({ kind }: { kind: FolderKind }) {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} style={BTN_GHOST}>
-        <FolderPlus size={13} />
+      <button onClick={() => setOpen(true)} className="btn btn-ghost">
+        <FolderPlus size={14} />
         Nueva carpeta
       </button>
-      {open && (
-        <NameModal
+      <ModalShell open={open} onClose={() => setOpen(false)} maxWidth={420}>
+        <NameForm
           title="Nueva carpeta"
           initial=""
           confirmLabel="Crear"
-          onConfirm={name => createFolder(kind, name)}
           // createFolder ya incluye el RSC actualizado en la respuesta de la
           // Server Action. Otro router.refresh duplicaba toda la lectura.
+          onConfirm={name => createFolder(kind, name)}
           onClose={() => setOpen(false)}
         />
-      )}
+      </ModalShell>
     </>
   )
 }
@@ -160,45 +116,48 @@ export function NewFolderButton({ kind }: { kind: FolderKind }) {
 
 // localStorage es un sistema externo a React, así que se lee con
 // `useSyncExternalStore` y no con un efecto que haga setState: el snapshot del
-// servidor es siempre "desplegada", el del cliente sale del storage, y React se
+// servidor es siempre "cerrada", el del cliente sale del storage, y React se
 // encarga de que la hidratación no choque.
-const collapseListeners = new Set<() => void>()
+const openListeners = new Set<() => void>()
 
-function notifyCollapse() {
-  for (const listener of collapseListeners) listener()
+function notifyOpen() {
+  for (const listener of openListeners) listener()
 }
 
-function subscribeCollapse(listener: () => void) {
-  collapseListeners.add(listener)
-  // Otra pestaña del mismo usuario también pliega carpetas: `storage` avisa.
+function subscribeOpen(listener: () => void) {
+  openListeners.add(listener)
+  // Otra pestaña del mismo usuario también abre carpetas: `storage` avisa.
   window.addEventListener('storage', listener)
   return () => {
-    collapseListeners.delete(listener)
+    openListeners.delete(listener)
     window.removeEventListener('storage', listener)
   }
 }
 
-function useCollapsed(folderId: string): [boolean, (v: boolean) => void] {
-  const storageKey = `folder-collapsed:${folderId}`
+// Clave propia (no la `folder-collapsed:` de antes): quien alguna vez desplegó
+// una carpeta con el esquema viejo la tenía guardada como "abierta", y eso
+// anulaba el nuevo valor por defecto.
+function useOpen(folderId: string): [boolean, (v: boolean) => void] {
+  const storageKey = `folder-open:${folderId}`
 
-  const collapsed = useSyncExternalStore(
-    subscribeCollapse,
+  const open = useSyncExternalStore(
+    subscribeOpen,
     () => {
       try {
         return window.localStorage.getItem(storageKey) === '1'
-      } catch { return false } // modo privado o storage bloqueado: desplegada
+      } catch { return false } // modo privado o storage bloqueado: cerrada
     },
     () => false,
   )
 
-  // El HTML del servidor no puede saber qué plegó este navegador, así que la
-  // carpeta se hidrata desplegada y el snapshot del cliente no coincide con el
+  // El HTML del servidor no puede saber qué abrió este navegador, así que la
+  // carpeta se hidrata cerrada y el snapshot del cliente no coincide con el
   // del servidor. Este aviso al montar hace que React vuelva a leer el storage
   // y aplique la preferencia. Va en un macrotask y no en el cuerpo del efecto
   // para no competir con la hidratación; `requestAnimationFrame` no sirve aquí
   // porque no corre en una pestaña en segundo plano.
   useEffect(() => {
-    const id = setTimeout(notifyCollapse, 0)
+    const id = setTimeout(notifyOpen, 0)
     return () => clearTimeout(id)
   }, [])
 
@@ -206,10 +165,10 @@ function useCollapsed(folderId: string): [boolean, (v: boolean) => void] {
     try {
       window.localStorage.setItem(storageKey, value ? '1' : '0')
     } catch { /* la preferencia no se recuerda, pero la vista debe reaccionar */ }
-    notifyCollapse()
+    notifyOpen()
   }
 
-  return [collapsed, update]
+  return [open, update]
 }
 
 export function FolderGroup({ folder, count, children }: {
@@ -217,11 +176,10 @@ export function FolderGroup({ folder, count, children }: {
   count:    number
   children: React.ReactNode
 }) {
-  const [collapsed, setCollapsed] = useCollapsed(folder.id)
-  const [menu,      setMenu]      = useState(false)
-  const [modal,     setModal]     = useState<'rename' | 'delete' | null>(null)
-  const [error,     setError]     = useState<string | null>(null)
-  const [pending,   start]        = useTransition()
+  const [open, setOpen] = useOpen(folder.id)
+  const [modal, setModal] = useState<'rename' | 'delete' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, start]  = useTransition()
 
   function handleDelete() {
     setError(null)
@@ -233,290 +191,124 @@ export function FolderGroup({ folder, count, children }: {
   }
 
   return (
-    <div style={{ marginBottom: '14px' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        padding: '8px 12px',
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: collapsed ? '10px' : '10px 10px 0 0',
-        borderBottom: collapsed ? '1px solid var(--border-subtle)' : 'none',
-      }}>
+    <section style={{ marginBottom: '16px' }}>
+      <div className="folder-head">
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          aria-expanded={!collapsed}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px', flex: 1,
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            color: 'var(--text-primary)', textAlign: 'left',
-          }}
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="folder-toggle"
         >
-          <ChevronRight
-            size={14}
-            style={{
-              color: 'var(--text-muted)', flexShrink: 0,
-              transform: collapsed ? 'none' : 'rotate(90deg)',
-              transition: 'transform 0.15s',
-            }}
-          />
-          <FolderIcon size={14} style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />
-          <span style={{ fontSize: '13px', fontWeight: 500 }}>{folder.name}</span>
-          <span style={{
-            fontSize: '11px', color: 'var(--text-muted)',
-            background: 'var(--bg-overlay)', padding: '1px 8px', borderRadius: '10px',
-          }}>
-            {count}
+          <ChevronRight size={15} className="folder-chevron" />
+          <FolderIcon size={16} style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />
+          <span style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {folder.name}
           </span>
+          <span className="pill" data-tone="mute" style={{ height: '20px', padding: '0 8px' }}>{count}</span>
         </button>
 
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setMenu(v => !v)}
-            aria-label={`Opciones de ${folder.name}`}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '26px', height: '26px', borderRadius: '6px',
-              background: 'transparent', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-muted)', cursor: 'pointer',
-            }}
-          >
-            <MoreVertical size={13} />
-          </button>
-          {menu && (
-            <>
-              <div onClick={() => setMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-              <div style={{
-                position: 'absolute', right: 0, top: '30px', zIndex: 41,
-                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-                borderRadius: '8px', boxShadow: 'var(--shadow-md)', minWidth: '170px', overflow: 'hidden',
-              }}>
-                <button
-                  onClick={() => { setMenu(false); setModal('rename') }}
-                  style={MENU_ITEM}
-                >
-                  <Pencil size={12} /> Renombrar
-                </button>
-                <button
-                  onClick={() => { setMenu(false); setModal('delete') }}
-                  style={{ ...MENU_ITEM, color: 'var(--accent-coral)' }}
-                >
-                  <Trash2 size={12} /> Eliminar carpeta
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <RowMenu
+          label={folder.name}
+          entries={[
+            { type: 'item', label: 'Renombrar', icon: <Pencil size={14} />, onSelect: () => setModal('rename') },
+            { type: 'separator' },
+            { type: 'item', label: 'Eliminar carpeta', icon: <Trash2 size={14} />, tone: 'danger', onSelect: () => setModal('delete') },
+          ]}
+        />
       </div>
 
-      {!collapsed && (
-        <div style={{
-          border: '1px solid var(--border-subtle)', borderTop: 'none',
-          borderRadius: '0 0 10px 10px', overflow: 'hidden',
-        }}>
+      {open && (
+        <div className="folder-body">
           {count === 0
-            ? <div style={{ padding: '18px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Carpeta vacía · usa el icono de carpeta de cada fila para mover algo aquí.
+            ? <div className="dt" style={{ padding: '20px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Carpeta vacía. Usa «Mover a carpeta» en el menú de una fila para traer algo aquí.
               </div>
             : children}
         </div>
       )}
 
-      {modal === 'rename' && (
-        <NameModal
+      <ModalShell open={modal === 'rename'} onClose={() => setModal(null)} maxWidth={420}>
+        <NameForm
           title="Renombrar carpeta"
           initial={folder.name}
           confirmLabel="Guardar"
           onConfirm={name => renameFolder(folder.id, name)}
           onClose={() => setModal(null)}
         />
-      )}
+      </ModalShell>
 
-      {modal === 'delete' && (
-        <div
-          onClick={() => setModal(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.55)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-              borderRadius: '16px', width: '100%', maxWidth: '420px', padding: '20px',
-              display: 'flex', flexDirection: 'column', gap: '14px',
-            }}
-          >
-            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-              Eliminar “{folder.name}”
-            </span>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              Se elimina sólo la carpeta. Lo que hay dentro no se borra: vuelve a la lista sin carpeta.
-            </span>
-            {error && <div style={ERROR_BOX}>{error}</div>}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setModal(null)} style={{ ...BTN_GHOST, fontSize: '13px' }}>Cancelar</button>
-              <button
-                onClick={handleDelete}
-                disabled={pending}
-                style={{
-                  ...BTN_PRIMARY, background: 'var(--accent-coral)', color: 'var(--bg-base)',
-                  opacity: pending ? 0.6 : 1,
-                }}
-              >
-                {pending ? 'Eliminando…' : 'Eliminar'}
-              </button>
-            </div>
+      <ModalShell open={modal === 'delete'} onClose={() => setModal(null)} maxWidth={420}>
+        <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)' }}>
+            Eliminar «{folder.name}»
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Se elimina sólo la carpeta. Lo que hay dentro no se borra: vuelve a la lista sin carpeta.
+          </div>
+          {error && <div role="alert" style={ERROR_BOX}>{error}</div>}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button onClick={() => setModal(null)} className="btn btn-ghost">Cancelar</button>
+            <button onClick={handleDelete} disabled={pending} className="btn btn-danger">
+              {pending && <span className="loading-spinner" aria-hidden="true" />}
+              {pending ? 'Eliminando…' : 'Eliminar'}
+            </button>
           </div>
         </div>
-      )}
-    </div>
+      </ModalShell>
+    </section>
   )
-}
-
-const MENU_ITEM: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
-  padding: '9px 12px', fontSize: '12px', textAlign: 'left',
-  background: 'transparent', border: 'none', cursor: 'pointer',
-  color: 'var(--text-secondary)',
 }
 
 // ─── Mover un elemento a una carpeta ──────────────────────────────────────────
 
-export function FolderPicker({ kind, itemId, folders, currentFolderId, label }: {
-  kind:            FolderKind
-  itemId:          string
-  folders:         Folder[]
-  currentFolderId: string | null
-  /** Nombre del elemento, sólo para lectores de pantalla. */
-  label:           string
-}) {
-  // El desplegable se posiciona con `fixed` y coordenadas calculadas al abrir:
-  // las filas viven en un contenedor con `overflow: hidden` (el que redondea las
-  // esquinas de la tabla), y en `absolute` el menú se cortaba por abajo en la
-  // última fila. `fixed` lo saca de ese recorte.
-  const [anchor,  setAnchor]  = useState<{ top: number; right: number } | null>(null)
+/**
+ * Entradas de menú para mover un elemento de carpeta, más el modal de «Nueva
+ * carpeta». El modal se devuelve aparte porque el menú se desmonta al elegir una
+ * opción: si viviera dentro, «Crear y mover» se cerraría antes de terminar.
+ * Quien lo usa pinta `modal` fuera del menú (junto a la fila).
+ */
+export function useFolderMenu(kind: FolderKind, itemId: string, folders: Folder[], currentFolderId: string | null) {
   const [creating, setCreating] = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
-  const [pending, start]      = useTransition()
-  const boxRef = useRef<HTMLDivElement>(null)
-  const open = anchor !== null
-
-  function toggle() {
-    if (open) { setAnchor(null); return }
-    const rect = boxRef.current?.getBoundingClientRect()
-    if (!rect) return
-    setAnchor({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
-  }
-
-  function setOpen(value: boolean) {
-    if (value) toggle()
-    else setAnchor(null)
-  }
+  const [pending, start] = useTransition()
 
   function move(folderId: string | null) {
-    setError(null)
-    start(async () => {
-      const res = await moveToFolder(kind, itemId, folderId)
-      if (!res.ok) { setError(res.error); return }
-      setOpen(false)
-    })
+    start(async () => { await moveToFolder(kind, itemId, folderId) })
   }
 
-  return (
-    <div ref={boxRef} style={{ position: 'relative', display: 'inline-flex' }}>
-      <button
-        onClick={e => { e.stopPropagation(); toggle() }}
-        title={currentFolderId ? 'Cambiar de carpeta' : 'Mover a una carpeta'}
-        aria-label={`Mover ${label} a una carpeta`}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: '28px', height: '28px', borderRadius: '6px',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-          color: currentFolderId ? 'var(--accent-gold)' : 'var(--text-secondary)',
-          cursor: pending ? 'wait' : 'pointer',
-        }}
-      >
-        <FolderIcon size={13} />
-      </button>
+  const entry: MenuEntry = {
+    type: 'submenu',
+    label: 'Mover a carpeta',
+    icon: <FolderInput size={14} />,
+    entries: [
+      { type: 'item', label: 'Sin carpeta', current: currentFolderId === null,
+        disabled: currentFolderId === null, onSelect: () => move(null),
+        icon: currentFolderId === null ? <Check size={14} /> : <span style={{ width: 14 }} /> },
+      ...folders.map((f): MenuEntry => ({
+        type: 'item', label: f.name, current: f.id === currentFolderId,
+        disabled: f.id === currentFolderId, onSelect: () => move(f.id),
+        icon: f.id === currentFolderId ? <Check size={14} /> : <FolderIcon size={14} />,
+      })),
+      { type: 'separator' },
+      // Crear y mover en un gesto: quien abre este menú ya sabe dónde quiere
+      // el elemento, y obligarle a crear la carpeta arriba y volver aquí
+      // convertía una acción en tres.
+      { type: 'item', label: 'Nueva carpeta…', icon: <FolderPlus size={14} />, onSelect: () => setCreating(true) },
+    ],
+  }
 
-      {open && (
-        <>
-          <div
-            onClick={e => { e.stopPropagation(); setOpen(false) }}
-            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-          />
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              position: 'fixed', top: anchor.top, right: anchor.right, zIndex: 41,
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-              borderRadius: '8px', boxShadow: 'var(--shadow-md)',
-              minWidth: '210px', maxHeight: '280px', overflowY: 'auto',
-            }}
-          >
-            <div style={{
-              padding: '8px 12px', fontSize: '10px', textTransform: 'uppercase',
-              letterSpacing: '0.06em', color: 'var(--text-muted)',
-              borderBottom: '1px solid var(--border-subtle)',
-            }}>
-              Mover a
-            </div>
-
-            <button
-              onClick={() => move(null)}
-              disabled={pending || currentFolderId === null}
-              style={{
-                ...MENU_ITEM,
-                color: currentFolderId === null ? 'var(--text-muted)' : 'var(--text-secondary)',
-                cursor: currentFolderId === null ? 'default' : 'pointer',
-              }}
-            >
-              Sin carpeta
-            </button>
-
-            {folders.map(f => (
-              <button
-                key={f.id}
-                onClick={() => move(f.id)}
-                disabled={pending || f.id === currentFolderId}
-                style={{
-                  ...MENU_ITEM,
-                  color: f.id === currentFolderId ? 'var(--accent-gold)' : 'var(--text-secondary)',
-                  cursor: f.id === currentFolderId ? 'default' : 'pointer',
-                }}
-              >
-                <FolderIcon size={12} style={{ flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-              </button>
-            ))}
-
-            <button
-              onClick={() => setCreating(true)}
-              style={{ ...MENU_ITEM, borderTop: '1px solid var(--border-subtle)', color: 'var(--accent-gold)' }}
-            >
-              <FolderPlus size={12} /> Nueva carpeta…
-            </button>
-
-            {error && <div style={{ ...ERROR_BOX, margin: '8px' }}>{error}</div>}
-          </div>
-        </>
-      )}
-
-      {creating && (
-        <NameModal
-          title="Nueva carpeta"
-          initial=""
-          confirmLabel="Crear y mover"
-          // Crear y mover en un gesto: quien abre este menú ya sabe dónde quiere
-          // el elemento, y obligarle a crear la carpeta arriba y volver aquí
-          // convertía una acción en tres.
-          // Una sola Server Action: Next despacha las actions secuencialmente,
-          // así que crear y luego mover obligaba a esperar dos RSC completos.
-          onConfirm={name => createFolderAndMove(kind, itemId, name)}
-          onClose={() => { setCreating(false); setOpen(false) }}
-        />
-      )}
-    </div>
+  const modal = (
+    <ModalShell open={creating} onClose={() => setCreating(false)} maxWidth={420}>
+      <NameForm
+        title="Nueva carpeta"
+        initial=""
+        confirmLabel="Crear y mover"
+        // Una sola Server Action: Next despacha las actions secuencialmente,
+        // así que crear y luego mover obligaba a esperar dos RSC completos.
+        onConfirm={name => createFolderAndMove(kind, itemId, name)}
+        onClose={() => setCreating(false)}
+      />
+    </ModalShell>
   )
+
+  // `pending` deja a la fila atenuarse mientras la Server Action termina.
+  return { entry, modal, pending }
 }

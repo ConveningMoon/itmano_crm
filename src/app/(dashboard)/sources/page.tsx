@@ -3,7 +3,9 @@ import { getChannelsWithMetrics, getArchivedChannelsWithMetrics } from '@/lib/da
 import { getTenantRow } from '@/lib/data/tenants'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
-import { SourcesClient } from './sources-client'
+import { SourcesClient, SourcesActions } from './sources-client'
+import { PageHeader } from '@/components/ui/page-header'
+import { StatCard } from '@/components/ui/stat-card'
 import { getSourcesHealth } from '@/lib/data/source-health'
 import { listFolders } from '@/lib/data/folders'
 import { columns } from '@/lib/supabase/columns'
@@ -97,64 +99,29 @@ async function SourcesPage({
   const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
   const avgConversion  = totalViews > 0 ? Math.round((totalLeads / totalViews) * 100) : 0
 
-  const kpis = [
-    { label: 'Leads generados',   value: String(totalLeads),      icon: <Users size={18} />,      color: '#5B8EC9' },
-    { label: 'Vistas totales',    value: String(totalViews),      icon: <Eye size={18} />,        color: 'var(--accent-teal)' },
-    { label: 'Conversión global', value: `${avgConversion}%`,     icon: <TrendingUp size={18} />, color: 'var(--accent-green)' },
-    { label: 'Fuentes activas',   value: String(channels.filter(c => c.active).length), icon: <GitBranch size={18} />, color: 'var(--accent-gold)' },
-  ]
-
   return (
     <>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Fuentes de Adquisición
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Canales activos · últimos {validWindow} días
-          </p>
-        </div>
+      <PageHeader
+        title="Fuentes de adquisición"
+        description={`Canales activos · últimos ${validWindow} días`}
+        actions={
+          <SourcesActions
+            isSuperAdmin={needsTenantPicker}
+            tenants={tenants}
+            agents={agents}
+            myAgentId={scope.agentId}
+          />
+        }
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '28px' }}>
+        <StatCard label="Leads generados"   value={totalLeads}    icon={<Users size={16} />}      tone="var(--accent-blue)" />
+        <StatCard label="Vistas totales"    value={totalViews}    icon={<Eye size={16} />}        tone="var(--accent-teal)" />
+        <StatCard label="Conversión global" value={avgConversion} suffix="%" icon={<TrendingUp size={16} />} tone="var(--accent-green)" />
+        <StatCard label="Fuentes activas"   value={channels.filter(c => c.active).length} icon={<GitBranch size={16} />} tone="var(--accent-gold)" />
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
-        {kpis.map((kpi, i) => (
-          <div
-            key={i}
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '12px',
-              padding: '20px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                {kpi.label}
-              </span>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '8px',
-                background: 'rgba(201,169,110,0.08)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: kpi.color,
-              }}>
-                {kpi.icon}
-              </div>
-            </div>
-            <div style={{ fontSize: '28px', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1 }}>
-              {kpi.value}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Client: tabs + window selector + cards */}
+      {/* Client: tabs + window selector + rows */}
       <SourcesClient
         health={health}
         channels={channels}
@@ -162,7 +129,6 @@ async function SourcesPage({
         windowDays={validWindow}
         isSuperAdmin={needsTenantPicker}
         tenants={tenants}
-        agents={agents}
         myAgentId={scope.agentId}
         tenantPages={tenantPages}
         folders={folders}

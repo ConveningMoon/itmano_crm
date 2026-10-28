@@ -1,6 +1,7 @@
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SupportForm } from './support-form'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 // Soporte técnico dentro del CRM: cualquier usuario del tenant puede escribir a
 // ITMANO. La solicitud se registra en el CRM (platform_requests → /solicitudes
@@ -13,14 +14,7 @@ async function SoportePage() {
 
   return (
     <>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Soporte técnico
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          ¿Algo no funciona o tienes una duda? Escríbenos y te ayudamos.
-        </p>
-      </div>
+      <PageHeader title="Soporte técnico" description="¿Algo no funciona o tienes una duda? Escríbenos y te ayudamos." />
 
       <SupportForm userEmail={userEmail} />
 

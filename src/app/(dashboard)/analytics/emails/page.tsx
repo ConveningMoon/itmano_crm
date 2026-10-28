@@ -3,6 +3,7 @@ import { getGlobalEmailMetrics } from '@/lib/services/email-metrics'
 import Link from 'next/link'
 import { ArrowLeft, Send, MousePointer2, MessageCircle, AlertCircle, UserMinus, TrendingDown } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 const CARD: React.CSSProperties = {
   background:   'var(--bg-surface)',
@@ -80,14 +81,7 @@ async function EmailAnalyticsPage() {
       </div>
 
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Email Analytics
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          {isSuperAdmin ? 'Todos los tenants' : 'Tu tenant'} · basado en envíos reales via Resend
-        </p>
-      </div>
+      <PageHeader title="Email Analytics" description={<>{isSuperAdmin ? 'Todos los tenants' : 'Tu tenant'} · basado en envíos reales via Resend</>} />
 
       {/* Global KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3" style={{ marginBottom: '24px' }}>

@@ -5,6 +5,7 @@ import { listTemplates } from '@/lib/data/studio-templates'
 import { StudioTeaser } from './teaser'
 import { StudioTabs } from './studio-tabs'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 // La generación encadena Claude (dirección de escena) + Nano Banana (la escena)
 // + sharp (la composición) en una sola invocación. Los fetch a Gemini tienen su
@@ -37,17 +38,11 @@ async function StudioPage() {
 
   return (
     <>
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Estudio
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          Imágenes · fase de prueba, solo ITMANO
-        </p>
-        <a href="/studio/plantillas" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
-          Editar diseños
-        </a>
-      </div>
+      <PageHeader
+        title="Estudio"
+        description="Imágenes · fase de prueba, solo ITMANO"
+        actions={<a href="/studio/plantillas" className="btn btn-ghost">Editar diseños</a>}
+      />
       <StudioTabs
         images={images}
         properties={properties}

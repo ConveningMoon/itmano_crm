@@ -2,19 +2,23 @@
 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import Link from 'next/link'
-import { Plus, X, Trash2, AlertTriangle, ExternalLink, Eye, Users } from 'lucide-react'
+import { Plus, X, Trash2, AlertTriangle, ExternalLink, Eye, Users, Mail, UserRound, ChevronDown, Magnet, CalendarDays, FileText } from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
 import { groupByFolder, type Folder } from '@/lib/data/folders'
-import { FolderGroup, FolderPicker, NewFolderButton } from '@/components/dashboard/folders'
+import { FolderGroup, NewFolderButton, useFolderMenu } from '@/components/dashboard/folders'
 import { resolveChannelPageUrl, type TenantPageInfo } from '@/lib/sources/page-link'
 import { STATUS_COPY, MEASUREMENT_COPY, type SourceHealth } from '@/lib/sources/health'
+import { ModalShell } from '@/components/motion/modal-shell'
+import { ButtonMenu, RowMenu } from '@/components/ui/row-menu'
+import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui/data-table'
+import { RefreshingPill } from '@/components/ui/loading-indicator'
 
-const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', { fg: string; bg: string }> = {
-  ok:   { fg: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.12)' },
-  warn: { fg: 'var(--accent-gold)',   bg: 'rgba(201,169,110,0.14)' },
-  bad:  { fg: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.14)' },
-  mute: { fg: 'var(--text-muted)',    bg: 'var(--bg-overlay)' },
+// Color de cada semáforo de salud (token, no hex): lo consume .pill vía --tone.
+const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', string> = {
+  ok:   'var(--accent-green)',
+  warn: 'var(--accent-gold)',
+  bad:  'var(--accent-coral)',
+  mute: 'var(--text-muted)',
 }
 import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
 import { FormSection } from '@/components/ui/form-section'
@@ -62,54 +66,36 @@ const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
 
 // Aviso cuando la fuente todavía no tiene página. El camino para arreglarlo es
 // distinto según quién construye la página, así que el mensaje también.
-function NoPageModal({ channelName, managedByItmano, onClose }: {
+function NoPageModal({ open, channelName, managedByItmano, onClose }: {
+  open:            boolean
   channelName:     string
   managedByItmano: boolean
   onClose:         () => void
 }) {
+  const strong = { color: 'var(--text-primary)', fontWeight: 500 } as const
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.55)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-          borderRadius: '16px', width: '100%', maxWidth: '440px',
-        }}
-      >
-        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={16} style={{ color: 'var(--accent-gold)' }} />
-            Página sin configurar
-          </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-            <X size={18} />
-          </button>
+    <ModalShell open={open} onClose={onClose} maxWidth={440}>
+      <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertTriangle size={16} style={{ color: 'var(--accent-gold)' }} />
+          Página sin configurar
         </div>
-
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <strong style={{ color: 'var(--text-primary)' }}>{channelName}</strong> todavía no tiene una página que abrir.
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            {managedByItmano
-              ? <>La página de esta fuente la conecta ITMANO, pero su link aún no está registrado. Abre la
-                  fuente, pulsa <strong style={{ color: 'var(--text-primary)' }}>Editar</strong> y pega el
-                  link en <strong style={{ color: 'var(--text-primary)' }}>Link de la página</strong>.</>
-              : <>Abre la fuente, entra a la sección <strong style={{ color: 'var(--text-primary)' }}>Página</strong> y
-                  configúrala. Cuando la publiques, este botón la abrirá directamente.</>}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={onClose} style={BTN_PRIMARY}>Entendido</button>
-          </div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          <strong style={strong}>{channelName}</strong> todavía no tiene una página que abrir.
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          {managedByItmano
+            ? <>La página de esta fuente la conecta ITMANO, pero su link aún no está registrado. Abre la
+                fuente, pulsa <strong style={strong}>Editar</strong> y pega el
+                link en <strong style={strong}>Link de la página</strong>.</>
+            : <>Abre la fuente, entra a la sección <strong style={strong}>Página</strong> y
+                configúrala. Cuando la publiques, esta opción la abrirá directamente.</>}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} className="btn btn-primary">Entendido</button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -120,54 +106,25 @@ function NoPageModal({ channelName, managedByItmano, onClose }: {
 // que deberían estar en la misma columna, y una fuente ocupaba lo que ahora
 // ocupan seis. La fila es la misma información con la lectura de /emails.
 //
-// Una sola definición de columnas para la cabecera y las filas: si divergen, la
-// tabla se desalinea sin que nada falle.
-const GRID_COLUMNS   = '2fr 92px 176px 72px 88px 72px 92px 132px'
-const GRID_MIN_WIDTH = '1080px'
+// Una sola definición de columnas para la cabecera y las filas (DataScope): si
+// divergen, la tabla se desalinea sin que nada falle. Las acciones viven en un
+// menú ⋯; la acción principal es el clic en la fila.
+const COLS    = 'minmax(0, 2.6fr) minmax(0, 1.5fr) 72px 96px 72px 96px 44px'
+const COLS_MD = 'minmax(0, 2.4fr) minmax(0, 1.4fr) 72px 96px 96px 44px'
+const COLS_SM = 'minmax(0, 1fr) 80px 44px'
 
-const HEADERS = ['Fuente', 'Estado', 'Salud', 'Envíos', 'Leads nuevos', 'Vistas', 'Conversión', 'Acciones']
+const COLUMNS: DataColumn[] = [
+  { label: 'Fuente' },
+  { label: 'Salud', hideSm: true },
+  { label: 'Envíos', right: true, hideSm: true },
+  { label: 'Leads nuevos', right: true },
+  { label: 'Vistas', right: true, hideMd: true, hideSm: true },
+  { label: 'Conversión', right: true, hideSm: true },
+  { label: '' },
+]
 
-function TableHeader({ labels, gridColumns }: { labels: string[]; gridColumns: string }) {
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: gridColumns,
-      padding: '10px 20px',
-      background: 'var(--bg-elevated)',
-      border: '1px solid var(--border-subtle)',
-      borderRadius: '10px',
-      marginBottom: '10px',
-      gap: '10px',
-    }}>
-      {labels.map(h => (
-        <span key={h} style={{ fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          {h}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-/** Contenedor de un bloque de filas (una carpeta, o el grupo sin carpeta). */
-function RowGroup({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      background: 'var(--bg-surface)',
-      border: '1px solid var(--border-subtle)',
-      borderRadius: '10px',
-      overflow: 'hidden',
-    }}>
-      {children}
-    </div>
-  )
-}
-
-const CELL_NUM: React.CSSProperties = { fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }
-
-function ChannelRow({ ch, first, health, tenant, folders, folderId }: {
+function ChannelRow({ ch, health, tenant, folders, folderId }: {
   ch:       ChannelWithMetrics
-  /** La primera fila del bloque no lleva separador superior. */
-  first:    boolean
   health?:  SourceHealth
   tenant?:  TenantPageInfo
   folders:  Folder[]
@@ -179,105 +136,50 @@ function ChannelRow({ ch, first, health, tenant, folders, folderId }: {
   const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
   const pageUrl   = resolveChannelPageUrl(ch, tenant)
-
-  // Atajo para no tener que entrar a la fuente y bajar al tab Página cada vez.
-  function openPage(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (!pageUrl) { setNoPage(true); return }
-    window.open(pageUrl, '_blank', 'noopener,noreferrer')
-  }
+  const folderMenu = useFolderMenu('source', ch.id, folders, folderId)
 
   return (
     <div
-      className="source-row"
+      className="dt-grid dt-row"
+      data-clickable
       role="link"
       tabIndex={0}
+      aria-busy={folderMenu.pending || undefined}
       onClick={() => navigate(`/sources/${ch.slug}`)}
-      onKeyDown={e => { if (e.key === 'Enter') navigate(`/sources/${ch.slug}`) }}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: GRID_COLUMNS,
-        gap: '10px',
-        alignItems: 'center',
-        padding: '12px 20px',
-        borderTop: first ? undefined : '1px solid var(--border-subtle)',
-        cursor: 'pointer',
-      }}
+      // Sólo Enter sobre la fila misma: sobre el botón ⋯ hijo debe abrir el menú.
+      onKeyDown={e => { if (e.key === 'Enter' && e.target === e.currentTarget) navigate(`/sources/${ch.slug}`) }}
+      style={folderMenu.pending ? { opacity: 0.6 } : undefined}
     >
       <NavLoadingOverlay show={navPending} />
-      {noPage && (
-        <NoPageModal
-          channelName={ch.name}
-          managedByItmano={tenant?.managedByItmano === true}
-          onClose={() => setNoPage(false)}
-        />
-      )}
 
       {/* Fuente: tipo, nombre, public id, agente y si tiene secuencia */}
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{
-            fontSize: '9px', fontWeight: 500, color: typeColor, background: `${typeColor}18`,
-            padding: '2px 7px', borderRadius: '10px', letterSpacing: '0.06em',
-            textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            {typeLabel}
-          </span>
-          <span style={{
-            fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {ch.name}
-          </span>
+      <div className="dt-cell-main">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <span className="pill" style={{ '--tone': typeColor } as React.CSSProperties}>{typeLabel}</span>
+          <span className="dt-title">{ch.name}</span>
+          {!ch.active && <span className="pill" data-tone="mute">Inactivo</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace', letterSpacing: '0.02em' }}>
-            {ch.publicId}
-          </span>
-          <span style={{
-            fontSize: '10px', padding: '1px 7px', borderRadius: '4px',
-            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-          }}>
-            {ch.agentName ?? 'Toda la agencia'}
-          </span>
+        <div className="dt-meta">
+          <span style={{ fontFamily: 'var(--font-mono, monospace)', letterSpacing: '0.02em' }}>{ch.publicId}</span>
+          <span title="Agente responsable"><UserRound size={12} />{ch.agentName ?? 'Toda la agencia'}</span>
           {ch.emailSequenceId && (
-            <span title="Secuencia de emails activa" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--accent-teal)' }}>
-              <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent-teal)' }} />
-              Secuencia
+            <span title="Secuencia de emails activa" style={{ color: 'var(--accent-teal)' }}>
+              <Mail size={12} />Secuencia
             </span>
           )}
         </div>
       </div>
-
-      {/* Estado */}
-      <span style={{
-        fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-        letterSpacing: '0.06em', textTransform: 'uppercase', width: 'fit-content',
-        color: ch.active ? 'var(--accent-green)' : 'var(--text-muted)',
-        background: ch.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
-      }}>
-        {ch.active ? 'Activo' : 'Inactivo'}
-      </span>
 
       {/* Dos semáforos, dos problemas distintos: el del FORMULARIO (qué tan
           bien califica lo que pregunta) y el de la FUENTE (si está reportando
           lo que hace falta para medirla). Se arreglan en sitios distintos —
           uno cambiando preguntas, el otro pegando un script — así que
           juntarlos escondía uno detrás del otro. */}
-      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+      <div className="dt-hide-sm" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
         {health && health.status !== 'sin_envios'
           ? [STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
-              <span key={i} title={`${b.label} — ${b.what}
-
-${b.why}`} style={{
-                cursor: 'help',
-                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                fontSize: '9px', fontWeight: 500, padding: '2px 7px', borderRadius: '10px',
-                letterSpacing: '0.05em', textTransform: 'uppercase',
-                color: HEALTH_TONE[b.tone].fg,
-                background: HEALTH_TONE[b.tone].bg,
-              }}>
-                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }} />
+              <span key={i} className="pill pill-dot" title={`${b.label} — ${b.what}\n\n${b.why}`}
+                style={{ '--tone': HEALTH_TONE[b.tone], cursor: 'help' } as React.CSSProperties}>
                 {b.label}
               </span>
             ))
@@ -286,75 +188,44 @@ ${b.why}`} style={{
 
       {/* Envíos y leads son cosas distintas: quien ya era lead y vuelve a llenar
           un formulario suma envío pero no adquisición. */}
-      <span style={CELL_NUM}>{ch.metrics.submissionsInWindow}</span>
+      <span className="dt-num dt-hide-sm dt-r">{ch.metrics.submissionsInWindow}</span>
 
-      <span style={CELL_NUM}>
+      <span className="dt-num dt-r" style={{ textAlign: 'right' }}>
         {ch.metrics.leadsInWindow}
-        <span style={{ display: 'block', fontSize: '10px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
-          {ch.metrics.leadsTotal} en total
-        </span>
+        <span className="dt-sub">{ch.metrics.leadsTotal} en total</span>
       </span>
 
       {/* Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió. */}
-      <span style={CELL_NUM}>{ch.metrics.pageViewsInWindow || '—'}</span>
-      <span style={{ ...CELL_NUM, color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+      <span className="dt-num dt-hide-md dt-hide-sm dt-r">{ch.metrics.pageViewsInWindow || '—'}</span>
+      <span className="dt-num dt-hide-sm dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
         {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
       </span>
 
-      {/* Acciones — no navegan a la fila: cada una para su propio clic */}
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
-      >
-        <FolderPicker
-          kind="source"
-          itemId={ch.id}
-          folders={folders}
-          currentFolderId={folderId}
-          label={ch.name}
+      {/* El menú y sus modales no navegan a la fila: cada clic es para sí mismo.
+          Los modales cuelgan de aquí (no de la fila) porque React propaga los
+          clics por el árbol, y el del overlay llegaría al onClick de la fila. */}
+      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <NoPageModal
+          open={noPage}
+          channelName={ch.name}
+          managedByItmano={tenant?.managedByItmano === true}
+          onClose={() => setNoPage(false)}
         />
-        <button
-          onClick={openPage}
-          className="row-icon-btn"
-          title={pageUrl ? `Abrir la página · ${pageUrl}` : 'La página aún no está configurada'}
-          aria-label={pageUrl ? `Abrir la página de ${ch.name}` : `${ch.name} no tiene página configurada`}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '28px', height: '28px', borderRadius: '6px',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            color: pageUrl ? 'var(--accent-gold)' : 'var(--text-muted)', cursor: 'pointer',
-          }}
-        >
-          <ExternalLink size={13} />
-        </button>
-        {/* El parámetro es `channelId`: con `channel` la lista lo ignoraba y el
-            enlace abría /leads sin filtrar, sin ninguna señal de que fallara. */}
-        <Link
-          href={`/leads?channelId=${ch.id}`}
-          className="row-icon-btn"
-          title="Ver leads de esta fuente"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '28px', height: '28px', borderRadius: '6px',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            color: 'var(--text-secondary)', textDecoration: 'none',
-          }}
-        >
-          <Users size={13} />
-        </Link>
-        <button
-          onClick={() => navigate(`/sources/${ch.slug}`)}
-          className="row-icon-btn"
-          title="Abrir detalle"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '28px', height: '28px', borderRadius: '6px',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            color: 'var(--text-secondary)', cursor: 'pointer',
-          }}
-        >
-          <Eye size={13} />
-        </button>
+        {folderMenu.modal}
+        <RowMenu
+          label={ch.name}
+          entries={[
+            { type: 'item', label: 'Abrir detalle', icon: <Eye size={14} />, onSelect: () => navigate(`/sources/${ch.slug}`) },
+            // El parámetro es `channelId`: con `channel` la lista lo ignoraba y el
+            // enlace abría /leads sin filtrar, sin ninguna señal de que fallara.
+            { type: 'item', label: 'Ver leads', icon: <Users size={14} />, href: `/leads?channelId=${ch.id}` },
+            pageUrl
+              ? { type: 'item', label: 'Abrir página', icon: <ExternalLink size={14} />, href: pageUrl, external: true }
+              : { type: 'item', label: 'Abrir página', icon: <ExternalLink size={14} />, onSelect: () => setNoPage(true) },
+            { type: 'separator' },
+            folderMenu.entry,
+          ]}
+        />
       </div>
     </div>
   )
@@ -906,12 +777,19 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
 
 // ─── Fila de fuente archivada ────────────────────────────────────────────────
 
-const ARCHIVED_GRID    = '2fr 110px 160px 120px 132px'
-const ARCHIVED_HEADERS = ['Fuente', 'Estado', 'Archivado', 'Leads', 'Acciones']
+const ARCHIVED_COLS    = 'minmax(0, 2.6fr) 110px 140px 110px 44px'
+const ARCHIVED_COLS_SM = 'minmax(0, 1fr) 110px 44px'
 
-function ArchivedChannelRow({ ch, first, isSuperAdmin, tenantName, canDelete }: {
+const ARCHIVED_COLUMNS: DataColumn[] = [
+  { label: 'Fuente' },
+  { label: 'Estado' },
+  { label: 'Archivado', hideSm: true },
+  { label: 'Leads', right: true, hideSm: true },
+  { label: '' },
+]
+
+function ArchivedChannelRow({ ch, isSuperAdmin, tenantName, canDelete }: {
   ch:           ChannelWithMetrics
-  first:        boolean
   isSuperAdmin: boolean
   tenantName?:  string
   /**
@@ -930,87 +808,85 @@ function ArchivedChannelRow({ ch, first, isSuperAdmin, tenantName, canDelete }: 
     : '—'
 
   return (
-    <div
-      className="source-row"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: ARCHIVED_GRID,
-        gap: '10px',
-        alignItems: 'center',
-        padding: '12px 20px',
-        borderTop: first ? undefined : '1px solid var(--border-subtle)',
-        opacity: 0.92,
-      }}
-    >
-      {showDelete && (
-        <DeleteChannelModal
-          channel={ch}
-          onClose={() => setShowDelete(false)}
-          onDeleted={() => { setShowDelete(false); router.refresh() }}
-        />
-      )}
-
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{
-            fontSize: '9px', fontWeight: 500, color: typeColor, background: `${typeColor}18`,
-            padding: '2px 7px', borderRadius: '10px', letterSpacing: '0.06em',
-            textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            {typeLabel}
-          </span>
-          <span style={{
-            fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {ch.name}
-          </span>
-          {isSuperAdmin && tenantName && (
-            <span style={{ fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '4px', background: 'var(--bg-overlay)', color: 'var(--text-secondary)' }}>
-              {tenantName}
-            </span>
-          )}
+    <div className="dt-grid dt-row">
+      <div className="dt-cell-main">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          <span className="pill" style={{ '--tone': typeColor } as React.CSSProperties}>{typeLabel}</span>
+          <span className="dt-title">{ch.name}</span>
+          {isSuperAdmin && tenantName && <span className="pill" data-tone="gold">{tenantName}</span>}
         </div>
-        <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace', letterSpacing: '0.02em', marginTop: '3px' }}>
-          {ch.publicId}
+        <div className="dt-meta">
+          <span style={{ fontFamily: 'var(--font-mono, monospace)', letterSpacing: '0.02em' }}>{ch.publicId}</span>
         </div>
       </div>
 
-      <span style={{
-        fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', background: 'var(--bg-elevated)',
-        padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
-        width: 'fit-content',
-      }}>
-        Archivado
-      </span>
+      <span className="pill" data-tone="mute" style={{ justifySelf: 'start' }}>Archivado</span>
 
-      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{archivedStr}</span>
+      <span className="dt-hide-sm" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{archivedStr}</span>
 
-      <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+      <span className="dt-num dt-hide-sm dt-r" style={{ textAlign: 'right' }}>
         {ch.metrics.leadsTotal}
-        <span style={{ display: 'block', fontSize: '10px', fontWeight: 400, color: 'var(--text-muted)', marginTop: '1px' }}>
-          atribuido{ch.metrics.leadsTotal === 1 ? '' : 's'}
-        </span>
+        <span className="dt-sub">atribuido{ch.metrics.leadsTotal === 1 ? '' : 's'}</span>
       </span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         {canDelete && (
-          <button
-            onClick={() => setShowDelete(true)}
-            className="row-icon-btn"
-            title="Eliminar definitivamente"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '28px', height: '28px', borderRadius: '6px',
-              background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
-              color: 'var(--accent-coral)', cursor: 'pointer',
-            }}
-          >
-            <Trash2 size={13} />
-          </button>
+          <RowMenu
+            label={ch.name}
+            entries={[
+              { type: 'item', label: 'Eliminar definitivamente', icon: <Trash2 size={14} />, tone: 'danger', onSelect: () => setShowDelete(true) },
+            ]}
+          />
+        )}
+        {showDelete && (
+          <DeleteChannelModal
+            channel={ch}
+            onClose={() => setShowDelete(false)}
+            onDeleted={() => { setShowDelete(false); router.refresh() }}
+          />
         )}
       </div>
     </div>
+  )
+}
+
+// ─── Acciones de la página (crear fuente / carpeta) ──────────────────────────
+
+interface CreateProps {
+  isSuperAdmin: boolean
+  tenants:      Array<{ id: string; name: string }>
+  agents:       AgentOption[]
+  /** Ver `Props.myAgentId`. */
+  myAgentId:    string | null
+}
+
+// Va en el encabezado de la página (PageHeader). Antes eran cuatro botones sueltos
+// sobre la lista; ahora son «Nueva carpeta» y un único menú «Nueva fuente».
+export function SourcesActions({ isSuperAdmin, tenants, agents, myAgentId }: CreateProps) {
+  const router = useRouter()
+  const [openModal, setOpenModal] = useState<'lead_magnet' | 'event' | 'contact_form' | null>(null)
+
+  const modalProps = {
+    onClose: () => { setOpenModal(null); router.refresh() },
+    isSuperAdmin, tenants, agents, myAgentId,
+  }
+
+  return (
+    <>
+      {openModal === 'lead_magnet'  && <LeadMagnetModal  {...modalProps} />}
+      {openModal === 'event'        && <EventModal       {...modalProps} />}
+      {openModal === 'contact_form' && <ContactFormModal {...modalProps} />}
+
+      <NewFolderButton kind="source" />
+      <ButtonMenu
+        trigger={<><Plus size={14} />Nueva fuente<ChevronDown size={14} /></>}
+        entries={[
+          { type: 'item', label: 'Lead magnet', icon: <Magnet size={14} />,       onSelect: () => setOpenModal('lead_magnet') },
+          { type: 'item', label: 'Evento',      icon: <CalendarDays size={14} />, onSelect: () => setOpenModal('event') },
+          { type: 'item', label: 'Formulario',  icon: <FileText size={14} />,     onSelect: () => setOpenModal('contact_form') },
+        ]}
+      />
+    </>
   )
 }
 
@@ -1024,7 +900,6 @@ interface Props {
   windowDays:       number
   isSuperAdmin:     boolean
   tenants:          Array<{ id: string; name: string }>
-  agents:           AgentOption[]
   /**
    * agents.id del que mira, sólo para el rol 'agent'. Cuando llega, las fuentes
    * que cree son suyas: el selector de agente queda fijo y sin "Toda la agencia".
@@ -1036,16 +911,18 @@ interface Props {
   folders:          Folder[]
 }
 
-export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, agents, myAgentId, tenantPages, folders }: Props) {
+export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, myAgentId, tenantPages, folders }: Props) {
   const router      = useRouter()
   const searchParams = useSearchParams()
-  const [activeTab,    setActiveTab]    = useState<TabValue>('all')
-  const [openModal,    setOpenModal]    = useState<'lead_magnet' | 'event' | 'contact_form' | null>(null)
+  const [activeTab, setActiveTab] = useState<TabValue>('all')
+  // La ventana cambia la URL y vuelve a consultar la base: la transición deja
+  // el contenido anterior en pantalla y muestra «Actualizando…» hasta que llega.
+  const [windowPending, startWindow] = useTransition()
 
   function setWindow(days: number) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('window', String(days))
-    router.push(`/sources?${params.toString()}`)
+    startWindow(() => router.push(`/sources?${params.toString()}`))
   }
 
   const isArchivedTab = activeTab === 'archived'
@@ -1066,12 +943,17 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
   const folderOf = new Map<string, string>()
   for (const f of folders) for (const id of f.itemIds) folderOf.set(id, f.id)
 
-  function renderRow(ch: ChannelWithMetrics, i: number) {
+  function countOf(tab: TabValue) {
+    if (tab === 'archived') return archivedChannels.length
+    if (tab === 'all') return channels.length
+    return channels.filter(c => c.channelType === tab).length
+  }
+
+  function renderRow(ch: ChannelWithMetrics) {
     return (
       <ChannelRow
         key={ch.id}
         ch={ch}
-        first={i === 0}
         health={health[ch.id]}
         tenant={tenantPages[ch.tenantId]}
         folders={folders}
@@ -1080,91 +962,39 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
     )
   }
 
+  const empty = (
+    <div style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+      {isArchivedTab ? 'No hay fuentes archivadas.' : 'No hay fuentes en esta categoría.'}
+    </div>
+  )
+
   return (
-    <div>
-      <style>{`
-        .detail-link:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
-        .row-icon-btn:hover { border-color: var(--accent-gold) !important; color: var(--accent-gold) !important; }
-        .source-row { background: var(--bg-surface); transition: background 0.1s; }
-        .source-row:hover { background: var(--bg-elevated); }
-      `}</style>
-      {openModal === 'lead_magnet'  && <LeadMagnetModal  onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
-      {openModal === 'event'        && <EventModal       onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
-      {openModal === 'contact_form' && <ContactFormModal onClose={() => { setOpenModal(null); router.refresh() }} isSuperAdmin={isSuperAdmin} tenants={tenants} agents={agents} myAgentId={myAgentId} />}
+    <div style={{ position: 'relative' }}>
+      <RefreshingPill show={windowPending} />
 
-      {/* Create buttons */}
-      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <NewFolderButton kind="source" />
-        <button
-          onClick={() => setOpenModal('contact_form')}
-          style={{ ...BTN_GHOST, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-        >
-          <Plus size={13} />
-          Crear Formulario
-        </button>
-        <button
-          onClick={() => setOpenModal('event')}
-          style={{ ...BTN_GHOST, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-        >
-          <Plus size={13} />
-          Agregar Evento
-        </button>
-        <button
-          onClick={() => setOpenModal('lead_magnet')}
-          style={{
-            padding: '8px 14px', fontSize: '12px', fontWeight: 500,
-            color: 'var(--bg-base)', background: 'var(--accent-gold)',
-            border: 'none', borderRadius: '8px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}
-        >
-          <Plus size={13} />
-          Agregar Lead Magnet
-        </button>
-      </div>
-
-      {/* Window selector + tab row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border-subtle)', flex: 1 }}>
+      {/* Tipo de fuente (izquierda) y ventana de tiempo (derecha) */}
+      <div className="toolbar" style={{ borderBottom: '1px solid var(--border-subtle)', marginBottom: '20px' }}>
+        <div className="filter-tabs" role="tablist">
           {TAB_FILTERS.map(t => (
             <button
               key={t.value}
+              role="tab"
+              aria-selected={activeTab === t.value}
               onClick={() => setActiveTab(t.value)}
-              style={{
-                padding: '8px 14px',
-                fontSize: '13px',
-                fontWeight: activeTab === t.value ? 500 : 400,
-                color: activeTab === t.value ? 'var(--accent-gold)' : 'var(--text-muted)',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: activeTab === t.value ? '2px solid var(--accent-gold)' : '2px solid transparent',
-                cursor: 'pointer',
-                marginBottom: '-1px',
-                whiteSpace: 'nowrap',
-              }}
+              className="filter-tab"
             >
               {t.label}
+              <span className="filter-tab-count">{countOf(t.value)}</span>
             </button>
           ))}
         </div>
 
-        {/* Window pills */}
-        <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-elevated)', borderRadius: '8px', padding: '3px', border: '1px solid var(--border-subtle)' }}>
+        <div className="segmented" style={{ marginBottom: '8px' }} role="group" aria-label="Ventana de tiempo">
           {WINDOWS.map(w => (
             <button
               key={w.value}
               onClick={() => setWindow(w.value)}
-              style={{
-                padding: '5px 12px',
-                fontSize: '12px',
-                fontWeight: windowDays === w.value ? 500 : 400,
-                color: windowDays === w.value ? 'var(--text-primary)' : 'var(--text-muted)',
-                background: windowDays === w.value ? 'var(--bg-surface)' : 'transparent',
-                border: windowDays === w.value ? '1px solid var(--border-subtle)' : '1px solid transparent',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
+              aria-pressed={windowDays === w.value}
             >
               {w.label}
             </button>
@@ -1172,61 +1002,44 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
         </div>
       </div>
 
-      {/* Filas. La tabla no se aplasta en pantallas estrechas: se desplaza. */}
-      {display.length === 0 && (isArchivedTab || !foldersView || folders.length === 0) ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: '14px' }}>
-          {isArchivedTab ? 'No hay fuentes archivadas.' : 'No hay fuentes en esta categoría.'}
-        </div>
+      {/* Filas. La tabla no se aplasta en pantallas estrechas: oculta columnas. */}
+      {display.length === 0 && (isArchivedTab || !foldersView || folders.length === 0) ? empty : isArchivedTab ? (
+        <DataScope cols={ARCHIVED_COLS} colsMd={ARCHIVED_COLS} colsSm={ARCHIVED_COLS_SM}>
+          <DataHead columns={ARCHIVED_COLUMNS} />
+          <DataBlock>
+            {display.map(ch => (
+              <ArchivedChannelRow
+                key={ch.id}
+                ch={ch}
+                isSuperAdmin={isSuperAdmin}
+                tenantName={tenantName(ch.tenantId)}
+                canDelete={myAgentId === null}
+              />
+            ))}
+          </DataBlock>
+        </DataScope>
       ) : (
-        <div className="overflow-x-auto">
-          <div style={{ minWidth: isArchivedTab ? '880px' : GRID_MIN_WIDTH }}>
-            <TableHeader
-              labels={isArchivedTab ? ARCHIVED_HEADERS : HEADERS}
-              gridColumns={isArchivedTab ? ARCHIVED_GRID : GRID_COLUMNS}
-            />
+        <DataScope cols={COLS} colsMd={COLS_MD} colsSm={COLS_SM}>
+          <DataHead columns={COLUMNS} />
 
-            {isArchivedTab ? (
-              <RowGroup>
-                {display.map((ch, i) => (
-                  <ArchivedChannelRow
-                    key={ch.id}
-                    ch={ch}
-                    first={i === 0}
-                    isSuperAdmin={isSuperAdmin}
-                    tenantName={tenantName(ch.tenantId)}
-                    canDelete={myAgentId === null}
-                  />
-                ))}
-              </RowGroup>
-            ) : foldersView ? (
-              <>
-                {grouped.folders.map(f => (
-                  <FolderGroup key={f.id} folder={f} count={f.items.length}>
-                    {f.items.map(renderRow)}
-                  </FolderGroup>
-                ))}
+          {foldersView ? (
+            <>
+              {grouped.folders.map(f => (
+                <FolderGroup key={f.id} folder={f} count={f.items.length}>
+                  <DataBlock>{f.items.map(renderRow)}</DataBlock>
+                </FolderGroup>
+              ))}
 
-                {folders.length > 0 && grouped.loose.length > 0 && (
-                  <div style={{
-                    fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)',
-                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                    margin: '18px 0 8px 2px',
-                  }}>
-                    Sin carpeta
-                  </div>
-                )}
-                {grouped.loose.length > 0 && <RowGroup>{grouped.loose.map(renderRow)}</RowGroup>}
-                {grouped.loose.length === 0 && folders.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: '14px' }}>
-                    No hay fuentes en esta categoría.
-                  </div>
-                )}
-              </>
-            ) : (
-              <RowGroup>{display.map(renderRow)}</RowGroup>
-            )}
-          </div>
-        </div>
+              {folders.length > 0 && grouped.loose.length > 0 && (
+                <div className="menu-label" style={{ padding: '14px 2px 8px' }}>Sin carpeta</div>
+              )}
+              {grouped.loose.length > 0 && <DataBlock>{grouped.loose.map(renderRow)}</DataBlock>}
+              {grouped.loose.length === 0 && folders.length === 0 && empty}
+            </>
+          ) : (
+            <DataBlock>{display.map(renderRow)}</DataBlock>
+          )}
+        </DataScope>
       )}
     </div>
   )
