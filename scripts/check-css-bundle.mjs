@@ -25,14 +25,18 @@ import path from 'node:path'
 const RAIZ   = path.resolve(import.meta.dirname, '..')
 const FUENTE = path.join(RAIZ, 'src', 'app', 'dashboard-ui.css')
 
-// Dónde deja Next los estáticos depende de quién lo construya. En local y en
-// `next start` viven en `.next/static`; en Vercel, el adaptador (`onBuildComplete`,
-// al final de `next build`) los reubica y `.next/static` ya no existe cuando
-// corre este script — la primera versión sólo miraba ahí y rompió el build de
-// Vercel con "No hay build". Se buscan todos los sitios conocidos, recursivo, y
-// se junta lo que haya: el nombre de la subcarpeta no importa, sólo los .css.
+// La subcarpeta de los CSS depende de quién construya. En local salen en
+// `.next/static/chunks`; en Vercel, el adaptador activa los estáticos inmutables
+// (Next 16.3, `supportsImmutableAssets`) y salen en `.next/static/immutable/chunks`
+// — de ahí las URLs `/_next/static/immutable/…` de producción. La primera versión
+// miraba sólo `.next/static/chunks` y rompió el build de Vercel con "No hay
+// build". Por eso se busca recursivo desde la raíz de estáticos y no se fija el
+// nombre de la subcarpeta: sólo importan los .css. `.next/output/static` es la
+// copia que escribe el adaptador de Vercel; se incluye por si algún día deja de
+// existir la original.
 const RAICES = [
   path.join(RAIZ, '.next', 'static'),
+  path.join(RAIZ, '.next', 'output', 'static'),
   path.join(RAIZ, '.vercel', 'output', 'static'),
 ]
 
