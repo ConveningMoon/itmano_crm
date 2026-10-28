@@ -1,5 +1,6 @@
 import 'server-only'
 import sharp from 'sharp'
+import { MAX_FILE_BYTES_PER_REQUEST, MAX_IMAGE_DIMENSION } from '@/lib/uploads/limits'
 
 // Shared by the property-media upload Route Handler (src/app/api/properties/media/route.ts)
 // and the property Server Actions (properties/actions.ts) that reconcile/delete Storage
@@ -8,7 +9,9 @@ import sharp from 'sharp'
 // was found to corrupt multipart/form-data bodies carrying binary File content. Route
 // Handlers under /api are excluded from the proxy matcher and self-guard via
 // getCurrentTenantContext, so they receive the raw request body untouched.
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
+// El techo real es el del cuerpo de una función en Vercel (4.5 MB), no 10 MB: lo
+// que lo supere ni llega a este handler. Ver src/lib/uploads/limits.ts.
+export const MAX_UPLOAD_BYTES = MAX_FILE_BYTES_PER_REQUEST
 
 export const IMAGE_MIME_PREFIX = 'image/'
 // Browsers report inconsistent (or blank) MIME types for some of these — e.g.
@@ -35,7 +38,8 @@ export const MEDIA_BUCKET = 'property-media'
 // cubre una pantalla retina a ancho completo con margen. `withoutEnlargement`
 // deja intactas las que ya son más chicas, y `fit: 'inside'` conserva la
 // proporción sin recortar: la foto que sube el agente es la que se ve.
-export const MAX_IMAGE_DIMENSION = 2560
+// `MAX_IMAGE_DIMENSION` (2560) vive en src/lib/uploads/limits.ts: el navegador
+// aplica el mismo recorte antes de enviar las fotos que no caben en la petición.
 
 export async function convertImageToWebp(bytes: Buffer): Promise<Buffer> {
   return sharp(bytes, { animated: true })

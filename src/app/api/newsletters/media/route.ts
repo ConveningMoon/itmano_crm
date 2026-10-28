@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { columns } from '@/lib/supabase/columns'
+import { MAX_FILE_BYTES_PER_REQUEST } from '@/lib/uploads/limits'
+import { mensajeArchivoGrande } from '@/lib/uploads/media-upload'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 // Sube una imagen (portada de edición o bloque de imagen) al bucket público
@@ -23,8 +25,11 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 // que hace guard() en actions.ts, repetida aquí porque este endpoint HTTP no
 // pasa por esa función.
 
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024
-const ALLOWED_MEDIA   = ['image/png', 'image/jpeg', 'image/webp']
+// El techo es el del cuerpo de una función en Vercel (4.5 MB), no 8 MB: lo que
+// lo supere ni llega aquí. El navegador reduce las fotos pesadas antes de
+// enviar (src/lib/uploads/prepare-image.ts).
+const MAX_MEDIA_BYTES = MAX_FILE_BYTES_PER_REQUEST
+const ALLOWED_MEDIA  = ['image/png', 'image/jpeg', 'image/webp']
 const EXT_BY_TYPE: Record<string, string> = {
   'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg',
 }
@@ -53,7 +58,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: 'No llegó ningún archivo.' }, { status: 400 })
   }
   if (file.size > MAX_MEDIA_BYTES) {
-    return NextResponse.json({ ok: false, error: 'La imagen supera los 8 MB.' }, { status: 400 })
+    return NextResponse.json({ ok: false, error: mensajeArchivoGrande(file.size) }, { status: 400 })
   }
   if (!ALLOWED_MEDIA.includes(file.type)) {
     return NextResponse.json({ ok: false, error: 'Formato no admitido. Usa PNG, JPG o WebP.' }, { status: 400 })
