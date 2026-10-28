@@ -15,7 +15,7 @@
 // al final de `npm run build`, así que rompe también el build de Vercel, y un
 // deploy fallido deja la versión anterior sirviendo.
 //
-// Mira el RESULTADO (los .css de .next/static/chunks) y no la configuración.
+// Mira el RESULTADO (los .css emitidos) y no la configuración.
 // Sólo comprueba clases: son lo que el markup referencia por nombre, y lo que
 // desaparece entero cuando el archivo no se compila.
 
@@ -24,10 +24,48 @@ import path from 'node:path'
 
 const RAIZ   = path.resolve(import.meta.dirname, '..')
 const FUENTE = path.join(RAIZ, 'src', 'app', 'dashboard-ui.css')
-const CHUNKS = path.join(RAIZ, '.next', 'static', 'chunks')
 
-if (!existsSync(CHUNKS)) {
-  console.error('[css-bundle] No hay build en .next/. Corre `npm run build` primero.')
+// Dónde deja Next los estáticos depende de quién lo construya. En local y en
+// `next start` viven en `.next/static`; en Vercel, el adaptador (`onBuildComplete`,
+// al final de `next build`) los reubica y `.next/static` ya no existe cuando
+// corre este script — la primera versión sólo miraba ahí y rompió el build de
+// Vercel con "No hay build". Se buscan todos los sitios conocidos, recursivo, y
+// se junta lo que haya: el nombre de la subcarpeta no importa, sólo los .css.
+const RAICES = [
+  path.join(RAIZ, '.next', 'static'),
+  path.join(RAIZ, '.vercel', 'output', 'static'),
+]
+
+/** Todos los .css bajo `dir`. */
+function cssBajo(dir) {
+  const salida = []
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const completo = path.join(dir, e.name)
+    if (e.isDirectory()) salida.push(...cssBajo(completo))
+    else if (e.name.endsWith('.css')) salida.push(completo)
+  }
+  return salida
+}
+
+/** Entradas de `dir` hasta `prof` niveles, para el diagnóstico de abajo. */
+function arbol(dir, prof, sangria = '    ') {
+  if (prof === 0 || !existsSync(dir)) return []
+  return readdirSync(dir, { withFileTypes: true }).flatMap(e => [
+    `${sangria}${e.name}${e.isDirectory() ? '/' : ''}`,
+    ...(e.isDirectory() ? arbol(path.join(dir, e.name), prof - 1, sangria + '  ') : []),
+  ])
+}
+
+const archivosCss = RAICES.filter(existsSync).flatMap(cssBajo)
+if (archivosCss.length === 0) {
+  console.error(
+    '\n[css-bundle] No encontré ningún .css del build. Busqué en:\n' +
+    RAICES.map(r => `    ${path.relative(RAIZ, r)}${existsSync(r) ? '' : '  (no existe)'}`).join('\n') +
+    '\n\n  Contenido de .next/ (2 niveles):\n' + (arbol(path.join(RAIZ, '.next'), 2).join('\n') || '    (no existe)') +
+    '\n\n  Contenido de .vercel/output/ (3 niveles):\n' + (arbol(path.join(RAIZ, '.vercel', 'output'), 3).join('\n') || '    (no existe)') +
+    '\n\n  Si el build es de Vercel, el adaptador cambió de sitio los estáticos: añade la' +
+    '\n  ruta nueva a RAICES en scripts/check-css-bundle.mjs.\n'
+  )
   process.exit(1)
 }
 
@@ -50,10 +88,7 @@ if (declaradas.size === 0) {
   process.exit(1)
 }
 
-const bundle = readdirSync(CHUNKS)
-  .filter(f => f.endsWith('.css'))
-  .map(f => readFileSync(path.join(CHUNKS, f), 'utf8'))
-  .join('\n')
+const bundle = archivosCss.map(f => readFileSync(f, 'utf8')).join('\n')
 
 const faltan = [...declaradas].filter(c => !new RegExp(`\\.${c}(?![\\w-])`).test(bundle))
 
@@ -69,4 +104,4 @@ if (faltan.length > 0) {
   process.exit(1)
 }
 
-console.log(`[css-bundle] Las ${declaradas.size} clases de dashboard-ui.css están en el CSS del build.`)
+console.log(`[css-bundle] Las ${declaradas.size} clases de dashboard-ui.css están en el CSS del build (${archivosCss.length} archivos .css).`)
