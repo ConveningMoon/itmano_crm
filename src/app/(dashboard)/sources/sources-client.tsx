@@ -1,17 +1,23 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useState, useTransition } from 'react'
-import { Plus, X, Trash2, AlertTriangle, ExternalLink, Eye, Users, Mail, UserRound, ChevronDown, Magnet, CalendarDays, FileText } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import {
+  Plus, X, Trash2, AlertTriangle, ExternalLink, Eye, Users, Mail, UserRound, ChevronDown, Magnet,
+  CalendarDays, FileText, Search, Link2, Check, Copy, MessageCircle, PenLine,
+  type LucideIcon,
+} from 'lucide-react'
 import type { ChannelWithMetrics, ChannelType } from '@/lib/data/channels'
 import { groupByFolder, type Folder } from '@/lib/data/folders'
 import { FolderGroup, NewFolderButton, useFolderMenu } from '@/components/dashboard/folders'
 import { resolveChannelPageUrl, type TenantPageInfo } from '@/lib/sources/page-link'
-import { STATUS_COPY, MEASUREMENT_COPY, type SourceHealth } from '@/lib/sources/health'
+import type { SourceHealth } from '@/lib/sources/health'
+import { combinedHealth, filterChannels } from '@/lib/sources/list-view'
+import { Sparkline } from '@/components/charts/sparkline'
+import { InfoHint } from '@/components/ui/info-hint'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { ButtonMenu, RowMenu } from '@/components/ui/row-menu'
 import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui/data-table'
-import { RefreshingPill } from '@/components/ui/loading-indicator'
 
 // Color de cada semáforo de salud (token, no hex): lo consume .pill vía --tone.
 const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', string> = {
@@ -30,12 +36,6 @@ type TabValue = ChannelType | 'all' | 'archived'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const WINDOWS = [
-  { value: 7,  label: '7 días' },
-  { value: 30, label: '30 días' },
-  { value: 90, label: '90 días' },
-]
-
 const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
   lead_magnet:   'Lead Magnet',
   event:         'Evento',
@@ -44,12 +44,14 @@ const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
   manual:        'Manual',
 }
 
-const CHANNEL_TYPE_COLORS: Record<ChannelType, string> = {
-  lead_magnet:   'var(--accent-gold)',
-  event:         'var(--accent-teal)',
-  contact_form:  'var(--accent-blue)',
-  manychat_flow: 'var(--accent-green)',
-  manual:        'var(--text-muted)',
+// Un icono por tipo, en un cuadro dorado único: el tipo se lee por la forma, no
+// por un color distinto por categoría.
+const CHANNEL_TYPE_ICONS: Record<ChannelType, LucideIcon> = {
+  lead_magnet:   Magnet,
+  event:         CalendarDays,
+  contact_form:  FileText,
+  manychat_flow: MessageCircle,
+  manual:        PenLine,
 }
 
 const TAB_FILTERS: Array<{ value: TabValue; label: string }> = [
@@ -101,31 +103,33 @@ function NoPageModal({ open, channelName, managedByItmano, onClose }: {
 
 // ─── Tabla de fuentes ─────────────────────────────────────────────────────────
 //
-// Antes cada fuente era una tarjeta. Con más de un puñado de fuentes la
-// cuadrícula obligaba a recorrer la pantalla entera para comparar dos números
-// que deberían estar en la misma columna, y una fuente ocupaba lo que ahora
-// ocupan seis. La fila es la misma información con la lectura de /emails.
-//
 // Una sola definición de columnas para la cabecera y las filas (DataScope): si
-// divergen, la tabla se desalinea sin que nada falle. Las acciones viven en un
-// menú ⋯; la acción principal es el clic en la fila.
-const COLS    = 'minmax(0, 2.6fr) minmax(0, 1.5fr) 72px 96px 72px 96px 44px'
-const COLS_MD = 'minmax(0, 2.4fr) minmax(0, 1.4fr) 72px 96px 96px 44px'
-const COLS_SM = 'minmax(0, 1fr) 80px 44px'
+// divergen, la tabla se desalinea sin que nada falle. Las métricas completas
+// (vistas, envíos, otras ventanas) viven en Dashboard → Fuentes; aquí la fila
+// sólo ayuda a gestionar. La acción principal es el clic en la fila.
+const COLS    = '34px minmax(0, 2fr) minmax(0, 150px) 84px 84px 72px 112px'
+const COLS_MD = '34px minmax(0, 2fr) minmax(0, 150px) 84px 72px 112px'
+const COLS_SM = 'minmax(0, 1fr) 72px 44px'
 
 const COLUMNS: DataColumn[] = [
+  { label: '', hideSm: true },
   { label: 'Fuente' },
   { label: 'Salud', hideSm: true },
-  { label: 'Envíos', right: true, hideSm: true },
-  { label: 'Leads nuevos', right: true },
-  { label: 'Vistas', right: true, hideMd: true, hideSm: true },
-  { label: 'Conversión', right: true, hideSm: true },
+  { label: 'Tendencia', hideMd: true, hideSm: true },
+  { label: 'Leads', right: true },
+  { label: 'Conv.', right: true, hideSm: true },
   { label: '' },
 ]
 
-function ChannelRow({ ch, health, tenant, folders, folderId }: {
+// Mensaje efímero de una copia: el menú se cierra al elegir, así que la
+// confirmación vive en la fila.
+type CopyNote = { ok: boolean; text: string }
+
+function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
   ch:       ChannelWithMetrics
   health?:  SourceHealth
+  /** Leads por barra en las últimas 4 semanas; vacío si no hay serie. */
+  trend:    number[]
   tenant?:  TenantPageInfo
   folders:  Folder[]
   /** Carpeta en la que está para ESTE usuario, o null. */
@@ -133,10 +137,40 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
 }) {
   const { navigate, pending: navPending } = useCardNavigation()
   const [noPage, setNoPage] = useState(false)
-  const typeColor = CHANNEL_TYPE_COLORS[ch.channelType]
+  const [note, setNote] = useState<CopyNote | null>(null)
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const Icon      = CHANNEL_TYPE_ICONS[ch.channelType]
   const typeLabel = CHANNEL_TYPE_LABELS[ch.channelType]
   const pageUrl   = resolveChannelPageUrl(ch, tenant)
   const folderMenu = useFolderMenu('source', ch.id, folders, folderId)
+  const hc = combinedHealth(health)
+
+  useEffect(() => () => { if (noteTimer.current) clearTimeout(noteTimer.current) }, [])
+
+  function flash(next: CopyNote) {
+    if (noteTimer.current) clearTimeout(noteTimer.current)
+    setNote(next)
+    noteTimer.current = setTimeout(() => setNote(null), 2200)
+  }
+
+  // El portapapeles puede no existir (http) o negarse (permisos): en ambos casos
+  // se avisa en vez de fingir que se copió.
+  async function copy(text: string, okText: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      flash({ ok: true, text: okText })
+    } catch {
+      flash({ ok: false, text: 'No se pudo copiar' })
+    }
+  }
+
+  function copyLink() {
+    if (!pageUrl) { setNoPage(true); return }
+    void copy(pageUrl, 'Enlace copiado')
+  }
+
+  const copyState = note ? (note.ok ? 'copied' : 'error') : undefined
+  const CopyIcon  = note ? (note.ok ? Check : AlertTriangle) : Link2
 
   return (
     <div
@@ -146,21 +180,33 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
       tabIndex={0}
       aria-busy={folderMenu.pending || undefined}
       onClick={() => navigate(`/sources/${ch.slug}`)}
-      // Sólo Enter sobre la fila misma: sobre el botón ⋯ hijo debe abrir el menú.
+      // Sólo Enter sobre la fila misma: sobre un botón hijo debe activarlo a él.
       onKeyDown={e => { if (e.key === 'Enter' && e.target === e.currentTarget) navigate(`/sources/${ch.slug}`) }}
       style={folderMenu.pending ? { opacity: 0.6 } : undefined}
     >
       <NavLoadingOverlay show={navPending} />
 
-      {/* Fuente: tipo, nombre, public id, agente y si tiene secuencia */}
+      <span className="fu-tile dt-hide-sm" aria-hidden="true"><Icon size={16} /></span>
+
+      {/* Fuente: nombre y, debajo, tipo, agente y si tiene secuencia */}
       <div className="dt-cell-main">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-          <span className="pill" style={{ '--tone': typeColor } as React.CSSProperties}>{typeLabel}</span>
           <span className="dt-title">{ch.name}</span>
-          {!ch.active && <span className="pill" data-tone="mute">Inactivo</span>}
+          {!ch.active && <span className="pill" data-tone="mute">Pausada</span>}
+          {note && (
+            <span
+              className="pill"
+              data-tone={note.ok ? 'green' : 'coral'}
+              role="status"
+              style={{ flex: 'none' }}
+            >
+              {note.ok ? <Check size={11} aria-hidden="true" /> : <AlertTriangle size={11} aria-hidden="true" />}
+              {note.text}
+            </span>
+          )}
         </div>
         <div className="dt-meta">
-          <span style={{ fontFamily: 'var(--font-mono, monospace)', letterSpacing: '0.02em' }}>{ch.publicId}</span>
+          <span>{typeLabel}</span>
           <span title="Agente responsable"><UserRound size={12} />{ch.agentName ?? 'Toda la agencia'}</span>
           {ch.emailSequenceId && (
             <span title="Secuencia de emails activa" style={{ color: 'var(--accent-teal)' }}>
@@ -170,25 +216,39 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
         </div>
       </div>
 
-      {/* Dos semáforos, dos problemas distintos: el del FORMULARIO (qué tan
-          bien califica lo que pregunta) y el de la FUENTE (si está reportando
-          lo que hace falta para medirla). Se arreglan en sitios distintos —
-          uno cambiando preguntas, el otro pegando un script — así que
-          juntarlos escondía uno detrás del otro. */}
-      <div className="dt-hide-sm" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-        {health && health.status !== 'sin_envios'
-          ? [STATUS_COPY[health.status], MEASUREMENT_COPY[health.measurement]].map((b, i) => (
-              <span key={i} className="pill pill-dot" title={`${b.label} — ${b.what}\n\n${b.why}`}
-                style={{ '--tone': HEALTH_TONE[b.tone], cursor: 'help' } as React.CSSProperties}>
-                {b.label}
-              </span>
-            ))
-          : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>}
+      {/* Un solo semáforo: manda el peor de FORMULARIO y MEDICIÓN. El detalle de
+          los dos va en el ⓘ, que no debe navegar a la fila (el popover vive en
+          un portal y React propaga sus eventos por el árbol). */}
+      <div className="dt-hide-sm">
+        {hc ? (
+          <span className="fu-health" style={{ '--tone': HEALTH_TONE[hc.tone] } as React.CSSProperties}>
+            <span className="fu-dot" aria-hidden="true" />
+            <span className="fu-health-label">{hc.label}</span>
+            <span
+              onClick={e => e.stopPropagation()}
+              onKeyDown={e => e.stopPropagation()}
+              style={{ display: 'inline-flex' }}
+            >
+              <InfoHint label={`Detalle de salud de ${ch.name}`}>
+                {hc.lines.map((l, i) => (
+                  <div key={i} style={i > 0 ? { marginTop: '8px' } : undefined}>
+                    <strong style={{ fontWeight: 500 }}>{l.label}</strong>{' — '}{l.what}
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>{l.why}</div>
+                  </div>
+                ))}
+              </InfoHint>
+            </span>
+          </span>
+        ) : (
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
+        )}
       </div>
 
-      {/* Envíos y leads son cosas distintas: quien ya era lead y vuelve a llenar
-          un formulario suma envío pero no adquisición. */}
-      <span className="dt-num dt-hide-sm dt-r">{ch.metrics.submissionsInWindow}</span>
+      <div className="dt-hide-md dt-hide-sm">
+        {trend.length > 1 && ch.metrics.leadsInWindow > 0
+          ? <Sparkline values={trend} />
+          : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>}
+      </div>
 
       <span className="dt-num dt-r" style={{ textAlign: 'right' }}>
         {ch.metrics.leadsInWindow}
@@ -196,15 +256,18 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
       </span>
 
       {/* Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió. */}
-      <span className="dt-num dt-hide-md dt-hide-sm dt-r">{ch.metrics.pageViewsInWindow || '—'}</span>
       <span className="dt-num dt-hide-sm dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
         {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
       </span>
 
-      {/* El menú y sus modales no navegan a la fila: cada clic es para sí mismo.
-          Los modales cuelgan de aquí (no de la fila) porque React propaga los
-          clics por el árbol, y el del overlay llegaría al onClick de la fila. */}
-      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {/* Los botones y el menú no navegan a la fila: cada clic o tecla es para sí
+          mismo. Los modales cuelgan de aquí (no de la fila) porque React propaga
+          los clics por el árbol, y el del overlay llegaría al onClick de la fila. */}
+      <div
+        className="fu-actions"
+        onClick={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+      >
         <NoPageModal
           open={noPage}
           channelName={ch.name}
@@ -212,6 +275,38 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
           onClose={() => setNoPage(false)}
         />
         {folderMenu.modal}
+        <button
+          type="button"
+          className="icon-btn dt-hide-sm"
+          data-state={copyState}
+          title={note ? note.text : 'Copiar enlace'}
+          aria-label={`Copiar enlace de ${ch.name}`}
+          onClick={copyLink}
+        >
+          <CopyIcon size={15} />
+        </button>
+        {pageUrl ? (
+          <a
+            className="icon-btn dt-hide-sm"
+            href={pageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir página"
+            aria-label={`Abrir página de ${ch.name}`}
+          >
+            <ExternalLink size={15} />
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="icon-btn dt-hide-sm"
+            title="Abrir página"
+            aria-label={`Abrir página de ${ch.name}`}
+            onClick={() => setNoPage(true)}
+          >
+            <ExternalLink size={15} />
+          </button>
+        )}
         <RowMenu
           label={ch.name}
           entries={[
@@ -222,6 +317,9 @@ function ChannelRow({ ch, health, tenant, folders, folderId }: {
             pageUrl
               ? { type: 'item', label: 'Abrir página', icon: <ExternalLink size={14} />, href: pageUrl, external: true }
               : { type: 'item', label: 'Abrir página', icon: <ExternalLink size={14} />, onSelect: () => setNoPage(true) },
+            // En pantallas estrechas el botón de copiar se oculta: el menú lo conserva.
+            { type: 'item', label: 'Copiar enlace', icon: <Link2 size={14} />, onSelect: copyLink },
+            { type: 'item', label: 'Copiar ID', icon: <Copy size={14} />, onSelect: () => { void copy(ch.publicId, 'ID copiado') } },
             { type: 'separator' },
             folderMenu.entry,
           ]}
@@ -365,7 +463,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.55)',
+      background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
     }}>
@@ -420,7 +518,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: 
           </FormSection>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -485,7 +583,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.55)',
+      background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
     }}>
@@ -542,7 +640,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
           </FormSection>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -604,7 +702,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }:
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.55)',
+      background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
     }}>
@@ -651,7 +749,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }:
           </FormSection>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -694,7 +792,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.55)',
+      background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
     }}>
@@ -722,8 +820,8 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
 
           <div style={{
             padding: '12px 14px',
-            background: 'rgba(224,64,64,0.08)',
-            border: '1px solid rgba(224,64,64,0.2)',
+            background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-coral) 20%, transparent)',
             borderRadius: '8px',
             fontSize: '12px',
             color: 'var(--text-secondary)',
@@ -744,7 +842,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -758,7 +856,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
                 padding: '9px 18px',
                 fontSize: '13px',
                 fontWeight: 500,
-                color: '#fff',
+                color: 'var(--bg-base)',
                 background: 'var(--accent-coral)',
                 border: 'none',
                 borderRadius: '8px',
@@ -801,7 +899,6 @@ function ArchivedChannelRow({ ch, isSuperAdmin, tenantName, canDelete }: {
 }) {
   const router = useRouter()
   const [showDelete, setShowDelete] = useState(false)
-  const typeColor   = CHANNEL_TYPE_COLORS[ch.channelType]
   const typeLabel   = CHANNEL_TYPE_LABELS[ch.channelType]
   const archivedStr = ch.archivedAt
     ? <FechaLocal fecha={ch.archivedAt} locale="es" opciones={{ day: '2-digit', month: 'short', year: 'numeric' }} />
@@ -811,7 +908,7 @@ function ArchivedChannelRow({ ch, isSuperAdmin, tenantName, canDelete }: {
     <div className="dt-grid dt-row">
       <div className="dt-cell-main">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-          <span className="pill" style={{ '--tone': typeColor } as React.CSSProperties}>{typeLabel}</span>
+          <span className="pill" data-tone="mute">{typeLabel}</span>
           <span className="dt-title">{ch.name}</span>
           {isSuperAdmin && tenantName && <span className="pill" data-tone="gold">{tenantName}</span>}
         </div>
@@ -897,7 +994,8 @@ interface Props {
   health:           Record<string, SourceHealth>
   channels:         ChannelWithMetrics[]
   archivedChannels: ChannelWithMetrics[]
-  windowDays:       number
+  /** channelId → leads por barra de las últimas 4 semanas. */
+  trends:           Record<string, number[]>
   isSuperAdmin:     boolean
   tenants:          Array<{ id: string; name: string }>
   /**
@@ -911,34 +1009,24 @@ interface Props {
   folders:          Folder[]
 }
 
-export function SourcesClient({ health, channels, archivedChannels, windowDays, isSuperAdmin, tenants, myAgentId, tenantPages, folders }: Props) {
-  const router      = useRouter()
-  const searchParams = useSearchParams()
+export function SourcesClient({ health, channels, archivedChannels, trends, isSuperAdmin, tenants, myAgentId, tenantPages, folders }: Props) {
   const [activeTab, setActiveTab] = useState<TabValue>('all')
-  // La ventana cambia la URL y vuelve a consultar la base: la transición deja
-  // el contenido anterior en pantalla y muestra «Actualizando…» hasta que llega.
-  const [windowPending, startWindow] = useTransition()
-
-  function setWindow(days: number) {
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('window', String(days))
-    startWindow(() => router.push(`/sources?${params.toString()}`))
-  }
+  const [query, setQuery] = useState('')
 
   const isArchivedTab = activeTab === 'archived'
-  const display = isArchivedTab
-    ? archivedChannels
-    : activeTab === 'all'
-      ? channels
-      : channels.filter(c => c.channelType === activeTab)
+  const searching = query.trim() !== ''
+  const display = filterChannels(
+    isArchivedTab ? archivedChannels : channels,
+    { type: isArchivedTab ? 'all' : activeTab, query },
+  )
 
   const tenantName = (id: string) => tenants.find(t => t.id === id)?.name
 
-  // Las carpetas sólo agrupan en "Todos". Los tabs por tipo siguen haciendo
-  // exactamente lo de antes —filtrar— y muestran los resultados sueltos: quien
-  // pregunta "¿qué eventos tengo?" quiere la lista, no volver a abrir carpetas.
+  // Las carpetas sólo agrupan en "Todos" y sin búsqueda. Los tabs por tipo y la
+  // búsqueda muestran los resultados sueltos: quien pregunta "¿qué eventos tengo?"
+  // o busca un nombre quiere la lista, no volver a abrir carpetas.
   const grouped     = groupByFolder(display, folders)
-  const foldersView = activeTab === 'all'
+  const foldersView = activeTab === 'all' && !searching
   // channelId → carpeta en la que está, para pintar el selector de cada fila.
   const folderOf = new Map<string, string>()
   for (const f of folders) for (const id of f.itemIds) folderOf.set(id, f.id)
@@ -955,6 +1043,7 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
         key={ch.id}
         ch={ch}
         health={health[ch.id]}
+        trend={trends[ch.id] ?? []}
         tenant={tenantPages[ch.tenantId]}
         folders={folders}
         folderId={folderOf.get(ch.id) ?? null}
@@ -964,15 +1053,15 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
 
   const empty = (
     <div style={{ textAlign: 'center', padding: '64px 20px', color: 'var(--text-secondary)', fontSize: '14px' }}>
-      {isArchivedTab ? 'No hay fuentes archivadas.' : 'No hay fuentes en esta categoría.'}
+      {searching
+        ? `Ninguna fuente coincide con «${query.trim()}».`
+        : isArchivedTab ? 'No hay fuentes archivadas.' : 'No hay fuentes en esta categoría.'}
     </div>
   )
 
   return (
-    <div style={{ position: 'relative' }}>
-      <RefreshingPill show={windowPending} />
-
-      {/* Tipo de fuente (izquierda) y ventana de tiempo (derecha) */}
+    <div>
+      {/* Tipo de fuente (izquierda) y búsqueda (derecha), en una sola fila */}
       <div className="toolbar" style={{ borderBottom: '1px solid var(--border-subtle)', marginBottom: '20px' }}>
         <div className="filter-tabs" role="tablist">
           {TAB_FILTERS.map(t => (
@@ -989,17 +1078,16 @@ export function SourcesClient({ health, channels, archivedChannels, windowDays, 
           ))}
         </div>
 
-        <div className="segmented" style={{ marginBottom: '8px' }} role="group" aria-label="Ventana de tiempo">
-          {WINDOWS.map(w => (
-            <button
-              key={w.value}
-              onClick={() => setWindow(w.value)}
-              aria-pressed={windowDays === w.value}
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
+        <label className="fu-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar fuente"
+            aria-label="Buscar fuente por nombre o ID"
+          />
+        </label>
       </div>
 
       {/* Filas. La tabla no se aplasta en pantallas estrechas: oculta columnas. */}

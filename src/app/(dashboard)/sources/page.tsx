@@ -5,25 +5,32 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient, SourcesActions } from './sources-client'
 import { PageHeader } from '@/components/ui/page-header'
-import { StatCard } from '@/components/ui/stat-card'
 import { getSourcesHealth } from '@/lib/data/source-health'
 import { listFolders } from '@/lib/data/folders'
 import { columns } from '@/lib/supabase/columns'
-import { GitBranch, Users, Eye, TrendingUp } from 'lucide-react'
+import Link from 'next/link'
+import { BarChart3 } from 'lucide-react'
+import { getBusinessProfile } from '@/lib/data/business-profile'
+import { getChannelLeadsTrend } from '@/lib/data/channels'
+import { businessTimeZone } from '@/lib/time-zones'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-async function SourcesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ window?: string }>
-}) {
+// Leads y conversión de la lista van fijos a 4 semanas, como el valor por defecto
+// del Dashboard. El selector de días se fue: elegir otra ventana es de la
+// pestaña Fuentes del Dashboard, no de esta lista de gestión.
+const WINDOW_DAYS = 28
+
+async function tendencias(tenantId: string) {
+  const profile = await getBusinessProfile(tenantId)
+  const timeZone = (profile && businessTimeZone(profile)) ?? 'UTC'
+  return getChannelLeadsTrend(tenantId, WINDOW_DAYS, timeZone)
+}
+
+async function SourcesPage() {
   const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const { window: windowParam } = await searchParams
-  const windowDays = Number(windowParam ?? 30)
-  const validWindow = [7, 30, 90].includes(windowDays) ? windowDays : 30
 
   const supabase = createAdminClient()
 
@@ -48,10 +55,10 @@ async function SourcesPage({
   // caso real: requireTenantContext lo garantiza), la fila del tenant para el
   // botón "abrir página" tampoco: antes esperaba a los canales sólo para saber
   // sus tenant_ids, y eso era una ola entera más al final de cada carga.
-  const [channels, archivedChannels, health, folders, tenantPickerResult, tenantPagesResult, agentResult] = await Promise.all([
+  const [channels, archivedChannels, health, folders, tenantPickerResult, tenantPagesResult, agentResult, trendAll] = await Promise.all([
     // Agent sees only their own channels (excludes "Toda la agencia"); owner/super: tenant scope.
-    getChannelsWithMetrics(tenant_id, validWindow, scope.agentId),
-    getArchivedChannelsWithMetrics(tenant_id, validWindow, scope.agentId),
+    getChannelsWithMetrics(tenant_id, WINDOW_DAYS, scope.agentId),
+    getArchivedChannelsWithMetrics(tenant_id, WINDOW_DAYS, scope.agentId),
     // Cómo está entrando cada fuente, según lo que realmente llega.
     tenant_id ? getSourcesHealth(tenant_id) : Promise.resolve({}),
     // Carpetas de QUIEN MIRA: la organización es personal, así que dos usuarios
@@ -63,6 +70,10 @@ async function SourcesPage({
     // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
     tenant_id ? getTenantRow(tenant_id) : Promise.resolve(null),
     agentsQ,
+    // La zona horaria sale de la fila del tenant (cache() de getBusinessProfile,
+    // ya leída por el layout). Sin tenant en el contexto no hay tendencias que
+    // pedir: las filas salen sin minigráfica.
+    tenant_id ? tendencias(tenant_id) : Promise.resolve({} as Record<string, number[]>),
   ])
 
   // Slug y modo de gestión de cada tenant presente en las tarjetas: el botón de
@@ -95,38 +106,37 @@ async function SourcesPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agents = (agentResult.data ?? []).map((a: any) => ({ id: a.id as string, name: a.name as string, tenantId: a.tenant_id as string }))
 
-  const totalLeads     = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
-  const totalViews     = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
-  const avgConversion  = totalViews > 0 ? Math.round((totalLeads / totalViews) * 100) : 0
+  // La RPC devuelve todo el tenant; el rol agent sólo ve las fuentes que
+  // getChannelsWithMetrics ya filtró, así que las demás nunca salen de aquí.
+  const trends: Record<string, number[]> = {}
+  for (const c of channels) trends[c.id] = trendAll[c.id] ?? []
 
   return (
     <>
       <PageHeader
-        title="Fuentes de adquisición"
-        description={`Canales activos · últimos ${validWindow} días`}
+        title="Fuentes"
+        description="Cada entrada de leads: una página, un formulario o un evento."
+        hint="Una fuente es por donde entran tus leads: una página, un formulario o un evento. Aquí las creas, las ordenas en carpetas y las archivas. Las métricas completas están en Dashboard → Fuentes."
         actions={
-          <SourcesActions
-            isSuperAdmin={needsTenantPicker}
-            tenants={tenants}
-            agents={agents}
-            myAgentId={scope.agentId}
-          />
+          <>
+            <Link href="/dashboard?tab=fuentes" className="btn btn-ghost">
+              <BarChart3 size={14} />Métricas
+            </Link>
+            <SourcesActions
+              isSuperAdmin={needsTenantPicker}
+              tenants={tenants}
+              agents={agents}
+              myAgentId={scope.agentId}
+            />
+          </>
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '28px' }}>
-        <StatCard label="Leads generados"   value={totalLeads}    icon={<Users size={16} />}      tone="var(--accent-blue)" />
-        <StatCard label="Vistas totales"    value={totalViews}    icon={<Eye size={16} />}        tone="var(--accent-teal)" />
-        <StatCard label="Conversión global" value={avgConversion} suffix="%" icon={<TrendingUp size={16} />} tone="var(--accent-green)" />
-        <StatCard label="Fuentes activas"   value={channels.filter(c => c.active).length} icon={<GitBranch size={16} />} tone="var(--accent-gold)" />
-      </div>
-
-      {/* Client: tabs + window selector + rows */}
       <SourcesClient
         health={health}
         channels={channels}
         archivedChannels={archivedChannels}
-        windowDays={validWindow}
+        trends={trends}
         isSuperAdmin={needsTenantPicker}
         tenants={tenants}
         myAgentId={scope.agentId}
