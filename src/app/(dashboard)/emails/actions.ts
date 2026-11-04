@@ -541,6 +541,8 @@ const PreviewSchema = z.object({
   // enlaces) salen de ese open house en vez de quedar literales.
   openHouseId: z.string().uuid().optional(),
   openHouseKind: z.enum(OPEN_HOUSE_EMAIL_KINDS).optional(),
+  // Correos grupales: la vista previa lleva la dirección postal del pie.
+  withPostalAddress: z.boolean().optional(),
 })
 
 export async function previewEmailHtml(
@@ -615,6 +617,13 @@ export async function previewEmailHtml(
     return { ok: true, html: oh.html, subject: oh.subject }
   }
 
+  let postalAddress: string | null = null
+  if (parsed.data.withPostalAddress && ctx.tenant_id) {
+    const { data: tenant } = await supabase.from('tenants').select('postal_address').eq('id', ctx.tenant_id).maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    postalAddress = ((tenant as any)?.postal_address as string | null) ?? null
+  }
+
   const rendered = renderEmail({
     subject: parsed.data.subject,
     content: parsed.data.content,
@@ -625,6 +634,7 @@ export async function previewEmailHtml(
     },
     signature:      signature?.trim() || SAMPLE_SIGNATURE[parsed.data.locale] || SAMPLE_SIGNATURE.en,
     unsubscribeUrl: '#',
+    postalAddress,
     locale:         parsed.data.locale as EmailLocale,
   })
 

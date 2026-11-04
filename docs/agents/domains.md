@@ -262,6 +262,53 @@ masivo del producto: todo lo demás sale lead por lead.
 Fuente inicial: `src/lib/open-houses/*`, `src/lib/services/open-house-*.ts`,
 `src/lib/data/open-houses.ts` y `src/app/(dashboard)/properties/open-house-actions.ts`.
 
+## Correos grupales
+
+Un correo manual, una sola vez, a un grupo de leads (`/emails?tab=grupales`,
+`email_broadcasts`). Es el segundo envío masivo del producto: mismas garantías
+que el de open houses y el mismo envío por lotes (`src/lib/email/batch-send.ts`).
+No es una campaña automática: nada lo dispara salvo una persona que confirma.
+
+- Sólo tenants con dominio propio verificado, por la misma razón que los open
+  houses (`resolveOpenHouseSender` con mensaje propio). Se recomprueba en cada
+  ejecución.
+- Audiencia: se guarda como filtro (`src/lib/broadcasts/audience.ts`), no como
+  lista. `segment` usa los criterios de `/leads` más varias etiquetas (`any`/`all`)
+  y varias etapas; `manual`, leads elegidos a mano. Desde `/leads` se abre un
+  borrador con la selección o con los filtros activos. Sin criterios no se
+  selecciona a nadie: "sin filtro" nunca significa "todos". La lista real se
+  congela al enviar, con PK `(broadcast_id, lead_id)`.
+- Permisos: cualquier rol envía. Un agente sólo alcanza a sus leads
+  (`scope_agent_id`, reaplicado al congelar aunque el filtro pida otra cosa) y
+  firma a su nombre.
+- Topes: `MAX_BROADCAST_RECIPIENTS` (2.000) por envío y `emailsPerMonth` del plan
+  como techo duro (`monthlyEmailAllowance`). Es el único flujo que hace cumplir
+  ese límite en código, porque un clic puede gastar el mes entero. El envío se
+  comprueba ENTERO contra el cupo: o cabe o no sale ninguno.
+- CAN-SPAM: un correo grupal es comercial, así que no sale sin
+  `tenants.postal_address`, que va en el pie. La dirección se edita en la pantalla
+  del envío (owner/super_admin). Los demás correos del CRM no la llevan.
+- Guarda de reputación (`broadcastGuardReason`): antes de cada lote se leen
+  rebotes y quejas de `email_broadcast_metrics`. Una queja de spam o más del 5% de
+  rebotes (con 20 leads o más) dejan el envío en `paused` con el motivo. Reanudar
+  es una decisión de una persona: fija `guard_overridden_at` y la guarda deja de
+  evaluarse para ese envío.
+- Cancelar detiene lo que falta (se relee el estado antes de cada lote); lo
+  entregado no se deshace. Sólo un borrador se borra.
+- Confirmar exige el número de destinatarios que vio quien confirma: si la
+  audiencia cambió, se le vuelve a preguntar.
+- Idioma, remitente y `reply_to`: las reglas de open houses. Sin versión en su
+  idioma, el lead no recibe nada. Diseño: texto personal de `renderEmail`, sin
+  plantilla de marca.
+- No escribe `lead_event` por envío ni etiqueta a nadie. `email_sends`
+  (`send_type = 'broadcast'`, `broadcast_id`) atribuye clicks, respuestas, rebotes
+  y bajas.
+- Programar tiene la granularidad del orquestador horario; "enviar ahora" corre
+  con `after()` y lo que no alcance lo retoma el orquestador.
+
+Fuente inicial: `src/lib/broadcasts/*`, `src/lib/services/broadcast-*.ts`,
+`src/lib/data/email-broadcasts.ts` y `src/app/(dashboard)/emails/broadcast-actions.ts`.
+
 ## Archivos iniciales por área
 
 | Área | Fuente inicial |
@@ -274,6 +321,7 @@ Fuente inicial: `src/lib/open-houses/*`, `src/lib/services/open-house-*.ts`,
 | Carpetas | `src/lib/data/folders.ts`, `src/app/(dashboard)/folder-actions.ts` |
 | Etiquetas de leads | `src/lib/leads/tags.ts`, `src/lib/data/lead-tags.ts`, `src/lib/services/enroll-lead-by-tag.ts` |
 | Open houses | `src/lib/open-houses/*`, `src/lib/services/open-house-dispatch.ts`, `src/app/(dashboard)/properties/open-house-actions.ts` |
+| Correos grupales | `src/lib/broadcasts/*`, `src/lib/services/broadcast-dispatch.ts`, `src/app/(dashboard)/emails/broadcast-actions.ts` |
 | Auth y proxy | `src/proxy.ts`, `src/lib/auth/tenant-context.ts`, docs actuales de Supabase SSR |
 | Migraciones/RLS | Última migración, skills Supabase y esquema real sandbox |
 | Landing/legal | `src/app/(marketing)/`, `src/components/motion/README.md` |

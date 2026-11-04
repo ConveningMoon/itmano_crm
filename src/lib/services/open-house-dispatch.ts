@@ -1,7 +1,9 @@
 import 'server-only'
-import { createHash } from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resendForAccount } from '@/lib/resend'
+import {
+  BATCH_SIZE, PAUSE_BETWEEN_CALLS_MS, batchIdempotencyKey, isRateLimit, sendPermissiveBatch, sleep,
+} from '@/lib/email/batch-send'
 import { parseEmailContent } from '@/lib/email-content'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
@@ -39,14 +41,8 @@ import type { AudienceMatch, OpenHouseEmailKind } from '@/lib/open-houses/model'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const BATCH_SIZE        = 100
 const MAX_ATTEMPTS      = 3
 const STALE_SENDING_MS  = 15 * 60 * 1000
-// Resend limita requests por segundo por cuenta; una pausa corta entre
-// llamadas evita el 429 sin alargar de verdad un envío de cientos.
-const PAUSE_BETWEEN_CALLS_MS = 600
-
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export type DispatchOutcome =
   | 'sent' | 'partial' | 'not_due' | 'claimed_elsewhere'
@@ -139,16 +135,6 @@ async function freezeRecipients(db: SupabaseClient, email: EmailRow, oh: any): P
 }
 
 interface ContentRow { language: string; subject: string | null; body_json: unknown; resend_template_id: string | null }
-
-function idempotencyKey(emailId: string, leadIds: string[]): string {
-  const h = createHash('sha256').update([...leadIds].sort().join(',')).digest('hex').slice(0, 32)
-  return `open-house/${emailId}/${h}`
-}
-
-function isRateLimit(err: { message?: string; name?: string; statusCode?: number } | null | undefined): boolean {
-  if (!err) return false
-  return err.statusCode === 429 || /rate.?limit|too many/i.test(`${err.name ?? ''} ${err.message ?? ''}`)
-}
 
 export async function dispatchOpenHouseEmail(
   db: SupabaseClient,
@@ -321,26 +307,12 @@ export async function dispatchOpenHouseEmail(
 
       // Contenido del CRM → API batch (100 por llamada).
       if (crm.length > 0) {
-        const res = await client.batch.send(crm.map(c => c.payload), {
-          idempotencyKey:  idempotencyKey(email.id, crm.map(c => c.leadId)),
-          batchValidation: 'permissive',
-        })
-        if (res.error) {
-          if (isRateLimit(res.error as any)) { rateLimited = true }
-          else crm.forEach(c => failedRows.push({ lead_id: c.leadId, error: res.error!.message }))
-        } else {
-          const ids    = res.data?.data ?? []
-          const errors = new Map<number, string>(((res.data as any)?.errors ?? []).map((e: any) => [e.index, e.message]))
-          // En modo permisivo `data` trae sólo los aceptados, en orden: se
-          // emparejan saltando los índices que fallaron.
-          let cursor = 0
-          crm.forEach((c, i) => {
-            if (errors.has(i)) { failedRows.push({ lead_id: c.leadId, error: errors.get(i)! }); return }
-            const id = ids[cursor++]?.id
-            if (id) sentRows.push({ lead_id: c.leadId, resend_email_id: id, subject: c.payload.subject as string })
-            else failedRows.push({ lead_id: c.leadId, error: 'Resend no devolvió id' })
-          })
-        }
+        const res = await sendPermissiveBatch(
+          client, crm, batchIdempotencyKey(`open-house/${email.id}`, crm.map(c => c.leadId)),
+        )
+        if (res.rateLimited) rateLimited = true
+        failedRows.push(...res.failed.map(f => ({ lead_id: f.leadId, error: f.error })))
+        sentRows.push(...res.sent.map(s => ({ lead_id: s.item.leadId, resend_email_id: s.id, subject: s.item.payload.subject as string })))
         await sleep(PAUSE_BETWEEN_CALLS_MS)
       }
 

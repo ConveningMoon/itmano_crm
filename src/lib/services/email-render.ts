@@ -117,6 +117,9 @@ export function renderEmail(params: {
   // si el agente no configuró ninguna.
   signature:      string | null
   unsubscribeUrl: string
+  // Dirección física del negocio (CAN-SPAM). Sólo la llevan los correos grupales,
+  // que son comerciales; los demás siguen siendo mensajes personales.
+  postalAddress?: string | null
   locale?:        EmailLocale
 }): { subject: string; html: string } {
   const { content, vars, unsubscribeUrl } = params
@@ -133,6 +136,11 @@ export function renderEmail(params: {
       }</p>`
     : ''
 
+  // Legible a propósito: la ley pide que se vea, no que esté.
+  const postalHtml = params.postalAddress?.trim()
+    ? `<div style="margin-bottom:6px;color:#8a8a8a;">${escapeHtml(params.postalAddress.trim()).replace(/\r?\n/g, '<br/>')}</div>\n      `
+    : ''
+
   // Unsubscribe muy sutil: gris claro, pequeño, sin marca ni "cancelar
   // suscripción" en mayúsculas — apenas visible, como pide el requisito.
   const html = `<!DOCTYPE html>
@@ -147,7 +155,7 @@ export function renderEmail(params: {
 ${bodyHtml}
 ${signatureHtml}
     <div style="margin-top:36px;${FONT};font-size:11px;line-height:1.5;color:#c2c2c2;">
-      <a href="${escapeHtml(unsubscribeUrl)}" style="color:#c2c2c2;text-decoration:underline;">${unsubscribeLabel(locale)}</a>
+      ${postalHtml}<a href="${escapeHtml(unsubscribeUrl)}" style="color:#c2c2c2;text-decoration:underline;">${unsubscribeLabel(locale)}</a>
     </div>
   </div>
 </body>

@@ -22,6 +22,7 @@ export interface OpenHouseSender {
 export async function resolveOpenHouseSender(
   db: SupabaseClient,
   tenantId: string,
+  ownDomainMessage: string = OWN_DOMAIN_REQUIRED_MESSAGE,
 ): Promise<{ ok: true; sender: OpenHouseSender } | { ok: false; error: string }> {
   const [{ data: tenant }, access] = await Promise.all([
     db.from('tenants')
@@ -36,7 +37,7 @@ export async function resolveOpenHouseSender(
   const t = tenant as any
   const identity = resolveSenderIdentity(t, { customDomainAllowed: access.customDomainAllowed })
   if (!identity || usesSharedDomain(identity)) {
-    return { ok: false, error: OWN_DOMAIN_REQUIRED_MESSAGE }
+    return { ok: false, error: ownDomainMessage }
   }
   return {
     ok: true,

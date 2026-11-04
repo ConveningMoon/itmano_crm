@@ -35,6 +35,7 @@ export type EmailAiPurpose =
   | 'open_house_reminder'
   | 'open_house_update'
   | 'open_house_cancellation'
+  | 'broadcast'
 
 export interface EmailAiInput {
   purpose:   EmailAiPurpose
@@ -90,6 +91,7 @@ const PURPOSE_LABEL: Record<EmailAiPurpose, string> = {
   purchase_pre_close:   'A friendly reminder shortly before the closing date',
   purchase_completed:   'The home purchase was completed — warm congratulations',
   one_off:              'A personal one-off email to a specific person',
+  broadcast:            'A personal-sounding email the agent sends to a group of leads they already know. It must read well for every recipient, so no details about any one person',
   open_house_announcement: 'An invitation to an open house of a specific property, sent to leads the agent already knows',
   open_house_reminder:     'A short reminder for someone who already confirmed they will attend an open house',
   open_house_update:       'A notice that an open house the recipient was invited to has a NEW date or time',

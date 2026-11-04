@@ -522,8 +522,235 @@ export type Database = {
           },
         ]
       }
+      email_broadcast_contents: {
+        Row: {
+          body_json: Json
+          broadcast_id: string
+          language: string
+          subject: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          body_json: Json
+          broadcast_id: string
+          language: string
+          subject: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          body_json?: Json
+          broadcast_id?: string
+          language?: string
+          subject?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_broadcast_contents_broadcast_id_fkey"
+            columns: ["broadcast_id"]
+            isOneToOne: false
+            referencedRelation: "email_broadcasts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcast_contents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_broadcast_recipients: {
+        Row: {
+          attempts: number
+          broadcast_id: string
+          language: string | null
+          last_error: string | null
+          lead_id: string
+          resend_email_id: string | null
+          sent_at: string | null
+          skip_reason: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          attempts?: number
+          broadcast_id: string
+          language?: string | null
+          last_error?: string | null
+          lead_id: string
+          resend_email_id?: string | null
+          sent_at?: string | null
+          skip_reason?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          attempts?: number
+          broadcast_id?: string
+          language?: string | null
+          last_error?: string | null
+          lead_id?: string
+          resend_email_id?: string | null
+          sent_at?: string | null
+          skip_reason?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_broadcast_recipients_broadcast_id_fkey"
+            columns: ["broadcast_id"]
+            isOneToOne: false
+            referencedRelation: "email_broadcasts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcast_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcast_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcast_recipients_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_broadcasts: {
+        Row: {
+          attempts: number
+          audience: Json
+          cancelled_at: string | null
+          cancelled_by_user_id: string | null
+          confirmed_at: string | null
+          confirmed_by_user_id: string | null
+          created_at: string
+          created_by_agent_id: string | null
+          created_by_user_id: string | null
+          failed_count: number
+          finished_at: string | null
+          guard_overridden_at: string | null
+          id: string
+          languages: string[]
+          last_error: string | null
+          name: string
+          recipients_frozen_at: string | null
+          scheduled_at: string | null
+          scope_agent_id: string | null
+          sender_agent_id: string | null
+          sent_count: number
+          skipped_count: number
+          started_at: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          audience?: Json
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
+          confirmed_at?: string | null
+          confirmed_by_user_id?: string | null
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          failed_count?: number
+          finished_at?: string | null
+          guard_overridden_at?: string | null
+          id?: string
+          languages?: string[]
+          last_error?: string | null
+          name: string
+          recipients_frozen_at?: string | null
+          scheduled_at?: string | null
+          scope_agent_id?: string | null
+          sender_agent_id?: string | null
+          sent_count?: number
+          skipped_count?: number
+          started_at?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          audience?: Json
+          cancelled_at?: string | null
+          cancelled_by_user_id?: string | null
+          confirmed_at?: string | null
+          confirmed_by_user_id?: string | null
+          created_at?: string
+          created_by_agent_id?: string | null
+          created_by_user_id?: string | null
+          failed_count?: number
+          finished_at?: string | null
+          guard_overridden_at?: string | null
+          id?: string
+          languages?: string[]
+          last_error?: string | null
+          name?: string
+          recipients_frozen_at?: string | null
+          scheduled_at?: string | null
+          scope_agent_id?: string | null
+          sender_agent_id?: string | null
+          sent_count?: number
+          skipped_count?: number
+          started_at?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_broadcasts_created_by_agent_id_fkey"
+            columns: ["created_by_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_scope_agent_id_fkey"
+            columns: ["scope_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_sender_agent_id_fkey"
+            columns: ["sender_agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_broadcasts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_sends: {
         Row: {
+          broadcast_id: string | null
           created_at: string
           id: string
           lead_id: string
@@ -538,6 +765,7 @@ export type Database = {
           tenant_id: string
         }
         Insert: {
+          broadcast_id?: string | null
           created_at?: string
           id?: string
           lead_id: string
@@ -552,6 +780,7 @@ export type Database = {
           tenant_id: string
         }
         Update: {
+          broadcast_id?: string | null
           created_at?: string
           id?: string
           lead_id?: string
@@ -566,6 +795,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "email_sends_broadcast_id_fkey"
+            columns: ["broadcast_id"]
+            isOneToOne: false
+            referencedRelation: "email_broadcasts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_sends_lead_id_fkey"
             columns: ["lead_id"]
@@ -2686,6 +2922,7 @@ export type Database = {
           newsletter_canonical_template: string | null
           newsletter_source_domains: string[] | null
           pages_managed_by_itmano: boolean
+          postal_address: string | null
           primary_areas: string[] | null
           primary_color: string
           public_site_url: string | null
@@ -2717,6 +2954,7 @@ export type Database = {
           newsletter_canonical_template?: string | null
           newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
+          postal_address?: string | null
           primary_areas?: string[] | null
           primary_color?: string
           public_site_url?: string | null
@@ -2748,6 +2986,7 @@ export type Database = {
           newsletter_canonical_template?: string | null
           newsletter_source_domains?: string[] | null
           pages_managed_by_itmano?: boolean
+          postal_address?: string | null
           primary_areas?: string[] | null
           primary_color?: string
           public_site_url?: string | null
@@ -2896,6 +3135,10 @@ export type Database = {
           stage_changed: boolean
         }[]
       }
+      email_broadcast_metrics: {
+        Args: { p_broadcast_ids: string[]; p_tenant_id: string }
+        Returns: Json
+      }
       ensure_tag_email_sequences: {
         Args: { p_tenant_id: string }
         Returns: number
@@ -2964,6 +3207,7 @@ export type Database = {
         Args: { p_sequence_ids?: string[]; p_tenant_id?: string }
         Returns: Json
       }
+      table_grants_snapshot: { Args: never; Returns: Json }
       tenant_channel_metrics: {
         Args: { p_tenant_id: string; p_window_days?: number }
         Returns: Json
