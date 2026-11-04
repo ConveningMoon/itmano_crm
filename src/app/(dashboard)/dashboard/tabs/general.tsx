@@ -124,7 +124,7 @@ export async function GeneralTab({ ctx }: TabProps) {
           <KpiCard
             label="Cartera activa" value={leadStats.active} highlight
             note={`${fmt(analytics.thisMonth.leads)} altas este mes`}
-            hint="Leads en etapa Nuevo o En Nutrición. Incluye los importados de otro CRM, que el Embudo deja fuera: por eso las dos cifras pueden diferir."
+            hint="Leads en etapa Nuevo o En Nutrición. Incluye importados de otro CRM y excluye suscriptores; el Embudo hace lo contrario, por eso las cifras pueden diferir."
           />
         </StaggerItem>
         <StaggerItem>
@@ -153,7 +153,7 @@ export async function GeneralTab({ ctx }: TabProps) {
         <ChartCard
           title="Evolución de leads"
           scope="Últimos 7 meses · no cambia con el periodo"
-          hint="Leads creados cada mes y, de esos, cuántos están cerrados hoy. Cada mes es un grupo de altas: no indica cuándo se cerraron. Los importados de otro CRM no cuentan."
+          hint="Leads creados cada mes y, de esos, cuántos están cerrados hoy. Cada mes es un grupo de altas: no indica cuándo se cerraron. La serie incluye importados de otro CRM y suscriptores."
         >
           <ChartFrame
             height={230}

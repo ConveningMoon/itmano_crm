@@ -4,7 +4,7 @@ import { getBusinessProfile } from '@/lib/data/business-profile'
 import { getChannelLeadsTrend, getChannelsWithMetrics, type ChannelType } from '@/lib/data/channels'
 import { businessTimeZone } from '@/lib/time-zones'
 import { PERIODS } from '@/lib/dashboard/period'
-import { planePoints } from '@/lib/dashboard/source-plane'
+import { overallConversion, planePoints } from '@/lib/dashboard/source-plane'
 import { colorsByKey } from '@/lib/charts/palette'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { ChartCard } from '@/components/ui/chart-card'
@@ -46,10 +46,12 @@ export async function FuentesTab({ ctx, period }: TabProps) {
   const cfg = PERIODS.find(p => p.days === period) ?? PERIODS[1]
   const windowText = `${cfg.bucketDays === 1 ? 'Últimos' : 'Últimas'} ${cfg.label}`
 
-  // ── KPIs: mismas fórmulas que /sources ──
+  // ── KPIs ──
   const totalLeads = channels.reduce((s, c) => s + c.metrics.leadsInWindow, 0)
   const totalViews = channels.reduce((s, c) => s + c.metrics.pageViewsInWindow, 0)
-  const conversion = totalViews > 0 ? Math.round((totalLeads / totalViews) * 100) : 0
+  const conversion = overallConversion(channels.map(c => ({
+    views: c.metrics.pageViewsInWindow, submissions: c.metrics.submissionsInWindow,
+  })))
   const activeCount = channels.filter(c => c.active).length
 
   // Leads por bucket: suma elemento a elemento de las tendencias.
@@ -105,7 +107,7 @@ export async function FuentesTab({ ctx, period }: TabProps) {
         <StaggerItem>
           <KpiCard
             label="Conversión" value={conversion} suffix="%"
-            hint="Leads captados entre vistas de página, en todas las fuentes. Sin vistas, 0%."
+            hint="Envíos de formulario entre vistas, sólo de las fuentes con vistas. Sin vistas, 0%."
           />
         </StaggerItem>
         <StaggerItem>
@@ -155,7 +157,7 @@ export async function FuentesTab({ ctx, period }: TabProps) {
         <ChartCard
           title="Conversión por fuente"
           scope={windowText}
-          hint="Leads entre vistas de cada fuente. Las fuentes sin vistas no entran al ranking porque no tienen cómo medirse; en la tabla aparecen con —."
+          hint="Envíos de formulario entre vistas de cada fuente. Las fuentes sin vistas no entran al ranking porque no tienen cómo medirse; en la tabla aparecen con —."
         >
           <ChartFrame
             height={160}
@@ -171,7 +173,7 @@ export async function FuentesTab({ ctx, period }: TabProps) {
           title="Todas las fuentes"
           scope={windowText}
           action={<Link href="/sources">Gestionar</Link>}
-          hint="Cada fuente activa con su tendencia de leads, sus vistas, sus leads, su conversión y el score medio de sus leads. Sin vistas o sin score, un —."
+          hint="Cada fuente, activa o pausada, con su tendencia de leads, sus vistas, sus leads, su conversión y el score medio de sus leads. Sin vistas o sin score, un —."
         >
           {tableRows.length === 0 ? (
             <div className="top5-empty">Todavía no hay fuentes. {sourcesLink}</div>

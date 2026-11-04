@@ -48,6 +48,8 @@ export async function NewsletterTab({ ctx }: TabProps) {
   const t = stats.totals
   const newsletterLink = <Link href="/newsletters">Ir a Newsletters →</Link>
   const reliable = growth.netReliable
+  // activeNow sale de SQL; si growth no respondió (monthly vacío), el conteo de filas en JS.
+  const subscribersNow = growth.monthly.length > 0 ? growth.activeNow : t.subscribers
 
   // ── Crecimiento: neto si es fiable; si no, altas por mes ──
   const months = growth.monthly
@@ -112,8 +114,8 @@ export async function NewsletterTab({ ctx }: TabProps) {
       <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '16px' }}>
         <StaggerItem className="col-span-2 md:col-span-1">
           <KpiCard
-            label="Suscriptores" value={t.subscribers} highlight
-            spark={reliable && t.subscribers > 0 && growthRows.length > 1 ? growthRows.map(r => r.active) : undefined}
+            label="Suscriptores" value={subscribersNow} highlight
+            spark={reliable && subscribersNow > 0 && growthRows.length > 1 ? growthRows.map(r => r.active) : undefined}
             note="Activos hoy"
             hint="Suscriptores activos de la newsletter, sin quienes se dieron de baja. Es el mismo número que muestra Newsletters. Cuenta a todo el equipo."
           />
@@ -122,7 +124,7 @@ export async function NewsletterTab({ ctx }: TabProps) {
           <KpiCard
             label="Vistas" value={t.views}
             note="Acumuladas"
-            hint="Vistas totales de todas tus ediciones desde que se publicaron. No cambia con el periodo elegido arriba."
+            hint="Vistas totales de todas tus ediciones desde que se publicaron."
           />
         </StaggerItem>
         <StaggerItem>
@@ -144,8 +146,8 @@ export async function NewsletterTab({ ctx }: TabProps) {
           title="Crecimiento de suscriptores"
           scope={reliable ? 'Últimos 7 meses · suscriptores activos al cierre de cada mes' : 'Últimos 7 meses · altas por mes'}
           hint={reliable
-            ? 'Suscriptores activos al final de cada mes: las altas menos las bajas. No cambia con el periodo elegido arriba.'
-            : 'Altas por mes. Hay bajas sin fecha registrada, así que no se puede calcular el neto con fiabilidad y por eso se muestran solo las altas. No cambia con el periodo elegido arriba.'}
+            ? 'Suscriptores activos al final de cada mes: las altas menos las bajas. Muestra siempre los últimos meses.'
+            : 'Altas por mes. Hay bajas sin fecha registrada, así que no se puede calcular el neto con fiabilidad y por eso se muestran solo las altas. Muestra siempre los últimos meses.'}
         >
           <ChartFrame
             height={200}
@@ -188,7 +190,7 @@ export async function NewsletterTab({ ctx }: TabProps) {
           title="Vistas por edición"
           scope="Últimas 8 publicadas · desde su publicación"
           action={<Link href="/newsletters">Gestionar</Link>}
-          hint="Vistas acumuladas de cada edición desde el día que se publicó hasta hoy, no solo del periodo elegido arriba. Por eso una edición antigua puede superar a una reciente. La más nueva va arriba."
+          hint="Vistas acumuladas de cada edición desde el día que se publicó hasta hoy, no solo de un periodo. Por eso una edición antigua puede superar a una reciente. La más nueva va arriba."
         >
           <ChartFrame
             height={Math.max(96, viewRows.length * 52)}

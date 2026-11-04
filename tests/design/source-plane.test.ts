@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planeCuts, planePoints, samePoint, topThree } from '@/lib/dashboard/source-plane'
+import { overallConversion, planeCuts, planePoints, samePoint, topThree } from '@/lib/dashboard/source-plane'
 
 const row = (id: string, leads: number, score: number | null, name = id) => ({ id, name, leads, score })
 
@@ -48,5 +48,18 @@ describe('samePoint', () => {
   })
   it('un id desconocido no enciende nada', () => {
     expect(samePoint(planePoints([row('a', 5, 50)]), 'nope')).toEqual([])
+  })
+})
+
+describe('overallConversion', () => {
+  it('suma envíos y vistas sólo de fuentes con vistas', () => {
+    expect(overallConversion([
+      { views: 100, submissions: 5 },
+      { views: 0, submissions: 50 },
+    ])).toBe(5)
+  })
+  it('sin vistas da 0', () => {
+    expect(overallConversion([{ views: 0, submissions: 9 }])).toBe(0)
+    expect(overallConversion([])).toBe(0)
   })
 })

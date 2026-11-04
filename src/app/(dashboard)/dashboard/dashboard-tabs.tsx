@@ -45,7 +45,7 @@ export function DashboardTabs({ tabs, active, period, showPeriod, children }: Pr
           borderBottom: '1px solid var(--border-subtle)',
         }}
       >
-        <div role="tablist" aria-label="Secciones del dashboard" style={{ display: 'flex', gap: '4px', overflowX: 'auto', maxWidth: '100%' }}>
+        <div role="tablist" aria-label="Secciones del dashboard" style={{ display: 'flex', gap: '4px', overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', paddingBottom: '1px', marginBottom: '-1px', maxWidth: '100%' }}>
           {tabs.map(t => {
             const selected = view.tab === t.key
             return (

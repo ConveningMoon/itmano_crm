@@ -66,6 +66,7 @@ export async function AgentesTab({ ctx }: TabProps) {
     highQuality: analytics.qualityDistribution.alta ?? 0,
   })
   const { total: totalLeads, highQuality: totalHigh, closed: totalClosed, perAgent, inactive } = summary
+  const activeLeads = agents.reduce((s, a) => s + a.total, 0)
   const closedPct = totalLeads > 0 ? Math.round((totalClosed / totalLeads) * 100) : 0
   const topHigh = agents.reduce<typeof agents[number] | null>(
     (best, a) => (a.highQuality > (best?.highQuality ?? 0) ? a : best), null,
@@ -100,21 +101,21 @@ export async function AgentesTab({ ctx }: TabProps) {
         <StaggerItem>
           <KpiCard
             label="Agentes activos" value={count} highlight
-            note={`${fmt(totalLeads)} leads asignados`}
+            note={`${fmt(activeLeads)} leads de los agentes activos`}
             hint="Miembros del equipo con la cuenta activa."
           />
         </StaggerItem>
         <StaggerItem>
           <KpiCard
             label="Leads por agente" value={perAgent} note="promedio del equipo"
-            hint="Total de leads asignados dividido entre los agentes activos."
+            hint="Leads de los agentes activos divididos entre su número. No cuenta los de agentes inactivos."
           />
         </StaggerItem>
         <StaggerItem>
           <KpiCard
             label="Calidad alta" value={totalHigh}
             note={topHigh ? `${fmt(topHigh.highQuality)} con ${topHigh.name.split(' ')[0]}` : undefined}
-            hint="Leads en la banda más alta de calidad, sumados por todo el equipo."
+            hint="Leads en la banda más alta de calidad en toda la cartera, cerrados incluidos."
           />
         </StaggerItem>
         <StaggerItem>

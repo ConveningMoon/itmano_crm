@@ -50,3 +50,19 @@ export function samePoint(points: PlanePoint[], id: string): string[] {
   if (!at) return []
   return points.filter(p => p.leads === at.leads && p.score === at.score).map(p => p.id)
 }
+
+/**
+ * Conversión global: envíos de formulario entre vistas, sólo de las fuentes que
+ * tienen vistas (las demás no tienen cómo medirse). Sin vistas, 0. Redondeada a entero.
+ */
+export function overallConversion(rows: { views: number; submissions: number }[]): number {
+  let views = 0
+  let submissions = 0
+  for (const r of rows) {
+    if (r.views > 0) {
+      views += r.views
+      submissions += r.submissions
+    }
+  }
+  return views > 0 ? Math.round((submissions / views) * 100) : 0
+}

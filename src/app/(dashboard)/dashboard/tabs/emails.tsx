@@ -105,7 +105,7 @@ export async function EmailsTab({ ctx, period }: TabProps) {
             label="Enviados" value={sends} highlight
             spark={sends > 0 ? stats.series.map(b => b.sends) : undefined}
             note={`${fmt(stats.uniqueLeads)} leads únicos`}
-            hint="Correos enviados en el periodo por secuencias, grupales, etiquetas y cierre. Para un agente cuenta todo lo recibido por sus leads."
+            hint="Correos enviados en el periodo por secuencias, grupales, etiquetas, cierre y otros. Para un agente cuenta todo lo recibido por sus leads."
           />
         </StaggerItem>
         <StaggerItem>
