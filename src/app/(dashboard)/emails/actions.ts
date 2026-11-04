@@ -19,6 +19,7 @@ import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
 import { loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
 import { OPEN_HOUSE_EMAIL_KINDS } from '@/lib/open-houses/model'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { getTenantLanguages } from '@/lib/data/tag-sequences'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -331,6 +332,92 @@ export async function importAllTagSequenceSteps(
       skipped: [...parsed.skipped, ...databaseSkips],
     },
   }
+}
+
+// Crea la secuencia vacía de una etiqueta en un idioma, para escribirla a mano
+// desde la matriz "Por etiqueta". La fila es idéntica a la que crea la función
+// SQL ensure_tag_email_sequences (que usa también importAllTagSequenceSteps).
+// Sin pasos no envía nada (enroll-lead-by-tag devuelve `no_steps`), así que
+// crearla es seguro. El índice único (tenant, etiqueta, idioma) de la 117 evita
+// duplicados: dos clics o dos pestañas devuelven la misma secuencia.
+export async function ensureTagSequenceSlot(
+  tagId: string,
+  language: string,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const ctx = await getCurrentTenantContext()
+  const denied = requireWriteAccess(ctx)
+  if (denied) return denied
+  if (!ctx.tenant_id) return { ok: false, error: 'Selecciona un tenant para escribir este correo.' }
+  const tenantId = ctx.tenant_id
+
+  if (!tagId || !language) return { ok: false, error: 'Datos inválidos' }
+  const supabase = createAdminClient()
+  const findExisting = async () => {
+    const { data, error } = await supabase
+      .from('email_sequences')
+      .select(columns('email_sequences', ['id']))
+      .eq('tenant_id', tenantId)
+      .eq('trigger_tag_id', tagId)
+      .eq('language', language)
+      .maybeSingle()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { id: ((data as any)?.id ?? null) as string | null, error }
+  }
+
+  // Tres lecturas independientes: una sola ola. Las guardas se evalúan después,
+  // en el orden de siempre.
+  const [languages, tagRes, existingRes] = await Promise.all([
+    getTenantLanguages(tenantId),
+    supabase
+      .from('lead_tags')
+      .select(columns('lead_tags', ['id', 'name', 'requires_sequence']))
+      .eq('id', tagId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle(),
+    findExisting(),
+  ])
+
+  if (!languages.includes(language)) {
+    return { ok: false, error: 'El equipo no atiende ese idioma.' }
+  }
+  if (tagRes.error || existingRes.error) {
+    return { ok: false, error: 'No se pudo leer la información de la etiqueta. Inténtalo de nuevo.' }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tagRow = tagRes.data as any
+  if (!tagRow) return { ok: false, error: 'No se encontró la etiqueta.' }
+  if (!tagRow.requires_sequence) return { ok: false, error: 'Esta etiqueta ya no manda correos automáticos.' }
+
+  if (existingRes.id) return { ok: true, id: existingRes.id }
+
+  const name = tagRow.name as string
+  const { data, error } = await supabase
+    .from('email_sequences')
+    .insert({
+      tenant_id:       tenantId,
+      name:            `${name} · ${language.toUpperCase()}`,
+      language,
+      description:     `Correo automático de la etiqueta "${name}".`,
+      activation_type: 'tag',
+      trigger_tag_id:  tagId,
+      agent_id:        null,
+      active:          true,
+    })
+    .select(columns('email_sequences', ['id']))
+    .single()
+
+  if (error) {
+    if (error.code === '23505') {
+      const winner = await findExisting()
+      if (winner.id) return { ok: true, id: winner.id }
+    }
+    return { ok: false, error: error.message }
+  }
+  if (!data) return { ok: false, error: 'Error al crear la secuencia' }
+
+  revalidateEmails()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { ok: true, id: (data as any).id }
 }
 
 export async function addStep(

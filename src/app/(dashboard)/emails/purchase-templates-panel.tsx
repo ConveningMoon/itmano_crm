@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Check, X, Pencil } from 'lucide-react'
+import { AlertTriangle, Check, LayoutTemplate, X, type LucideIcon } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
-import type { PurchaseTemplateRow } from './purchase-templates-actions'
+import type { AgentPurchaseTemplates, PurchaseTemplateRow } from './purchase-templates-actions'
 import { updatePurchaseTemplate, updatePurchaseTemplateContent, clearPurchaseTemplateContent } from './purchase-templates-actions'
 import {
   EmailComposer,
@@ -12,7 +12,7 @@ import {
   composerValueToInput,
   type ComposerValue,
 } from '@/components/dashboard/email-composer'
-import { parseEmailContent } from '@/lib/email-content'
+import { cellState, isPlaceholder, type PurchaseCellState } from '@/lib/emails/purchase-state'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import type { EmailAiPurpose } from './ai-actions'
 
@@ -31,30 +31,7 @@ const MILESTONE_PURPOSE: Record<string, EmailAiPurpose> = {
 const LANG_LABEL: Record<string, string> = Object.fromEntries(
   SUPPORTED_LANGUAGE_CODES.map(c => [c, LANGUAGE_CONFIG[c].label])
 )
-// Colores rotan sobre la paleta de acentos para cualquier idioma.
-const ACCENT_CYCLE = ['var(--accent-gold)', 'var(--accent-blue)', 'var(--accent-teal)', 'var(--accent-coral)', 'var(--accent-pink)', 'var(--accent-green)']
-const LANG_COLOR: Record<string, string> = Object.fromEntries(
-  SUPPORTED_LANGUAGE_CODES.map((c, i) => [c, ACCENT_CYCLE[i % ACCENT_CYCLE.length]])
-)
-
 const MILESTONES = ['start', 'pre_close', 'completed'] as const
-
-function isPlaceholder(id: string) {
-  return !id || id.startsWith('REPLACE_ME')
-}
-
-// Estado de una celda: contenido del CRM, template de Resend, o sin configurar.
-function cellState(row: PurchaseTemplateRow): 'crm' | 'template' | 'empty' {
-  if (parseEmailContent(row.body_json) && row.subject?.trim()) return 'crm'
-  if (!isPlaceholder(row.resend_template_id)) return 'template'
-  return 'empty'
-}
-
-const STATE_META: Record<'crm' | 'template' | 'empty', { label: string; color: string; bg: string }> = {
-  crm:      { label: 'Contenido CRM', color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
-  template: { label: 'Template Resend', color: 'var(--accent-blue)', bg: 'rgba(91,142,201,0.12)' },
-  empty:    { label: 'Sin configurar', color: 'var(--accent-coral)', bg: 'rgba(201,123,107,0.1)' },
-}
 
 // ─── Editor modal ──────────────────────────────────────────────────────────────
 
@@ -176,155 +153,162 @@ function EditModal({
   )
 }
 
-// ─── Cell (status chip + edit button) ────────────────────────────────────────────
+// ─── Matriz ───────────────────────────────────────────────────────────────────
+// Una tarjeta con una fila por agente y una columna por hito. Cada celda lleva un
+// botón por idioma que atiende el agente; el estado se lee por icono y por texto
+// accesible, no sólo por color. Un solo EditModal vive en el panel: un clic abre
+// exactamente uno.
 
-function TemplateCell({
-  row, tenantName, agentName, readOnly,
+const STATE_META: Record<PurchaseCellState, { label: string; color: string; Icon: LucideIcon }> = {
+  crm:      { label: 'Contenido CRM',   color: 'var(--accent-gold)',  Icon: Check },
+  template: { label: 'Template Resend', color: 'var(--accent-blue)',  Icon: LayoutTemplate },
+  empty:    { label: 'Sin configurar',  color: 'var(--accent-coral)', Icon: AlertTriangle },
+}
+
+const CHIP: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+  minWidth: '44px', minHeight: '28px', padding: '0 8px', borderRadius: '8px',
+  fontSize: '11px', fontWeight: 600, letterSpacing: '0.04em',
+}
+
+function LangCell({
+  row, agentName, readOnly, onEdit,
 }: {
-  row: PurchaseTemplateRow
-  tenantName?: string
-  agentName?: string
+  row: PurchaseTemplateRow | undefined
+  agentName: string
   readOnly: boolean
+  onEdit: (row: PurchaseTemplateRow) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const state = cellState(row)
-  const meta  = STATE_META[state]
-
-  return (
+  if (!row) return <span aria-label="Sin correo" style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
+  const meta = STATE_META[cellState(row)]
+  const label = `${MILESTONE_LABEL[row.milestone]}, ${LANG_LABEL[row.language]}: ${meta.label}`
+  const style: React.CSSProperties = {
+    ...CHIP, color: meta.color,
+    background: `color-mix(in srgb, ${meta.color} 10%, transparent)`,
+    border: `1px solid color-mix(in srgb, ${meta.color} 28%, transparent)`,
+  }
+  const content = (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: '4px',
-          fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-          letterSpacing: '0.04em', color: meta.color, background: meta.bg,
-        }}>
-          {state === 'empty' && <AlertTriangle size={10} />}
-          {state === 'crm' && <Check size={10} />}
-          {meta.label}
-        </span>
-        {!readOnly && (
-          <button
-            onClick={() => setOpen(true)}
-            title="Editar"
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px',
-              borderRadius: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0,
-            }}
-          >
-            <Pencil size={11} />
-          </button>
-        )}
-      </div>
-      {open && <EditModal row={row} tenantName={tenantName} agentName={agentName} onClose={() => setOpen(false)} />}
+      <meta.Icon size={12} aria-hidden />
+      {row.language.toUpperCase()}
     </>
+  )
+  if (readOnly) {
+    return <span role="img" aria-label={label} title={label} style={style}>{content}</span>
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onEdit(row)}
+      aria-label={label}
+      title={`${label} (${agentName}). Editar`}
+      style={{ ...style, cursor: 'pointer' }}
+    >
+      {content}
+    </button>
   )
 }
 
-// ─── Panel ────────────────────────────────────────────────────────────────────
-// Un panel por agente: columnas = idiomas registrados del agente
-// (agents.languages). El título/subtítulo general lo pone la página; aquí va
-// la cabecera del agente.
+const TH: React.CSSProperties = {
+  padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 500,
+  color: 'var(--text-muted)', background: 'var(--bg-elevated)',
+  borderBottom: '1px solid var(--border-subtle)', whiteSpace: 'nowrap',
+}
 
 export function PurchaseTemplatesPanel({
-  templates,
-  agentName,
-  accentColor,
-  languages,
+  agents,
   tenantName,
   readOnly = false,
 }: {
-  templates: PurchaseTemplateRow[]
-  agentName: string
-  accentColor?: string
-  languages: string[]
+  agents: AgentPurchaseTemplates[]
   tenantName?: string
   readOnly?: boolean
 }) {
-  const byKey = Object.fromEntries(templates.map(t => [`${t.milestone}_${t.language}`, t]))
-  // Columnas = idiomas registrados del agente (orden estable por el catálogo).
-  const langs = SUPPORTED_LANGUAGE_CODES.filter(l => languages.includes(l))
-  const color = accentColor ?? 'var(--accent-gold)'
-
-  const shown = templates.filter(t => languages.includes(t.language))
-  const pendingCount = shown.filter(t => cellState(t) === 'empty').length
+  const [editing, setEditing] = useState<{ row: PurchaseTemplateRow; agentName: string } | null>(null)
 
   return (
-    <div style={{ marginTop: '24px' }}>
-      {/* Agent header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-        <div style={{
-          width: '28px', height: '28px', borderRadius: '50%',
-          background: `${color}22`, border: `1px solid ${color}44`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '10px', fontWeight: 700, color, flexShrink: 0,
-        }}>
-          {agentName.trim().slice(0, 2).toUpperCase()}
-        </div>
-        <div>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{agentName}</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-            {langs.map(l => LANG_LABEL[l]).join(' · ')}
-          </span>
-        </div>
-        {pendingCount > 0 && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: '5px',
-            fontSize: '11px', fontWeight: 500,
-            color: 'var(--accent-coral)',
-            background: 'rgba(201,123,107,0.1)',
-            border: '1px solid rgba(201,123,107,0.25)',
-            borderRadius: '6px', padding: '3px 10px',
-          }}>
-            <AlertTriangle size={11} />
-            {pendingCount} sin configurar
-          </span>
-        )}
-      </div>
-
-      {/* Table */}
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-        {/* Header row */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: `180px repeat(${langs.length}, 1fr)`,
-          padding: '10px 16px', background: 'var(--bg-elevated)',
-          borderBottom: '1px solid var(--border-subtle)',
-        }}>
-          <span style={{ fontSize: '10px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Hito
-          </span>
-          {langs.map(l => (
-            <span key={l} style={{
-              fontSize: '10px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: LANG_COLOR[l],
-            }}>
-              {LANG_LABEL[l]}
-            </span>
-          ))}
-        </div>
-
-        {MILESTONES.map((milestone, idx) => (
-          <div
-            key={milestone}
-            style={{
-              display: 'grid', gridTemplateColumns: `180px repeat(${langs.length}, 1fr)`,
-              padding: '14px 16px',
-              borderTop: idx > 0 ? '1px solid var(--border-subtle)' : undefined,
-              alignItems: 'center', gap: '12px',
-            }}
-          >
-            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-              {MILESTONE_LABEL[milestone]}
-            </span>
-            {langs.map(lang => {
-              const row = byKey[`${milestone}_${lang}`]
-              if (!row) return <span key={lang} style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
-              return <TemplateCell key={lang} row={row} tenantName={tenantName} agentName={agentName} readOnly={readOnly} />
+    <>
+      <ul aria-label="Leyenda de estados" style={{
+        display: 'flex', flexWrap: 'wrap', gap: '4px 16px', listStyle: 'none',
+        margin: '0 2px 8px', padding: 0, fontSize: '11px', color: 'var(--text-muted)',
+      }}>
+        {(Object.keys(STATE_META) as PurchaseCellState[]).map(k => {
+          const m = STATE_META[k]
+          return (
+            <li key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <m.Icon size={12} aria-hidden color={m.color} />
+              {m.label}
+            </li>
+          )
+        })}
+      </ul>
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflowX: 'auto' }}>
+        <table aria-label="Correos de cierre por agente e idioma" style={{ width: '100%', minWidth: '560px', borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ ...TH, textAlign: 'left', position: 'sticky', left: 0, zIndex: 1 }}>Agente</th>
+              {MILESTONES.map(m => <th key={m} scope="col" style={TH}>{MILESTONE_LABEL[m]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map((agent, i) => {
+              const byKey = Object.fromEntries(agent.templates.map(t => [`${t.milestone}_${t.language}`, t]))
+              // Orden estable por el catálogo, sólo los idiomas que atiende el agente.
+              const langs = SUPPORTED_LANGUAGE_CODES.filter(l => agent.languages.includes(l))
+              const rowBorder = i > 0 ? '1px solid var(--border-subtle)' : undefined
+              return (
+                <tr key={agent.agent_id}>
+                  <th scope="row" style={{
+                    padding: '10px 12px', textAlign: 'left', fontWeight: 400, borderTop: rowBorder,
+                    position: 'sticky', left: 0, zIndex: 1, background: 'var(--bg-surface)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <span aria-hidden style={{
+                        width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                        background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)',
+                      }}>
+                        {agent.agent_name.trim().slice(0, 2).toUpperCase()}
+                      </span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.agent_name}</span>
+                        <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {langs.map(l => LANG_LABEL[l]).join(' · ')}
+                        </span>
+                      </span>
+                    </div>
+                  </th>
+                  {MILESTONES.map(m => (
+                    <td key={m} style={{ padding: '10px 12px', textAlign: 'center', borderTop: rowBorder }}>
+                      <div style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {langs.map(l => (
+                          <LangCell
+                            key={l}
+                            row={byKey[`${m}_${l}`]}
+                            agentName={agent.agent_name}
+                            readOnly={readOnly}
+                            onEdit={row => setEditing({ row, agentName: agent.agent_name })}
+                          />
+                        ))}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              )
             })}
-          </div>
-        ))}
+          </tbody>
+        </table>
       </div>
-
-    </div>
+      {editing && (
+        <EditModal
+          key={editing.row.id}
+          row={editing.row}
+          tenantName={tenantName}
+          agentName={editing.agentName}
+          onClose={() => setEditing(null)}
+        />
+      )}
+    </>
   )
 }

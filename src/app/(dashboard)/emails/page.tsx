@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { listSequences } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
@@ -8,16 +9,20 @@ import { getMetricsForSequences } from '@/lib/services/email-metrics'
 import { listFolders } from '@/lib/data/folders'
 import { getTagSequenceCoverage } from '@/lib/data/tag-sequences'
 import { TagSequencesPanel } from './tag-sequences-panel'
+import { tagMatrix } from '@/lib/emails/tag-matrix'
 import { BroadcastsPanel } from './broadcasts-panel'
-import { listBroadcasts } from '@/lib/data/email-broadcasts'
+import { getBroadcastsMetrics, listBroadcasts, type BroadcastListItem } from '@/lib/data/email-broadcasts'
 import { BROADCAST_OWN_DOMAIN_MESSAGE } from '@/lib/services/broadcast-dispatch'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { pickByIds } from '@/lib/data-scope'
 import { SequencesTable } from './sequences-table'
 import { NewFolderButton } from '@/components/dashboard/folders'
 import { Tabs } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/ui/page-header'
-import { Plus, Mail } from 'lucide-react'
+import { InfoHint } from '@/components/ui/info-hint'
+import { countMissingClosing } from '@/lib/emails/purchase-state'
+import { AlertTriangle, BarChart3, Plus, Mail } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // /emails tiene cuatro clases de correo y antes iban apiladas en una sola página:
@@ -37,6 +42,30 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 type EmailsTab = 'secuencias' | 'grupales' | 'etiquetas' | 'cierre'
 
 const TABS: EmailsTab[] = ['secuencias', 'grupales', 'etiquetas', 'cierre']
+
+// Cada pestaña abre con una línea de alcance; la explicación larga va detrás del ⓘ.
+function TabIntro({ scope, label, children }: { scope: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="toolbar-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 14px' }}>
+      <span>{scope}</span>
+      <InfoHint label={label}>{children}</InfoHint>
+    </div>
+  )
+}
+
+// Las cifras de la lista (leads y clics) necesitan los ids de la lista, así que
+// no pueden ir en el Promise.all de la página. En vez de sumar esa lectura al
+// camino crítico, la lista se pinta ya con las celdas en skeleton y las cifras
+// llegan por streaming. Sólo se piden las de los envíos que salieron de borrador.
+async function BroadcastsWithMetrics({ tenantId, broadcasts, senderError }: {
+  tenantId:    string | null
+  broadcasts:  BroadcastListItem[]
+  senderError: string | null
+}) {
+  const ids = broadcasts.filter(b => b.status !== 'draft').map(b => b.id)
+  const metrics = tenantId ? await getBroadcastsMetrics(tenantId, ids) : {}
+  return <BroadcastsPanel broadcasts={broadcasts} senderError={senderError} metrics={metrics} />
+}
 
 async function EmailsPage({
   searchParams,
@@ -78,15 +107,26 @@ async function EmailsPage({
   ])
 
   // Huecos por escribir: es el número que hace falta ver sin entrar a la pestaña.
-  const missingTagSequences = tagCoverage.reduce(
-    (n, c) => n + c.slots.filter(s => s.sequence === null).length,
-    0,
-  )
+  const missingTagSequences = tagMatrix(tagCoverage).missing
 
   const hasClosingEmails = isSuperAdmin ? purchaseByTenant.length > 0 : ownAgentTemplates.length > 0
 
+  // Versiones de cierre sin configurar, sólo en los idiomas que cada agente atiende
+  // (la misma cuenta que el chip de cada panel). Para super_admin, de todos los tenants.
+  // El super_admin sólo edita (y cuenta) el tenant que está actuando: guardar en
+  // otro falla en assertCanEditRow, así que los demás salen de sólo lectura.
+  const closingAgents = isSuperAdmin
+    ? purchaseByTenant.filter(t => t.tenant_id === tenant_id).flatMap(t => t.agents)
+    : ownAgentTemplates
+  const missingClosing = closingAgents.reduce((n, a) => n + countMissingClosing(a), 0)
+
   const sequencesTab = (
     <>
+      <TabIntro scope="Campañas de nutrición que arrancan con un formulario o a mano." label="Qué son las secuencias">
+        Una secuencia es una serie de emails enviados por Resend que recorre cada lead
+        desde que entra por una fuente o la lanzas a mano. Las cifras de cada fila son
+        históricas, no de un periodo, y el detalle completo está en Dashboard → Emails.
+      </TabIntro>
       <div className="toolbar">
         <span className="toolbar-meta">
           {sequences.length === 0
@@ -126,23 +166,55 @@ async function EmailsPage({
           </Link>
         </div>
       ) : (
+        <>
+        <p className="toolbar-meta" style={{ margin: '0 2px 8px' }}>
+          Cifras históricas: suman todos los envíos de cada secuencia desde que existe.
+        </p>
         <SequencesTable
           sequences={sequences}
-          metrics={Object.fromEntries(metrics)}
+          metrics={pickByIds(Object.fromEntries(metrics), sequences.map(s => s.id))}
           isSuperAdmin={isSuperAdmin}
           folders={folders}
         />
+        </>
       )}
+    </>
+  )
+
+  const broadcastSenderError = broadcastSender.ok ? null : broadcastSender.error
+
+  const groupTab = (
+    <>
+      <TabIntro scope="Un correo manual a un grupo de leads, una sola vez." label="Qué son los correos grupales">
+        Eliges la audiencia por etiqueta, etapa, agente o fuente, o marcas los leads uno
+        por uno. Cada lead lo recibe en su idioma y firmado por su agente. Requiere un
+        dominio propio para enviar.
+      </TabIntro>
+      <Suspense fallback={<BroadcastsPanel broadcasts={broadcasts} senderError={broadcastSenderError} metrics={null} />}>
+        <BroadcastsWithMetrics tenantId={tenant_id} broadcasts={broadcasts} senderError={broadcastSenderError} />
+      </Suspense>
+    </>
+  )
+
+  const tagTab = (
+    <>
+      <TabIntro scope="Salen solos al poner la etiqueta a un lead." label="Cómo funcionan los correos por etiqueta">
+        Estos correos no se mandan a una lista: salen cuando alguien pone la etiqueta a un
+        lead. Hace falta una versión por cada idioma que atiende el equipo — el lead
+        recibe la de su idioma, y si esa versión no existe no se le manda nada. Los
+        idiomas vienen de Configuración → Agentes.
+      </TabIntro>
+      <TagSequencesPanel coverage={tagCoverage} canManage={!scope.agentId} />
     </>
   )
 
   const closingTab = (
     <>
-      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 18px', lineHeight: 1.6, maxWidth: '680px' }}>
+      <TabIntro scope="Tres correos por agente en los hitos del proceso de compra." label="Cómo funcionan los correos de cierre">
         Cada agente tiene sus 3 correos de hitos del proceso de compra (inicio, pre-cierre,
         completado) por cada idioma que atiende. Los idiomas se gestionan en
         Configuración → Agentes.
-      </p>
+      </TabIntro>
       {!hasClosingEmails && (
         <div style={{
           background: 'var(--bg-surface)', border: '1px dashed var(--border-subtle)',
@@ -152,38 +224,35 @@ async function EmailsPage({
           Todavía no hay agentes con idiomas configurados.
         </div>
       )}
+      {missingClosing > 0 && (
+        <div role="status" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '7px', marginBottom: '14px',
+          padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
+          color: 'var(--accent-coral)',
+          background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+        }}>
+          <AlertTriangle size={13} aria-hidden />
+          {missingClosing === 1
+            ? 'Falta 1 versión por configurar.'
+            : `Faltan ${missingClosing} versiones por configurar.`}
+        </div>
+      )}
       {isSuperAdmin
         ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, agents }) => (
-            <div key={tid} style={{ marginTop: '8px' }}>
-              <div style={{
-                display: 'inline-block', marginBottom: '4px',
-                fontSize: '11px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
-                color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)',
-                border: '1px solid rgba(201,169,110,0.2)', borderRadius: '6px', padding: '3px 10px',
-              }}>
+            <section key={tid} aria-label={tenant_name} style={{ marginTop: '8px', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 8px' }}>
                 {tenant_name}
-              </div>
-              {agents.map(a => (
-                <PurchaseTemplatesPanel
-                  key={a.agent_id}
-                  templates={a.templates}
-                  agentName={a.agent_name}
-                  accentColor={a.accent_color}
-                  languages={a.languages}
-                  tenantName={tenant_name}
-                />
-              ))}
-            </div>
+              </h2>
+              {tid !== tenant_id && (
+                <p className="toolbar-meta" style={{ margin: '0 2px 8px' }}>
+                  Selecciona este tenant para editar.
+                </p>
+              )}
+              <PurchaseTemplatesPanel agents={agents} tenantName={tenant_name} readOnly={tid !== tenant_id} />
+            </section>
           ))
-        : ownAgentTemplates.map(a => (
-            <PurchaseTemplatesPanel
-              key={a.agent_id}
-              templates={a.templates}
-              agentName={a.agent_name}
-              accentColor={a.accent_color}
-              languages={a.languages}
-            />
-          ))}
+        : ownAgentTemplates.length > 0 && <PurchaseTemplatesPanel agents={ownAgentTemplates} />}
     </>
   )
 
@@ -191,7 +260,13 @@ async function EmailsPage({
     <>
       <PageHeader
         title="Email"
-        description="Campañas de nutrición, correos a un grupo de leads y los obligatorios que dispara el CRM."
+        description="Lo que se envía y cuándo."
+        hint="Campañas de nutrición, correos a un grupo de leads y los correos obligatorios que dispara el CRM. Las métricas completas están en Dashboard → Emails."
+        actions={
+          <Link href="/dashboard?tab=emails" className="btn btn-ghost">
+            <BarChart3 size={14} />Métricas
+          </Link>
+        }
       />
 
       {/* El id se conserva para los enlaces viejos a /emails#emails-de-cierre. */}
@@ -201,13 +276,13 @@ async function EmailsPage({
           items={[
             { key: 'secuencias', label: 'Secuencias',   badge: sequences.length },
             { key: 'grupales',   label: 'Grupales',     badge: broadcasts.length || undefined },
-            { key: 'etiquetas',  label: 'Por etiqueta', badge: missingTagSequences > 0 ? missingTagSequences : undefined },
-            { key: 'cierre',     label: 'De cierre' },
+            { key: 'etiquetas',  label: 'Por etiqueta', alert: missingTagSequences > 0 },
+            { key: 'cierre',     label: 'De cierre',    alert: missingClosing > 0 },
           ]}
           content={{
             secuencias: sequencesTab,
-            grupales:   <BroadcastsPanel broadcasts={broadcasts} senderError={broadcastSender.ok ? null : broadcastSender.error} />,
-            etiquetas:  <TagSequencesPanel coverage={tagCoverage} canManage={!scope.agentId} />,
+            grupales:   groupTab,
+            etiquetas:  tagTab,
             cierre:     closingTab,
           }}
         />

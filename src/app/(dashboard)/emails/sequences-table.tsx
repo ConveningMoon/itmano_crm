@@ -7,6 +7,7 @@ import type { SequenceMetrics } from '@/lib/services/email-metrics'
 import { groupByFolder, type Folder } from '@/lib/data/folders'
 import { FolderGroup } from '@/components/dashboard/folders'
 import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui/data-table'
+import { BOUNCE_ALERT_OVER, UNSUB_ALERT_OVER } from '@/lib/dashboard/email-health'
 import { SequenceListActions } from './sequence-list-actions'
 
 // ─── Tabla de secuencias ──────────────────────────────────────────────────────
@@ -20,8 +21,9 @@ import { SequenceListActions } from './sequence-list-actions'
 // nada de lo que contiene.
 //
 // Seis columnas en vez de doce. Pasos, canales y runs activos son datos de
-// contexto y viven como iconos bajo el nombre; el rendimiento muestra click y
-// reply como medidores, y rebote y bajas sólo cuando pasan su umbral sano.
+// contexto y viven como iconos bajo el nombre; el rendimiento muestra una barra
+// de clics, las respuestas quedan en el title de la fila, y rebote y bajas
+// aparecen sólo cuando pasan su umbral sano (src/lib/dashboard/email-health.ts).
 // Todo el detalle de tasas sigue en la tarjeta de métricas del detalle.
 
 const COLS    = 'minmax(0, 2.6fr) 96px 96px 96px minmax(0, 1.7fr) 44px'
@@ -33,13 +35,9 @@ const COLUMNS: DataColumn[] = [
   { label: 'Idioma', hideMd: true },
   { label: 'Estado' },
   { label: 'Enviados', right: true, hideSm: true },
-  { label: 'Rendimiento', hideSm: true },
+  { label: 'Clics', hideSm: true },
   { label: '' },
 ]
-
-// Umbrales sanos: por encima, la tasa deja de ser un dato y pasa a ser una alerta.
-const BOUNCE_ALERT_OVER = 5
-const UNSUB_ALERT_OVER  = 3
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_TONE: Record<string, string>  = { es: 'gold', en: 'blue', pt: 'teal' }
@@ -87,7 +85,11 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
     const langLabel = LANG_LABEL[seq.language] ?? seq.language
 
     return (
-      <div key={seq.id} className="dt-grid dt-row">
+      <div
+        key={seq.id}
+        className="dt-grid dt-row"
+        title={`Clics ${m?.clickRate ?? 0}% · Respuestas ${m?.replyRate ?? 0}% · Rebote ${bounce}% · Bajas ${unsub}%`}
+      >
         {/* Nombre + contexto */}
         <div className="dt-cell-main">
           <Link href={`/emails/${seq.id}`} className="dt-title">{seq.name}</Link>
@@ -101,6 +103,17 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
             {seq.activeRunCount > 0 && (
               <span title="Leads recorriendo la secuencia ahora" style={{ color: 'var(--accent-gold)' }}>
                 <Play size={12} />{plural(seq.activeRunCount, 'activo', 'activos')}
+              </span>
+            )}
+            {/* Con la columna de clics oculta (móvil) la alerta sigue a la vista. */}
+            {bounce > BOUNCE_ALERT_OVER && (
+              <span className="dt-show-sm" style={{ color: 'var(--alert)' }}>
+                <AlertTriangle size={12} />Rebote {bounce}%
+              </span>
+            )}
+            {unsub > UNSUB_ALERT_OVER && (
+              <span className="dt-show-sm" style={{ color: 'var(--alert)' }}>
+                <AlertTriangle size={12} />Bajas {unsub}%
               </span>
             )}
             {isSuperAdmin && seq.tenantName && <span className="pill" data-tone="gold">{seq.tenantName}</span>}
@@ -128,17 +141,18 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
         <div
           className="dt-hide-sm"
           style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}
-          title={`Click ${m?.clickRate ?? 0}% · Reply ${m?.replyRate ?? 0}% · Rebote ${bounce}% · Bajas ${unsub}%`}
         >
-          <RateMeter label="Click" value={m?.clickRate ?? 0} tone="var(--accent-blue)" />
-          <RateMeter label="Reply" value={m?.replyRate ?? 0} tone="var(--accent-green)" />
+          <RateMeter label="Clics" value={m?.clickRate ?? 0} tone="var(--accent-blue)" />
+          <span className="dt-hide-md" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            {m?.replyRate ?? 0}% respuestas
+          </span>
           {bounce > BOUNCE_ALERT_OVER && (
-            <span className="pill" data-tone="coral" title="Rebote por encima del umbral sano (5%)">
+            <span className="pill" data-tone="coral" title={`Rebote por encima del umbral sano (${BOUNCE_ALERT_OVER}%)`}>
               <AlertTriangle size={11} />Rebote {bounce}%
             </span>
           )}
           {unsub > UNSUB_ALERT_OVER && (
-            <span className="pill" data-tone="coral" title="Bajas por encima del umbral sano (3%)">
+            <span className="pill" data-tone="coral" title={`Bajas por encima del umbral sano (${UNSUB_ALERT_OVER}%)`}>
               <AlertTriangle size={11} />Bajas {unsub}%
             </span>
           )}

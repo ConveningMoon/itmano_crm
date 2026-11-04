@@ -126,11 +126,7 @@ export interface BroadcastMetrics {
   unsubscribed: number
 }
 
-export async function getBroadcastMetrics(tenantId: string, id: string): Promise<BroadcastMetrics> {
-  const { data, error } = await createAdminClient()
-    .rpc('email_broadcast_metrics', { p_tenant_id: tenantId, p_broadcast_ids: [id] })
-  if (error) throw new Error(error.message)
-  const m = (data as any)?.[id]
+function toMetrics(m: any): BroadcastMetrics {
   return {
     leads:        m?.leads ?? 0,
     clicked:      m?.clicked ?? 0,
@@ -139,6 +135,33 @@ export async function getBroadcastMetrics(tenantId: string, id: string): Promise
     complained:   m?.complained ?? 0,
     unsubscribed: m?.unsubscribed ?? 0,
   }
+}
+
+async function fetchMetrics(tenantId: string, ids: string[]): Promise<Record<string, BroadcastMetrics>> {
+  const { data, error } = await createAdminClient()
+    .rpc('email_broadcast_metrics', { p_tenant_id: tenantId, p_broadcast_ids: ids })
+  if (error) throw new Error(error.message)
+  return Object.fromEntries(ids.map(id => [id, toMetrics((data as any)?.[id])]))
+}
+
+/**
+ * Métricas de varios envíos con una sola llamada a la RPC. Es lo que lee la
+ * lista; un fallo se registra y devuelve vacío para que la lista siga visible
+ * sin cifras en lugar de caerse.
+ */
+export async function getBroadcastsMetrics(tenantId: string, ids: string[]): Promise<Record<string, BroadcastMetrics>> {
+  if (ids.length === 0) return {}
+  try {
+    return await fetchMetrics(tenantId, ids)
+  } catch (err) {
+    console.error('[email-broadcasts] métricas de la lista:', err instanceof Error ? err.message : err)
+    return {}
+  }
+}
+
+/** Métricas de un envío (detalle). Si la RPC falla, lanza: la página lo muestra. */
+export async function getBroadcastMetrics(tenantId: string, id: string): Promise<BroadcastMetrics> {
+  return (await fetchMetrics(tenantId, [id]))[id]
 }
 
 /** Omitidos por motivo y fallidos con su último error, para explicar el resultado. */

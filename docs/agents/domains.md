@@ -21,7 +21,7 @@ Una secuencia se activa de tres formas (`email_sequences.activation_type`):
   correo OBLIGATORIO, como los hitos del proceso de compra: no se borra ni admite
   inscripción manual, y no se puede enganchar a una fuente.
 
-`/emails` separa las tres en pestañas (`?tab=secuencias|etiquetas|cierre`) porque
+`/emails` separa las cuatro en pestañas (`?tab=secuencias|grupales|etiquetas|cierre`) porque
 las obligatorias no se lanzan, se configuran: su pregunta es si está escrita la
 versión de cada idioma.
 
@@ -56,6 +56,9 @@ Las secuencias por etiqueta se crean automáticamente para cada combinación de
 etiqueta obligatoria e idioma atendido; no dependen de que alguien pulse un alta
 manual. La pestaña importa todo el catálogo en un único JSON identificado por
 `tag_slug + language`, según el contrato de `src/lib/email-sequence-import.ts`.
+En la matriz, el hueco real es `incompleta` (la secuencia existe sin pasos), no
+`falta`: los triggers la crean vacía. Con permiso, ambos estados muestran
+"Escribir"; `incompleta` enlaza a `/emails/<id>` y `falta` crea la secuencia.
 `send_at_hours` representa horas acumuladas desde que se aplica la etiqueta y
 la base lo convierte a `delay_hours` relativo. Las restricciones horarias son
 independientes por combinación. Una secuencia con runs conserva su `step_order`

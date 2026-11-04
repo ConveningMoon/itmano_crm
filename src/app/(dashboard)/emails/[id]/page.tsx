@@ -23,9 +23,9 @@ const LANG_COLOR: Record<string, string> = {
 }
 
 const RUN_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  active:    { label: 'Activo',     color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
-  completed: { label: 'Completado', color: 'var(--accent-green)', bg: 'rgba(107,163,104,0.12)' },
-  cancelled: { label: 'Cancelado',  color: 'var(--accent-coral)', bg: 'rgba(201,123,107,0.12)' },
+  active:    { label: 'Activo',     color: 'var(--accent-gold)',  bg: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)' },
+  completed: { label: 'Completado', color: 'var(--accent-green)', bg: 'color-mix(in srgb, var(--accent-green) 12%, transparent)' },
+  cancelled: { label: 'Cancelado',  color: 'var(--accent-coral)', bg: 'color-mix(in srgb, var(--accent-coral) 12%, transparent)' },
   paused:    { label: 'Pausado',    color: 'var(--text-muted)',    bg: 'var(--bg-elevated)'     },
 }
 
@@ -42,9 +42,9 @@ const CANCEL_LABEL: Record<string, string> = {
 // Cómo se activa la secuencia. 'tag' (117) es un correo obligatorio: no se
 // lanza, se dispara al etiquetar un lead.
 const ACTIVATION_BADGE: Record<'form' | 'manual' | 'tag', { label: string; color: string; bg: string }> = {
-  form:   { label: 'Formulario', color: 'var(--accent-teal)', bg: 'rgba(90,175,160,0.12)' },
-  manual: { label: 'Manual',     color: 'var(--accent-blue)', bg: 'rgba(91,142,201,0.12)' },
-  tag:    { label: 'Etiqueta',   color: 'var(--accent-gold)', bg: 'rgba(201,169,110,0.12)' },
+  form:   { label: 'Formulario', color: 'var(--accent-teal)', bg: 'color-mix(in srgb, var(--accent-teal) 12%, transparent)' },
+  manual: { label: 'Manual',     color: 'var(--accent-blue)', bg: 'color-mix(in srgb, var(--accent-blue) 12%, transparent)' },
+  tag:    { label: 'Etiqueta',   color: 'var(--accent-gold)', bg: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)' },
 }
 
 function formatDate(iso: string) {
@@ -139,11 +139,11 @@ async function EmailSequenceDetailPage({
       {/* Back nav */}
       <div style={{ marginBottom: '20px' }}>
         <Link
-          href="/emails"
+          href={sequence.activationType === 'tag' ? '/emails?tab=etiquetas' : '/emails'}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
         >
           <ArrowLeft size={13} />
-          Secuencias de Email
+          {sequence.activationType === 'tag' ? 'Correos por etiqueta' : 'Secuencias de Email'}
         </Link>
       </div>
 
@@ -166,7 +166,7 @@ async function EmailSequenceDetailPage({
               fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
               letterSpacing: '0.06em', textTransform: 'uppercase',
               color: sequence.active ? 'var(--accent-green)' : 'var(--text-muted)',
-              background: sequence.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
+              background: sequence.active ? 'color-mix(in srgb, var(--accent-green) 12%, transparent)' : 'var(--bg-elevated)',
             }}>
               {sequence.active ? 'Activa' : 'Inactiva'}
             </span>
@@ -188,7 +188,7 @@ async function EmailSequenceDetailPage({
           </div>
           {isSuperAdmin && sequence.tenantName && (
             <div style={{ marginBottom: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 10%, transparent)', padding: '2px 8px', borderRadius: '4px' }}>
                 {sequence.tenantName}
               </span>
             </div>
@@ -266,7 +266,7 @@ async function EmailSequenceDetailPage({
                 href={`/sources/${ch.slug}`}
                 style={{
                   fontSize: '12px', color: 'var(--accent-gold)',
-                  background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.2)',
+                  background: 'color-mix(in srgb, var(--accent-gold) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-gold) 20%, transparent)',
                   borderRadius: '6px', padding: '4px 10px', textDecoration: 'none',
                 }}
               >

@@ -1,12 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { AlertTriangle, Check, Pause } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { AlertTriangle, Check, Pause, Pencil } from 'lucide-react'
 import { LANGUAGE_CONFIG } from '@/lib/config'
 import type { Language } from '@/lib/types'
 import { tagChipStyle } from '@/lib/leads/tags'
 import type { TagSequenceCoverage } from '@/lib/data/tag-sequences'
+import { tagMatrix, type TagCellState } from '@/lib/emails/tag-matrix'
+import { InfoHint } from '@/components/ui/info-hint'
 import { TagSequencesImportTools } from './tag-sequences-import-tools'
+import { ensureTagSequenceSlot } from './actions'
 
 interface TagSequencesPanelProps {
   coverage: TagSequenceCoverage[]
@@ -18,16 +23,140 @@ function langLabel(code: string): string {
   return cfg ? `${cfg.flag} ${cfg.label}` : code.toUpperCase()
 }
 
+const CELL_LINK: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+  minWidth: '32px', minHeight: '32px', padding: '0 8px', borderRadius: '8px',
+  fontSize: '12px', textDecoration: 'none',
+}
+
+// Hueco: crea la secuencia vacía de esa etiqueta e idioma y lleva a escribirla.
+// Sin pasos no envía nada, así que crearla es seguro; si ya existía (otra
+// pestaña, doble clic) la acción devuelve la misma.
+function WriteButton({ tagId, language }: { tagId: string; language: string }) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  function write() {
+    setError(null)
+    startTransition(async () => {
+      const res = await ensureTagSequenceSlot(tagId, language)
+      if (!res.ok) { setError(res.error); return }
+      router.push(`/emails/${res.id}`)
+    })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+      <button
+        type="button"
+        onClick={write}
+        disabled={pending}
+        aria-busy={pending}
+        style={{
+          ...CELL_LINK, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1,
+          color: 'var(--accent-coral)',
+          background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent-coral) 30%, transparent)',
+        }}
+      >
+        {pending ? <span aria-hidden className="loading-spinner" /> : <Pencil size={12} aria-hidden />}
+        {pending ? 'Creando…' : 'Escribir'}
+      </button>
+      {error && (
+        <span role="alert" style={{ fontSize: '11px', color: 'var(--accent-coral)', textAlign: 'center', lineHeight: 1.3 }}>
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}
+
+const WRITE_STYLE: React.CSSProperties = {
+  ...CELL_LINK,
+  color: 'var(--accent-coral)',
+  background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--accent-coral) 30%, transparent)',
+}
+
+const STATUS_TEXT: React.CSSProperties = { lineHeight: 1.25, textAlign: 'center' }
+
+function Cell({
+  state, tagId, tagName, language, sequenceId, steps, runs, canManage,
+}: {
+  state: TagCellState
+  tagId: string
+  tagName: string
+  language: string
+  sequenceId?: string
+  steps?: number
+  runs?: number
+  canManage: boolean
+}) {
+  if (state === 'na') {
+    return <span aria-label="No aplica" style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
+  }
+  if (state === 'falta') {
+    return canManage
+      ? <WriteButton tagId={tagId} language={language} />
+      : (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--accent-coral)' }}>
+          <AlertTriangle size={12} aria-hidden /> Falta
+        </span>
+      )
+  }
+  // Vacía (el caso normal de un hueco real: los triggers la crean sin pasos).
+  if (state === 'incompleta') {
+    const label = `${tagName}, ${langLabel(language)}: sin pasos, no envía nada todavía`
+    return canManage
+      ? (
+        <Link href={`/emails/${sequenceId}`} title="Sin pasos: no envía nada todavía" aria-label={`${label}. Escribir`} style={WRITE_STYLE}>
+          <Pencil size={12} aria-hidden /> Escribir
+        </Link>
+      )
+      : (
+        <span role="img" aria-label={label} title="Sin pasos: no envía nada todavía"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--accent-coral)' }}>
+          <AlertTriangle size={12} aria-hidden /> Falta
+        </span>
+      )
+  }
+
+  const running = runs && runs > 0 ? ` · ${runs} en curso` : ''
+  const count = `${steps ?? 0} ${steps === 1 ? 'correo' : 'correos'}`
+  const meta = {
+    lista:       { Icon: Check, color: 'var(--accent-green)', text: 'Lista',    visible: `${count}${running}`, title: `${count}${running}` },
+    desactivada: { Icon: Pause, color: 'var(--text-muted)',   text: 'Pausada',  visible: `Pausada${running}`,  title: `Desactivada: tiene ${count} pero no envía${running}` },
+  }[state]
+
+  const label = `${tagName}, ${langLabel(language)}: ${meta.text}. ${meta.title}`
+  const style = { ...CELL_LINK, color: meta.color, border: '1px solid transparent', padding: '4px 8px' }
+  const body = (
+    <>
+      <meta.Icon size={12} aria-hidden />
+      <span style={STATUS_TEXT}>{meta.visible}</span>
+    </>
+  )
+
+  // Las secuencias de etiqueta no tienen agente: el detalle responde 404 al rol
+  // agent, así que ahí el estado se ve pero no es un enlace.
+  if (!canManage) {
+    return <span role="img" title={meta.title} aria-label={label} style={style}>{body}</span>
+  }
+  return (
+    <Link href={`/emails/${sequenceId}`} title={meta.title} aria-label={`${label}. Editar`} style={style}>
+      {body}
+    </Link>
+  )
+}
+
 // Correos obligatorios por etiqueta: una secuencia por etiqueta y por idioma que
 // el equipo atiende. El panel existe para que el HUECO se vea — el disparo es
 // silencioso por diseño (mandar en otro idioma sería peor que no mandar), así
 // que sin esta vista nadie se enteraría de que los leads en inglés no reciben
 // nada.
 export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProps) {
-  const missing = coverage.reduce(
-    (n, c) => n + c.slots.filter(s => s.sequence === null).length,
-    0,
-  )
+  const { languages, rows, missing } = tagMatrix(coverage)
 
   if (coverage.length === 0) {
     return (
@@ -46,125 +175,101 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
     )
   }
 
+  const columnsTemplate = `minmax(120px, 1.5fr) repeat(${languages.length}, minmax(88px, 1fr))`
+  const rowStyle: React.CSSProperties = {
+    display: 'grid', gridTemplateColumns: columnsTemplate, alignItems: 'center', columnGap: '8px',
+    padding: '8px 12px',
+  }
+
   return (
     <div>
-      <div style={{ marginBottom: '18px' }}>
-        {canManage && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}><TagSequencesImportTools coverage={coverage} /></div>}
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55, maxWidth: '680px' }}>
-          Estos correos no se mandan a una lista: salen solos cuando alguien pone la
-          etiqueta a un lead. Hace falta una versión por cada idioma que atiende el
-          equipo — el lead recibe la de su idioma, y si esa versión no existe no se le
-          manda nada. Los idiomas vienen de Configuración → Agentes.
-        </p>
-        {missing > 0 && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '7px', marginTop: '12px',
-            padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
-            color: 'var(--accent-gold)',
-            background: 'color-mix(in srgb, var(--accent-gold) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--accent-gold) 25%, transparent)',
-          }}>
-            <AlertTriangle size={13} />
-            {missing === 1
-              ? 'Falta 1 versión por escribir: esos leads no reciben nada.'
-              : `Faltan ${missing} versiones por escribir: esos leads no reciben nada.`}
-          </div>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        {coverage.map(({ tag, slots }) => {
-          const chip = tagChipStyle(tag.color)
-          return (
-            <div
-              key={tag.id}
-              style={{
-                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-                borderRadius: '12px', padding: '18px 20px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
-                  color: chip.color, background: chip.background, border: chip.border,
-                }}>
-                  {tag.name}
-                </span>
-                {!tag.requiresSequence && (
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    ya no está marcada como obligatoria
-                  </span>
-                )}
-              </div>
-              {tag.description && (
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
-                  {tag.description}
-                </p>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {slots.map((slot, idx) => (
-                  <div
-                    key={slot.language}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '12px', padding: '9px 0',
-                      borderTop: idx === 0 ? '1px solid var(--border-subtle)' : 'none',
-                      borderBottom: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '130px', flexShrink: 0 }}>
-                      {langLabel(slot.language)}
-                    </span>
-
-                    {slot.sequence ? (
-                      <>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {slot.sequence.stepCount === 0
-                            ? 'Sin pasos: no envía nada todavía'
-                            : `${slot.sequence.stepCount} ${slot.sequence.stepCount === 1 ? 'correo' : 'correos'}`}
-                          {slot.sequence.activeRunCount > 0 && ` · ${slot.sequence.activeRunCount} en curso`}
-                        </span>
-                        {slot.sequence.stepCount === 0 ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--accent-gold)', flexShrink: 0 }}>
-                            <AlertTriangle size={12} /> incompleta
-                          </span>
-                        ) : !slot.sequence.active ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>
-                            <Pause size={12} /> desactivada
-                          </span>
-                        ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--accent-green)', flexShrink: 0 }}>
-                            <Check size={12} /> lista
-                          </span>
-                        )}
-                        <Link
-                          href={`/emails/${slot.sequence.id}`}
-                          style={{
-                            fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none',
-                            padding: '5px 10px', borderRadius: '7px', flexShrink: 0,
-                            border: '1px solid color-mix(in srgb, var(--accent-gold) 25%, transparent)',
-                          }}
-                        >
-                          Editar
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ flex: 1, fontSize: '12px', color: 'var(--accent-gold)' }}>
-                          Sin escribir — estos leads no reciben nada
-                        </span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Se creará automáticamente</span>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '12px', flexWrap: 'wrap', marginBottom: '14px',
+      }}>
+        <div>
+          {missing > 0 && (
+            <div role="status" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '7px',
+              padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
+              color: 'var(--accent-coral)',
+              background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+            }}>
+              <AlertTriangle size={13} aria-hidden />
+              {missing === 1
+                ? 'Falta 1 versión por completar: esos leads no reciben nada.'
+                : `Faltan ${missing} versiones por completar: esos leads no reciben nada.`}
             </div>
-          )
-        })}
+          )}
+        </div>
+        {canManage && <TagSequencesImportTools coverage={coverage} />}
       </div>
 
+      <div style={{
+        background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+        borderRadius: '12px', overflowX: 'auto',
+      }}>
+        <div role="table" aria-label="Correos por etiqueta e idioma" style={{ minWidth: `${120 + languages.length * 96 + 24}px` }}>
+          <div role="row" style={{
+            ...rowStyle, borderBottom: '1px solid var(--border-subtle)',
+            fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)',
+          }}>
+            <span role="columnheader">Etiqueta</span>
+            {languages.map(l => (
+              <span key={l} role="columnheader" style={{ textAlign: 'center' }}>{langLabel(l)}</span>
+            ))}
+          </div>
+
+          {rows.map(({ tag, cells, sequenceIds }, i) => {
+            const chip = tagChipStyle(tag.color)
+            const slots = coverage.find(c => c.tag.id === tag.id)!.slots
+            return (
+              <div
+                key={tag.id}
+                role="row"
+                style={{ ...rowStyle, borderTop: i === 0 ? 'none' : '1px solid var(--border-subtle)' }}
+              >
+                <span role="rowheader" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexWrap: 'wrap' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
+                    color: chip.color, background: chip.background, border: chip.border,
+                  }}>
+                    {tag.name}
+                  </span>
+                  {tag.description && (
+                    <InfoHint label={`Qué es ${tag.name}`}>{tag.description}</InfoHint>
+                  )}
+                  {!tag.requiresSequence && (
+                    <InfoHint label={`${tag.name} ya no es obligatoria`}>
+                      Esta etiqueta ya no está marcada como obligatoria. Conserva las secuencias
+                      que ya tenía, pero no exige versión en cada idioma.
+                    </InfoHint>
+                  )}
+                </span>
+                {languages.map(l => {
+                  const seq = slots.find(s => s.language === l)?.sequence ?? null
+                  return (
+                    <span key={l} role="cell" style={{ display: 'flex', justifyContent: 'center' }}>
+                      <Cell
+                        state={cells[l]}
+                        tagId={tag.id}
+                        tagName={tag.name}
+                        language={l}
+                        sequenceId={sequenceIds[l]}
+                        steps={seq?.stepCount}
+                        runs={seq?.activeRunCount}
+                        canManage={canManage}
+                      />
+                    </span>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
