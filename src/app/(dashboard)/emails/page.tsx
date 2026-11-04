@@ -9,6 +9,7 @@ import { getMetricsForSequences } from '@/lib/services/email-metrics'
 import { listFolders } from '@/lib/data/folders'
 import { getTagSequenceCoverage } from '@/lib/data/tag-sequences'
 import { TagSequencesPanel } from './tag-sequences-panel'
+import { tagMatrix } from '@/lib/emails/tag-matrix'
 import { BroadcastsPanel } from './broadcasts-panel'
 import { getBroadcastsMetrics, listBroadcasts, type BroadcastListItem } from '@/lib/data/email-broadcasts'
 import { BROADCAST_OWN_DOMAIN_MESSAGE } from '@/lib/services/broadcast-dispatch'
@@ -105,10 +106,7 @@ async function EmailsPage({
   ])
 
   // Huecos por escribir: es el número que hace falta ver sin entrar a la pestaña.
-  const missingTagSequences = tagCoverage.reduce(
-    (n, c) => n + c.slots.filter(s => s.sequence === null).length,
-    0,
-  )
+  const missingTagSequences = tagMatrix(tagCoverage).missing
 
   const hasClosingEmails = isSuperAdmin ? purchaseByTenant.length > 0 : ownAgentTemplates.length > 0
 

@@ -20,7 +20,7 @@ export interface TagMatrixRow {
 export interface TagMatrix {
   languages: string[]
   rows:      TagMatrixRow[]
-  /** Huecos reales: etiquetas obligatorias sin versión en un idioma. */
+  /** Versiones por completar: falta o incompleta en etiquetas obligatorias. */
   missing:   number
 }
 
@@ -44,6 +44,8 @@ export function tagMatrix(coverage: TagSequenceCoverage[]): TagMatrix {
       } else {
         sequenceIds[language] = seq.id
         cells[language] = seq.stepCount === 0 ? 'incompleta' : !seq.active ? 'desactivada' : 'lista'
+        // Sin pasos tampoco envía: para quien no escribe nada, igual que un hueco.
+        if (cells[language] === 'incompleta' && tag.requiresSequence) missing++
       }
     }
     return { tag, cells, sequenceIds }

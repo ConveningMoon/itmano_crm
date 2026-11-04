@@ -45,6 +45,22 @@ describe('tagMatrix', () => {
     expect(tagMatrix(cov).rows[0].cells).toEqual({ es: 'incompleta', en: 'desactivada', pt: 'incompleta' })
   })
 
+  it('missing cuenta falta e incompleta de etiquetas obligatorias; desactivada no', () => {
+    const cov: TagSequenceCoverage[] = [
+      {
+        tag: tag('a'),
+        slots: [
+          { language: 'es', sequence: seq({ stepCount: 0 }) },     // incompleta: cuenta
+          { language: 'en', sequence: null },                      // falta: cuenta
+          { language: 'pt', sequence: seq({ active: false }) },    // desactivada: no
+        ],
+      },
+      // etiqueta no obligatoria con secuencia vacía: no cuenta
+      { tag: tag('b', false), slots: [{ language: 'es', sequence: seq({ stepCount: 0 }) }] },
+    ]
+    expect(tagMatrix(cov).missing).toBe(2)
+  })
+
   it('sin etiquetas: sin filas ni huecos', () => {
     expect(tagMatrix([])).toEqual({ languages: [], rows: [], missing: 0 })
   })

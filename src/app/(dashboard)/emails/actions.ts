@@ -351,25 +351,9 @@ export async function ensureTagSequenceSlot(
   const tenantId = ctx.tenant_id
 
   if (!tagId || !language) return { ok: false, error: 'Datos inválidos' }
-  const languages = await getTenantLanguages(tenantId)
-  if (!languages.includes(language)) {
-    return { ok: false, error: 'El equipo no atiende ese idioma.' }
-  }
-
   const supabase = createAdminClient()
-  const { data: tag } = await supabase
-    .from('lead_tags')
-    .select(columns('lead_tags', ['id', 'name', 'requires_sequence']))
-    .eq('id', tagId)
-    .eq('tenant_id', tenantId)
-    .maybeSingle()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tagRow = tag as any
-  if (!tagRow) return { ok: false, error: 'No se encontró la etiqueta.' }
-  if (!tagRow.requires_sequence) return { ok: false, error: 'Esta etiqueta ya no manda correos automáticos.' }
-
   const findExisting = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('email_sequences')
       .select(columns('email_sequences', ['id']))
       .eq('tenant_id', tenantId)
@@ -377,11 +361,34 @@ export async function ensureTagSequenceSlot(
       .eq('language', language)
       .maybeSingle()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((data as any)?.id ?? null) as string | null
+    return { id: ((data as any)?.id ?? null) as string | null, error }
   }
 
-  const existing = await findExisting()
-  if (existing) return { ok: true, id: existing }
+  // Tres lecturas independientes: una sola ola. Las guardas se evalúan después,
+  // en el orden de siempre.
+  const [languages, tagRes, existingRes] = await Promise.all([
+    getTenantLanguages(tenantId),
+    supabase
+      .from('lead_tags')
+      .select(columns('lead_tags', ['id', 'name', 'requires_sequence']))
+      .eq('id', tagId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle(),
+    findExisting(),
+  ])
+
+  if (!languages.includes(language)) {
+    return { ok: false, error: 'El equipo no atiende ese idioma.' }
+  }
+  if (tagRes.error || existingRes.error) {
+    return { ok: false, error: 'No se pudo leer la información de la etiqueta. Inténtalo de nuevo.' }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tagRow = tagRes.data as any
+  if (!tagRow) return { ok: false, error: 'No se encontró la etiqueta.' }
+  if (!tagRow.requires_sequence) return { ok: false, error: 'Esta etiqueta ya no manda correos automáticos.' }
+
+  if (existingRes.id) return { ok: true, id: existingRes.id }
 
   const name = tagRow.name as string
   const { data, error } = await supabase
@@ -402,7 +409,7 @@ export async function ensureTagSequenceSlot(
   if (error) {
     if (error.code === '23505') {
       const winner = await findExisting()
-      if (winner) return { ok: true, id: winner }
+      if (winner.id) return { ok: true, id: winner.id }
     }
     return { ok: false, error: error.message }
   }

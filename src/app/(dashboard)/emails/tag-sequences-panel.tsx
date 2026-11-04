@@ -105,12 +105,24 @@ function Cell({
     desactivada: { Icon: Pause,         color: 'var(--text-muted)',   text: 'Desactivada', title: `Desactivada: tiene ${count} pero no envía${running}` },
   }[state]
 
+  const label = `${tagName}, ${langLabel(language)}: ${meta.text}. ${meta.title}`
+  const style = { ...CELL_LINK, color: meta.color, border: '1px solid transparent' }
+
+  // Las secuencias de etiqueta no tienen agente: el detalle responde 404 al rol
+  // agent, así que ahí el estado se ve pero no es un enlace.
+  if (!canManage) {
+    return (
+      <span role="img" title={meta.title} aria-label={label} style={style}>
+        <meta.Icon size={14} aria-hidden />
+      </span>
+    )
+  }
   return (
     <Link
       href={`/emails/${sequenceId}`}
       title={meta.title}
-      aria-label={`${tagName}, ${langLabel(language)}: ${meta.text}. Editar`}
-      style={{ ...CELL_LINK, color: meta.color, border: '1px solid transparent' }}
+      aria-label={`${label}. Editar`}
+      style={style}
     >
       <meta.Icon size={14} aria-hidden />
     </Link>
@@ -165,8 +177,8 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
             }}>
               <AlertTriangle size={13} aria-hidden />
               {missing === 1
-                ? 'Falta 1 versión: esos leads no reciben nada.'
-                : `Faltan ${missing} versiones: esos leads no reciben nada.`}
+                ? 'Falta 1 versión por completar: esos leads no reciben nada.'
+                : `Faltan ${missing} versiones por completar: esos leads no reciben nada.`}
             </div>
           )}
         </div>
