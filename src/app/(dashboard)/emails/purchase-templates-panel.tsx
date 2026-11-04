@@ -12,7 +12,7 @@ import {
   composerValueToInput,
   type ComposerValue,
 } from '@/components/dashboard/email-composer'
-import { parseEmailContent } from '@/lib/email-content'
+import { cellState, isPlaceholder } from '@/lib/emails/purchase-state'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import type { EmailAiPurpose } from './ai-actions'
 
@@ -39,21 +39,10 @@ const LANG_COLOR: Record<string, string> = Object.fromEntries(
 
 const MILESTONES = ['start', 'pre_close', 'completed'] as const
 
-function isPlaceholder(id: string) {
-  return !id || id.startsWith('REPLACE_ME')
-}
-
-// Estado de una celda: contenido del CRM, template de Resend, o sin configurar.
-function cellState(row: PurchaseTemplateRow): 'crm' | 'template' | 'empty' {
-  if (parseEmailContent(row.body_json) && row.subject?.trim()) return 'crm'
-  if (!isPlaceholder(row.resend_template_id)) return 'template'
-  return 'empty'
-}
-
 const STATE_META: Record<'crm' | 'template' | 'empty', { label: string; color: string; bg: string }> = {
-  crm:      { label: 'Contenido CRM', color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
-  template: { label: 'Template Resend', color: 'var(--accent-blue)', bg: 'rgba(91,142,201,0.12)' },
-  empty:    { label: 'Sin configurar', color: 'var(--accent-coral)', bg: 'rgba(201,123,107,0.1)' },
+  crm:      { label: 'Contenido CRM', color: 'var(--accent-gold)',  bg: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)' },
+  template: { label: 'Template Resend', color: 'var(--accent-blue)', bg: 'color-mix(in srgb, var(--accent-blue) 12%, transparent)' },
+  empty:    { label: 'Sin configurar', color: 'var(--accent-coral)', bg: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)' },
 }
 
 // ─── Editor modal ──────────────────────────────────────────────────────────────
@@ -272,8 +261,8 @@ export function PurchaseTemplatesPanel({
             display: 'inline-flex', alignItems: 'center', gap: '5px',
             fontSize: '11px', fontWeight: 500,
             color: 'var(--accent-coral)',
-            background: 'rgba(201,123,107,0.1)',
-            border: '1px solid rgba(201,123,107,0.25)',
+            background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
             borderRadius: '6px', padding: '3px 10px',
           }}>
             <AlertTriangle size={11} />

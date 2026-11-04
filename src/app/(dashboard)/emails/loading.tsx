@@ -11,6 +11,12 @@ export default function EmailsLoading() {
         {['96px', '70px', '92px', '70px'].map((w, i) => <Skeleton key={i} w={w} h={12} r={3} />)}
       </div>
 
+      {/* Línea de alcance de la pestaña, con su ⓘ */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+        <Skeleton w="300px" h={11} r={3} />
+        <Skeleton w="14px" h={14} r={7} />
+      </div>
+
       {/* Barra de herramientas */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <Skeleton w="96px" h={12} r={3} />
@@ -20,9 +26,11 @@ export default function EmailsLoading() {
         </div>
       </div>
 
+      <div style={{ marginBottom: '8px' }}><Skeleton w="240px" h={11} r={3} /></div>
+
       {/* Cabecera + filas de la tabla de secuencias */}
       <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '10px', height: '40px', padding: '0 20px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '28px' }}>
-        {['70px', '54px', '54px', '64px', '86px'].map((w, i) => <Skeleton key={i} w={w} h={10} r={3} />)}
+        {['76px', '54px', '54px', '64px', '48px'].map((w, i) => <Skeleton key={i} w={w} h={10} r={3} />)}
       </div>
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
         {[...Array(5)].map((_, i) => (

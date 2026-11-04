@@ -2,6 +2,7 @@
 
 import { useId, useState } from 'react'
 import { AnimatePresence, m } from 'motion/react'
+import { AlertTriangle } from 'lucide-react'
 import { EASE_OUT_PREMIUM } from '@/components/motion/primitives'
 
 export interface TabItem {
@@ -9,6 +10,8 @@ export interface TabItem {
   label: string
   // Conteo opcional mostrado como pill (0 se renderiza igual: "vacío" es información).
   badge?: number
+  // Hay algo por resolver dentro de la pestaña: icono de alerta en vez de un número.
+  alert?: boolean
 }
 
 interface TabsProps {
@@ -90,6 +93,14 @@ export function Tabs({ items, content, defaultKey, value, onChange }: TabsProps)
                 >
                   {item.badge}
                 </span>
+              )}
+              {item.alert && (
+                <AlertTriangle
+                  size={13}
+                  aria-label="Requiere atención"
+                  role="img"
+                  style={{ color: 'var(--alert)', flexShrink: 0 }}
+                />
               )}
               {isActive && (
                 <m.span

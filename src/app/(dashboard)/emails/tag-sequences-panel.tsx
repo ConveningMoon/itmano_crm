@@ -50,12 +50,6 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
     <div>
       <div style={{ marginBottom: '18px' }}>
         {canManage && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}><TagSequencesImportTools coverage={coverage} /></div>}
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55, maxWidth: '680px' }}>
-          Estos correos no se mandan a una lista: salen solos cuando alguien pone la
-          etiqueta a un lead. Hace falta una versión por cada idioma que atiende el
-          equipo — el lead recibe la de su idioma, y si esa versión no existe no se le
-          manda nada. Los idiomas vienen de Configuración → Agentes.
-        </p>
         {missing > 0 && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '7px', marginTop: '12px',
