@@ -33,20 +33,23 @@ export function GeneralSkeleton() {
   return (
     <div>
       <KpiRow />
-      <div style={{ ...CARD, marginBottom: '24px' }}>
-        <Skeleton w="140px" h={14} r={4} />
-        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-          {[...Array(5)].map((_, i) => <Skeleton key={i} w="76px" h={60} r={4} />)}
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ marginBottom: '16px' }}>
+        <div style={CARD}><Skeleton w="140px" h={14} r={4} /><Skeleton w="100%" h={230} r={8} /></div>
+        <div style={CARD}><Skeleton w="100px" h={14} r={4} /><Skeleton w="100%" h={230} r={8} /></div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ marginBottom: '16px' }}>
         <div style={CARD}>
-          <Skeleton w="140px" h={14} r={4} />
+          <Skeleton w="80px" h={14} r={4} />
           {[...Array(5)].map((_, i) => <Skeleton key={i} w="100%" h={44} r={8} />)}
         </div>
+        <div style={CARD}><Skeleton w="120px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+        <div style={CARD}><Skeleton w="80px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div style={CARD}><Skeleton w="140px" h={14} r={4} /><Skeleton w="100%" h={200} r={8} /></div>
         <div style={CARD}>
           <Skeleton w="120px" h={14} r={4} />
-          {[...Array(6)].map((_, i) => <Skeleton key={i} w="100%" h={36} r={8} />)}
+          {[...Array(4)].map((_, i) => <Skeleton key={i} w="100%" h={36} r={8} />)}
         </div>
       </div>
     </div>

@@ -105,7 +105,7 @@ describe('tokens de color', () => {
     const srcRoot = path.resolve(__dirname, '../../src')
     const allowed = [
       'app/(dashboard)/admin/page.tsx', 'app/(dashboard)/admin/tenant-card.tsx',
-      'app/(dashboard)/analytics/page.tsx', 'app/(dashboard)/dashboard/tabs/general.tsx',
+      'app/(dashboard)/analytics/page.tsx',
       'app/(dashboard)/settings/business-profile-section.tsx', 'app/(marketing)/landing.css',
       'app/globals.css', 'components/marketing/landing/crm-views.tsx', 'lib/scoring/priority.ts',
     ]

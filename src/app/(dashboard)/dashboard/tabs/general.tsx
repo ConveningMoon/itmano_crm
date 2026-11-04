@@ -1,392 +1,270 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { mapAgent, type AgentRow } from '@/lib/db'
-import { getLeadDashboardStats, getPriorityQueue } from '@/lib/data/leads'
-import { LANGUAGE_CONFIG } from '@/lib/config'
-import { QUALITY_CONFIG, URGENCY_CONFIG } from '@/lib/scoring/priority'
-import type { TabProps } from '../types'
+import { columns } from '@/lib/supabase/columns'
 import { scopeFor } from '@/lib/auth/visibility'
+import { getLeadAnalyticsStats, getLeadDashboardStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
+import { getScoreHistogram, getTopLeads } from '@/lib/data/dashboard-leads'
 import { getRecentActivity } from '@/lib/data/activity'
-import { ActivityRow } from '../../activity/activity-ui'
-import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { getLeadSource } from '@/lib/leads/source'
+import { QUALITY_BANDS, QUALITY_CONFIG, type Stage } from '@/lib/scoring/priority'
+import { colorsByKey, foldCategories, GOLD_RAMP } from '@/lib/charts/palette'
 import { KpiCard } from '@/components/ui/kpi-card'
-import { GrowBar } from '@/components/motion/grow-bar'
-import type { Agent } from '@/lib/types'
+import { ChartCard } from '@/components/ui/chart-card'
+import { ChartFrame } from '@/components/ui/chart-frame'
+import { AreaChart, BarsChart, DonutChart } from '@/components/charts/lazy'
+import { CapsuleFunnel } from '@/components/charts/capsule-funnel'
+import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
+import { ActivityRow } from '../../activity/activity-ui'
+import { TopLeads } from '../top-leads'
+import type { TabProps } from '../types'
 
-type AgentStat = {
-  agent: Agent
-  total: number
-  // Calidad alta, no "calientes": la temperatura salía del score, que decae, así
-  // que un agente con leads antiguos parecía peor sin que sus leads lo fueran.
-  highQuality: number
-  percentage: number
-  closed: number
-}
+const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
-const STAGE_COLORS: Record<string, string> = {
-  nuevo:      'var(--status-new)',
-  nutricion:  'var(--status-nurturing)',
-  en_proceso: 'var(--status-process-started)',
-  cerrado:    'var(--status-closed)',
-  perdido:    'var(--status-lost)',
-}
+// Orden fijo de las fuentes: el color sigue a la fuente y no a su rango, así que
+// una fuente no cambia de tono cuando otra la rebasa en el conteo.
+const SOURCE_ORDER = [
+  'manual', 'import', 'instagram', 'facebook', 'whatsapp', 'lead_magnet', 'event',
+  'contact_form', 'newsletter', 'manychat', 'other',
+]
 
-function getInitials(firstName: string, lastName: string): string {
-  const f = firstName.charAt(0)
-  const l = lastName.charAt(0)
-  return (f + l).toUpperCase() || f.toUpperCase()
-}
+const FUNNEL: { key: Stage; label: string }[] = [
+  { key: 'nuevo', label: 'Nuevo' },
+  { key: 'nutricion', label: 'Nutrición' },
+  { key: 'en_proceso', label: 'En proceso' },
+  { key: 'cerrado', label: 'Cerrado' },
+  { key: 'perdido', label: 'Perdido' },
+]
+
+const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+const fmt = (n: number) => n.toLocaleString('en-US')
 
 export async function GeneralTab({ ctx }: TabProps) {
-  const { tenant_id, role, user_id } = ctx
+  const { role, user_id } = ctx
   const scope = scopeFor(ctx)
-  const isAgent = role === 'agent'
   const supabase = createAdminClient()
 
-  // Los conteos se agregan en Postgres (RPC lead_dashboard_stats) y los leads
-  // calientes salen por índice: el dashboard ya no trae la tabla de leads entera
-  // para contarla en JS.
-  const [leadStats, queue, { data: rawAgents }, recentActivity] = await Promise.all([
-    // Scope: tenant (owner/super) + agent_id (agent) — mismo criterio que scopeFor.
+  const agentsQuery = supabase.from('agents').select(columns('agents', ['id', 'name']))
+
+  // Una sola ola de lecturas: ninguna depende de otra. Los nombres de agente se
+  // piden todos (id y name) para no esperar a los Top 5.
+  const [leadStats, analytics, top, histogram, activity, agentsRes] = await Promise.all([
     getLeadDashboardStats(scope),
-    getPriorityQueue(scope, 6),
-    tenant_id
-      ? supabase.from('agents').select('*').eq('active', true).eq('tenant_id', tenant_id)
-      : supabase.from('agents').select('*').eq('active', true),
-    // Agent: recent activity over their OWN leads; owner/super: tenant-wide (author model).
-    getRecentActivity(tenant_id, { role, userId: user_id }, 10, scope.agentId),
+    getLeadAnalyticsStats(scope),
+    getTopLeads(scope),
+    getScoreHistogram(scope),
+    getRecentActivity(scope.tenantId, { role, userId: user_id }, 4, scope.agentId),
+    scope.tenantId ? agentsQuery.eq('tenant_id', scope.tenantId) : agentsQuery,
   ])
 
-  const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
-  const totalLeads = leadStats.total
-
-  const stats = {
-    active:      leadStats.active,
-    highQuality: leadStats.highQuality,
-    urgentToday: leadStats.urgentToday,
-    closedMonth: leadStats.closedThisMonth,
+  const agentNames: Record<string, string> = {}
+  for (const a of (agentsRes.data ?? []) as unknown as { id: string; name: string }[]) {
+    agentNames[a.id] = a.name
   }
 
-  // Embudo por ETAPA (4 columnas reales) en vez de barras por los 8 `status`.
-  // La tasa de paso entre etapas es lo que una agencia quiere saber de su
-  // operación y hoy no existía en ninguna pantalla.
-  const stageOf = (k: string) => leadStats.byStage[k] ?? 0
-  const funnel = [
-    { key: 'nuevo',      label: 'Nuevo',        count: stageOf('nuevo') },
-    { key: 'nutricion',  label: 'En Nutrición', count: stageOf('nutricion') },
-    { key: 'en_proceso', label: 'En proceso',   count: stageOf('en_proceso') },
-    { key: 'cerrado',    label: 'Cerrado',      count: stageOf('cerrado') },
-  ]
-  // Cada barra son los leads que están AHORA en esa etapa — el mismo número que
-  // el kanban, comprobable abriendo la lista.
-  //
-  // Antes mostraba un acumulado hacia atrás ("un cerrado también pasó por
-  // nuevo") con la etiqueta de la etapa, así que "Nuevo 4" salía con 1 solo lead
-  // en Nuevo y nadie podía reconciliarlo con nada. Y el acumulado además daba
-  // por hecho que todos pasan por Nutrición, que es opcional: un lead puede ir
-  // de Nuevo a En proceso directo.
-  //
-  // La tasa de paso REAL vive en lead_status_history, no aquí. Mientras esa
-  // tabla no tenga las transiciones de este tenant, cualquier porcentaje que
-  // pintáramos sería inventado — y un número inventado en un panel es peor que
-  // no tener el número.
-  const funnelMax = Math.max(...funnel.map(f => f.count), 1)
-  // Los leads traídos de otro CRM quedan FUERA del embudo (migración 080): no
-  // recorrieron estas etapas aquí, y contarlos daba un 100% de paso inventado.
-  // Se dicen aparte para que el total del embudo no parezca un lead perdido.
-  const importedLeads = leadStats.imported
-  const funnelTotal   = funnel.reduce((sum, f) => sum + f.count, 0) + stageOf('perdido')
+  // ── KPIs ──
+  const conversion = analytics.attributedTotal > 0
+    ? Math.round((analytics.attributedClosed / analytics.attributedTotal) * 100)
+    : 0
 
-  const agentStats: AgentStat[] = agents.map(agent => {
-    const row = leadStats.byAgent.find(a => a.agentId === agent.id)
-    const total = row?.total ?? 0
-    return {
-      agent,
-      total,
-      highQuality: row?.highQuality ?? 0,
-      closed:      row?.closed      ?? 0,
-      percentage: totalLeads > 0 ? Math.round((total / totalLeads) * 100) : 0,
-    }
-  })
+  // ── Evolución: eje de 7 meses (UTC), los sin altas en cero ──
+  const now = new Date()
+  const byMonth = new Map(analytics.monthly.map(m => [m.month, m]))
+  const evolution: { label: string; altas: number; cerradas: number }[] = []
+  for (let i = ANALYTICS_MONTHS - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    const row = byMonth.get(monthKey(d))
+    evolution.push({ label: MONTH_LABELS[d.getUTCMonth()], altas: row?.leads ?? 0, cerradas: row?.cerrado ?? 0 })
+  }
+  const evolutionEmpty = evolution.every(m => m.altas === 0)
 
-  const statCards = [
-    { label: 'Cartera activa', value: stats.active, highlight: true,
-      hint: 'Leads en etapa Nuevo o En Nutrición.' },
-    { label: 'Calidad alta', value: stats.highQuality,
-      hint: 'Leads en la banda más alta de calidad de tu cartera activa.' },
-    { label: 'Para hoy', value: stats.urgentToday, note: 'requieren acción', href: '/leads?sort=prioridad',
-      hint: 'Leads con urgencia activa hoy.' },
-    { label: 'Cerrados', value: stats.closedMonth, note: 'este mes',
-      hint: 'Leads cerrados durante este mes calendario.' },
+  // ── Embudo ──
+  const stages = FUNNEL.map(s => ({ ...s, count: leadStats.byStage[s.key] ?? 0 }))
+
+  // ── Fuentes: se agrupa por kind (como /leads) y se pliega a 5 con "Otras" ──
+  const sources = new Map<string, { label: string; value: number; top: number }>()
+  for (const row of analytics.bySource) {
+    const src = getLeadSource(row.channelType, row.trafficSource)
+    const prev = sources.get(src.kind)
+    sources.set(src.kind, {
+      // 'other' junta varias etiquetas: nombra el grupo la mayoritaria.
+      label: !prev || row.total > prev.top ? src.label : prev.label,
+      value: (prev?.value ?? 0) + row.total,
+      top: Math.max(prev?.top ?? 0, row.total),
+    })
+  }
+  const kindOfLabel = new Map<string, string>()
+  const folded = foldCategories(
+    [...sources.entries()].map(([kind, s]) => {
+      kindOfLabel.set(s.label, kind)
+      return { name: s.label, value: s.value }
+    }),
+  )
+  const stableIdx = (name: string) => {
+    const i = SOURCE_ORDER.indexOf(kindOfLabel.get(name) ?? '')
+    return i === -1 ? SOURCE_ORDER.length : i
+  }
+  // Las conservadas siguen el orden fijo de fuentes; "Otras" toma el último tono.
+  const keptSorted = folded.filter(r => r.name !== 'Otras').sort((a, b) => stableIdx(a.name) - stableIdx(b.name))
+  const others = folded.find(r => r.name === 'Otras')
+  const sourceColors = colorsByKey(keptSorted.map(r => r.name))
+  const sourceData = [
+    ...keptSorted.map(r => ({ ...r, color: sourceColors[r.name] })),
+    ...(others ? [{ ...others, color: GOLD_RAMP[GOLD_RAMP.length - 1] }] : []),
   ]
+  const sourceTotal = sourceData.reduce((s, r) => s + r.value, 0)
+
+  // ── Calidad: 5 bandas, rampa en el orden de las bandas ──
+  const qualityData = QUALITY_BANDS.map((b, i) => ({
+    name: QUALITY_CONFIG[b].label,
+    value: analytics.qualityDistribution[b] ?? 0,
+    color: GOLD_RAMP[i],
+  }))
+  const qualityTotal = qualityData.reduce((s, r) => s + r.value, 0)
+
+  // ── Histograma: 10 tramos, de oscuro (score bajo) a claro ──
+  const histData = histogram.map((value, i) => ({
+    label: String(i * 10),
+    value,
+    color: GOLD_RAMP[4 - Math.floor(i / 2)],
+  }))
+  const histTotal = histogram.reduce((s, v) => s + v, 0)
 
   return (
-    // Content gutter is owned by .app-shell-main (single source of truth); no inner
-    // padding here — avoids the double-gutter and the dead utility classes.
     <div>
-      {/* ── BLOQUE 1: Stats Cards ── */}
-      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
-        {statCards.map(card => (
-          <StaggerItem key={card.label}>
-            <KpiCard {...card} />
-          </StaggerItem>
-        ))}
+      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '16px' }}>
+        <StaggerItem>
+          <KpiCard
+            label="Cartera activa" value={leadStats.active} highlight
+            note={`${fmt(analytics.thisMonth.leads)} altas este mes`}
+            hint="Leads en etapa Nuevo o En Nutrición."
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <KpiCard
+            label="Calidad alta" value={leadStats.highQuality}
+            hint="Leads en la banda más alta de calidad de tu cartera activa."
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <KpiCard
+            label="Para hoy" value={leadStats.urgentToday} note="requieren acción"
+            href="/leads?sort=prioridad"
+            hint="Leads con urgencia activa hoy. Al hacer clic abre la lista ordenada por prioridad."
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <KpiCard
+            label="Cerrados" value={leadStats.closedThisMonth}
+            note={`este mes · ${conversion}% conversión`}
+            hint="Leads cerrados durante este mes calendario. La conversión es cerrados sobre leads captados por ITMANO: los importados de otro CRM no cuentan."
+          />
+        </StaggerItem>
       </StaggerGroup>
 
-      {/* ── BLOQUE 2: Pipeline Visual ── */}
-      <div style={{
-        background:   'var(--bg-surface)',
-        border:       '1px solid var(--border-subtle)',
-        borderRadius: '12px',
-        padding:      '20px 24px',
-        marginBottom: '24px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <div>
-            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Embudo</span>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Cuántos leads llegaron a cada etapa, y qué porcentaje pasó a la siguiente
-              {importedLeads > 0 && (
-                <> · {importedLeads} importados de otro CRM quedan fuera</>
-              )}
-            </div>
-          </div>
-          <span style={{
-            fontSize: '11px', color: 'var(--accent-gold)',
-            background: 'rgba(201,169,110,0.12)', padding: '2px 8px', borderRadius: '4px',
-          }}>
-            {funnelTotal} leads
-          </span>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ marginBottom: '16px' }}>
+        <ChartCard
+          title="Evolución de leads"
+          scope="Últimos 7 meses · no cambia con el periodo"
+          hint="Leads creados cada mes y, de esos, cuántos están cerrados hoy. Cada mes es un grupo de altas: no indica cuándo se cerraron. Los importados de otro CRM no cuentan."
+        >
+          <ChartFrame
+            height={230}
+            empty={evolutionEmpty}
+            emptyText="Todavía no hay leads en estos meses."
+            label={`Altas por mes y cerradas hoy de cada grupo: ${evolution.map(m => `${m.label} ${m.altas} altas, ${m.cerradas} cerradas`).join('; ')}`}
+          >
+            <AreaChart
+              height={230}
+              data={evolution}
+              series={[
+                { key: 'altas', name: 'Altas', color: GOLD_RAMP[1] },
+                { key: 'cerradas', name: 'Cerradas', color: GOLD_RAMP[0] },
+              ]}
+            />
+          </ChartFrame>
+        </ChartCard>
 
-        {/* Dónde está la cartera AHORA: una barra por etapa, con el número que
-            se ve en el kanban. Sin acumulados ni porcentajes derivados de una
-            suposición — ver el comentario del cálculo. */}
-        <div className="max-md:overflow-x-auto" style={{ display: 'flex', alignItems: 'flex-end' }}>
-          {funnel.map((stage, idx) => {
-            const h = Math.max(4, Math.round((stage.count / funnelMax) * 48))
-            const color = STAGE_COLORS[stage.key]
-            return (
-              <div key={stage.key} style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '92px' }}>
-                  <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1 }}>{stage.count}</span>
-                  <GrowBar
-                    axis="y"
-                    delay={idx * 0.05}
-                    style={{ width: '100%', height: `${h}px`, background: color, borderRadius: '4px' }}
-                  />
-                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
-                    {stage.label}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Perdidos — salida del embudo, no una etapa más */}
-          <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
-            <span style={{ color: 'var(--border-subtle)', fontSize: '24px', paddingBottom: '28px', margin: '0 8px' }}>|</span>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '60px' }}>
-              <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1 }}>
-                {stageOf('perdido')}
-              </span>
-              <GrowBar
-                axis="y"
-                delay={funnel.length * 0.05}
-                style={{
-                  width: '100%',
-                  height: `${Math.max(4, Math.round((stageOf('perdido') / funnelMax) * 48))}px`,
-                  background: STAGE_COLORS.perdido,
-                  borderRadius: '4px',
-                }}
-              />
-              <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Perdido
-              </span>
-            </div>
-          </div>
-        </div>
+        <ChartCard
+          title="Embudo"
+          scope="Estado actual · no cambia con el periodo"
+          action={<Link href="/leads">Ver leads →</Link>}
+          hint={
+            <>
+              Leads que están hoy en cada etapa: el mismo número que ves en el kanban. Perdido va rayado porque es una salida, no una etapa.
+              {leadStats.imported > 0 && ` ${fmt(leadStats.imported)} importados de otro CRM quedan fuera.`}
+            </>
+          }
+        >
+          <CapsuleFunnel stages={stages} />
+        </ChartCard>
       </div>
 
-      {/* ── BLOQUE 3: Hot Leads + Actividad ── */}
-      <FadeIn delay={0.1} className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4" style={{ marginBottom: '24px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ marginBottom: '16px' }}>
+        <ChartCard title="Top 5" scope="Etapas Nuevo, Nutrición y En proceso">
+          <TopLeads hot={top.hot} recent={top.recent} agentNames={agentNames} />
+        </ChartCard>
 
-        {/* Tu cola de hoy — reemplaza "Leads Calientes". Un lead caliente que ya
-            está en proceso no es trabajo pendiente, y uno mediocre que acaba de
-            responder sí; ordenar por score no distinguía ninguno de los dos. */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Tu cola de hoy</span>
-              <span style={{ fontSize: '10px', color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)', padding: '1px 6px', borderRadius: '4px' }}>
-                {queue.length}
-              </span>
-            </div>
-            <Link href="/leads?sort=prioridad" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none' }}>
-              Ver todos →
-            </Link>
-          </div>
+        <ChartCard title="Leads por fuente" scope="Toda la cartera">
+          <ChartFrame
+            height={128}
+            empty={sourceTotal === 0}
+            emptyText="Todavía no hay leads con fuente."
+            label={`Leads por fuente, ${fmt(sourceTotal)} en total: ${sourceData.map(s => `${s.name} ${s.value}`).join(', ')}`}
+          >
+            <DonutChart data={sourceData} centerValue={sourceTotal} centerLabel="leads" />
+          </ChartFrame>
+        </ChartCard>
 
-          <div>
-            {queue.length === 0 && (
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', padding: '12px' }}>
-                No hay leads activos en tu cartera.
-              </div>
-            )}
-            {queue.map(lead => {
-              const agent    = agents.find(a => a.id === lead.agentId)
-              const initials = getInitials(lead.firstName, lead.lastName)
-              const agentBg  = agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)'
-              const q        = QUALITY_CONFIG[lead.qualityBand]
+        <ChartCard
+          title="Calidad"
+          scope="Toda la cartera"
+          hint="Cómo se reparte toda tu cartera entre las cinco bandas. Más claro significa mejor calidad."
+        >
+          <ChartFrame
+            height={128}
+            empty={qualityTotal === 0}
+            emptyText="Todavía no hay leads para clasificar."
+            label={`Calidad de la cartera, ${fmt(qualityTotal)} leads: ${qualityData.map(q => `${q.name} ${q.value}`).join(', ')}`}
+          >
+            <DonutChart data={qualityData} centerValue={qualityTotal} centerLabel="leads" />
+          </ChartFrame>
+        </ChartCard>
+      </div>
 
-              return (
-                <Link
-                  key={lead.id}
-                  href={`/leads/${lead.id}`}
-                  className="row-hover"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 12px', borderRadius: '8px', textDecoration: 'none',
-                  }}
-                >
-                  <div style={{
-                    width: '32px', height: '32px', borderRadius: '50%',
-                    background: agentBg,
-                    color:      agent?.accentColor ?? 'var(--text-muted)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '11px', fontWeight: 600, flexShrink: 0,
-                  }}>
-                    {initials}
-                  </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard
+          title="Distribución de score"
+          scope="Cartera activa"
+          hint="Cuántos leads tienen cada rango de score actual; cada tramo lleva el inicio de su rango de 10 puntos. Una cola larga a la derecha indica una cartera caliente."
+        >
+          <ChartFrame
+            height={200}
+            empty={histTotal === 0}
+            emptyText="Todavía no hay leads activos con score."
+            label={`Distribución de score de ${fmt(histTotal)} leads activos por tramos de 10: ${histData.map(h => `${h.label} ${h.value}`).join(', ')}`}
+          >
+            <BarsChart height={200} data={histData} unit="leads" />
+          </ChartFrame>
+        </ChartCard>
 
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {lead.firstName} {lead.lastName}
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {agent?.name ?? '—'} · {lead.channelName ?? '—'}
-                    </div>
-                  </div>
-
-                  {/* Urgencia — sólo cuando hay algo que hacer */}
-                  {lead.urgency && lead.urgency !== 'sin_apuro' && (
-                    <span style={{
-                      fontSize: '10px', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
-                      color: URGENCY_CONFIG[lead.urgency].color,
-                      background: `color-mix(in srgb, ${URGENCY_CONFIG[lead.urgency].color} 14%, transparent)`,
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {URGENCY_CONFIG[lead.urgency].label}
-                    </span>
-                  )}
-
-                  <span style={{
-                    fontSize: '10px', padding: '2px 8px', borderRadius: '4px', flexShrink: 0,
-                    color: q.color, background: `color-mix(in srgb, ${q.color} 14%, transparent)`,
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {q.label}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Actividad Reciente */}
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px', overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Actividad Reciente</span>
-            <Link href="/activity" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
-              Ver toda la actividad →
-            </Link>
-          </div>
-          {recentActivity.length === 0 ? (
-            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+        <ChartCard
+          title="Actividad reciente"
+          action={<Link href="/activity">Ver toda →</Link>}
+        >
+          {activity.length === 0 ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
               No hay actividad todavía.
             </div>
           ) : (
-            <div>
-              {recentActivity.map((item, idx) => (
-                <div key={item.id}>
-                  <ActivityRow item={item} />
-                  {idx < recentActivity.length - 1 && (
-                    <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-                  )}
-                </div>
-              ))}
-            </div>
+            activity.map((item, idx) => (
+              <div key={item.id}>
+                <ActivityRow item={item} />
+                {idx < activity.length - 1 && <div style={{ height: '1px', background: 'var(--border-subtle)' }} />}
+              </div>
+            ))
           )}
-        </div>
-      </FadeIn>
-
-      {/* ── BLOQUE 4: Rendimiento por Agente ── (hidden for role 'agent' — they only see their own leads) */}
-      {!isAgent && (
-      <FadeIn delay={0.15} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px 20px' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Rendimiento por Agente</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Distribución actual de leads</div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {agentStats.map(({ agent, total, highQuality, percentage }) => (
-            <div
-              key={agent.id}
-              className="row-hover"
-              style={{
-                display:      'flex',
-                alignItems:   'center',
-                gap:          '12px',
-                padding:      '12px 16px',
-                borderRadius: '8px',
-                borderLeft:   `3px solid ${agent.accentColor}`,
-                cursor:       'default',
-              }}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: '36px', height: '36px', borderRadius: '50%',
-                background: `${agent.accentColor}26`,
-                color:      agent.accentColor,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '12px', fontWeight: 600, flexShrink: 0,
-              }}>
-                {agent.avatarInitials}
-              </div>
-
-              {/* Name + idiomas */}
-              <div style={{ minWidth: '160px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {agent.languages.map(l => LANGUAGE_CONFIG[l]?.flag ?? l).join(' ')}
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div>
-                <div style={{ width: '180px', height: '4px', background: 'var(--bg-overlay)', borderRadius: '2px', marginBottom: '4px' }}>
-                  <div style={{ width: `${percentage}%`, height: '100%', background: agent.accentColor, borderRadius: '2px' }} />
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{percentage}%</div>
-              </div>
-
-              {/* Count */}
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                {total}/{totalLeads}
-              </div>
-
-              {/* Idiomas + calidad alta */}
-              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--status-hot)' }}>{highQuality} de calidad alta</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </FadeIn>
-      )}
+        </ChartCard>
+      </div>
     </div>
   )
 }
