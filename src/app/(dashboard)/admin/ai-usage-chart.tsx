@@ -2,15 +2,13 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { colorsByKey } from '@/lib/charts/palette'
 import type { AiDailySeries } from '@/lib/data/ai-usage'
 
 // Diagrama del Centro de control: costo diario de IA (últimos 30 días),
 // apilado por tenant. Reemplaza al listado plano de requests recientes — el
 // dato operativo importante es CUÁNTO se gasta, DÓNDE y su tendencia.
 // Client-only (recharts); recibe la serie ya agregada del server.
-
-// Paleta fija por posición (hex, como los demás charts — recharts pinta SVG).
-const SERIES_COLORS = ['#C9A96E', '#5B8EC9', '#5AAFA0', '#C97B6B', '#B87BA3', '#6BA368']
 
 function fmtCost(v: number): string {
   if (v === 0) return '$0.00'
@@ -58,6 +56,7 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
   }))
 
   const hasData = series.days.some(d => d.costUsd > 0)
+  const colors = colorsByKey(series.tenantNames)
 
   return (
     <div style={{
@@ -102,7 +101,7 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
                   key={name}
                   dataKey={name}
                   stackId="cost"
-                  fill={SERIES_COLORS[i % SERIES_COLORS.length]}
+                  fill={colors[name]}
                   radius={i === series.tenantNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
                   isAnimationActive={!reduced}
                   animationBegin={0}

@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { GOLD_RAMP, LOST_COLOR } from '@/lib/charts/palette'
 
 // Cohortes: el mes es el de ALTA del lead, la etapa es la de HOY. Las cinco
 // series suman el total del mes porque un lead está en exactamente una etapa —
@@ -45,13 +46,12 @@ export function LeadsOverTimeChart({ data }: Props) {
     animationDuration: 700,
     animationEasing: 'ease-out' as const,
   }
-  // Hex literal como en el resto de charts: recharts no resuelve CSS variables.
   const series = [
-    { key: 'nuevo',     name: 'Nuevo',        color: '#5B8EC9' },
-    { key: 'nutricion', name: 'En nutrición', color: '#C9A96E' },
-    { key: 'enProceso', name: 'En proceso',   color: '#9B72CF' },
-    { key: 'cerrado',   name: 'Cerrado',      color: '#6BA368' },
-    { key: 'perdido',   name: 'Perdido',      color: '#8A877F' },
+    { key: 'nuevo',     name: 'Nuevo',        color: GOLD_RAMP[0] },
+    { key: 'nutricion', name: 'En nutrición', color: GOLD_RAMP[1] },
+    { key: 'enProceso', name: 'En proceso',   color: GOLD_RAMP[2] },
+    { key: 'cerrado',   name: 'Cerrado',      color: GOLD_RAMP[3] },
+    { key: 'perdido',   name: 'Perdido',      color: LOST_COLOR },
   ]
   return (
     <ResponsiveContainer width="100%" height={280}>

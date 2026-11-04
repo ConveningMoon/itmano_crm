@@ -2,6 +2,7 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { GOLD_RAMP, LOST_COLOR } from '@/lib/charts/palette'
 
 // Por ETAPA, no por status. Las bandas de temperatura (nuevo/nurturing/tibio/
 // caliente) mezclaban medición con embudo: un agente con muchos "tibios" no
@@ -56,11 +57,11 @@ export function StageDistributionChart({ data }: Props) {
           iconSize={8}
           iconType="square"
         />
-        <Bar {...anim} dataKey="nuevo"     stackId="a" fill="#5B8EC9" name="Nuevo"        radius={[0, 0, 0, 0]} />
-        <Bar {...anim} dataKey="nutricion" stackId="a" fill="#C9A96E" name="En nutrición" />
-        <Bar {...anim} dataKey="enProceso" stackId="a" fill="#9B72CF" name="En proceso"   />
-        <Bar {...anim} dataKey="cerrado"   stackId="a" fill="#6BA368" name="Cerrado"      />
-        <Bar {...anim} dataKey="perdido"   stackId="a" fill="#8A877F" name="Perdido"      radius={[4, 4, 0, 0]} />
+        <Bar {...anim} dataKey="nuevo"     stackId="a" fill={GOLD_RAMP[0]} name="Nuevo"        radius={[0, 0, 0, 0]} />
+        <Bar {...anim} dataKey="nutricion" stackId="a" fill={GOLD_RAMP[1]} name="En nutrición" />
+        <Bar {...anim} dataKey="enProceso" stackId="a" fill={GOLD_RAMP[2]} name="En proceso"   />
+        <Bar {...anim} dataKey="cerrado"   stackId="a" fill={GOLD_RAMP[3]} name="Cerrado"      />
+        <Bar {...anim} dataKey="perdido"   stackId="a" fill={LOST_COLOR} name="Perdido"      radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )

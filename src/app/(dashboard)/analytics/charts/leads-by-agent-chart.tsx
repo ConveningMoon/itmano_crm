@@ -1,7 +1,8 @@
 'use client'
 
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { GOLD_RAMP } from '@/lib/charts/palette'
 
 interface AgentDataPoint {
   name: string
@@ -11,7 +12,6 @@ interface AgentDataPoint {
   // ninguna otra pantalla, y el score que la alimentaba decae con el tiempo.
   highQuality: number
   closed: number
-  color: string
 }
 
 interface Props {
@@ -38,8 +38,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
     <div style={{ ...tooltipStyle, padding: '8px 12px' }}>
       <div style={{ fontWeight: 500, marginBottom: '4px', color: 'var(--text-primary)' }}>{d.fullName}</div>
       <div style={{ color: 'var(--text-secondary)' }}>Total: {d.total}</div>
-      <div style={{ color: '#E04040' }}>Calidad alta: {d.highQuality}</div>
-      <div style={{ color: '#6BA368' }}>Cerrados: {d.closed}</div>
+      <div style={{ color: 'var(--text-secondary)' }}>Calidad alta: {d.highQuality}</div>
+      <div style={{ color: 'var(--text-secondary)' }}>Cerrados: {d.closed}</div>
     </div>
   )
 }
@@ -64,11 +64,7 @@ export function LeadsByAgentChart({ data }: Props) {
           width={70}
         />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-        <Bar dataKey="total" radius={[0, 4, 4, 0]} barSize={20} isAnimationActive={!reduced} animationBegin={0} animationDuration={700} animationEasing="ease-out">
-          {data.map((entry, i) => (
-            <Cell key={i} fill={entry.color} />
-          ))}
-        </Bar>
+        <Bar dataKey="total" fill={GOLD_RAMP[1]} radius={[0, 4, 4, 0]} barSize={20} isAnimationActive={!reduced} animationBegin={0} animationDuration={700} animationEasing="ease-out" />
       </BarChart>
     </ResponsiveContainer>
   )

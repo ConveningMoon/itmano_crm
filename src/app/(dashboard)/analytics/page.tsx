@@ -104,18 +104,6 @@ async function AnalyticsPage() {
   // a lead with a channel → its channel type; a direct-entry lead → its
   // traffic_source. Counts the real source instead of bucketing everything
   // channel-less as "Manual". Categories with 0 leads are omitted.
-  const SOURCE_EMOJI: Record<string, string> = {
-    manual:       '✍️',
-    import:       '📥',
-    instagram:    '📸',
-    facebook:     '👍',
-    whatsapp:     '💬',
-    lead_magnet:  '📄',
-    event:        '🏠',
-    contact_form: '🌐',
-    manychat:     '💬',
-    other:        '📌',
-  }
   const sourceCounts = new Map<string, { label: string; count: number; top: number; qualitySum: number }>()
   stats.bySource.forEach(row => {
     const src = getLeadSource(row.channelType, row.trafficSource)
@@ -132,10 +120,9 @@ async function AnalyticsPage() {
     })
   })
   const sourceData = [...sourceCounts.entries()]
-    .map(([kind, { label, count, qualitySum }]) => ({
+    .map(([, { label, count, qualitySum }]) => ({
       name: label,
       value: count,
-      emoji: SOURCE_EMOJI[kind] ?? '📌',
       avgQuality: count > 0 ? Math.round(qualitySum / count) : null,
     }))
     .sort((a, b) => b.value - a.value)
@@ -152,7 +139,6 @@ async function AnalyticsPage() {
       total: row?.total ?? 0,
       highQuality: row?.highQuality ?? 0,
       closed: row?.closed ?? 0,
-      color: agent.accentColor,
     }
   })
 
@@ -371,7 +357,7 @@ async function AnalyticsPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '14px' }}>
                   {sourceData.filter(d => d.avgQuality !== null).map(d => (
                     <div key={d.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>{d.emoji} {d.name}</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{d.name}</span>
                       <span style={{ color: 'var(--text-muted)' }}>
                         {d.value} leads · calidad media <strong style={{ color: 'var(--text-secondary)' }}>{d.avgQuality}</strong>
                       </span>

@@ -2,19 +2,17 @@
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { colorsByKey, foldCategories } from '@/lib/charts/palette'
 
 interface DataPoint {
   name: string
   value: number
-  emoji: string
 }
 
 interface Props {
   data: DataPoint[]
   total: number
 }
-
-const DONUT_COLORS = ['#C9A96E', '#5B8EC9', '#5AAFA0', '#C97B6B', '#B87BA3', '#6BA368']
 
 const tooltipStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)',
@@ -46,11 +44,13 @@ function CenterLabel({ viewBox, total }: CenterLabelProps) {
 
 export function LeadsDonutChart({ data, total }: Props) {
   const reduced = usePrefersReducedMotion()
+  const rows = foldCategories(data)
+  const colors = colorsByKey(rows.map(r => r.name))
   return (
     <ResponsiveContainer width="100%" height={260}>
       <PieChart>
         <Pie
-          data={data}
+          data={rows}
           cx="50%"
           cy="45%"
           innerRadius={68}
@@ -62,8 +62,8 @@ export function LeadsDonutChart({ data, total }: Props) {
           animationDuration={700}
           animationEasing="ease-out"
         >
-          {data.map((_, i) => (
-            <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+          {rows.map(r => (
+            <Cell key={r.name} fill={colors[r.name]} />
           ))}
           <Label
             content={(props) => <CenterLabel viewBox={props.viewBox as { cx?: number; cy?: number }} total={total} />}
