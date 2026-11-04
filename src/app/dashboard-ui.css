@@ -149,6 +149,95 @@
   background: currentColor;
 }
 
+/* Ayuda ⓘ. El área de toque es de 24 px aunque el icono mida 13. */
+.info-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: -5px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: help;
+  transition: color var(--dur-fast);
+}
+.info-hint:hover,
+.info-hint[data-popup-open] { color: var(--gold-2); }
+.info-hint-positioner { z-index: 70; }
+.info-hint-popup {
+  width: max-content;
+  max-width: min(240px, calc(100vw - 24px));
+  padding: 9px 11px;
+  border: 1px solid var(--border-hover);
+  border-radius: 9px;
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* KPI del dashboard */
+.kpi-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: var(--bg-surface);
+  box-shadow: var(--highlight-top);
+  transition: border-color var(--dur-fast);
+}
+.kpi-card:has(.kpi-card-link):hover { border-color: var(--border-gold-hover); }
+.kpi-card-link {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.kpi-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.kpi-card-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.kpi-card .info-hint { position: relative; }
+.kpi-card-value {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+}
+.kpi-card-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.kpi-card[data-highlight] {
+  border-color: transparent;
+  background: var(--gold-gradient);
+  box-shadow: var(--gold-glow);
+}
+.kpi-card[data-highlight] .kpi-card-value { color: #1A1408; }
+.kpi-card[data-highlight] .kpi-card-label,
+.kpi-card[data-highlight] .kpi-card-note,
+.kpi-card[data-highlight] .info-hint { color: #3A2D10; }
+.kpi-card[data-highlight] .info-hint:hover,
+.kpi-card[data-highlight] .info-hint[data-popup-open] { color: #1A1408; }
+
 /* Tarjeta de KPI */
 .stat-card {
   --tone: var(--accent-gold);

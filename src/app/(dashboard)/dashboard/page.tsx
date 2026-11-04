@@ -9,15 +9,9 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { getRecentActivity } from '@/lib/data/activity'
 import { ActivityRow } from '../activity/activity-ui'
 import { FadeIn, StaggerGroup, StaggerItem } from '@/components/motion/primitives'
-import { AnimatedNumber } from '@/components/motion/animated-number'
+import { KpiCard } from '@/components/ui/kpi-card'
 import { GrowBar } from '@/components/motion/grow-bar'
 import type { Agent } from '@/lib/types'
-import {
-  Flame,
-  Users,
-  ArrowRightCircle,
-  CheckCircle2,
-} from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 type AgentStat = {
@@ -30,13 +24,12 @@ type AgentStat = {
   closed: number
 }
 
-// Hex (no var(--...)) porque las barras concatenan el alfa: '#RRGGBB' + 'CC'.
 const STAGE_COLORS: Record<string, string> = {
-  nuevo:      '#5B8EC9',
-  nutricion:  '#C9A96E',
-  en_proceso: '#9B72CF',
-  cerrado:    '#4A9B6B',
-  perdido:    '#C97B6B',
+  nuevo:      'var(--status-new)',
+  nutricion:  'var(--status-nurturing)',
+  en_proceso: 'var(--status-process-started)',
+  cerrado:    'var(--status-closed)',
+  perdido:    'var(--status-lost)',
 }
 
 function getInitials(firstName: string, lastName: string): string {
@@ -119,38 +112,14 @@ async function DashboardPage() {
   })
 
   const statCards = [
-    {
-      label: 'Cartera activa',
-      value: stats.active,
-      icon: <Users size={16} />,
-      iconColor: 'var(--accent-gold)',
-      iconBg:    'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
-      desc: 'nuevos y en nutrición',
-    },
-    {
-      label: 'Calidad alta',
-      value: stats.highQuality,
-      icon: <Flame size={16} />,
-      iconColor: 'var(--status-hot)',
-      iconBg:    'color-mix(in srgb, var(--status-hot) 12%, transparent)',
-      desc: 'lo mejor de tu cartera',
-    },
-    {
-      label: 'Para hoy',
-      value: stats.urgentToday,
-      icon: <ArrowRightCircle size={16} />,
-      iconColor: 'var(--accent-coral)',
-      iconBg:    'color-mix(in srgb, var(--accent-coral) 12%, transparent)',
-      desc: 'necesitan acción hoy',
-    },
-    {
-      label: 'Cerrados',
-      value: stats.closedMonth,
-      icon: <CheckCircle2 size={16} />,
-      iconColor: 'var(--accent-green)',
-      iconBg:    'color-mix(in srgb, var(--accent-green) 12%, transparent)',
-      desc: 'este mes',
-    },
+    { label: 'Cartera activa', value: stats.active, highlight: true,
+      hint: 'Leads en etapa Nuevo o En Nutrición.' },
+    { label: 'Calidad alta', value: stats.highQuality,
+      hint: 'Leads en la banda más alta de calidad de tu cartera activa.' },
+    { label: 'Para hoy', value: stats.urgentToday, note: 'requieren acción', href: '/leads?sort=prioridad',
+      hint: 'Leads con urgencia activa hoy.' },
+    { label: 'Cerrados', value: stats.closedMonth, note: 'este mes',
+      hint: 'Leads cerrados durante este mes calendario.' },
   ]
 
   return (
@@ -160,39 +129,8 @@ async function DashboardPage() {
       {/* ── BLOQUE 1: Stats Cards ── */}
       <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
         {statCards.map(card => (
-          <StaggerItem
-            key={card.label}
-            className="card-interactive"
-            style={{
-              background:   'var(--bg-surface)',
-              border:       '1px solid var(--border-subtle)',
-              borderRadius: '12px',
-              padding:      '20px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div style={{
-                width:        '32px',
-                height:       '32px',
-                borderRadius: '8px',
-                background:   card.iconBg,
-                color:        card.iconColor,
-                display:      'flex',
-                alignItems:   'center',
-                justifyContent: 'center',
-              }}>
-                {card.icon}
-              </div>
-              <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 500 }}>
-                {card.label}
-              </span>
-            </div>
-            <div style={{ fontSize: '32px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1, marginBottom: '8px' }}>
-              <AnimatedNumber value={card.value} />
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              ↑ {card.desc}
-            </div>
+          <StaggerItem key={card.label}>
+            <KpiCard {...card} />
           </StaggerItem>
         ))}
       </StaggerGroup>
@@ -233,11 +171,11 @@ async function DashboardPage() {
             return (
               <div key={stage.key} style={{ display: 'flex', alignItems: 'center' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '92px' }}>
-                  <span style={{ fontSize: '22px', fontWeight: 500, color, lineHeight: 1 }}>{stage.count}</span>
+                  <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1 }}>{stage.count}</span>
                   <GrowBar
                     axis="y"
                     delay={idx * 0.05}
-                    style={{ width: '100%', height: `${h}px`, background: color + 'CC', borderRadius: '4px' }}
+                    style={{ width: '100%', height: `${h}px`, background: color, borderRadius: '4px' }}
                   />
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
                     {stage.label}
@@ -251,7 +189,7 @@ async function DashboardPage() {
           <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>
             <span style={{ color: 'var(--border-subtle)', fontSize: '24px', paddingBottom: '28px', margin: '0 8px' }}>|</span>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '60px' }}>
-              <span style={{ fontSize: '22px', fontWeight: 500, color: STAGE_COLORS.perdido, lineHeight: 1 }}>
+              <span style={{ fontSize: '22px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1 }}>
                 {stageOf('perdido')}
               </span>
               <GrowBar
@@ -260,7 +198,7 @@ async function DashboardPage() {
                 style={{
                   width: '100%',
                   height: `${Math.max(4, Math.round((stageOf('perdido') / funnelMax) * 48))}px`,
-                  background: STAGE_COLORS.perdido + 'CC',
+                  background: STAGE_COLORS.perdido,
                   borderRadius: '4px',
                 }}
               />
