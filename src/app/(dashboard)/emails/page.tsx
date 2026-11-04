@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { listSequences } from '@/lib/data/email-sequences'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
@@ -9,7 +10,7 @@ import { listFolders } from '@/lib/data/folders'
 import { getTagSequenceCoverage } from '@/lib/data/tag-sequences'
 import { TagSequencesPanel } from './tag-sequences-panel'
 import { BroadcastsPanel } from './broadcasts-panel'
-import { listBroadcasts } from '@/lib/data/email-broadcasts'
+import { getBroadcastsMetrics, listBroadcasts, type BroadcastListItem } from '@/lib/data/email-broadcasts'
 import { BROADCAST_OWN_DOMAIN_MESSAGE } from '@/lib/services/broadcast-dispatch'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -48,6 +49,20 @@ function TabIntro({ scope, label, children }: { scope: string; label: string; ch
       <InfoHint label={label}>{children}</InfoHint>
     </div>
   )
+}
+
+// Las cifras de la lista (leads y clics) necesitan los ids de la lista, así que
+// no pueden ir en el Promise.all de la página. En vez de sumar esa lectura al
+// camino crítico, la lista se pinta ya con las celdas en skeleton y las cifras
+// llegan por streaming. Sólo se piden las de los envíos que salieron de borrador.
+async function BroadcastsWithMetrics({ tenantId, broadcasts, senderError }: {
+  tenantId:    string | null
+  broadcasts:  BroadcastListItem[]
+  senderError: string | null
+}) {
+  const ids = broadcasts.filter(b => b.status !== 'draft').map(b => b.id)
+  const metrics = tenantId ? await getBroadcastsMetrics(tenantId, ids) : {}
+  return <BroadcastsPanel broadcasts={broadcasts} senderError={senderError} metrics={metrics} />
 }
 
 async function EmailsPage({
@@ -163,6 +178,8 @@ async function EmailsPage({
     </>
   )
 
+  const broadcastSenderError = broadcastSender.ok ? null : broadcastSender.error
+
   const groupTab = (
     <>
       <TabIntro scope="Un correo manual a un grupo de leads, una sola vez." label="Qué son los correos grupales">
@@ -170,7 +187,9 @@ async function EmailsPage({
         por uno. Cada lead lo recibe en su idioma y firmado por su agente. Requiere un
         dominio propio para enviar.
       </TabIntro>
-      <BroadcastsPanel broadcasts={broadcasts} senderError={broadcastSender.ok ? null : broadcastSender.error} />
+      <Suspense fallback={<BroadcastsPanel broadcasts={broadcasts} senderError={broadcastSenderError} metrics={null} />}>
+        <BroadcastsWithMetrics tenantId={tenant_id} broadcasts={broadcasts} senderError={broadcastSenderError} />
+      </Suspense>
     </>
   )
 

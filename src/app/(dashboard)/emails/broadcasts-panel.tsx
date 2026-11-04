@@ -3,32 +3,56 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Users } from 'lucide-react'
+import { AlertTriangle, Plus, Send, Users } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui/data-table'
 import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import { FechaLocal } from '@/components/ui/local-date'
-import type { BroadcastListItem } from '@/lib/data/email-broadcasts'
+import type { BroadcastListItem, BroadcastMetrics } from '@/lib/data/email-broadcasts'
 import { BROADCAST_STATUS_LABEL, type BroadcastStatus } from '@/lib/broadcasts/model'
 import { createBroadcast } from './broadcast-actions'
 
-const FECHA: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' }
+const FECHA_CORTA: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
 
-const STATUS_COLOR: Record<BroadcastStatus, { color: string; bg: string }> = {
-  draft:     { color: 'var(--text-muted)',     bg: 'var(--bg-elevated)' },
-  pending:   { color: 'var(--accent-blue)',    bg: 'rgba(91,142,201,0.12)' },
-  sending:   { color: 'var(--accent-gold)',    bg: 'rgba(201,169,110,0.12)' },
-  paused:    { color: 'var(--accent-coral)',   bg: 'rgba(201,123,107,0.12)' },
-  sent:      { color: 'var(--accent-teal)',    bg: 'rgba(90,175,160,0.12)' },
-  cancelled: { color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' },
-  failed:    { color: 'var(--accent-coral)',   bg: 'rgba(201,123,107,0.12)' },
+// Dorado más vivo = más avanzado; apagado = sin actividad. Coral sólo en los
+// estados que piden atención (pausado, fallido), siempre con icono y texto.
+const STATUS_TONE: Record<BroadcastStatus, { tone: string; alert?: boolean }> = {
+  draft:     { tone: 'mute' },
+  pending:   { tone: 'gold' },
+  sending:   { tone: 'gold' },
+  paused:    { tone: 'coral', alert: true },
+  sent:      { tone: 'green' },
+  cancelled: { tone: 'mute' },
+  failed:    { tone: 'coral', alert: true },
 }
 
 export function BroadcastStatusChip({ status }: { status: BroadcastStatus }) {
-  const c = STATUS_COLOR[status]
+  const c = STATUS_TONE[status]
   return (
-    <span style={{ fontSize: '11px', fontWeight: 500, padding: '3px 9px', borderRadius: '999px', color: c.color, background: c.bg, whiteSpace: 'nowrap' }}>
+    <span className={c.alert ? 'pill' : 'pill pill-dot'} data-tone={c.tone}>
+      {c.alert && <AlertTriangle size={11} aria-hidden="true" />}
       {BROADCAST_STATUS_LABEL[status]}
     </span>
   )
+}
+
+const COLS    = '34px minmax(0, 2fr) 120px 84px 64px 64px'
+const COLS_MD = '34px minmax(0, 2fr) 120px 64px 64px'
+const COLS_SM = 'minmax(0, 1fr) 96px'
+
+const COLUMNS: DataColumn[] = [
+  { label: '', hideSm: true },
+  { label: 'Correo' },
+  { label: 'Estado' },
+  { label: 'Fecha', hideMd: true },
+  { label: 'Leads', right: true, hideSm: true },
+  { label: 'Clics', right: true, hideSm: true },
+]
+
+/** Clics sobre leads, en %. Sin leads no hay tasa que mostrar. */
+function clickRate(m: BroadcastMetrics | undefined): string {
+  if (!m || m.leads <= 0) return '—'
+  return `${Math.round((m.clicked / m.leads) * 100)}%`
 }
 
 function NewBroadcastButton() {
@@ -56,7 +80,12 @@ function NewBroadcastButton() {
   )
 }
 
-export function BroadcastsPanel({ broadcasts, senderError }: { broadcasts: BroadcastListItem[]; senderError: string | null }) {
+export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
+  broadcasts:  BroadcastListItem[]
+  senderError: string | null
+  /** id → métricas; `null` mientras llegan (streaming), para pintar la lista ya. */
+  metrics:     Record<string, BroadcastMetrics> | null
+}) {
   return (
     <>
       <div className="toolbar">
@@ -91,38 +120,56 @@ export function BroadcastsPanel({ broadcasts, senderError }: { broadcasts: Broad
           </div>
         )
       ) : (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
-          {broadcasts.map((b, i) => (
-            <Link
-              key={b.id}
-              href={`/emails/grupales/${b.id}`}
-              className="row-hover"
-              style={{
-                display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', padding: '14px 20px',
-                borderTop: i === 0 ? 'none' : '1px solid var(--border-subtle)', textDecoration: 'none',
-              }}
-            >
-              <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {b.name} <LinkPendingSpinner />
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {b.status === 'pending' && b.scheduledAt
-                    ? <>Sale el <FechaLocal fecha={b.scheduledAt} opciones={FECHA} /></>
-                    : b.finishedAt
-                      ? <>Terminó el <FechaLocal fecha={b.finishedAt} opciones={FECHA} /></>
-                      : <>Creado el <FechaLocal fecha={b.createdAt} opciones={FECHA} /></>}
-                </div>
-              </div>
-              {b.status !== 'draft' && (
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                  {b.sentCount} enviados{b.skippedCount > 0 ? ` · ${b.skippedCount} omitidos` : ''}{b.failedCount > 0 ? ` · ${b.failedCount} fallidos` : ''}
-                </span>
-              )}
-              <BroadcastStatusChip status={b.status} />
-            </Link>
-          ))}
-        </div>
+        <DataScope cols={COLS} colsMd={COLS_MD} colsSm={COLS_SM}>
+          <DataHead columns={COLUMNS} />
+          <DataBlock>
+            {broadcasts.map(b => {
+              const m = metrics?.[b.id]
+              const sent = b.status !== 'draft'
+              const loading = sent && metrics === null
+              const when = b.status === 'pending' && b.scheduledAt
+                ? <>Sale el <FechaLocal fecha={b.scheduledAt} opciones={FECHA_CORTA} /></>
+                : b.finishedAt
+                  ? <>Terminó el <FechaLocal fecha={b.finishedAt} opciones={FECHA_CORTA} /></>
+                  : <>Creado el <FechaLocal fecha={b.createdAt} opciones={FECHA_CORTA} /></>
+              const shortDate = b.status === 'pending' && b.scheduledAt ? b.scheduledAt : (b.finishedAt ?? b.createdAt)
+              return (
+                <Link key={b.id} href={`/emails/grupales/${b.id}`} className="dt-grid dt-row" style={{ textDecoration: 'none' }}>
+                  <div className="dt-hide-sm" aria-hidden="true" style={{
+                    width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
+                  }}><Send size={14} /></div>
+
+                  <div className="dt-cell-main">
+                    <span className="dt-title">{b.name} <LinkPendingSpinner /></span>
+                    <div className="dt-meta">
+                      <span className="dt-show-md">{when}</span>
+                      {sent && (
+                        <span>
+                          {b.sentCount} enviados{b.skippedCount > 0 ? ` · ${b.skippedCount} omitidos` : ''}{b.failedCount > 0 ? ` · ${b.failedCount} fallidos` : ''}
+                        </span>
+                      )}
+                      {!sent && <span className="dt-hide-md">Sin enviar</span>}
+                    </div>
+                  </div>
+
+                  <span style={{ justifySelf: 'start' }}><BroadcastStatusChip status={b.status} /></span>
+
+                  <span className="dt-hide-md" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {sent || b.scheduledAt ? <FechaLocal fecha={shortDate} opciones={FECHA_CORTA} /> : '—'}
+                  </span>
+
+                  <span className="dt-hide-sm dt-r dt-num">
+                    {loading ? <Skeleton w="28px" h={12} r={3} style={{ marginLeft: 'auto' }} /> : sent && m && m.leads > 0 ? m.leads : '—'}
+                  </span>
+                  <span className="dt-hide-sm dt-r dt-num">
+                    {loading ? <Skeleton w="28px" h={12} r={3} style={{ marginLeft: 'auto' }} /> : sent ? clickRate(m) : '—'}
+                  </span>
+                </Link>
+              )
+            })}
+          </DataBlock>
+        </DataScope>
       )}
     </>
   )
