@@ -10,6 +10,8 @@ export interface TopLead {
   firstName: string
   lastName: string
   agentId: string | null
+  /** Embebido en la misma consulta: el cliente no recibe al resto del equipo. */
+  agentName: string | null
   channelName: string | null
   score: number | null
   createdAt: string
@@ -40,7 +42,7 @@ export async function getScoreHistogram(scope: VisibilityScope): Promise<number[
 
 const TOP_COLUMNS = columns('leads_list', [
   'id', 'first_name', 'last_name', 'agent_id', 'current_score', 'created_at', 'urgency',
-]) + ', acquisition_channels!acquisition_channel_id(name)'
+]) + ', acquisition_channels!acquisition_channel_id(name), agents!agent_id(name)'
 
 function topQuery(scope: VisibilityScope) {
   const supabase = createAdminClient()
@@ -57,6 +59,7 @@ function toTopLead(r: any): TopLead {
     firstName:   r.first_name as string,
     lastName:    r.last_name as string,
     agentId:     (r.agent_id ?? null) as string | null,
+    agentName:   (r.agents?.name ?? null) as string | null,
     channelName: (r.acquisition_channels?.name ?? null) as string | null,
     score:       (r.current_score ?? null) as number | null,
     createdAt:   r.created_at as string,

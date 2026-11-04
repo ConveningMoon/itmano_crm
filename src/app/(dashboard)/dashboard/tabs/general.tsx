@@ -1,6 +1,4 @@
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { columns } from '@/lib/supabase/columns'
 import { scopeFor } from '@/lib/auth/visibility'
 import { getLeadAnalyticsStats, getLeadDashboardStats, ANALYTICS_MONTHS } from '@/lib/data/leads'
 import { getScoreHistogram, getTopLeads } from '@/lib/data/dashboard-leads'
@@ -41,25 +39,15 @@ const fmt = (n: number) => n.toLocaleString('en-US')
 export async function GeneralTab({ ctx }: TabProps) {
   const { role, user_id } = ctx
   const scope = scopeFor(ctx)
-  const supabase = createAdminClient()
 
-  const agentsQuery = supabase.from('agents').select(columns('agents', ['id', 'name']))
-
-  // Una sola ola de lecturas: ninguna depende de otra. Los nombres de agente se
-  // piden todos (id y name) para no esperar a los Top 5.
-  const [leadStats, analytics, top, histogram, activity, agentsRes] = await Promise.all([
+  // Una sola ola de lecturas: ninguna depende de otra.
+  const [leadStats, analytics, top, histogram, activity] = await Promise.all([
     getLeadDashboardStats(scope),
     getLeadAnalyticsStats(scope),
     getTopLeads(scope),
     getScoreHistogram(scope),
     getRecentActivity(scope.tenantId, { role, userId: user_id }, 4, scope.agentId),
-    scope.tenantId ? agentsQuery.eq('tenant_id', scope.tenantId) : agentsQuery,
   ])
-
-  const agentNames: Record<string, string> = {}
-  for (const a of (agentsRes.data ?? []) as unknown as { id: string; name: string }[]) {
-    agentNames[a.id] = a.name
-  }
 
   // ── KPIs ──
   const conversion = analytics.attributedTotal > 0
@@ -136,7 +124,7 @@ export async function GeneralTab({ ctx }: TabProps) {
           <KpiCard
             label="Cartera activa" value={leadStats.active} highlight
             note={`${fmt(analytics.thisMonth.leads)} altas este mes`}
-            hint="Leads en etapa Nuevo o En Nutrición."
+            hint="Leads en etapa Nuevo o En Nutrición. Incluye los importados de otro CRM, que el Embudo deja fuera: por eso las dos cifras pueden diferir."
           />
         </StaggerItem>
         <StaggerItem>
@@ -201,7 +189,7 @@ export async function GeneralTab({ ctx }: TabProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ marginBottom: '16px' }}>
         <ChartCard title="Top 5" scope="Etapas Nuevo, Nutrición y En proceso">
-          <TopLeads hot={top.hot} recent={top.recent} agentNames={agentNames} />
+          <TopLeads hot={top.hot} recent={top.recent} />
         </ChartCard>
 
         <ChartCard title="Leads por fuente" scope="Toda la cartera">

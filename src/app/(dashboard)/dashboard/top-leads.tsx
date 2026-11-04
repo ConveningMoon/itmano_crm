@@ -19,10 +19,9 @@ function initials(l: TopLead): string {
 
 // Los dos Top 5 llegan juntos desde el servidor: el switch sólo cambia cuál se
 // pinta, así que no hay consulta ni transición al alternar.
-export function TopLeads({ hot, recent, agentNames }: {
+export function TopLeads({ hot, recent }: {
   hot: TopLead[]
   recent: TopLead[]
-  agentNames: Record<string, string>
 }) {
   const [mode, setMode] = useState<Mode>('hot')
   const rows = mode === 'hot' ? hot : recent
@@ -49,14 +48,13 @@ export function TopLeads({ hot, recent, agentNames }: {
       ) : (
         <div>
           {rows.map((l, i) => {
-            const agent = l.agentId ? agentNames[l.agentId] : undefined
             return (
               <Link key={l.id} href={`/leads/${l.id}`} className="top5-row row-hover">
                 <span className="top5-rank">{i + 1}</span>
                 <span className="top5-avatar" aria-hidden="true">{initials(l)}</span>
                 <span className="top5-main">
                   <span className="top5-name">{l.firstName} {l.lastName}</span>
-                  <span className="top5-sub">{l.channelName ?? '—'} · {agent ?? '—'}</span>
+                  <span className="top5-sub">{l.channelName ?? '—'} · {l.agentName ?? '—'}</span>
                 </span>
                 <span className="top5-right">
                   {l.urgency === 'hoy' && (

@@ -82,6 +82,12 @@ describe('getTopLeads', () => {
     }
   })
 
+  it('pide el nombre del agente en la misma consulta, sin leer la tabla de agentes', async () => {
+    await getTopLeads(OWNER)
+    expect(queries.every(q => q.table === 'leads_list')).toBe(true)
+    for (const q of queries) expect(String(calls(q, 'select')[0].args[0])).toContain('agents!agent_id(name)')
+  })
+
   it('ordena hot por score y recent por fecha, con id como desempate', async () => {
     await getTopLeads(OWNER)
     const [hot, recent] = queries
@@ -98,17 +104,17 @@ describe('getTopLeads', () => {
   it('mapea las filas', async () => {
     mockRows = [{
       id: 'l1', first_name: 'Ana', last_name: 'Paz', agent_id: 'a1', current_score: 80,
-      created_at: '2026-11-01T00:00:00Z', urgency: 'hoy', acquisition_channels: { name: 'Web' },
+      created_at: '2026-11-01T00:00:00Z', urgency: 'hoy', acquisition_channels: { name: 'Web' }, agents: { name: 'Marta Ruiz' },
     }, {
       id: 'l2', first_name: 'Bo', last_name: 'Li', agent_id: null, current_score: null,
-      created_at: '2026-11-02T00:00:00Z', urgency: null, acquisition_channels: null,
+      created_at: '2026-11-02T00:00:00Z', urgency: null, acquisition_channels: null, agents: null,
     }]
     const r = await getTopLeads(OWNER)
     expect(r.hot[0]).toEqual({
-      id: 'l1', firstName: 'Ana', lastName: 'Paz', agentId: 'a1', channelName: 'Web',
+      id: 'l1', firstName: 'Ana', lastName: 'Paz', agentId: 'a1', agentName: 'Marta Ruiz', channelName: 'Web',
       score: 80, createdAt: '2026-11-01T00:00:00Z', urgency: 'hoy',
     })
-    expect(r.hot[1]).toMatchObject({ agentId: null, channelName: null, score: null, urgency: null })
+    expect(r.hot[1]).toMatchObject({ agentId: null, agentName: null, channelName: null, score: null, urgency: null })
   })
 })
 
