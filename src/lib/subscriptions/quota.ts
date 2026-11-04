@@ -1,5 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getSubscription } from '@/lib/data/subscriptions'
+import { PLANS } from '@/lib/plans'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 
 // Cuota de envío CORPORATIVO (por Resend) en modo degradado. El modo Personal
@@ -34,6 +36,26 @@ export async function countMonthlyCorporateSends(
     .eq('tenant_id', tenantId)
     .gte('sent_at', quotaWindowStart(new Date(), degradedAt))
   return count ?? 0
+}
+
+/**
+ * Cupo mensual de un envío masivo. A diferencia de assertEmailQuota, aquí sí
+ * rige `emailsPerMonth` del plan: un solo clic puede gastar el mes entero, así
+ * que el límite contractual deja de depender de que alguien lo vigile. En modo
+ * degradado manda la cuota de cortesía, que es menor.
+ */
+export async function monthlyEmailAllowance(tenantId: string): Promise<{ limit: number; used: number }> {
+  const supabase = createAdminClient()
+  const [access, subscription, { data: sub }] = await Promise.all([
+    getTenantAccessFor(tenantId),
+    getSubscription(tenantId),
+    supabase.from('subscriptions').select('degraded_at').eq('tenant_id', tenantId).maybeSingle(),
+  ])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
+  const used = await countMonthlyCorporateSends(tenantId, degradedAt)
+  const limit = access.monthlyEmailQuota ?? PLANS[subscription?.plan ?? 'esencial'].limits.emailsPerMonth
+  return { limit, used }
 }
 
 /**

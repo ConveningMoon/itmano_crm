@@ -6,7 +6,7 @@ import { AnimatePresence, m } from 'motion/react'
 import {
   Search, List, LayoutGrid, ChevronDown, X, Users, SlidersHorizontal,
   Camera, ThumbsUp, MessageCircle, PenLine, FileDown, FileUp, Calendar, Globe,
-  Trash2, Download, CheckSquare, Square, Clock,
+  Trash2, Download, CheckSquare, Square, Clock, Mail,
 } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
@@ -24,6 +24,7 @@ import type { ChannelOption } from './new/page'
 import { tagChipStyle, type LeadTag } from '@/lib/leads/tags'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
+import { createBroadcastFromLeadFilters, createBroadcastFromLeads } from '../emails/broadcast-actions'
 import { PageHeader } from '@/components/ui/page-header'
 import { FechaLocal } from '@/components/ui/local-date'
 
@@ -302,6 +303,8 @@ export function LeadsClient({
   const [deleteInput, setDeleteInput] = useState('')
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [bulkPending, startBulk]  = useTransition()
+  const [broadcastPending, startBroadcast] = useTransition()
+  const [broadcastError, setBroadcastError] = useState<string | null>(null)
 
   function pushFilters(patch: Partial<LeadListFilters>) {
     // Cualquier cambio de filtro vuelve a la página 1 salvo que se pida otra.
@@ -342,6 +345,17 @@ export function LeadsClient({
     })
   }
   function clearSelection() { setSelected(new Map()) }
+
+  // Correo grupal: abre un borrador con lo que hay en pantalla. Nada sale hasta
+  // que alguien lo revise y lo confirme en /emails/grupales/[id].
+  function openBroadcast(create: () => ReturnType<typeof createBroadcastFromLeads>) {
+    setBroadcastError(null)
+    startBroadcast(async () => {
+      const res = await create()
+      if (!res.ok) { setBroadcastError(res.error); return }
+      router.push(`/emails/grupales/${res.id}`)
+    })
+  }
 
   // Dropdowns activos (los 5) — alimenta el contador del botón "Filtros".
   const activeFilterCount = [
@@ -726,6 +740,18 @@ export function LeadsClient({
           </button>
           <div style={{ flex: 1 }} />
           <button
+            onClick={() => openBroadcast(() => createBroadcastFromLeads([...selected.keys()]))}
+            disabled={broadcastPending}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '7px 14px', fontSize: '13px', borderRadius: '8px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)', cursor: 'pointer', opacity: broadcastPending ? 0.6 : 1,
+            }}
+          >
+            <Mail size={14} /> {broadcastPending ? 'Abriendo…' : 'Correo grupal'}
+          </button>
+          <button
             onClick={exportCsv}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -748,6 +774,27 @@ export function LeadsClient({
             <Trash2 size={14} /> Eliminar ({selected.size})
           </button>
         </div>
+      )}
+
+      {/* Sin selección: los filtros activos también son una audiencia. */}
+      {filters.view === 'table' && selected.size === 0 && hasActiveLeadFilters(filters) && total > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+          <button
+            onClick={() => openBroadcast(() => createBroadcastFromLeadFilters(leadListFiltersToQuery(filters)))}
+            disabled={broadcastPending}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '6px 12px', fontSize: '12px', borderRadius: '8px',
+              background: 'transparent', border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)', cursor: 'pointer', opacity: broadcastPending ? 0.6 : 1,
+            }}
+          >
+            <Mail size={13} /> {broadcastPending ? 'Abriendo…' : `Correo grupal a este filtro (${total})`}
+          </button>
+        </div>
+      )}
+      {broadcastError && (
+        <div role="alert" style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', lineHeight: 1.5 }}>{broadcastError}</div>
       )}
 
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.

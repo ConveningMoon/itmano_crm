@@ -8,6 +8,11 @@ import { getMetricsForSequences } from '@/lib/services/email-metrics'
 import { listFolders } from '@/lib/data/folders'
 import { getTagSequenceCoverage } from '@/lib/data/tag-sequences'
 import { TagSequencesPanel } from './tag-sequences-panel'
+import { BroadcastsPanel } from './broadcasts-panel'
+import { listBroadcasts } from '@/lib/data/email-broadcasts'
+import { BROADCAST_OWN_DOMAIN_MESSAGE } from '@/lib/services/broadcast-dispatch'
+import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { SequencesTable } from './sequences-table'
 import { NewFolderButton } from '@/components/dashboard/folders'
 import { Tabs } from '@/components/ui/tabs'
@@ -15,22 +20,23 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Plus, Mail } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
-// /emails tiene tres clases de correo y antes iban apiladas en una sola página:
+// /emails tiene cuatro clases de correo y antes iban apiladas en una sola página:
 //
 //   · Secuencias — campañas de nutrición que arrancan con un formulario o a mano.
+//   · Grupales — un correo manual a un grupo de leads, una sola vez.
 //   · Por etiqueta (117) — obligatorias: salen al etiquetar un lead.
 //   · De cierre (036/058) — obligatorias: salen en los hitos del proceso.
 //
-// Las dos últimas no se "lanzan", se CONFIGURAN, y su pregunta es siempre la
+// Las dos últimas (etiqueta y cierre) no se "lanzan", se CONFIGURAN, y su pregunta es siempre la
 // misma: ¿está escrita la versión de cada idioma? Mezclarlas con la lista de
 // campañas hacía que ese hueco se leyera como una fila más.
 //
 // La pestaña viaja en la URL (?tab=) y no en estado del cliente: así el botón
 // "Configurar emails de cierre" de la ficha del lead puede enlazar directo.
 
-type EmailsTab = 'secuencias' | 'etiquetas' | 'cierre'
+type EmailsTab = 'secuencias' | 'grupales' | 'etiquetas' | 'cierre'
 
-const TABS: EmailsTab[] = ['secuencias', 'etiquetas', 'cierre']
+const TABS: EmailsTab[] = ['secuencias', 'grupales', 'etiquetas', 'cierre']
 
 async function EmailsPage({
   searchParams,
@@ -45,7 +51,8 @@ async function EmailsPage({
   const { tenant_id, role } = ctx
   const isSuperAdmin = role === 'super_admin'
   const scope = scopeFor(ctx)
-  const [sequences, purchaseByTenant, ownAgentTemplates, folders, tagCoverage, metrics] = await Promise.all([
+  const [sequences, purchaseByTenant, ownAgentTemplates, folders, tagCoverage, metrics, broadcasts, broadcastSender] = await Promise.all([
+    // (las secuencias primero; los dos últimos alimentan la pestaña de grupales)
     // 'channel': las disparadas por etiqueta tienen su propia pestaña. Verlas
     // aquí invitaría a borrarlas o a engancharlas a una fuente.
     listSequences(tenant_id, scope.agentId, 'channel'),
@@ -62,6 +69,12 @@ async function EmailsPage({
     // Las mismas métricas de la tarjeta del detalle, para cada fila. Una sola
     // RPC por tenant, en la misma ola que la lista: no necesita los ids antes.
     getMetricsForSequences(tenant_id),
+    listBroadcasts(scope),
+    // Sin dominio propio no hay envíos masivos: la pestaña lo explica en vez de
+    // dejar crear un borrador que nunca podría salir.
+    tenant_id
+      ? resolveOpenHouseSender(createAdminClient(), tenant_id, BROADCAST_OWN_DOMAIN_MESSAGE)
+      : Promise.resolve({ ok: false as const, error: 'Selecciona un tenant desde el centro de control.' }),
   ])
 
   // Huecos por escribir: es el número que hace falta ver sin entrar a la pestaña.
@@ -178,7 +191,7 @@ async function EmailsPage({
     <>
       <PageHeader
         title="Email"
-        description="Campañas de nutrición y los correos obligatorios que dispara el CRM."
+        description="Campañas de nutrición, correos a un grupo de leads y los obligatorios que dispara el CRM."
       />
 
       {/* El id se conserva para los enlaces viejos a /emails#emails-de-cierre. */}
@@ -187,11 +200,13 @@ async function EmailsPage({
           defaultKey={activeTab}
           items={[
             { key: 'secuencias', label: 'Secuencias',   badge: sequences.length },
+            { key: 'grupales',   label: 'Grupales',     badge: broadcasts.length || undefined },
             { key: 'etiquetas',  label: 'Por etiqueta', badge: missingTagSequences > 0 ? missingTagSequences : undefined },
             { key: 'cierre',     label: 'De cierre' },
           ]}
           content={{
             secuencias: sequencesTab,
+            grupales:   <BroadcastsPanel broadcasts={broadcasts} senderError={broadcastSender.ok ? null : broadcastSender.error} />,
             etiquetas:  <TagSequencesPanel coverage={tagCoverage} canManage={!scope.agentId} />,
             cierre:     closingTab,
           }}

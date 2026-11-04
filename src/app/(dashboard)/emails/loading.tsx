@@ -6,9 +6,9 @@ export default function EmailsLoading() {
     <>
       <PageHeaderSkeleton width="120px" />
 
-      {/* Pestañas: Secuencias / Por etiqueta / De cierre */}
+      {/* Pestañas: Secuencias / Grupales / Por etiqueta / De cierre */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '28px', height: '40px', borderBottom: '1px solid var(--border-subtle)', marginBottom: '20px' }}>
-        {['96px', '92px', '70px'].map((w, i) => <Skeleton key={i} w={w} h={12} r={3} />)}
+        {['96px', '70px', '92px', '70px'].map((w, i) => <Skeleton key={i} w={w} h={12} r={3} />)}
       </div>
 
       {/* Barra de herramientas */}

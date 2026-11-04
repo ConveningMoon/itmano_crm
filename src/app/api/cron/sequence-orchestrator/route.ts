@@ -3,9 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 import { sendPurchaseEmail } from '@/lib/services/send-purchase-email'
 import { dispatchDueOpenHouseEmails } from '@/lib/services/open-house-dispatch'
+import { dispatchDueBroadcasts } from '@/lib/services/broadcast-dispatch'
 
 // Presupuesto de la etapa de open houses (~30 lotes de 100 correos).
 const OPEN_HOUSE_BUDGET_MS = 45_000
+// Lo mismo para los correos grupales programados o a medias.
+const BROADCAST_BUDGET_MS = 45_000
 
 interface DryRunDetail {
   run_id:        string
@@ -40,6 +43,9 @@ export async function POST(request: NextRequest) {
   const openHouses = dryRun || leadId
     ? { processed: 0, sent: 0 }
     : await dispatchDueOpenHouseEmails(db, { deadline: Date.now() + OPEN_HOUSE_BUDGET_MS })
+  const broadcasts = dryRun || leadId
+    ? { processed: 0, sent: 0 }
+    : await dispatchDueBroadcasts(db, { deadline: Date.now() + BROADCAST_BUDGET_MS })
 
   // ── Stage 1: fetch eligible run IDs ────────────────────────────────────────
   // Eligibility lives here in the caller; processSequenceRun processes whatever
@@ -67,6 +73,7 @@ export async function POST(request: NextRequest) {
       ok: true, dry_run: dryRun,
       processed: 0, sent: 0, completed: 0, paused: 0,
       open_houses: openHouses,
+      broadcasts,
       ts: new Date().toISOString(),
       ...(dryRun && { runs: [] }),
     })

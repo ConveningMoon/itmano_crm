@@ -108,6 +108,7 @@ interface Props {
   previewContext?: {
     leadId?: string; sequenceId?: string; agentId?: string
     openHouseId?: string; openHouseKind?: 'announcement' | 'reminder' | 'update' | 'cancellation'
+    withPostalAddress?: boolean
   }
   // Variables disponibles. Por defecto las de siempre; los correos de open
   // house suman las del evento (fecha, dirección, enlaces).
@@ -165,6 +166,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
         agentId:    previewContext?.agentId,
         openHouseId: previewContext?.openHouseId,
         openHouseKind: previewContext?.openHouseKind,
+        withPostalAddress: previewContext?.withPostalAddress,
       })
       if (!res.ok) { setPreviewError(res.error); return }
       setPreviewHtml(res.html)

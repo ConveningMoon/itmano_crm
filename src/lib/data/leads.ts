@@ -42,7 +42,7 @@ const LIST_COLUMNS = columns('leads_list', [
 
 // Aplica scope de visibilidad + todos los filtros salvo el estado (que el kanban
 // necesita sobreescribir por columna).
-function applyFilters(
+export function applyLeadListFilters(
   query: any,
   scope: VisibilityScope,
   filters: LeadListFilters,
@@ -164,7 +164,7 @@ export async function getLeadsListData(
   const stageFiltered = (q: any) =>
     filters.stage !== 'all' ? q.eq('stage', filters.stage) : q
 
-  const countQuery = () => stageFiltered(applyFilters(
+  const countQuery = () => stageFiltered(applyLeadListFilters(
     supabase.from('leads_list').select('id', { count: 'exact', head: true }),
     scope, filters, channels, tags,
   ))
@@ -195,7 +195,7 @@ export async function getLeadsListData(
   const pageQuery = (page: number) => {
     const from = (page - 1) * LEADS_PAGE_SIZE
     return applySort(
-      stageFiltered(applyFilters(
+      stageFiltered(applyLeadListFilters(
         supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
         scope, filters, channels, tags,
       )),
@@ -254,7 +254,7 @@ async function fetchKanbanColumns(
       return { key: stage, total: 0, items: [] }
     }
 
-    const { data, count } = await applyFilters(
+    const { data, count } = await applyLeadListFilters(
       supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
       scope, filters, channels, tags,
     )
