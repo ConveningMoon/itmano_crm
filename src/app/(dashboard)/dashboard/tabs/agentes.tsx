@@ -3,6 +3,7 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { getLeadAnalyticsStats } from '@/lib/data/leads'
+import { summarizeAgents } from '@/lib/dashboard/agents-summary'
 import { STAGES, STAGE_CONFIG } from '@/lib/scoring/priority'
 import { colorsByKey, foldCategories, GOLD_RAMP, STAGE_HEX } from '@/lib/charts/palette'
 import { KpiCard } from '@/components/ui/kpi-card'
@@ -15,6 +16,7 @@ import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import type { TabProps } from '../types'
 
 const AGENT_COLUMNS = columns('agents', ['id', 'name'])
+const INACTIVE = 'Agentes inactivos'
 const fmt = (n: number) => n.toLocaleString('en-US')
 
 const initials = (name: string) =>
@@ -56,12 +58,14 @@ export async function AgentesTab({ ctx }: TabProps) {
     }
   })
 
-  // ── KPIs (sin dividir entre cero) ──
+  // ── KPIs: cifras globales; los leads de agentes inactivos entran como sobrante ──
   const count = agents.length
-  const totalLeads = agents.reduce((s, a) => s + a.total, 0)
-  const totalHigh = agents.reduce((s, a) => s + a.highQuality, 0)
-  const totalClosed = agents.reduce((s, a) => s + a.closed, 0)
-  const perAgent = count > 0 ? Math.round(totalLeads / count) : 0
+  const summary = summarizeAgents(agents, {
+    total: analytics.total,
+    closed: analytics.closed,
+    highQuality: analytics.qualityDistribution.alta ?? 0,
+  })
+  const { total: totalLeads, highQuality: totalHigh, closed: totalClosed, perAgent, inactive } = summary
   const closedPct = totalLeads > 0 ? Math.round((totalClosed / totalLeads) * 100) : 0
   const topHigh = agents.reduce<typeof agents[number] | null>(
     (best, a) => (a.highQuality > (best?.highQuality ?? 0) ? a : best), null,
@@ -69,10 +73,13 @@ export async function AgentesTab({ ctx }: TabProps) {
 
   // ── Ranking: por leads, desempata el nombre ──
   const ranking = [...agents].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
-  const rankMax = Math.max(1, ...ranking.map(a => a.total))
+  const rankMax = Math.max(1, inactive?.total ?? 0, ...ranking.map(a => a.total))
 
   // ── Reparto: dona pliegada a 5; el color sigue al agente por orden alfabético ──
-  const folded = foldCategories(agents.filter(a => a.total > 0).map(a => ({ name: a.name, value: a.total })))
+  const folded = foldCategories([
+    ...agents.filter(a => a.total > 0).map(a => ({ name: a.name, value: a.total })),
+    ...(inactive ? [{ name: INACTIVE, value: inactive.total }] : []),
+  ])
   const keptSorted = folded.filter(r => r.name !== 'Otras').sort((a, b) => a.name.localeCompare(b.name))
   const others = folded.find(r => r.name === 'Otras')
   const palette = colorsByKey(keptSorted.map(r => r.name))
@@ -124,7 +131,7 @@ export async function AgentesTab({ ctx }: TabProps) {
           scope="Toda la cartera"
           hint="Ordenado por leads asignados. Haz clic en un agente para ver sus leads."
         >
-          {count === 0 ? noAgents : (
+          {count === 0 && !inactive ? noAgents : (
             <div>
               <div className="rank-row" data-head>
                 <span /><span>Agente</span><span className="rank-hide-sm">Cartera</span>
@@ -140,6 +147,16 @@ export async function AgentesTab({ ctx }: TabProps) {
                   <span className="rank-num">{fmt(a.closed)}</span>
                 </Link>
               ))}
+              {inactive && (
+                <div className="rank-row">
+                  <span className="top5-avatar" aria-hidden="true" />
+                  <span className="rank-name">{INACTIVE}</span>
+                  <span className="rank-track"><i style={{ width: `${(inactive.total / rankMax) * 100}%` }} /></span>
+                  <span className="rank-num" data-strong>{fmt(inactive.total)}</span>
+                  <span className="rank-num">{fmt(inactive.highQuality)}</span>
+                  <span className="rank-num">{fmt(inactive.closed)}</span>
+                </div>
+              )}
             </div>
           )}
         </ChartCard>
