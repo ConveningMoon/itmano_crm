@@ -79,7 +79,11 @@ describe('getEmailDashboardStats — mapeo', () => {
 
   it('un error del RPC devuelve la forma vacía, no revienta la página', async () => {
     mockError = { message: 'boom' }
-    expect(await getEmailDashboardStats(OWNER, 7, 'UTC')).toEqual({
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const result = await getEmailDashboardStats(OWNER, 7, 'UTC')
+    expect(log).toHaveBeenCalledWith('[email_dashboard_stats]', 'boom')
+    log.mockRestore()
+    expect(result).toEqual({
       totalSends: 0, uniqueLeads: 0,
       clickRate: 0, replyRate: 0, bounceRate: 0, unsubscribeRate: 0,
       byClass: { secuencias: 0, grupales: 0, etiqueta: 0, cierre: 0, otros: 0 },

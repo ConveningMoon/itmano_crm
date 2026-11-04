@@ -46,7 +46,12 @@ export async function getEmailDashboardStats(
     p_days:      period,
     p_time_zone: timeZone,
   })
-  if (error || !data) return emptyEmailDashboardStats()
+  if (error) {
+    // Sin este log, un fallo (p. ej. zona horaria inválida) se ve igual que un tenant sin envíos.
+    console.error('[email_dashboard_stats]', error.message)
+    return emptyEmailDashboardStats()
+  }
+  if (!data) return emptyEmailDashboardStats()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const raw = data as any
