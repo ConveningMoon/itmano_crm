@@ -106,10 +106,28 @@ function EmailsSkeleton() {
 function FuentesSkeleton() {
   return (
     <div>
-      <ChartCard />
-      <div style={CARD}>
-        <Skeleton w="140px" h={14} r={4} />
-        {[...Array(5)].map((_, i) => <Skeleton key={i} w="100%" h={36} r={8} />)}
+      <KpiRow />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-4" style={{ marginBottom: '16px' }}>
+        <div style={CARD}>
+          <Skeleton w="140px" h={14} r={4} />
+          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_196px] gap-4">
+            <Skeleton w="100%" h={260} r={8} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {[...Array(6)].map((_, i) => <Skeleton key={i} w="100%" h={28} r={8} />)}
+            </div>
+          </div>
+        </div>
+        <div style={CARD}><Skeleton w="120px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4">
+        <div style={CARD}>
+          <Skeleton w="140px" h={14} r={4} />
+          {[...Array(4)].map((_, i) => <Skeleton key={i} w="100%" h={24} r={6} />)}
+        </div>
+        <div style={CARD}>
+          <Skeleton w="140px" h={14} r={4} />
+          {[...Array(5)].map((_, i) => <Skeleton key={i} w="100%" h={36} r={8} />)}
+        </div>
       </div>
     </div>
   )
