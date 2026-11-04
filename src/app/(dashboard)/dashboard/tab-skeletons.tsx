@@ -58,9 +58,20 @@ export function GeneralSkeleton() {
 
 function AgentesSkeleton() {
   return (
-    <div style={CARD}>
-      <Skeleton w="180px" h={14} r={4} />
-      {[...Array(4)].map((_, i) => <Skeleton key={i} w="100%" h={60} r={8} />)}
+    <div>
+      <KpiRow />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4" style={{ marginBottom: '16px' }}>
+        <div style={CARD}>
+          <Skeleton w="140px" h={14} r={4} />
+          {[...Array(4)].map((_, i) => <Skeleton key={i} w="100%" h={44} r={8} />)}
+        </div>
+        <div style={CARD}><Skeleton w="120px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} style={CARD}><Skeleton w="120px" h={14} r={4} /><Skeleton w="100%" h={160} r={8} /></div>
+        ))}
+      </div>
     </div>
   )
 }
