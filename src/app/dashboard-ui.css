@@ -920,4 +920,5 @@ a.seq-row:hover { background: var(--bg-overlay); }
   .seq-row { grid-template-columns: minmax(0, 1fr) 44px 44px 44px 44px; gap: 6px; }
   .seq-row .seq-bar, .seq-hide-sm { display: none; }
   .seq-clicks { grid-template-columns: 1fr; }
+  .seq-clicks-head { text-align: right; }
 }

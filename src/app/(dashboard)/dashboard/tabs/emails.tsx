@@ -150,7 +150,7 @@ export async function EmailsTab({ ctx, period }: TabProps) {
             emptyText={emptySends}
             label={`Envíos, ${fmt(barsTotal)} en total: ${bars.map(b => `${b.label} ${b.value}`).join('; ')}`}
           >
-            <BarsChart height={200} data={bars} unit="correos" everyLabel={period === 91 ? 2 : 1} />
+            <BarsChart height={200} data={bars} unit="correos" />
           </ChartFrame>
         </ChartCard>
 
@@ -182,7 +182,7 @@ export async function EmailsTab({ ctx, period }: TabProps) {
           ) : (
             <div>
               <div className="seq-row" data-head>
-                <span>Secuencia</span><span className="seq-num">Enviados</span><span className="seq-bar">Clics</span>
+                <span>Secuencia</span><span className="seq-num">Enviados</span><span className="seq-clicks-head">Clics</span>
                 <span className="seq-num seq-hide-sm">Respuesta</span><span className="seq-num">Rebote</span><span className="seq-num">Bajas</span>
               </div>
               {seqRows.map(({ id, name, m }) => {

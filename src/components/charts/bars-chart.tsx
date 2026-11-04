@@ -12,12 +12,13 @@ const MAX_BAR_WIDTH = 56
 // Barras verticales. La barra mayor lleva degradado, brillo y su valor encima; las
 // demás, el dorado oscuro de la rampa. El tooltip y su zona de contacto abarcan
 // toda la columna (no sólo la barra), así una barra baja o angosta sigue siendo
-// fácil de tocar. `everyLabel`: una etiqueta de cada N, para ejes largos (30 días).
-export function BarsChart({ data, unit, height, everyLabel = 1 }: {
+// fácil de tocar. Las etiquetas del eje nunca se montan: recharts oculta las que
+// no caben (`preserveStartEnd` + `minTickGap`), así que en pantallas angostas salen
+// menos, y el tooltip conserva el rango completo.
+export function BarsChart({ data, unit, height }: {
   data:        { label: string; value: number; color?: string }[]
   unit:        string
   height:      number
-  everyLabel?: number
 }) {
   const reduced = usePrefersReducedMotion()
   const id = useChartId('bars')
@@ -40,7 +41,8 @@ export function BarsChart({ data, unit, height, everyLabel = 1 }: {
           tick={AXIS_TICK}
           axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
           tickLine={false}
-          interval={Math.max(0, Math.floor(everyLabel) - 1)}
+          interval="preserveStartEnd"
+          minTickGap={14}
         />
         <YAxis hide domain={[0, 'dataMax']} />
         <Tooltip
