@@ -79,9 +79,26 @@ function AgentesSkeleton() {
 function EmailsSkeleton() {
   return (
     <div>
-      <KpiRow />
-      <ChartCard />
-      <ChartCard h={160} />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4" style={{ marginBottom: '16px' }}>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className={i === 0 ? 'col-span-2 md:col-span-1' : undefined} style={{ ...CARD, borderRadius: '16px', padding: '16px 18px' }}>
+            <Skeleton w="60%" h={12} />
+            <Skeleton w="40%" h={32} />
+            <Skeleton w="50%" h={10} />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4" style={{ marginBottom: '16px' }}>
+        <div style={CARD}><Skeleton w="80px" h={14} r={4} /><Skeleton w="100%" h={200} r={8} /></div>
+        <div style={CARD}><Skeleton w="120px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4">
+        <div style={CARD}>
+          <Skeleton w="120px" h={14} r={4} />
+          {[...Array(4)].map((_, i) => <Skeleton key={i} w="100%" h={36} r={8} />)}
+        </div>
+        <div style={CARD}><Skeleton w="140px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+      </div>
     </div>
   )
 }

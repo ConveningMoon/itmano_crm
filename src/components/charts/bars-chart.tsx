@@ -52,7 +52,8 @@ export function BarsChart({ data, unit, height, everyLabel = 1 }: {
           name={unit}
           maxBarSize={MAX_BAR_WIDTH}
           radius={[6, 6, 0, 0]}
-          minPointSize={4}
+          // Un valor distinto de cero siempre se ve; un cero no dibuja nada.
+          minPointSize={v => (v ? 4 : 0)}
           isAnimationActive={!reduced}
           animationDuration={600}
           animationEasing="ease-out"

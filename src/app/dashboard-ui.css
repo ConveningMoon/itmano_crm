@@ -895,3 +895,29 @@ a.rank-row:hover { background: var(--bg-overlay); }
 .stage-legend i { display: block; width: 10px; height: 10px; border-radius: 3px; }
 .ring-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 16px 8px; padding-top: 6px; }
 .ring-grid .ring-gauge span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Pestaña Emails: nota de salud de un KPI y tabla Por secuencia */
+.kpi-health { display: inline-flex; align-items: center; gap: 4px; }
+.kpi-health[data-state="alert"] { color: var(--alert); font-weight: 500; }
+.seq-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 56px minmax(0, 1fr) 52px 52px 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 6px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+a.seq-row:hover { background: var(--bg-overlay); }
+.seq-row[data-head] { padding-top: 0; padding-bottom: 4px; font-size: 11px; color: var(--text-muted); }
+.seq-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
+.seq-clicks { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: center; gap: 6px; }
+.seq-num { text-align: right; font-variant-numeric: tabular-nums; }
+.seq-num[data-alert] { display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; color: var(--alert); font-weight: 500; }
+@media (max-width: 760px) {
+  .seq-row { grid-template-columns: minmax(0, 1fr) 44px 44px 44px 44px; gap: 6px; }
+  .seq-row .seq-bar, .seq-hide-sm { display: none; }
+  .seq-clicks { grid-template-columns: 1fr; }
+}
