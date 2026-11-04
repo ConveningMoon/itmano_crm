@@ -226,7 +226,6 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
             <span className="fu-health-label">{hc.label}</span>
             <span
               onClick={e => e.stopPropagation()}
-              onKeyDown={e => e.stopPropagation()}
               style={{ display: 'inline-flex' }}
             >
               <InfoHint label={`Detalle de salud de ${ch.name}`}>
@@ -266,7 +265,6 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
       <div
         className="fu-actions"
         onClick={e => e.stopPropagation()}
-        onKeyDown={e => e.stopPropagation()}
       >
         <NoPageModal
           open={noPage}
@@ -1108,6 +1106,7 @@ export function SourcesClient({ health, channels, archivedChannels, trends, isSu
         </DataScope>
       ) : (
         <DataScope cols={COLS} colsMd={COLS_MD} colsSm={COLS_SM}>
+          <p className="toolbar-meta" style={{ margin: '0 2px 8px' }}>Leads y conversión: últimas 4 semanas.</p>
           <DataHead columns={COLUMNS} />
 
           {foldersView ? (
