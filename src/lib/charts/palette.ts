@@ -1,3 +1,5 @@
+import type { Stage } from '@/lib/scoring/priority'
+
 // Colores de las gráficas: la única definición. Son hex y no tokens porque recharts
 // los recibe como atributos de SVG. Deben coincidir con --gold-1 a --gold-5 de
 // globals.css.
@@ -5,6 +7,20 @@ export const GOLD_RAMP = ['#F8E7BC', '#DDB968', '#B08D45', '#8A6E38', '#6F5A34']
 
 // Perdido no es un punto de la escala de etapas: es una salida del embudo.
 export const LOST_COLOR = '#A89878'
+
+// Color de cada etapa para SVG y recharts, que reciben hex y no var(--token).
+// Debe coincidir con --status-* de globals.css (tests/design/tokens.test.ts lo vigila).
+export const STAGE_HEX: Record<Stage, string> = {
+  nuevo:      '#F8E7BC',
+  nutricion:  '#DDB968',
+  en_proceso: '#B08D45',
+  cerrado:    '#C9A96E',
+  perdido:    '#A89878',
+}
+
+// Texto de ejes y etiquetas dentro de un SVG. Coincide con --text-muted y
+// --text-secondary; el contraste de ambos se mide en tokens.test.ts.
+export const CHART_TEXT = { muted: '#8A877F', secondary: '#A09D95' } as const
 
 const MAX_CATEGORIES = 5
 

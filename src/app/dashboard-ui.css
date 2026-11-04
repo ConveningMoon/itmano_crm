@@ -214,12 +214,24 @@
   color: var(--text-secondary);
 }
 .kpi-card .info-hint { position: relative; }
+.kpi-card-main {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
 .kpi-card-value {
   font-size: 32px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.025em;
   color: var(--text-primary);
+}
+.kpi-card-suffix {
+  margin-left: 2px;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 .kpi-card-note {
   margin-top: 8px;
@@ -232,6 +244,9 @@
   box-shadow: var(--gold-glow);
 }
 .kpi-card[data-highlight] .kpi-card-value { color: #1A1408; }
+.kpi-card[data-highlight] .kpi-card-suffix { color: #3A2D10; }
+.kpi-card[data-highlight] .spark-line { stroke: #1A1408; }
+.kpi-card[data-highlight] .spark-dot { fill: #1A1408; }
 .kpi-card[data-highlight] .kpi-card-label,
 .kpi-card[data-highlight] .kpi-card-note,
 .kpi-card[data-highlight] .info-hint { color: #3A2D10; }
@@ -239,6 +254,188 @@
 .kpi-card[data-highlight] .info-hint[data-popup-open] { color: #1A1408; }
 /* El anillo dorado global no se ve sobre el degradado. */
 .kpi-card[data-highlight] .info-hint:focus-visible { outline-color: #1A1408; }
+
+/* Minigráfica */
+.spark {
+  flex: none;
+  display: block;
+  width: 72px;
+  height: 24px;
+  overflow: visible;
+}
+.spark-line { stroke: var(--gold-2); }
+.spark-dot { fill: var(--gold-1); }
+
+/* Tarjeta de gráfica */
+.chart-card {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: var(--bg-surface);
+  box-shadow: var(--highlight-top);
+}
+.chart-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.chart-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.chart-card-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.chart-card-scope {
+  width: 100%;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.chart-card-action {
+  flex: none;
+  font-size: 12px;
+  color: var(--gold-2);
+}
+
+/* Gráficas de recharts: hueco, esqueleto y leyendas */
+.chart-slot { width: 100%; }
+.chart-skeleton {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+  height: var(--chart-h, 220px);
+  padding: 12px 0;
+}
+.chart-skeleton > * { flex: 1; }
+.chart-skeleton-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.chart-legend s,
+.chart-tooltip s,
+.donut-legend s {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  text-decoration: none;
+}
+.chart-legend s { margin-right: 6px; }
+.chart-tooltip {
+  min-width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-hover);
+  border-radius: 9px;
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.chart-tooltip-title { margin-bottom: 4px; font-weight: 600; }
+.chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+}
+.chart-tooltip-row b { margin-left: auto; padding-left: 12px; color: var(--text-primary); font-weight: 600; }
+
+/* Dona con leyenda */
+.donut-block {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+.donut-chart {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  filter: drop-shadow(0 0 8px rgba(221, 185, 104, 0.16));
+}
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.donut-center b { font-size: 22px; font-weight: 600; line-height: 1.1; color: var(--text-primary); }
+.donut-center span { font-size: 10px; color: var(--text-muted); }
+.donut-legend {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.donut-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: opacity var(--dur-fast);
+}
+.donut-legend li[data-dim] { opacity: 0.45; }
+.donut-legend span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-legend b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .donut-block { grid-template-columns: 104px minmax(0, 1fr); gap: 14px; }
+  .donut-chart { width: 104px; height: 104px; }
+}
+
+/* Embudo, anillo y lista de barras (SVG y HTML de servidor) */
+.capsule-funnel { display: block; width: 100%; max-height: 260px; overflow: visible; }
+.ring-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.ring-gauge svg { display: block; width: 82px; height: 82px; }
+.hbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 104px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 8px; border-radius: 4px; background: var(--bg-overlay); overflow: hidden; }
+.hbar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--gold-4), var(--gold-2) 60%, var(--gold-1));
+}
+.hbar-value { min-width: 32px; text-align: right; font-weight: 500; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
 /* Tarjeta de KPI */
 .stat-card {

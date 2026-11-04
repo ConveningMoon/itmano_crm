@@ -10,7 +10,10 @@ interface AnimatedNumberProps {
   duration?: number
 }
 
-const defaultFormat = (n: number) => Math.round(n).toString()
+// en-US fija la coma de millares (1,284) igual en servidor y cliente. Un formato en
+// función no puede cruzar de un Server Component a este Client Component: quien
+// necesite otro formato lo resuelve en un wrapper cliente.
+const defaultFormat = (n: number) => Math.round(n).toLocaleString('en-US')
 
 // SSR renderiza el valor final (cero hydration mismatch, cero layout shift si
 // JS no carga). En el primer mount anima desde 0 mutando textContent — React no

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { GOLD_RAMP } from '@/lib/charts/palette'
+import { CHART_TEXT, GOLD_RAMP, STAGE_HEX } from '@/lib/charts/palette'
 
 // La paleta del CRM vive en un solo archivo y se cambia a menudo. Estas pruebas
 // fijan lo que no debe romperse al tocarla: las páginas públicas conservan su
@@ -82,6 +82,23 @@ describe('tokens de color', () => {
   it('la rampa de las gráficas coincide con los tokens', () => {
     const root = block(':root')
     GOLD_RAMP.forEach((hex, i) => expect(tokenValue(root, `--gold-${i + 1}`)).toBe(hex))
+  })
+
+  it('STAGE_HEX coincide con los tokens --status-*', () => {
+    const root = block(':root')
+    const tokenOf = {
+      nuevo: '--status-new', nutricion: '--status-nurturing', en_proceso: '--status-process-started',
+      cerrado: '--status-closed', perdido: '--status-lost',
+    } as const
+    for (const [stage, token] of Object.entries(tokenOf)) {
+      expect(STAGE_HEX[stage as keyof typeof tokenOf], stage).toBe(tokenValue(root, token))
+    }
+  })
+
+  it('CHART_TEXT coincide con --text-muted y --text-secondary', () => {
+    const root = block(':root')
+    expect(CHART_TEXT.muted).toBe(tokenValue(root, '--text-muted'))
+    expect(CHART_TEXT.secondary).toBe(tokenValue(root, '--text-secondary'))
   })
 
   it('--status-hot no se usa para errores: sólo donde significa calidad alta', () => {

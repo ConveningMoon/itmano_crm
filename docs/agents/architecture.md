@@ -272,7 +272,11 @@ cliente. Pasaba en producción en la ficha del lead.
   el clic en ella y el resto va en un menú ⋯.
 - Cada gráfica de recharts va dentro de `ChartFrame`: resumen en texto para
   lectores de pantalla y estado vacío. Sus colores salen de
-  `src/lib/charts/palette.ts`, nunca de hex sueltos.
+  `src/lib/charts/palette.ts`, nunca de hex sueltos. Los textos de eje y etiqueta
+  dentro de un SVG usan `CHART_TEXT` (mismos valores que `--text-muted` y
+  `--text-secondary`); las etapas, `STAGE_HEX` (mismos que `--status-*`). Los
+  componentes de `src/components/charts/` ya cumplen esto: recharts sólo entra por
+  `charts/lazy.tsx`; embudo, anillo, lista de barras y minigráfica son de servidor.
 - El CRM es oscuro con dorado: `--gold-1` a `--gold-5` y `--alert` en
   `globals.css`. Marketing y login conservan los colores originales con
   `.mk-root` y `.brand-original`; una superficie pública nueva necesita una de
