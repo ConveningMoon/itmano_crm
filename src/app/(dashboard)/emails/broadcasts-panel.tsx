@@ -51,7 +51,7 @@ function NewBroadcastButton() {
         <Plus size={14} />
         {pending ? 'Creando…' : 'Nuevo correo grupal'}
       </button>
-      {error && <span style={{ fontSize: '12px', color: 'var(--status-hot)', maxWidth: '420px', textAlign: 'right', lineHeight: 1.5 }}>{error}</span>}
+      {error && <span style={{ fontSize: '12px', color: 'var(--alert)', maxWidth: '420px', textAlign: 'right', lineHeight: 1.5 }}>{error}</span>}
     </div>
   )
 }

@@ -2,13 +2,15 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
-import { colorsByKey } from '@/lib/charts/palette'
+import { colorsByKey, foldSeriesKeys } from '@/lib/charts/palette'
 import type { AiDailySeries } from '@/lib/data/ai-usage'
 
 // Diagrama del Centro de control: costo diario de IA (últimos 30 días),
 // apilado por tenant. Reemplaza al listado plano de requests recientes — el
 // dato operativo importante es CUÁNTO se gasta, DÓNDE y su tendencia.
 // Client-only (recharts); recibe la serie ya agregada del server.
+
+const OTHERS = 'Otras'
 
 function fmtCost(v: number): string {
   if (v === 0) return '$0.00'
@@ -49,14 +51,23 @@ function CustomTooltip({ active, payload, label }: {
 export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
   const reduced = usePrefersReducedMotion()
 
+  // Con más de 5 tenants los tonos dejarían de distinguirse: los menores se suman.
+  const totals = Object.fromEntries(series.tenantNames.map(name => [
+    name,
+    series.days.reduce((sum, d) => sum + (d.byTenant[name] ?? 0), 0),
+  ]))
+  const { kept, folded } = foldSeriesKeys(totals)
+  const barKeys = folded.length > 0 ? [...kept, OTHERS] : kept
+
   const data = series.days.map(d => ({
     date: d.date,
     requests: d.requests,
-    ...Object.fromEntries(series.tenantNames.map(name => [name, d.byTenant[name] ?? 0])),
+    ...Object.fromEntries(kept.map(name => [name, d.byTenant[name] ?? 0])),
+    ...(folded.length > 0 ? { [OTHERS]: folded.reduce((sum, name) => sum + (d.byTenant[name] ?? 0), 0) } : {}),
   }))
 
   const hasData = series.days.some(d => d.costUsd > 0)
-  const colors = colorsByKey(series.tenantNames)
+  const colors = colorsByKey(barKeys)
 
   return (
     <div style={{
@@ -96,13 +107,13 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
                 iconType="circle"
                 iconSize={7}
               />
-              {series.tenantNames.map((name, i) => (
+              {barKeys.map((name, i) => (
                 <Bar
                   key={name}
                   dataKey={name}
                   stackId="cost"
                   fill={colors[name]}
-                  radius={i === series.tenantNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                  radius={i === barKeys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
                   isAnimationActive={!reduced}
                   animationBegin={0}
                   animationDuration={700}

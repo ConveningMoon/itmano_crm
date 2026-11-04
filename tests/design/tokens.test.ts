@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { GOLD_RAMP } from '@/lib/charts/palette'
 
 // La paleta del CRM vive en un solo archivo y se cambia a menudo. Estas pruebas
 // fijan lo que no debe romperse al tocarla: las páginas públicas conservan su
@@ -11,10 +12,11 @@ const css = readFileSync(path.resolve(__dirname, '../../src/app/globals.css'), '
 
 const REMAP: Record<string, string> = {
   '--accent-blue': '#E6CF9A', '--accent-teal': '#B8A37A', '--accent-pink': '#A89878',
-  '--accent-green': '#DDB968', '--accent-coral': '#D98A78',
+  '--accent-green': '#F8E7BC', '--accent-coral': '#D98A78',
   '--status-new': '#F8E7BC', '--status-nurturing': '#DDB968', '--status-warm': '#DDB968',
   '--status-hot': '#F8E7BC', '--status-process-started': '#B08D45',
   '--status-process-completed': '#C9A96E', '--status-closed': '#C9A96E', '--status-lost': '#A89878',
+  '--quality-media': '#B08D45',
 }
 
 const ORIGINAL: Record<string, string> = {
@@ -23,7 +25,7 @@ const ORIGINAL: Record<string, string> = {
   '--status-new': '#5B8EC9', '--status-nurturing': '#C9A96E', '--status-warm': '#E07B3A',
   '--status-hot': '#E04040', '--status-process-started': '#9B72CF',
   '--status-process-completed': '#6BA368', '--status-closed': '#4A9B6B', '--status-lost': '#C97B6B',
-  '--destructive': '#C97B6B',
+  '--destructive': '#C97B6B', '--quality-media': '#C9A96E',
 }
 
 const SURFACES = ['#111215', '#16181C', '#1C1F24']
@@ -71,6 +73,30 @@ describe('tokens de color', () => {
         expect(contrast(value, surface), `${token} sobre ${surface}`).toBeGreaterThanOrEqual(4.5)
       }
     }
+  })
+
+  it('correcto y advertencia se distinguen', () => {
+    expect(contrast(REMAP['--accent-green'], '#C9A96E')).toBeGreaterThanOrEqual(1.5)
+  })
+
+  it('la rampa de las gráficas coincide con los tokens', () => {
+    const root = block(':root')
+    GOLD_RAMP.forEach((hex, i) => expect(tokenValue(root, `--gold-${i + 1}`)).toBe(hex))
+  })
+
+  it('--status-hot no se usa para errores: sólo donde significa calidad alta', () => {
+    const srcRoot = path.resolve(__dirname, '../../src')
+    const allowed = [
+      'app/(dashboard)/admin/page.tsx', 'app/(dashboard)/admin/tenant-card.tsx',
+      'app/(dashboard)/analytics/page.tsx', 'app/(dashboard)/dashboard/page.tsx',
+      'app/(dashboard)/settings/business-profile-section.tsx', 'app/(marketing)/landing.css',
+      'app/globals.css', 'components/marketing/landing/crm-views.tsx', 'lib/scoring/priority.ts',
+    ]
+    const users = (readdirSync(srcRoot, { recursive: true }) as string[])
+      .map(f => f.split(path.sep).join('/'))
+      .filter(f => /\.(tsx?|css)$/.test(f))
+      .filter(f => readFileSync(path.join(srcRoot, f), 'utf8').includes('--status-hot'))
+    expect(users.filter(f => !allowed.includes(f))).toEqual([])
   })
 
   it('@theme no fija el hex de los acentos', () => {

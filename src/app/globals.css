@@ -31,7 +31,7 @@
   --accent-teal: #B8A37A;
   --accent-coral: #D98A78;
   --accent-pink: #A89878;
-  --accent-green: #DDB968;
+  --accent-green: #F8E7BC;
 
   /* Rampa dorada: más claro = más alto o mejor. Los tonos 4 y 5 no llegan a
      4.5:1, así que sólo sirven para marcas (barras, puntos), nunca para texto. */
@@ -42,6 +42,7 @@
   --gold-5: #6F5A34;
   --gold-gradient: linear-gradient(135deg, #F8E7BC 0%, #DDB968 42%, #8A6E38 100%);
   --gold-glow: 0 0 16px rgba(221, 185, 104, 0.28);
+  --quality-media: #B08D45;
   /* Único color fuera del dorado. Siempre con icono y texto. */
   --alert: #D98A78;
 
@@ -119,6 +120,7 @@
   --status-closed: #4A9B6B;
   --status-lost: #C97B6B;
   --destructive: #C97B6B;
+  --quality-media: #C9A96E;
 }
 
 @theme inline {

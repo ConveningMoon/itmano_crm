@@ -130,7 +130,7 @@ function EditModal({
               // previa muestra esa misma firma, no una de muestra.
               previewContext={{ agentId: row.agent_id }}
             />
-            {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '12px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '20px' }}>
               <button onClick={() => setAdvanced(true)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer', padding: 0 }}>
                 Usar template de Resend (avanzado)
@@ -157,7 +157,7 @@ function EditModal({
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
               Al guardar el template, se descarta el contenido creado en el CRM para este correo.
             </div>
-            {error && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '12px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginTop: '20px' }}>
               <button onClick={() => setAdvanced(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer', padding: 0 }}>
                 ← Crear contenido en el CRM

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { colorsByKey, foldCategories, GOLD_RAMP } from '@/lib/charts/palette'
+import { colorsByKey, foldCategories, foldSeriesKeys, GOLD_RAMP } from '@/lib/charts/palette'
 
 const row = (name: string, value: number) => ({ name, value })
 
@@ -22,6 +22,24 @@ describe('foldCategories', () => {
 
   it('sin categorías devuelve vacío', () => {
     expect(foldCategories([])).toEqual([])
+  })
+})
+
+describe('foldSeriesKeys', () => {
+  it('con más de 5 series conserva las 4 de mayor total', () => {
+    const r = foldSeriesKeys({ a: 1, b: 6, c: 5, d: 4, e: 3, f: 2 })
+    expect(r.kept).toEqual(['b', 'c', 'd', 'e'])
+    expect(r.folded).toEqual(['f', 'a'])
+  })
+
+  it('con 5 o menos no agrupa', () => {
+    const r = foldSeriesKeys({ a: 1, b: 2, c: 3, d: 4, e: 5 })
+    expect(r.kept).toEqual(['e', 'd', 'c', 'b', 'a'])
+    expect(r.folded).toEqual([])
+  })
+
+  it('en un empate decide el nombre, para no cambiar de tono entre cargas', () => {
+    expect(foldSeriesKeys({ b: 1, a: 1 }).kept).toEqual(['a', 'b'])
   })
 })
 

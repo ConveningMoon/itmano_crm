@@ -237,6 +237,8 @@
 .kpi-card[data-highlight] .info-hint { color: #3A2D10; }
 .kpi-card[data-highlight] .info-hint:hover,
 .kpi-card[data-highlight] .info-hint[data-popup-open] { color: #1A1408; }
+/* El anillo dorado global no se ve sobre el degradado. */
+.kpi-card[data-highlight] .info-hint:focus-visible { outline-color: #1A1408; }
 
 /* Tarjeta de KPI */
 .stat-card {

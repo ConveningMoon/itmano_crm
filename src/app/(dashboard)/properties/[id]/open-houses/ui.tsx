@@ -35,7 +35,7 @@ export const BTN_DANGER: React.CSSProperties = {
 }
 
 export const HINT: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }
-export const ERROR: React.CSSProperties = { fontSize: '12px', color: 'var(--status-hot)', lineHeight: 1.5 }
+export const ERROR: React.CSSProperties = { fontSize: '12px', color: 'var(--alert)', lineHeight: 1.5 }
 export const WARN: React.CSSProperties  = { fontSize: '12px', color: 'var(--accent-gold)', lineHeight: 1.5 }
 
 const STATE_COLOR: Record<OpenHouseDisplayState, { color: string; bg: string }> = {

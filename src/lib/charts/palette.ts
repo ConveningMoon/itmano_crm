@@ -27,6 +27,20 @@ export function foldCategories<T extends { name: string; value: number }>(
 }
 
 /**
+ * El equivalente de foldCategories para series apiladas: decide qué series conservar
+ * según su total y cuáles se suman en "Otras". En un empate decide el nombre, para
+ * que una serie no cambie de tono entre cargas.
+ */
+export function foldSeriesKeys(
+  totals: Record<string, number>,
+  max: number = MAX_CATEGORIES,
+): { kept: string[]; folded: string[] } {
+  const keys = Object.keys(totals).sort((a, b) => totals[b] - totals[a] || a.localeCompare(b))
+  if (keys.length <= max) return { kept: keys, folded: [] }
+  return { kept: keys.slice(0, max - 1), folded: keys.slice(max - 1) }
+}
+
+/**
  * Asigna la rampa siguiendo una lista estable de claves, para que el color siga a
  * la categoría y no a su rango: filtrar no debe repintar a las que quedan.
  */

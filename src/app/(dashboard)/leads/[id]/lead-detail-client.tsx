@@ -913,7 +913,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               }}
             />
             {deleteError && (
-              <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
                 {deleteError}
               </div>
             )}

@@ -794,7 +794,7 @@ export function LeadsClient({
         </div>
       )}
       {broadcastError && (
-        <div role="alert" style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px', lineHeight: 1.5 }}>{broadcastError}</div>
+        <div role="alert" style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', lineHeight: 1.5 }}>{broadcastError}</div>
       )}
 
       {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
@@ -1175,7 +1175,7 @@ export function LeadsClient({
             }}
           />
           {bulkError && (
-            <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginBottom: '12px' }}>{bulkError}</div>
+            <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px' }}>{bulkError}</div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
