@@ -429,6 +429,10 @@
   color: var(--text-secondary);
 }
 .hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-row[data-stacked] { grid-template-columns: minmax(0, 112px) minmax(0, 1fr) auto; }
+@media (min-width: 640px) { .hbar-row[data-stacked] { grid-template-columns: minmax(0, 200px) minmax(0, 1fr) auto; } }
+.hbar-label-stack { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hbar-sublabel { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
 .hbar-track { height: 8px; border-radius: 4px; background: var(--bg-overlay); overflow: hidden; }
 .hbar-fill {
   height: 100%;

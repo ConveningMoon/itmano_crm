@@ -92,17 +92,11 @@ export async function NewsletterTab({ ctx }: TabProps) {
     .slice(0, 8)
     .map(e => {
       const views = stats.byEdition.get(e.id)?.views ?? 0
-      const date = shortDate(e.publishedAt)
       return {
         key: e.id,
-        title: e.title,
+        label: e.title,
+        sublabel: shortDate(e.publishedAt),
         value: views,
-        label: (
-          <>
-            {e.title}
-            {date && <span style={{ color: 'var(--text-muted)' }}> · {date}</span>}
-          </>
-        ),
       }
     })
 
@@ -197,12 +191,12 @@ export async function NewsletterTab({ ctx }: TabProps) {
           hint="Vistas acumuladas de cada edición desde el día que se publicó hasta hoy, no solo del periodo elegido arriba. Por eso una edición antigua puede superar a una reciente. La más nueva va arriba."
         >
           <ChartFrame
-            height={Math.max(96, viewRows.length * 32)}
+            height={Math.max(96, viewRows.length * 52)}
             empty={viewRows.length === 0}
             emptyText={<span>Todavía no hay ediciones publicadas. {newsletterLink}</span>}
-            label={`Vistas por edición: ${viewRows.map(r => `${r.title} ${r.value}`).join('; ')}`}
+            label={`Vistas por edición: ${viewRows.map(r => `${r.label}${r.sublabel ? `, ${r.sublabel}` : ''}: ${r.value}`).join('; ')}`}
           >
-            <HBarList rows={viewRows} />
+            <HBarList rows={viewRows} stacked />
           </ChartFrame>
         </ChartCard>
 
