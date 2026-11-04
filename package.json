@@ -44,6 +44,7 @@
     "types:db:sandbox": "node scripts/gen-db-types.mjs sandbox",
     "test:business": "vitest run tests/business",
     "test:open-houses": "npm run check:db-targets && vitest run tests/db-open-houses",
+    "test:dashboard": "npm run check:db-targets && vitest run tests/db-dashboard",
     "test:broadcasts": "npm run check:db-targets && vitest run tests/db-broadcasts",
     "test:agent-api": "vitest run tests/agent-api-db",
     "seed:agent-demo": "node scripts/seed-agent-demo.mjs",
