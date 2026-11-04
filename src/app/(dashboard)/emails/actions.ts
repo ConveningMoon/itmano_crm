@@ -38,7 +38,7 @@ async function getTenantId(overrideTenantId?: string): Promise<string | { error:
 function revalidateEmails() {
   revalidatePath('/emails')
   revalidatePath('/emails/[id]', 'page')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
   revalidatePath('/sources')
 }
 

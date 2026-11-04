@@ -659,7 +659,7 @@ export async function createLeadMagnet(fields: {
 
   revalidatePath('/sources')
   revalidatePath('/emails')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
 
   const integrationPrompt = await buildPromptForChannel(supabase, {
     tenant_id: tenant_id, channel_type: 'lead_magnet', name: fields.name.trim(), public_id: publicId,
@@ -730,7 +730,7 @@ export async function updateChannel(
 
   revalidatePath('/sources')
   revalidatePath('/emails')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
   // Nombre y activo cambian lo que sirve su página pública (inactivo → 404).
   await expireHostedPages(channel.tenant_id)
   return { ok: true }
@@ -770,7 +770,7 @@ export async function archiveChannel(
 
   revalidatePath('/sources')
   revalidatePath('/emails')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
   // Archivada, su página pública deja de existir: que el 404 se vea ya.
   await expireHostedPages(channel.tenant_id)
   return { ok: true }
@@ -833,7 +833,7 @@ export async function deleteChannelPermanently(
 
   revalidatePath('/sources')
   revalidatePath('/emails')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
   return { ok: true }
 }
 
@@ -936,7 +936,7 @@ export async function createEvent(fields: {
   await insertSourceNotification(supabase, tenant_id, 'event_added', `Nuevo evento: ${fields.name.trim()}`)
 
   revalidatePath('/sources')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
 
   const integrationPrompt = await buildPromptForChannel(supabase, {
     tenant_id: tenant_id, channel_type: 'event', name: fields.name.trim(), public_id: publicId,
@@ -1011,7 +1011,7 @@ export async function createContactForm(fields: {
   if (chErr) return { ok: false, error: chErr.message }
 
   revalidatePath('/sources')
-  revalidatePath('/analytics')
+  revalidatePath('/dashboard')
 
   const integrationPrompt = await buildPromptForChannel(
     supabase,

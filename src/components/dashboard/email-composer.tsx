@@ -299,7 +299,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
                   El borrador reemplaza el contenido actual — revísalo antes de guardar.
                 </span>
               </div>
-              {aiError && <div style={{ fontSize: '12px', color: 'var(--status-hot)' }}>{aiError}</div>}
+              {aiError && <div style={{ fontSize: '12px', color: 'var(--alert)' }}>{aiError}</div>}
             </div>
           )}
         </div>
@@ -375,7 +375,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
           <Eye size={13} />
           {previewing ? 'Generando vista previa…' : 'Vista previa'}
         </button>
-        {previewError && <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '8px' }}>{previewError}</div>}
+        {previewError && <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '8px' }}>{previewError}</div>}
         {previewHtml && (
           <div style={{ marginTop: '10px', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
             <iframe

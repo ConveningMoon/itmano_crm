@@ -2,6 +2,8 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
+import { ChartFrame } from '@/components/ui/chart-frame'
+import { CHART_TEXT, colorsByKey, foldSeriesKeys } from '@/lib/charts/palette'
 import type { AiDailySeries } from '@/lib/data/ai-usage'
 
 // Diagrama del Centro de control: costo diario de IA (últimos 30 días),
@@ -9,8 +11,7 @@ import type { AiDailySeries } from '@/lib/data/ai-usage'
 // dato operativo importante es CUÁNTO se gasta, DÓNDE y su tendencia.
 // Client-only (recharts); recibe la serie ya agregada del server.
 
-// Paleta fija por posición (hex, como los demás charts — recharts pinta SVG).
-const SERIES_COLORS = ['#C9A96E', '#5B8EC9', '#5AAFA0', '#C97B6B', '#B87BA3', '#6BA368']
+const OTHERS = 'Otras'
 
 function fmtCost(v: number): string {
   if (v === 0) return '$0.00'
@@ -51,13 +52,24 @@ function CustomTooltip({ active, payload, label }: {
 export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
   const reduced = usePrefersReducedMotion()
 
+  // Con más de 5 tenants los tonos dejarían de distinguirse: los menores se suman.
+  const totals = Object.fromEntries(series.tenantNames.map(name => [
+    name,
+    series.days.reduce((sum, d) => sum + (d.byTenant[name] ?? 0), 0),
+  ]))
+  const { kept, folded } = foldSeriesKeys(totals)
+  const barKeys = folded.length > 0 ? [...kept, OTHERS] : kept
+
   const data = series.days.map(d => ({
     date: d.date,
     requests: d.requests,
-    ...Object.fromEntries(series.tenantNames.map(name => [name, d.byTenant[name] ?? 0])),
+    ...Object.fromEntries(kept.map(name => [name, d.byTenant[name] ?? 0])),
+    ...(folded.length > 0 ? { [OTHERS]: folded.reduce((sum, name) => sum + (d.byTenant[name] ?? 0), 0) } : {}),
   }))
 
   const hasData = series.days.some(d => d.costUsd > 0)
+  const totalCost = series.days.reduce((sum, d) => sum + d.costUsd, 0)
+  const colors = colorsByKey(barKeys)
 
   return (
     <div style={{
@@ -67,18 +79,19 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
         Costo diario de IA · últimos 30 días
       </div>
-      {!hasData ? (
-        <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-          Sin uso de IA en los últimos 30 días.
-        </div>
-      ) : (
-        <div style={{ padding: '16px 12px 8px' }}>
+      <div style={{ padding: '16px 12px 8px' }}>
+        <ChartFrame
+          label={`Costo diario de IA de los últimos 30 días, ${fmtCost(totalCost)} en total`}
+          empty={!hasData}
+          emptyText="Sin uso de IA en los últimos 30 días."
+          height={240}
+        >
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data} margin={{ left: 4, right: 12, top: 4, bottom: 0 }}>
               <XAxis
                 dataKey="date"
                 tickFormatter={fmtDay}
-                tick={{ fill: '#8A877F', fontSize: 10 }}
+                tick={{ fill: CHART_TEXT.muted, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -86,24 +99,24 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
               />
               <YAxis
                 tickFormatter={(v: number) => `$${v}`}
-                tick={{ fill: '#8A877F', fontSize: 10 }}
+                tick={{ fill: CHART_TEXT.muted, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 width={44}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
               <Legend
-                wrapperStyle={{ fontSize: '11px', color: '#A09D95' }}
+                wrapperStyle={{ fontSize: '11px', color: CHART_TEXT.secondary }}
                 iconType="circle"
                 iconSize={7}
               />
-              {series.tenantNames.map((name, i) => (
+              {barKeys.map((name, i) => (
                 <Bar
                   key={name}
                   dataKey={name}
                   stackId="cost"
-                  fill={SERIES_COLORS[i % SERIES_COLORS.length]}
-                  radius={i === series.tenantNames.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                  fill={colors[name]}
+                  radius={i === barKeys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
                   isAnimationActive={!reduced}
                   animationBegin={0}
                   animationDuration={700}
@@ -112,8 +125,8 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
               ))}
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        </ChartFrame>
+      </div>
     </div>
   )
 }

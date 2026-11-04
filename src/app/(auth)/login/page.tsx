@@ -83,6 +83,7 @@ function LoginForm() {
 
   return (
     <div
+      className="brand-original"
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--bg-base)',

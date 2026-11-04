@@ -44,7 +44,7 @@ Los guards de rol y tenant viven en `src/lib/auth/guards.ts` y
 - No hay queries de datos de aplicación desde el cliente. Un proceso largo se
   sigue mediante una Server Action de lectura o el mecanismo servidor aprobado.
 - No importes `recharts` desde un Server Component; usa wrappers cliente en
-  `analytics/charts/`.
+  `src/components/charts/` (entran por `charts/lazy.tsx`).
 
 ## Rendimiento de lecturas
 
@@ -271,6 +271,17 @@ cliente. Pasaba en producción en la ficha del lead.
   se ocultan con `dt-hide-md`/`dt-hide-sm`; la acción principal de una fila es
   el clic en ella y el resto va en un menú ⋯.
 - Cada gráfica de recharts va dentro de `ChartFrame`: resumen en texto para
-  lectores de pantalla y estado vacío.
+  lectores de pantalla y estado vacío. Sus colores salen de
+  `src/lib/charts/palette.ts`, nunca de hex sueltos. Los textos de eje y etiqueta
+  dentro de un SVG usan `CHART_TEXT` (mismos valores que `--text-muted` y
+  `--text-secondary`); las etapas, `STAGE_HEX` (mismos que `--status-*`). Los
+  componentes de `src/components/charts/` ya cumplen esto: recharts sólo entra por
+  `charts/lazy.tsx`; embudo, anillo, lista de barras y minigráfica son de servidor.
+- El CRM es oscuro con dorado: `--gold-1` a `--gold-5` y `--alert` en
+  `globals.css`. Marketing y login conservan los colores originales con
+  `.mk-root` y `.brand-original`; una superficie pública nueva necesita una de
+  ellas. `tests/design/tokens.test.ts` vigila ambos lados y el contraste.
+- Las explicaciones van detrás de `InfoHint` (`src/components/ui/info-hint.tsx`),
+  no como párrafos siempre visibles.
 - El texto atenuado (`--text-muted`) debe mantener 4.5:1 de contraste sobre
   `--bg-surface` y `--bg-elevated`; si cambias el token, vuelve a medirlo.

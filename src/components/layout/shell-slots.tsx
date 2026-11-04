@@ -11,7 +11,7 @@ import { MobileNav } from './mobile-nav'
 import { NavList } from './nav-list'
 import { NewLeadButton } from './new-lead-button'
 import { SidebarUser } from './sidebar-user'
-import { navItemsForRole } from './nav-items'
+import { navGroupsForRole } from './nav-items'
 import { SubscriptionBanner } from '@/components/dashboard/subscription-banner'
 import { NewVersionNotice } from './new-version-notice'
 
@@ -56,7 +56,7 @@ export function BrandFallback() {
  */
 export async function SidebarNavSlot() {
   const ctx = await getCurrentTenantContext()
-  return <NavList items={navItemsForRole(ctx.role, { hubMode: isHubMode(ctx) })} />
+  return <NavList groups={navGroupsForRole(ctx.role, { hubMode: isHubMode(ctx) })} />
 }
 
 /** Usuario, rol y plan al pie del sidebar. */

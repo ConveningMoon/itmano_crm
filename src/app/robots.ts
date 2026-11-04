@@ -40,7 +40,6 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
           '/properties',
           '/emails',
           '/sources',
-          '/analytics',
           '/notifications',
           '/activity',
           '/admin',

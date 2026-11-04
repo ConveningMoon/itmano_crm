@@ -179,7 +179,7 @@ npm run build
 ```
 
 Las suites remotas (`test:schema`, `test:rls`, `test:scoring`, `test:broadcasts`,
-`test:ai-limits`, `test:sources`, `test:open-houses`) comparten fixtures y se ejecutan de una en una
+`test:ai-limits`, `test:sources`, `test:open-houses`, `test:dashboard`) comparten fixtures y se ejecutan de una en una
 contra sandbox. `npm run check:db-targets` debe pasar antes. No ejecutes dos
 suites remotas o builds con fixtures en paralelo.
 

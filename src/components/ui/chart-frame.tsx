@@ -6,7 +6,7 @@ export function ChartFrame({ label, empty = false, emptyText = 'Todavía no hay 
   /** Resumen de lo que dice la gráfica, en una frase con las cifras clave. */
   label:      string
   empty?:     boolean
-  emptyText?: string
+  emptyText?: React.ReactNode
   /** Altura del gráfico (px): la del estado vacío. */
   height:     number
   children:   React.ReactNode

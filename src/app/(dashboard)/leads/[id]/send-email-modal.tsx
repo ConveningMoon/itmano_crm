@@ -180,7 +180,7 @@ export function SendEmailModal({
               previewContext={{ leadId }}
             />
             {error && (
-              <div style={{ fontSize: '12px', color: 'var(--status-hot)', marginTop: '12px', padding: '8px 12px', background: 'color-mix(in srgb, var(--status-hot) 8%, transparent)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '12px', padding: '8px 12px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
                 {error}
               </div>
             )}

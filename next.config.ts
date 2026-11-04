@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants";
 import { clavesPublicas } from "./src/lib/supabase/jwks";
+import { redirects } from "./src/lib/routing/redirects";
 
 // Host de Supabase Storage, derivado del env en vez de hardcodear el project ref
 // — así un cambio de proyecto no deja las imágenes rotas en silencio.
@@ -37,6 +38,7 @@ const nextConfig: NextConfig = {
   // llega por streaming detrás. Convenciones en docs/agents/architecture.md
   // ("Cache Components").
   cacheComponents: true,
+  redirects: async () => redirects,
   cacheLife: {
     // Páginas públicas alojadas (/web, /nl, /hp). Mismo techo que el ISR de
     // 300 s que tenían: lo normal es que las invalide la acción que guarda el

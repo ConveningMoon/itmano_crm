@@ -63,7 +63,6 @@ export function Sidebar({ brand, nav, user }: {
           padding: '12px 8px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '2px',
           overflowY: 'auto',
         }}
       >

@@ -13,40 +13,74 @@ export interface NavItemDef {
   badgeLabel?: string
 }
 
-export const navItems: NavItemDef[] = [
-  { label: 'Dashboard',     href: '/dashboard', icon: 'LayoutDashboard' },
-  { label: 'Leads',         href: '/leads',       icon: 'Users'      },
-  { label: 'Propiedades',   href: '/properties', icon: 'Building2'  },
-  { label: 'Newsletters',   href: '/newsletters', icon: 'Newspaper' },
-  { label: 'Fuentes',       href: '/sources',    icon: 'GitBranch'  },
-  { label: 'Emails',        href: '/emails',    icon: 'Mail' },
-  { label: 'Analytics',     href: '/analytics', icon: 'BarChart2' },
-  { label: 'Estudio',       href: '/studio',    icon: 'Sparkles', badgeLabel: 'Pronto' },
-  { label: 'Configuración', href: '/settings',  icon: 'Settings' },
-  { label: 'Soporte',       href: '/soporte',   icon: 'LifeBuoy' },
+export interface NavGroupDef {
+  // null: lista sin encabezado (modo hub).
+  label: string | null
+  items: NavItemDef[]
+}
+
+export const navGroups: NavGroupDef[] = [
+  {
+    label: 'Trabajo',
+    items: [
+      { label: 'Dashboard',   href: '/dashboard',  icon: 'LayoutDashboard' },
+      { label: 'Leads',       href: '/leads',      icon: 'Users' },
+      { label: 'Propiedades', href: '/properties', icon: 'Building2' },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      { label: 'Newsletters', href: '/newsletters', icon: 'Newspaper' },
+      { label: 'Fuentes',     href: '/sources',     icon: 'GitBranch' },
+      { label: 'Emails',      href: '/emails',      icon: 'Mail' },
+      { label: 'Estudio',     href: '/studio',      icon: 'Sparkles', badgeLabel: 'Pronto' },
+    ],
+  },
+  {
+    label: 'Cuenta',
+    items: [
+      { label: 'Configuración', href: '/settings', icon: 'Settings' },
+      { label: 'Soporte',       href: '/soporte',  icon: 'LifeBuoy' },
+    ],
+  },
 ]
+
+export const navItems: NavItemDef[] = navGroups.flatMap(g => g.items)
 
 // El Estudio sin el badge "Pronto": para super_admin la página es real.
 const STUDIO_OPEN: NavItemDef = { label: 'Estudio', href: '/studio', icon: 'Sparkles' }
 
-// super_admin gets the control-center link appended. In hub mode (super_admin
+// super_admin gets the control-center group appended. In hub mode (super_admin
 // without a selected tenant) the tenant pages would all redirect to the hub, so
 // the nav collapses to the only routes that make sense there.
-export function navItemsForRole(role: TenantRole, opts?: { hubMode?: boolean }): NavItemDef[] {
-  if (role !== 'super_admin') return navItems
+export function navGroupsForRole(role: TenantRole, opts?: { hubMode?: boolean }): NavGroupDef[] {
+  if (role !== 'super_admin') return navGroups
   if (opts?.hubMode) {
-    return [
-      { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
-      STUDIO_OPEN,
-      { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
-      { label: 'Notificaciones', href: '/notifications', icon: 'Bell' },
-    ]
+    return [{
+      label: null,
+      items: [
+        { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+        STUDIO_OPEN,
+        { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
+        { label: 'Notificaciones', href: '/notifications', icon: 'Bell' },
+      ],
+    }]
   }
   return [
-    ...navItems.map(i => (i.href === '/studio' ? STUDIO_OPEN : i)),
-    { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
-    { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
+    ...navGroups.map(g => ({ ...g, items: g.items.map(i => (i.href === '/studio' ? STUDIO_OPEN : i)) })),
+    {
+      label: 'Administración',
+      items: [
+        { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+        { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
+      ],
+    },
   ]
+}
+
+export function navItemsForRole(role: TenantRole, opts?: { hubMode?: boolean }): NavItemDef[] {
+  return navGroupsForRole(role, opts).flatMap(g => g.items)
 }
 
 export const ROLE_LABELS: Record<TenantRole, string> = {

@@ -47,7 +47,7 @@ export type QualityBand = typeof QUALITY_BANDS[number]
 export const QUALITY_CONFIG: Record<QualityBand, { label: string; color: string }> = {
   alta:       { label: 'Alta',       color: 'var(--status-hot)' },
   media_alta: { label: 'Media alta', color: 'var(--status-warm)' },
-  media:      { label: 'Media',      color: 'var(--accent-gold)' },
+  media:      { label: 'Media',      color: 'var(--quality-media)' },
   media_baja: { label: 'Media baja', color: 'var(--text-secondary)' },
   baja:       { label: 'Baja',       color: 'var(--text-muted)' },
 }
