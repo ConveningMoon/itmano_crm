@@ -166,9 +166,10 @@ function NavActiveMarker({ href, hrefs, indicatorId }: { href: string; hrefs?: s
         left: 0,
         top: '6px',
         bottom: '6px',
-        width: '2px',
-        borderRadius: '1px',
-        backgroundColor: 'var(--accent-gold)',
+        width: '3px',
+        borderRadius: '0 3px 3px 0',
+        backgroundColor: 'var(--gold-2)',
+        boxShadow: '0 0 10px var(--gold-2)',
       }}
     />
   )

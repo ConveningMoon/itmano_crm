@@ -3,11 +3,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { AnimatePresence, m } from 'motion/react'
 import { Menu, X, LogOut } from 'lucide-react'
-import { NavItem } from './nav-item'
 import { PendingSubmitButton } from '@/components/ui/pending-submit-button'
 import { signOut } from '@/lib/auth/sign-out'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import { navItemsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
+import { NavList } from './nav-list'
+import { navGroupsForRole, ROLE_LABELS, initialsFromEmail } from './nav-items'
 
 // Trigger — phones only. `flex` here + `md:hidden` controls display via CSS class
 // only — no inline display: so the md:hidden rule can override at ≥768px.
@@ -60,7 +60,7 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
   planLabel?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const items = navItemsForRole(role, { hubMode })
+  const groups = navGroupsForRole(role, { hubMode })
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {
@@ -144,11 +144,9 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
           {/* Nav — clicking any link closes the drawer (navigation happens on the Link). */}
           <nav
             onClick={() => setOpen(false)}
-            style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}
+            style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}
           >
-            {items.map(item => (
-              <NavItem key={item.href} {...item} indicatorId="nav-indicator-mobile" hrefs={items.map(i => i.href)} />
-            ))}
+            <NavList groups={groups} indicatorId="nav-indicator-mobile" />
           </nav>
 
           {/* Footer: user + sign out */}
