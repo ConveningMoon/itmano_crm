@@ -27,25 +27,37 @@
   /* Accents */
   --accent-gold: #C9A96E;
   --accent-gold-dim: #A08445;
-  --accent-blue: #5B8EC9;
-  --accent-teal: #5AAFA0;
-  --accent-coral: #C97B6B;
-  --accent-pink: #B87BA3;
-  --accent-green: #6BA368;
+  --accent-blue: #E6CF9A;
+  --accent-teal: #B8A37A;
+  --accent-coral: #D98A78;
+  --accent-pink: #A89878;
+  --accent-green: #DDB968;
+
+  /* Rampa dorada: más claro = más alto o mejor. Los tonos 4 y 5 no llegan a
+     4.5:1, así que sólo sirven para marcas (barras, puntos), nunca para texto. */
+  --gold-1: #F8E7BC;
+  --gold-2: #DDB968;
+  --gold-3: #B08D45;
+  --gold-4: #8A6E38;
+  --gold-5: #6F5A34;
+  --gold-gradient: linear-gradient(135deg, #F8E7BC 0%, #DDB968 42%, #8A6E38 100%);
+  --gold-glow: 0 0 16px rgba(221, 185, 104, 0.28);
+  /* Único color fuera del dorado. Siempre con icono y texto. */
+  --alert: #D98A78;
 
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-accent: rgba(201, 169, 110, 0.15);
 
   /* Status colors */
-  --status-new: #5B8EC9;
-  --status-nurturing: #C9A96E;
-  --status-warm: #E07B3A;
-  --status-hot: #E04040;
-  --status-process-started: #9B72CF;
-  --status-process-completed: #6BA368;
-  --status-closed: #4A9B6B;
-  --status-lost: #C97B6B;
+  --status-new: #F8E7BC;
+  --status-nurturing: #DDB968;
+  --status-warm: #DDB968;
+  --status-hot: #F8E7BC;
+  --status-process-started: #B08D45;
+  --status-process-completed: #C9A96E;
+  --status-closed: #C9A96E;
+  --status-lost: #A89878;
 
   --radius: 8px;
   /* --font-inter lo inyecta next/font desde el layout raíz. El fallback cubre
@@ -67,7 +79,7 @@
   --muted-foreground: #8A877F;
   --accent: #1C1F24;
   --accent-foreground: #E8E6E1;
-  --destructive: #C97B6B;
+  --destructive: #D98A78;
   --border: rgba(255, 255, 255, 0.06);
   --input: rgba(255, 255, 255, 0.06);
   --ring: #C9A96E;
@@ -86,6 +98,27 @@
   --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --border-hover: rgba(255, 255, 255, 0.12);
   --border-gold-hover: rgba(201, 169, 110, 0.3);
+}
+
+/* La paleta dorada es del CRM. Marketing y login conservan la identidad original.
+   La reasignación es global y esto la restaura, no al revés, porque menús, modales
+   y tooltips del CRM se renderizan en portales fuera del shell del dashboard. */
+.mk-root,
+.brand-original {
+  --accent-blue: #5B8EC9;
+  --accent-teal: #5AAFA0;
+  --accent-coral: #C97B6B;
+  --accent-pink: #B87BA3;
+  --accent-green: #6BA368;
+  --status-new: #5B8EC9;
+  --status-nurturing: #C9A96E;
+  --status-warm: #E07B3A;
+  --status-hot: #E04040;
+  --status-process-started: #9B72CF;
+  --status-process-completed: #6BA368;
+  --status-closed: #4A9B6B;
+  --status-lost: #C97B6B;
+  --destructive: #C97B6B;
 }
 
 @theme inline {
@@ -116,11 +149,11 @@
   --color-bg-overlay: #1C1F24;
   --color-accent-gold: #C9A96E;
   --color-accent-gold-dim: #A08445;
-  --color-accent-blue: #5B8EC9;
-  --color-accent-teal: #5AAFA0;
-  --color-accent-coral: #C97B6B;
-  --color-accent-pink: #B87BA3;
-  --color-accent-green: #6BA368;
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-teal: var(--accent-teal);
+  --color-accent-coral: var(--accent-coral);
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-green: var(--accent-green);
   --color-text-primary: #E8E6E1;
   --color-text-secondary: #A09D95;
   --color-text-muted: #8A877F;
