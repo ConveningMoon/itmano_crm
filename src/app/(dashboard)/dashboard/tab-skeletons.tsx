@@ -20,15 +20,6 @@ function KpiRow() {
   )
 }
 
-function ChartCard({ h = 200 }: { h?: number }) {
-  return (
-    <div style={{ ...CARD, marginBottom: '24px' }}>
-      <Skeleton w="140px" h={14} r={4} />
-      <Skeleton w="100%" h={h} r={8} />
-    </div>
-  )
-}
-
 export function GeneralSkeleton() {
   return (
     <div>
@@ -137,7 +128,18 @@ function NewsletterSkeleton() {
   return (
     <div>
       <KpiRow />
-      <ChartCard />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4" style={{ marginBottom: '16px' }}>
+        <div style={CARD}><Skeleton w="180px" h={14} r={4} /><Skeleton w="100%" h={200} r={8} /></div>
+        <div style={CARD}><Skeleton w="140px" h={14} r={4} /><Skeleton w="100%" h={128} r={8} /></div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} style={CARD}>
+            <Skeleton w="140px" h={14} r={4} />
+            {[...Array(4)].map((_, j) => <Skeleton key={j} w="100%" h={24} r={6} />)}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
