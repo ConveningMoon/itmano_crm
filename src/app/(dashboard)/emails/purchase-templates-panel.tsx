@@ -228,6 +228,20 @@ export function PurchaseTemplatesPanel({
 
   return (
     <>
+      <ul aria-label="Leyenda de estados" style={{
+        display: 'flex', flexWrap: 'wrap', gap: '4px 16px', listStyle: 'none',
+        margin: '0 2px 8px', padding: 0, fontSize: '11px', color: 'var(--text-muted)',
+      }}>
+        {(Object.keys(STATE_META) as PurchaseCellState[]).map(k => {
+          const m = STATE_META[k]
+          return (
+            <li key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <m.Icon size={12} aria-hidden color={m.color} />
+              {m.label}
+            </li>
+          )
+        })}
+      </ul>
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflowX: 'auto' }}>
         <table aria-label="Correos de cierre por agente e idioma" style={{ width: '100%', minWidth: '560px', borderCollapse: 'separate', borderSpacing: 0 }}>
           <thead>

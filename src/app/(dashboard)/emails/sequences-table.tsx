@@ -143,6 +143,9 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
           style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}
         >
           <RateMeter label="Clics" value={m?.clickRate ?? 0} tone="var(--accent-blue)" />
+          <span className="dt-hide-md" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            {m?.replyRate ?? 0}% respuestas
+          </span>
           {bounce > BOUNCE_ALERT_OVER && (
             <span className="pill" data-tone="coral" title={`Rebote por encima del umbral sano (${BOUNCE_ALERT_OVER}%)`}>
               <AlertTriangle size={11} />Rebote {bounce}%

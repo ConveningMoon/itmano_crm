@@ -213,6 +213,17 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
               <Mail size={12} />Secuencia
             </span>
           )}
+          {/* Con la columna de salud oculta (móvil) sólo se avisa lo que pide
+              atención; ok y mute no dicen nada. */}
+          {hc && (hc.tone === 'warn' || hc.tone === 'bad') && (
+            <span
+              className="fu-health dt-show-sm"
+              style={{ '--tone': HEALTH_TONE[hc.tone] } as React.CSSProperties}
+            >
+              <span className="fu-dot" aria-hidden="true" />
+              <span className="fu-health-label">{hc.label}</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -275,7 +286,7 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
         {folderMenu.modal}
         <button
           type="button"
-          className="icon-btn dt-hide-sm"
+          className="icon-btn dt-hide-sm fu-hide-coarse"
           data-state={copyState}
           title={note ? note.text : 'Copiar enlace'}
           aria-label={`Copiar enlace de ${ch.name}`}
@@ -285,7 +296,7 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
         </button>
         {pageUrl ? (
           <a
-            className="icon-btn dt-hide-sm"
+            className="icon-btn dt-hide-sm fu-hide-coarse"
             href={pageUrl}
             target="_blank"
             rel="noopener noreferrer"
@@ -297,7 +308,7 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
         ) : (
           <button
             type="button"
-            className="icon-btn dt-hide-sm"
+            className="icon-btn dt-hide-sm fu-hide-coarse"
             title="Abrir página"
             aria-label={`Abrir página de ${ch.name}`}
             onClick={() => setNoPage(true)}

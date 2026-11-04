@@ -13,6 +13,8 @@ import { BROADCAST_STATUS_LABEL, type BroadcastStatus } from '@/lib/broadcasts/m
 import { createBroadcast } from './broadcast-actions'
 
 const FECHA_CORTA: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }
+// Fecha y hora completas en la línea meta, como antes de la tabla.
+const FECHA: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' }
 
 // Dorado más vivo = más avanzado; apagado = sin actividad. Coral sólo en los
 // estados que piden atención (pausado, fallido), siempre con icono y texto.
@@ -128,10 +130,10 @@ export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
               const sent = b.status !== 'draft'
               const loading = sent && metrics === null
               const when = b.status === 'pending' && b.scheduledAt
-                ? <>Sale el <FechaLocal fecha={b.scheduledAt} opciones={FECHA_CORTA} /></>
+                ? <>Sale el <FechaLocal fecha={b.scheduledAt} opciones={FECHA} /></>
                 : b.finishedAt
-                  ? <>Terminó el <FechaLocal fecha={b.finishedAt} opciones={FECHA_CORTA} /></>
-                  : <>Creado el <FechaLocal fecha={b.createdAt} opciones={FECHA_CORTA} /></>
+                  ? <>Terminó el <FechaLocal fecha={b.finishedAt} opciones={FECHA} /></>
+                  : <>Creado el <FechaLocal fecha={b.createdAt} opciones={FECHA} /></>
               const shortDate = b.status === 'pending' && b.scheduledAt ? b.scheduledAt : (b.finishedAt ?? b.createdAt)
               return (
                 <Link key={b.id} href={`/emails/grupales/${b.id}`} className="dt-grid dt-row" style={{ textDecoration: 'none' }}>
@@ -149,6 +151,10 @@ export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
                           {b.sentCount} enviados{b.skippedCount > 0 ? ` · ${b.skippedCount} omitidos` : ''}{b.failedCount > 0 ? ` · ${b.failedCount} fallidos` : ''}
                         </span>
                       )}
+                      {/* Con las columnas de leads y clics ocultas (móvil) van aquí. */}
+                      {sent && !loading && m && m.leads > 0 && (
+                        <span className="dt-show-sm">{m.leads} leads · {clickRate(m)} clics</span>
+                      )}
                       {!sent && <span className="dt-hide-md">Sin enviar</span>}
                     </div>
                   </div>
@@ -156,7 +162,7 @@ export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
                   <span style={{ justifySelf: 'start' }}><BroadcastStatusChip status={b.status} /></span>
 
                   <span className="dt-hide-md" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {sent || b.scheduledAt ? <FechaLocal fecha={shortDate} opciones={FECHA_CORTA} /> : '—'}
+                    <FechaLocal fecha={shortDate} opciones={FECHA_CORTA} />
                   </span>
 
                   <span className="dt-hide-sm dt-r dt-num">

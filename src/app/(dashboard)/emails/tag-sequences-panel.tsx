@@ -72,6 +72,15 @@ function WriteButton({ tagId, language }: { tagId: string; language: string }) {
   )
 }
 
+const WRITE_STYLE: React.CSSProperties = {
+  ...CELL_LINK,
+  color: 'var(--accent-coral)',
+  background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--accent-coral) 30%, transparent)',
+}
+
+const STATUS_TEXT: React.CSSProperties = { lineHeight: 1.25, textAlign: 'center' }
+
 function Cell({
   state, tagId, tagName, language, sequenceId, steps, runs, canManage,
 }: {
@@ -96,35 +105,47 @@ function Cell({
         </span>
       )
   }
+  // Vacía (el caso normal de un hueco real: los triggers la crean sin pasos).
+  if (state === 'incompleta') {
+    const label = `${tagName}, ${langLabel(language)}: sin pasos, no envía nada todavía`
+    return canManage
+      ? (
+        <Link href={`/emails/${sequenceId}`} title="Sin pasos: no envía nada todavía" aria-label={`${label}. Escribir`} style={WRITE_STYLE}>
+          <Pencil size={12} aria-hidden /> Escribir
+        </Link>
+      )
+      : (
+        <span role="img" aria-label={label} title="Sin pasos: no envía nada todavía"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--accent-coral)' }}>
+          <AlertTriangle size={12} aria-hidden /> Falta
+        </span>
+      )
+  }
 
   const running = runs && runs > 0 ? ` · ${runs} en curso` : ''
   const count = `${steps ?? 0} ${steps === 1 ? 'correo' : 'correos'}`
   const meta = {
-    lista:       { Icon: Check,         color: 'var(--accent-green)', text: 'Lista',       title: `${count}${running}` },
-    incompleta:  { Icon: AlertTriangle, color: 'var(--accent-gold)',  text: 'Incompleta',  title: `Incompleta: sin pasos, no envía nada todavía${running}` },
-    desactivada: { Icon: Pause,         color: 'var(--text-muted)',   text: 'Desactivada', title: `Desactivada: tiene ${count} pero no envía${running}` },
+    lista:       { Icon: Check, color: 'var(--accent-green)', text: 'Lista',    visible: `${count}${running}`, title: `${count}${running}` },
+    desactivada: { Icon: Pause, color: 'var(--text-muted)',   text: 'Pausada',  visible: `Pausada${running}`,  title: `Desactivada: tiene ${count} pero no envía${running}` },
   }[state]
 
   const label = `${tagName}, ${langLabel(language)}: ${meta.text}. ${meta.title}`
-  const style = { ...CELL_LINK, color: meta.color, border: '1px solid transparent' }
+  const style = { ...CELL_LINK, color: meta.color, border: '1px solid transparent', padding: '4px 8px' }
+  const body = (
+    <>
+      <meta.Icon size={12} aria-hidden />
+      <span style={STATUS_TEXT}>{meta.visible}</span>
+    </>
+  )
 
   // Las secuencias de etiqueta no tienen agente: el detalle responde 404 al rol
   // agent, así que ahí el estado se ve pero no es un enlace.
   if (!canManage) {
-    return (
-      <span role="img" title={meta.title} aria-label={label} style={style}>
-        <meta.Icon size={14} aria-hidden />
-      </span>
-    )
+    return <span role="img" title={meta.title} aria-label={label} style={style}>{body}</span>
   }
   return (
-    <Link
-      href={`/emails/${sequenceId}`}
-      title={meta.title}
-      aria-label={`${label}. Editar`}
-      style={style}
-    >
-      <meta.Icon size={14} aria-hidden />
+    <Link href={`/emails/${sequenceId}`} title={meta.title} aria-label={`${label}. Editar`} style={style}>
+      {body}
     </Link>
   )
 }
@@ -154,7 +175,7 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
     )
   }
 
-  const columnsTemplate = `minmax(120px, 1.5fr) repeat(${languages.length}, minmax(72px, 1fr))`
+  const columnsTemplate = `minmax(120px, 1.5fr) repeat(${languages.length}, minmax(88px, 1fr))`
   const rowStyle: React.CSSProperties = {
     display: 'grid', gridTemplateColumns: columnsTemplate, alignItems: 'center', columnGap: '8px',
     padding: '8px 12px',
@@ -189,7 +210,7 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
         background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
         borderRadius: '12px', overflowX: 'auto',
       }}>
-        <div role="table" aria-label="Correos por etiqueta e idioma" style={{ minWidth: `${120 + languages.length * 80 + 24}px` }}>
+        <div role="table" aria-label="Correos por etiqueta e idioma" style={{ minWidth: `${120 + languages.length * 96 + 24}px` }}>
           <div role="row" style={{
             ...rowStyle, borderBottom: '1px solid var(--border-subtle)',
             fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)',

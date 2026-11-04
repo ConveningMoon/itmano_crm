@@ -1026,6 +1026,9 @@ a.src-row:hover { background: var(--bg-overlay); }
   box-shadow: 0 0 7px var(--tone, transparent);
 }
 .fu-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+/* Táctil: tres botones de 44px no caben en la columna de 112px. Copiar y abrir
+   siguen en el menú ⋯. */
+@media (pointer: coarse) { .fu-actions .fu-hide-coarse { display: none; } }
 .fu-actions .icon-btn[data-state='copied'] { color: var(--accent-green); }
 .fu-actions .icon-btn[data-state='error'] { color: var(--accent-coral); }
 .fu-search { position: relative; display: inline-flex; align-items: center; margin-bottom: 8px; }

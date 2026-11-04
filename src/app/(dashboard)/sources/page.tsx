@@ -6,6 +6,7 @@ import { scopeFor } from '@/lib/auth/visibility'
 import { SourcesClient, SourcesActions } from './sources-client'
 import { PageHeader } from '@/components/ui/page-header'
 import { getSourcesHealth } from '@/lib/data/source-health'
+import { pickByIds } from '@/lib/data-scope'
 import { listFolders } from '@/lib/data/folders'
 import { columns } from '@/lib/supabase/columns'
 import Link from 'next/link'
@@ -133,7 +134,7 @@ async function SourcesPage() {
       />
 
       <SourcesClient
-        health={health}
+        health={pickByIds(health, [...channels, ...archivedChannels].map(c => c.id))}
         channels={channels}
         archivedChannels={archivedChannels}
         trends={trends}

@@ -4,7 +4,9 @@ import type { LeadTag } from '@/lib/leads/tags'
 
 // Estado de una celda (etiqueta x idioma) de la matriz "Por etiqueta".
 //   lista       secuencia activa con al menos un paso
-//   incompleta  existe pero sin pasos: no envía nada (enroll-lead-by-tag: no_steps)
+//   incompleta  existe pero sin pasos: no envía nada (enroll-lead-by-tag: no_steps).
+//               Es el estado vacío NORMAL: los triggers de la migración 20260914162315
+//               crean la secuencia sin pasos, así que un hueco real casi siempre es éste.
 //   desactivada existe con pasos pero está apagada
 //   falta       la etiqueta debe mandar correos y no hay versión en ese idioma
 //   na          no aplica: la etiqueta ya no es obligatoria o no tiene ese idioma

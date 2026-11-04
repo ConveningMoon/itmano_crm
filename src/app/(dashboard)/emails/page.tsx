@@ -15,6 +15,7 @@ import { getBroadcastsMetrics, listBroadcasts, type BroadcastListItem } from '@/
 import { BROADCAST_OWN_DOMAIN_MESSAGE } from '@/lib/services/broadcast-dispatch'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { pickByIds } from '@/lib/data-scope'
 import { SequencesTable } from './sequences-table'
 import { NewFolderButton } from '@/components/dashboard/folders'
 import { Tabs } from '@/components/ui/tabs'
@@ -112,7 +113,11 @@ async function EmailsPage({
 
   // Versiones de cierre sin configurar, sólo en los idiomas que cada agente atiende
   // (la misma cuenta que el chip de cada panel). Para super_admin, de todos los tenants.
-  const closingAgents = isSuperAdmin ? purchaseByTenant.flatMap(t => t.agents) : ownAgentTemplates
+  // El super_admin sólo edita (y cuenta) el tenant que está actuando: guardar en
+  // otro falla en assertCanEditRow, así que los demás salen de sólo lectura.
+  const closingAgents = isSuperAdmin
+    ? purchaseByTenant.filter(t => t.tenant_id === tenant_id).flatMap(t => t.agents)
+    : ownAgentTemplates
   const missingClosing = closingAgents.reduce((n, a) => n + countMissingClosing(a), 0)
 
   const sequencesTab = (
@@ -167,7 +172,7 @@ async function EmailsPage({
         </p>
         <SequencesTable
           sequences={sequences}
-          metrics={Object.fromEntries(metrics)}
+          metrics={pickByIds(Object.fromEntries(metrics), sequences.map(s => s.id))}
           isSuperAdmin={isSuperAdmin}
           folders={folders}
         />
@@ -239,7 +244,12 @@ async function EmailsPage({
               <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 8px' }}>
                 {tenant_name}
               </h2>
-              <PurchaseTemplatesPanel agents={agents} tenantName={tenant_name} />
+              {tid !== tenant_id && (
+                <p className="toolbar-meta" style={{ margin: '0 2px 8px' }}>
+                  Selecciona este tenant para editar.
+                </p>
+              )}
+              <PurchaseTemplatesPanel agents={agents} tenantName={tenant_name} readOnly={tid !== tenant_id} />
             </section>
           ))
         : ownAgentTemplates.length > 0 && <PurchaseTemplatesPanel agents={ownAgentTemplates} />}
