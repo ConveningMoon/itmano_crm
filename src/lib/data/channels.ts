@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
+import type { PeriodDays } from '@/lib/dashboard/period'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -293,4 +294,25 @@ export async function getChannelLeads(
     trafficSource:    r.traffic_source,
     createdAt:        r.created_at,
   }))
+}
+
+/**
+ * Leads adquiridos por canal en las mismas barras que la serie de Envíos
+ * (RPC channel_leads_trend). Un canal sin leads trae ceros del largo de la ventana.
+ */
+export async function getChannelLeadsTrend(
+  tenantId: string,
+  period: PeriodDays,
+  timeZone: string,
+): Promise<Record<string, number[]>> {
+  const { data, error } = await createAdminClient().rpc('channel_leads_trend', {
+    p_tenant_id: tenantId,
+    p_days:      period,
+    p_time_zone: timeZone,
+  })
+  if (error) {
+    console.error('[channel_leads_trend]', error.message)
+    return {}
+  }
+  return (data ?? {}) as Record<string, number[]>
 }

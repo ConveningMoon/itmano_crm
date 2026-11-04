@@ -155,3 +155,161 @@ $function$;
 
 revoke all on function public.email_dashboard_stats(text, text, int, text) from public, anon, authenticated;
 grant execute on function public.email_dashboard_stats(text, text, int, text) to service_role;
+
+-- ── lead_score_histogram ─────────────────────────────────────────────────────
+-- Diez tramos de current_score: [0,10), [10,20) ... [90,100]; 100 cae en el último.
+-- Mismo criterio que `active`: sólo nuevo y nutricion, sin suscriptores (marca
+-- newsletter_subscriber, como leads_list.is_subscriber). Score nulo queda fuera.
+--   p_tenant_id  null → todos los tenants (super_admin).
+--   p_agent_id   no nulo → sólo leads de ese agente.
+create or replace function public.lead_score_histogram(
+  p_tenant_id text,
+  p_agent_id  text
+) returns int[]
+language sql
+stable
+security invoker
+set search_path = ''
+as $function$
+  select coalesce(array_agg(coalesce(c.n, 0) order by g.i), array_fill(0, array[10]))
+  from generate_series(1, 10) as g(i)
+  left join (
+    select least(greatest(floor(l.current_score / 10.0)::int, 0), 9) + 1 as bucket,
+           count(*)::int as n
+    from public.leads l
+    where l.stage in ('nuevo', 'nutricion')
+      and l.current_score is not null
+      and not jsonb_exists(coalesce(l.metadata, '{}'::jsonb), 'newsletter_subscriber')
+      and (p_tenant_id is null or l.tenant_id = p_tenant_id)
+      and (p_agent_id  is null or l.agent_id  = p_agent_id)
+    group by 1
+  ) c on c.bucket = g.i;
+$function$;
+
+revoke all on function public.lead_score_histogram(text, text) from public, anon, authenticated;
+grant execute on function public.lead_score_histogram(text, text) to service_role;
+
+-- ── newsletter_growth ────────────────────────────────────────────────────────
+-- Suscriptores = leads del canal newsletter no archivado (como getNewsletterStats).
+-- Activo = email_blocked_reason nulo o distinto de 'unsubscribed'.
+-- monthly: los últimos p_months meses calendario (UTC) hasta el actual. Altas por
+-- leads.created_at; bajas por el evento email_unsubscribed de esos leads.
+-- active_end = altas acumuladas - bajas acumuladas (con la historia previa).
+-- net_reliable = false si hay suscriptores dados de baja sin evento.
+create or replace function public.newsletter_growth(
+  p_tenant_id text,
+  p_months    int
+) returns jsonb
+language sql
+stable
+security invoker
+set search_path = ''
+as $function$
+  with subs as (
+    select l.id, l.created_at, l.email_blocked_reason
+    from public.leads l
+    join public.acquisition_channels ch on ch.id = l.acquisition_channel_id
+    where l.tenant_id = p_tenant_id
+      and ch.tenant_id = p_tenant_id
+      and ch.channel_type = 'newsletter'
+      and ch.archived_at is null
+  ),
+  unsub_events as (
+    select s.id, min(e.created_at) as at
+    from subs s
+    join public.lead_events e
+      on e.lead_id = s.id and e.tenant_id = p_tenant_id and e.type = 'email_unsubscribed'
+    group by s.id
+  ),
+  months as (
+    select g.i,
+      (date_trunc('month', now() at time zone 'UTC') - make_interval(months => p_months - 1 - g.i))::date as m_start
+    from generate_series(0, greatest(p_months, 1) - 1) as g(i)
+  ),
+  monthly as (
+    select m.i, to_char(m.m_start, 'YYYY-MM') as month,
+      (select count(*)::int from subs s
+        where (s.created_at at time zone 'UTC')::date >= m.m_start
+          and (s.created_at at time zone 'UTC')::date < (m.m_start + interval '1 month')::date) as signups,
+      (select count(*)::int from unsub_events u
+        where (u.at at time zone 'UTC')::date >= m.m_start
+          and (u.at at time zone 'UTC')::date < (m.m_start + interval '1 month')::date) as unsubscribes,
+      (select count(*)::int from subs s
+        where (s.created_at at time zone 'UTC')::date < (m.m_start + interval '1 month')::date)
+      - (select count(*)::int from unsub_events u
+        where (u.at at time zone 'UTC')::date < (m.m_start + interval '1 month')::date) as active_end
+    from months m
+  )
+  select jsonb_build_object(
+    'active_now', (select count(*)::int from subs s
+                   where s.email_blocked_reason is null or s.email_blocked_reason <> 'unsubscribed'),
+    'net_reliable', not exists (
+      select 1 from subs s
+      where s.email_blocked_reason = 'unsubscribed'
+        and not exists (select 1 from unsub_events u where u.id = s.id)
+    ),
+    'monthly', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'month', month, 'signups', signups, 'unsubscribes', unsubscribes, 'active_end', active_end
+      ) order by i) from monthly
+    ), '[]'::jsonb)
+  );
+$function$;
+
+revoke all on function public.newsletter_growth(text, int) from public, anon, authenticated;
+grant execute on function public.newsletter_growth(text, int) to service_role;
+
+-- ── channel_leads_trend ──────────────────────────────────────────────────────
+-- Leads adquiridos por canal en las mismas barras que la serie de email_dashboard_stats
+-- (7 días: una por día; 28 y 91: una por cada 7 días hacia atrás desde hoy, zona
+-- p_time_zone). Todos los canales del tenant aparecen, con ceros si no hay leads.
+--   p_tenant_id  null → todos los tenants.
+create or replace function public.channel_leads_trend(
+  p_tenant_id text,
+  p_days      int,
+  p_time_zone text
+) returns jsonb
+language sql
+stable
+security invoker
+set search_path = ''
+as $function$
+  with win as (
+    select ((now() at time zone p_time_zone)::date - (p_days - 1)) as win_start_day,
+           case when p_days <= 7 then 1 else 7 end                as bucket_days
+  ),
+  buckets as (
+    select g.i,
+      (w.win_start_day + g.i * w.bucket_days)       as b_start,
+      (w.win_start_day + (g.i + 1) * w.bucket_days) as b_end
+    from win w
+    cross join lateral generate_series(0, ((p_days + w.bucket_days - 1) / w.bucket_days) - 1) as g(i)
+  ),
+  chans as (
+    select c.id from public.acquisition_channels c
+    where p_tenant_id is null or c.tenant_id = p_tenant_id
+  ),
+  lds as (
+    select l.acquisition_channel_id as channel_id,
+           ((l.created_at at time zone p_time_zone)::date) as local_day
+    from public.leads l
+    cross join win w
+    where l.acquisition_channel_id is not null
+      and (p_tenant_id is null or l.tenant_id = p_tenant_id)
+      and l.created_at >= (w.win_start_day::timestamp at time zone p_time_zone)
+      and l.created_at <= now()
+  )
+  select coalesce(jsonb_object_agg(per.id, per.arr), '{}'::jsonb)
+  from (
+    select c.id,
+      (select jsonb_agg(
+         (select count(*)::int from lds d
+           where d.channel_id = c.id and d.local_day >= b.b_start and d.local_day < b.b_end)
+         order by b.i)
+       from buckets b) as arr
+    from chans c
+  ) per;
+$function$;
+
+revoke all on function public.channel_leads_trend(text, int, text) from public, anon, authenticated;
+grant execute on function public.channel_leads_trend(text, int, text) to service_role;

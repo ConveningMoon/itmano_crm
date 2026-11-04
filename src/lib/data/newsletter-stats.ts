@@ -85,7 +85,7 @@ export function aggregateStats(
 
 const STATS_EDITION_COLUMNS = columns('newsletter_editions', ['id', 'status'])
 const STATS_VIEW_COLUMNS    = columns('channel_page_views', ['edition_id'])
-const STATS_LEAD_COLUMNS    = columns('leads', ['metadata'])
+const STATS_LEAD_COLUMNS    = columns('leads', ['metadata', 'email_blocked_reason'])
 const STATS_LEAD_SELECT     = `${STATS_LEAD_COLUMNS}, acquisition_channels!inner(channel_type, archived_at)`
 
 /**
@@ -129,7 +129,10 @@ export async function getNewsletterStats(tenantId: string): Promise<NewsletterSt
     db.from('leads').select(STATS_LEAD_SELECT)
       .eq('tenant_id', tenantId)
       .eq('acquisition_channels.channel_type', 'newsletter')
-      .is('acquisition_channels.archived_at', null),
+      .is('acquisition_channels.archived_at', null)
+      // Activo = no dado de baja. Un `.neq` solo descartaría los nulos (NULL <> x
+      // no es verdadero); un hard_bounce sigue siendo suscriptor.
+      .or('email_blocked_reason.is.null,email_blocked_reason.neq.unsubscribed'),
   ])
 
   // reason: el cliente de Supabase no está tipado en este repo; columns() ya
@@ -146,4 +149,46 @@ export async function getNewsletterStats(tenantId: string): Promise<NewsletterSt
   }))
 
   return aggregateStats(editions, views, subscribers)
+}
+
+export interface NewsletterGrowthMonth {
+  month:        string
+  signups:      number
+  unsubscribes: number
+  activeEnd:    number
+}
+
+export interface NewsletterGrowth {
+  activeNow:   number
+  /** Falso si hay bajas sin evento `email_unsubscribed`: el neto no es confiable. */
+  netReliable: boolean
+  monthly:     NewsletterGrowthMonth[]
+}
+
+/** Altas, bajas y activos de la newsletter por mes (RPC newsletter_growth). */
+export async function getNewsletterGrowth(tenantId: string, months = 7): Promise<NewsletterGrowth> {
+  const empty: NewsletterGrowth = { activeNow: 0, netReliable: true, monthly: [] }
+  const { data, error } = await createAdminClient().rpc('newsletter_growth', {
+    p_tenant_id: tenantId,
+    p_months:    months,
+  })
+  if (error) {
+    console.error('[newsletter_growth]', error.message)
+    return empty
+  }
+  if (!data) return empty
+  // reason: el cliente de Supabase no está tipado en este repo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = data as any
+  return {
+    activeNow:   raw.active_now ?? 0,
+    netReliable: raw.net_reliable !== false,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    monthly: ((raw.monthly ?? []) as any[]).map(m => ({
+      month:        m.month as string,
+      signups:      m.signups ?? 0,
+      unsubscribes: m.unsubscribes ?? 0,
+      activeEnd:    m.active_end ?? 0,
+    })),
+  }
 }
