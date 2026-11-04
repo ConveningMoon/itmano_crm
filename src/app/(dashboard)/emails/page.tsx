@@ -21,7 +21,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/ui/page-header'
 import { InfoHint } from '@/components/ui/info-hint'
 import { countMissingClosing } from '@/lib/emails/purchase-state'
-import { BarChart3, Plus, Mail } from 'lucide-react'
+import { AlertTriangle, BarChart3, Plus, Mail } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 // /emails tiene cuatro clases de correo y antes iban apiladas en una sola página:
@@ -219,38 +219,30 @@ async function EmailsPage({
           Todavía no hay agentes con idiomas configurados.
         </div>
       )}
+      {missingClosing > 0 && (
+        <div role="status" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '7px', marginBottom: '14px',
+          padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
+          color: 'var(--accent-coral)',
+          background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+        }}>
+          <AlertTriangle size={13} aria-hidden />
+          {missingClosing === 1
+            ? 'Falta 1 versión por configurar.'
+            : `Faltan ${missingClosing} versiones por configurar.`}
+        </div>
+      )}
       {isSuperAdmin
         ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, agents }) => (
-            <div key={tid} style={{ marginTop: '8px' }}>
-              <div style={{
-                display: 'inline-block', marginBottom: '4px',
-                fontSize: '11px', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase',
-                color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 8%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--accent-gold) 20%, transparent)', borderRadius: '6px', padding: '3px 10px',
-              }}>
+            <section key={tid} aria-label={tenant_name} style={{ marginTop: '8px', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 8px' }}>
                 {tenant_name}
-              </div>
-              {agents.map(a => (
-                <PurchaseTemplatesPanel
-                  key={a.agent_id}
-                  templates={a.templates}
-                  agentName={a.agent_name}
-                  accentColor={a.accent_color}
-                  languages={a.languages}
-                  tenantName={tenant_name}
-                />
-              ))}
-            </div>
+              </h2>
+              <PurchaseTemplatesPanel agents={agents} tenantName={tenant_name} />
+            </section>
           ))
-        : ownAgentTemplates.map(a => (
-            <PurchaseTemplatesPanel
-              key={a.agent_id}
-              templates={a.templates}
-              agentName={a.agent_name}
-              accentColor={a.accent_color}
-              languages={a.languages}
-            />
-          ))}
+        : ownAgentTemplates.length > 0 && <PurchaseTemplatesPanel agents={ownAgentTemplates} />}
     </>
   )
 
