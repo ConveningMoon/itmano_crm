@@ -105,6 +105,17 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
                 <Play size={12} />{plural(seq.activeRunCount, 'activo', 'activos')}
               </span>
             )}
+            {/* Con la columna de clics oculta (móvil) la alerta sigue a la vista. */}
+            {bounce > BOUNCE_ALERT_OVER && (
+              <span className="dt-show-sm" style={{ color: 'var(--alert)' }}>
+                <AlertTriangle size={12} />Rebote {bounce}%
+              </span>
+            )}
+            {unsub > UNSUB_ALERT_OVER && (
+              <span className="dt-show-sm" style={{ color: 'var(--alert)' }}>
+                <AlertTriangle size={12} />Bajas {unsub}%
+              </span>
+            )}
             {isSuperAdmin && seq.tenantName && <span className="pill" data-tone="gold">{seq.tenantName}</span>}
           </div>
         </div>
