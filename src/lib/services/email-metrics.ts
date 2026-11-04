@@ -36,26 +36,6 @@ export interface StepMetric {
   replyRate:  number
 }
 
-export interface SequenceSummary {
-  sequenceId:      string
-  sequenceName:    string
-  totalSends:      number
-  clickRate:       number
-  replyRate:       number
-  bounceRate:      number
-  unsubscribeRate: number
-}
-
-export interface GlobalEmailMetrics {
-  totalSends:      number
-  uniqueLeads:     number
-  clickRate:       number
-  replyRate:       number
-  bounceRate:      number
-  unsubscribeRate: number
-  bySequence:      SequenceSummary[]
-}
-
 // ─── RPC ───────────────────────────────────────────────────────────────────
 
 interface RawMetrics {
@@ -148,29 +128,4 @@ export async function getStepMetrics(tenantId: string | null, sequenceId: string
 export async function getMetricsForSequences(tenantId: string | null): Promise<Map<string, SequenceMetrics>> {
   const bundle = await fetchMetricsBundle(tenantId, null)
   return new Map([...bundle.sequences].map(([id, s]) => [id, s.metrics]))
-}
-
-// tenantId = null → super_admin: aggregate across all tenants
-export async function getGlobalEmailMetrics(tenantId: string | null): Promise<GlobalEmailMetrics> {
-  const db = createAdminClient()
-
-  let seqQ = db.from('email_sequences').select('id, name').order('created_at')
-  if (tenantId) seqQ = seqQ.eq('tenant_id', tenantId)
-
-  const [{ data: seqRows }, bundle] = await Promise.all([seqQ, fetchMetricsBundle(tenantId, null)])
-
-  const bySequence: SequenceSummary[] = ((seqRows ?? []) as { id: string; name: string }[]).map(seq => {
-    const m = bundle.sequences.get(seq.id)?.metrics ?? EMPTY
-    return {
-      sequenceId:      seq.id,
-      sequenceName:    seq.name,
-      totalSends:      m.totalSends,
-      clickRate:       m.clickRate,
-      replyRate:       m.replyRate,
-      bounceRate:      m.bounceRate,
-      unsubscribeRate: m.unsubscribeRate,
-    }
-  })
-
-  return { ...bundle.total, bySequence }
 }

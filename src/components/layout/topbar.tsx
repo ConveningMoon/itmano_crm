@@ -7,7 +7,6 @@ import { Bell } from 'lucide-react'
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
   '/leads':         'Leads',
-  '/analytics':     'Analytics',
   '/activity':      'Actividad',
   '/notifications': 'Notificaciones',
   '/settings':      'Configuración',

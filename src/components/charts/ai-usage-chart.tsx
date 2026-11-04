@@ -2,7 +2,8 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
-import { colorsByKey, foldSeriesKeys } from '@/lib/charts/palette'
+import { ChartFrame } from '@/components/ui/chart-frame'
+import { CHART_TEXT, colorsByKey, foldSeriesKeys } from '@/lib/charts/palette'
 import type { AiDailySeries } from '@/lib/data/ai-usage'
 
 // Diagrama del Centro de control: costo diario de IA (últimos 30 días),
@@ -67,6 +68,7 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
   }))
 
   const hasData = series.days.some(d => d.costUsd > 0)
+  const totalCost = series.days.reduce((sum, d) => sum + d.costUsd, 0)
   const colors = colorsByKey(barKeys)
 
   return (
@@ -77,18 +79,19 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
       <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
         Costo diario de IA · últimos 30 días
       </div>
-      {!hasData ? (
-        <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-          Sin uso de IA en los últimos 30 días.
-        </div>
-      ) : (
-        <div style={{ padding: '16px 12px 8px' }}>
+      <div style={{ padding: '16px 12px 8px' }}>
+        <ChartFrame
+          label={`Costo diario de IA de los últimos 30 días, ${fmtCost(totalCost)} en total`}
+          empty={!hasData}
+          emptyText="Sin uso de IA en los últimos 30 días."
+          height={240}
+        >
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data} margin={{ left: 4, right: 12, top: 4, bottom: 0 }}>
               <XAxis
                 dataKey="date"
                 tickFormatter={fmtDay}
-                tick={{ fill: '#8A877F', fontSize: 10 }}
+                tick={{ fill: CHART_TEXT.muted, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -96,14 +99,14 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
               />
               <YAxis
                 tickFormatter={(v: number) => `$${v}`}
-                tick={{ fill: '#8A877F', fontSize: 10 }}
+                tick={{ fill: CHART_TEXT.muted, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 width={44}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
               <Legend
-                wrapperStyle={{ fontSize: '11px', color: '#A09D95' }}
+                wrapperStyle={{ fontSize: '11px', color: CHART_TEXT.secondary }}
                 iconType="circle"
                 iconSize={7}
               />
@@ -122,8 +125,8 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
               ))}
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        </ChartFrame>
+      </div>
     </div>
   )
 }

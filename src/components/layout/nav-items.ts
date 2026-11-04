@@ -26,7 +26,6 @@ export const navGroups: NavGroupDef[] = [
       { label: 'Dashboard',   href: '/dashboard',  icon: 'LayoutDashboard' },
       { label: 'Leads',       href: '/leads',      icon: 'Users' },
       { label: 'Propiedades', href: '/properties', icon: 'Building2' },
-      { label: 'Analytics',   href: '/analytics',  icon: 'BarChart2' },
     ],
   },
   {

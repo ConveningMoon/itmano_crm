@@ -53,6 +53,11 @@ const DonutChartImpl = dynamic(
   { ssr: false, loading: () => <DonutFallback /> },
 )
 
+const AiUsageDailyChartImpl = dynamic(
+  () => import('./ai-usage-chart').then(m => m.AiUsageDailyChart),
+  { ssr: false, loading: () => <div className="chart-slot" style={slot(240)}><ChartFallback /></div> },
+)
+
 type AreaProps = React.ComponentProps<typeof AreaChartImpl>
 type BarsProps = React.ComponentProps<typeof BarsChartImpl>
 type DonutProps = React.ComponentProps<typeof DonutChartImpl>
@@ -71,4 +76,8 @@ export function BarsChart(props: BarsProps) {
 
 export function DonutChart(props: DonutProps) {
   return <DonutChartImpl {...props} />
+}
+
+export function AiUsageDailyChart(props: React.ComponentProps<typeof AiUsageDailyChartImpl>) {
+  return <AiUsageDailyChartImpl {...props} />
 }

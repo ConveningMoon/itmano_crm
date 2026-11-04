@@ -44,7 +44,7 @@ Los guards de rol y tenant viven en `src/lib/auth/guards.ts` y
 - No hay queries de datos de aplicación desde el cliente. Un proceso largo se
   sigue mediante una Server Action de lectura o el mecanismo servidor aprobado.
 - No importes `recharts` desde un Server Component; usa wrappers cliente en
-  `analytics/charts/`.
+  `src/components/charts/` (entran por `charts/lazy.tsx`).
 
 ## Rendimiento de lecturas
 

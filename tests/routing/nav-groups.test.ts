@@ -4,7 +4,7 @@ import { navGroups, navGroupsForRole, navItems, navItemsForRole } from '@/compon
 describe('grupos del sidebar', () => {
   it('tenant: grupos en orden', () => {
     expect(navGroups.map(g => g.label)).toEqual(['Trabajo', 'Marketing', 'Cuenta'])
-    expect(navGroups[0].items.map(i => i.href)).toEqual(['/dashboard', '/leads', '/properties', '/analytics'])
+    expect(navGroups[0].items.map(i => i.href)).toEqual(['/dashboard', '/leads', '/properties'])
     expect(navGroups[1].items.map(i => i.href)).toEqual(['/newsletters', '/sources', '/emails', '/studio'])
     expect(navGroups[2].items.map(i => i.href)).toEqual(['/settings', '/soporte'])
   })

@@ -8,7 +8,6 @@ import {
 } from '@/lib/leads/list-filters'
 import { planTagFilter, type TagRef } from '@/lib/leads/tags'
 import { columns } from '@/lib/supabase/columns'
-import { FIXED_AGENT_ACTION_TYPES } from '@/lib/scoring/agent-actions'
 import { OUT_OF_QUEUE_RANK, ACTIVE_STAGES } from '@/lib/scoring/priority'
 import type { Stage, QualityBand, Urgency } from '@/lib/scoring/priority'
 import type { Language } from '@/lib/types'
@@ -674,68 +673,6 @@ export async function getEligibleLeadsForSequence(
       stage:     l.stage as Stage,
       agentId:   (l.agent_id ?? null) as string | null,
       language:  (l.language ?? null) as string | null,
-    })),
-  }
-}
-
-// ─── Tiempo de respuesta ──────────────────────────────────────────────────────
-
-export interface ResponseTimeStats {
-  /** Leads de entrada medibles en la ventana (importados y altas manuales fuera). */
-  total:         number
-  respondidos:   number
-  sinResponder:  number
-  /** Mediana en horas; null cuando todavía no hay ni una respuesta medida. */
-  medianHours:   number | null
-  byAgent: Array<{
-    agentId:     string
-    total:       number
-    respondidos: number
-    medianHours: number | null
-  }>
-}
-
-function emptyResponseTime(): ResponseTimeStats {
-  return { total: 0, respondidos: 0, sinResponder: 0, medianHours: null, byAgent: [] }
-}
-
-/**
- * Cuánto tarda el equipo en responder a un lead que llegó solo (migración 084).
- *
- * Los tipos de evento que cuentan como respuesta NO se fijan aquí: se resuelven
- * contra `lead_score_rules` y se pasan al RPC. Una lista escrita a mano en el
- * SQL sería una segunda definición esperando a divergir de la de TypeScript —
- * que es exactamente cómo se rompió la tasa de seguimiento de los briefings.
- */
-export async function getResponseTimeStats(
-  scope: VisibilityScope,
-  days = 90,
-): Promise<ResponseTimeStats> {
-  const supabase = createAdminClient()
-
-  // Los tipos fijos van desde aquí y las reglas manuales activas del tenant las
-  // une la propia RPC (p_include_manual_rules): antes se leían primero en
-  // lead_score_rules y esta consulta esperaba a esa lectura.
-  const { data, error } = await supabase.rpc('lead_response_time_stats', {
-    p_tenant_id:            scope.tenantId,
-    p_agent_id:             scope.agentId,
-    p_action_types:         [...FIXED_AGENT_ACTION_TYPES],
-    p_days:                 days,
-    p_include_manual_rules: true,
-  })
-  if (error || !data) return emptyResponseTime()
-
-  const raw = data as any
-  return {
-    total:        (raw.total ?? 0) as number,
-    respondidos:  (raw.respondidos ?? 0) as number,
-    sinResponder: (raw.sin_responder ?? 0) as number,
-    medianHours:  (raw.mediana_horas ?? null) as number | null,
-    byAgent: ((raw.by_agent ?? []) as any[]).map(a => ({
-      agentId:     a.agent_id as string,
-      total:       (a.total ?? 0) as number,
-      respondidos: (a.respondidos ?? 0) as number,
-      medianHours: (a.mediana_horas ?? null) as number | null,
     })),
   }
 }
