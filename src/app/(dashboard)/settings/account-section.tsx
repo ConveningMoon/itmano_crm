@@ -1,7 +1,7 @@
 'use client'
 
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import { LABEL, CARD, CARD_HEADER } from './settings-styles'
+import { SettingsCard, SettingsRow } from '@/components/ui/settings-row'
 
 const ROLE_LABELS: Record<TenantRole, string> = {
   super_admin: 'Administrador ITMANO',
@@ -18,57 +18,34 @@ export function AccountSection({ userEmail, userRole, onGoToAgents, canManage }:
   canManage: boolean
 }) {
   return (
-    <div style={CARD}>
-      <div style={CARD_HEADER}>
-        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Cuenta y acceso</span>
-      </div>
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* Auth method */}
-        <div>
-          <label style={LABEL}>Método de autenticación</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '10px', fontWeight: 500, color: 'var(--accent-green)', background: 'rgba(107,163,104,0.12)', padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Magic Link
-            </span>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              Sin contraseña — acceso por enlace de un solo uso al email
-            </span>
-          </div>
+    <SettingsCard title="Cuenta y acceso">
+      <SettingsRow label="Método de autenticación">
+        <div className="settings-inline">
+          <span className="pill" data-tone="green">Magic Link</span>
+          <span className="settings-note">Sin contraseña — acceso por enlace de un solo uso al email</span>
         </div>
+      </SettingsRow>
 
-        {/* Login email — the real authenticated user */}
-        <div>
-          <label style={LABEL}>Email de acceso</label>
-          <div style={{ fontSize: '14px', color: 'var(--text-primary)', padding: '9px 0' }}>
-            {userEmail || '—'}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            El enlace de acceso llega a este email. Para cambiarlo, contacta a soporte ITMANO.
-          </div>
-        </div>
+      {/* Email con el que se inició sesión: el usuario autenticado real */}
+      <SettingsRow label="Email de acceso" hint="El enlace de acceso llega a este email. Para cambiarlo, contacta a soporte ITMANO.">
+        <span className="settings-value">{userEmail || '—'}</span>
+      </SettingsRow>
 
-        {/* Role */}
-        <div>
-          <label style={LABEL}>Rol</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '10px', fontWeight: 500, color: '#5B8EC9', background: 'rgba(91,142,201,0.12)', padding: '2px 8px', borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              {ROLE_LABELS[userRole]}
-            </span>
-          </div>
-        </div>
+      <SettingsRow label="Rol">
+        <span className="pill" data-tone="blue">{ROLE_LABELS[userRole]}</span>
+      </SettingsRow>
 
-        {/* Team access management pointer */}
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            {canManage ? (
-              <>El acceso de login de los miembros del equipo se gestiona en el tab{' '}
-                <button onClick={onGoToAgents} style={{ background: 'none', border: 'none', color: 'var(--accent-gold)', cursor: 'pointer', padding: 0, fontSize: '12px' }}>Agentes</button>.</>
-            ) : (
-              <>El acceso de login de los miembros del equipo lo gestiona el propietario de la cuenta.</>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+      {/* Dónde se gestiona el acceso de los demás miembros */}
+      <SettingsRow label="Acceso del equipo">
+        <p className="settings-note">
+          {canManage ? (
+            <>El acceso de login de los miembros del equipo se gestiona en la sección{' '}
+              <button type="button" className="settings-link-btn settings-link-gold" onClick={onGoToAgents}>Agentes</button>.</>
+          ) : (
+            <>El acceso de login de los miembros del equipo lo gestiona el propietario de la cuenta.</>
+          )}
+        </p>
+      </SettingsRow>
+    </SettingsCard>
   )
 }

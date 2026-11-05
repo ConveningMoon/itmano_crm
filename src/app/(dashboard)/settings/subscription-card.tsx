@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { AlertCircle } from 'lucide-react'
 import { requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { openBillingPortal } from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, trialDaysLeft } from '@/lib/plans'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { FechaLocal } from '@/components/ui/local-date'
-import { LABEL, BTN_PRIMARY, BTN_GHOST, CARD, CARD_HEADER } from './settings-styles'
+import { SettingsCard, SettingsRow } from '@/components/ui/settings-row'
+import { InfoHint } from '@/components/ui/info-hint'
 
 // ─── Subscription card ────────────────────────────────────────────────────────
 // Sales-led: sin procesador de pagos todavía, el owner SOLICITA cambio o
@@ -27,19 +29,17 @@ export function SubscriptionCard({ subscription, canManage }: {
 
   if (!subscription) {
     return (
-      <div style={CARD}>
-        <div style={CARD_HEADER}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Suscripción</span>
-        </div>
-        <div style={{ padding: '20px', fontSize: '13px', color: 'var(--text-muted)' }}>
-          Este equipo no tiene una suscripción registrada. Contacta a ITMANO.
-        </div>
-      </div>
+      <SettingsCard title="Suscripción">
+        <p className="settings-note">Este equipo no tiene una suscripción registrada. Contacta a ITMANO.</p>
+      </SettingsCard>
     )
   }
 
   const cfg = PLAN_CONFIG[subscription.plan]
   const hasPendingRequest = subscription.status === 'change_requested' || subscription.status === 'cancel_requested'
+  const statusTone = subscription.status === 'active' ? 'green'
+                   : subscription.status === 'cancelled' ? 'coral'
+                   : 'gold'
 
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null)
@@ -63,52 +63,56 @@ export function SubscriptionCard({ subscription, canManage }: {
   }
 
   return (
-    <div style={CARD}>
-      <div style={{ ...CARD_HEADER, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Suscripción</span>
-        <span style={{
-          fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-          letterSpacing: '0.06em', textTransform: 'uppercase',
-          color: subscription.status === 'active' ? 'var(--accent-green)'
-               : subscription.status === 'cancelled' ? 'var(--accent-coral)'
-               : 'var(--accent-gold)',
-          background: subscription.status === 'active' ? 'rgba(107,163,104,0.12)'
-                    : subscription.status === 'cancelled' ? 'rgba(201,123,107,0.12)'
-                    : 'rgba(201,169,110,0.12)',
-        }}>
+    <SettingsCard
+      title="Suscripción"
+      action={
+        <span className="pill" data-tone={statusTone}>
           {SUBSCRIPTION_STATUS_LABELS[subscription.status]}
         </span>
-      </div>
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <div>
-          <div style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Plan {cfg.label}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--accent-gold)', marginTop: '2px' }}>{cfg.inversion}</div>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>{cfg.blurb}</div>
+      }
+    >
+      <SettingsRow label="Plan">
+        <div className="settings-inline">
+          <span className="settings-value">Plan {cfg.label}</span>
+          <InfoHint label="Sobre el plan Partner">
+            El plan Partner se define a medida con nuestro equipo. Para cancelar tu
+            suscripción, usa el portal de inversión o escríbenos.
+          </InfoHint>
         </div>
+        <p className="settings-note settings-note-gap">{cfg.blurb}</p>
+      </SettingsRow>
 
-        {subscription.billingCycle && (
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+      <SettingsRow label="Inversión">
+        <span className="settings-value">{cfg.inversion}</span>
+      </SettingsRow>
+
+      {subscription.billingCycle && (
+        <SettingsRow label="Facturación">
+          <span className="settings-value">
             {BILLING_CYCLE_LABELS[subscription.billingCycle]}
             {subscription.currentPeriodEnd && (
               <> · Renueva el{' '}
                 <FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={{ day: 'numeric', month: 'long' }} />
               </>
             )}
-          </div>
-        )}
+          </span>
+        </SettingsRow>
+      )}
 
+      <div className="settings-stack settings-stack-top">
         {subscription.cancelAt && (
-          <div style={{ fontSize: '12px', color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
-            Tu suscripción termina el{' '}
-            <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>.
-            Conservas el acceso completo hasta entonces.
+          <div className="settings-alert settings-alert-block" role="alert">
+            <AlertCircle size={14} aria-hidden="true" />
+            <span>
+              Tu suscripción termina el{' '}
+              <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>.
+              Conservas el acceso completo hasta entonces.
+            </span>
           </div>
         )}
 
         {subscription.status === 'trial' && subscription.trialEndsAt && (
-          <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
+          <div className="settings-note settings-note-gold">
             {trialDaysLeft(subscription.trialEndsAt) > 0 ? (
               <>Tu período de prueba termina el{' '}
                 <strong><FechaLocal fecha={subscription.trialEndsAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>
@@ -121,18 +125,22 @@ export function SubscriptionCard({ subscription, canManage }: {
         )}
 
         {hasPendingRequest && (
-          <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '10px 12px', lineHeight: 1.5 }}>
+          <div className="settings-note settings-note-gold">
             {subscription.status === 'change_requested' && subscription.requestedPlan
               ? <>Solicitaste cambiar al plan <strong>{PLAN_CONFIG[subscription.requestedPlan].label}</strong>. El equipo ITMANO te contactará para completar el cambio.</>
               : <>Solicitaste cancelar la suscripción. El equipo ITMANO te contactará para confirmarlo.</>}
             {canManage && (
-              <button
-                onClick={() => run(withdrawSubscriptionRequest)}
-                disabled={pending}
-                style={{ marginLeft: '10px', background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-              >
-                Retirar solicitud
-              </button>
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="settings-link-btn"
+                  onClick={() => run(withdrawSubscriptionRequest)}
+                  disabled={pending}
+                >
+                  {pending ? 'Retirando…' : 'Retirar solicitud'}
+                </button>
+              </>
             )}
           </div>
         )}
@@ -156,35 +164,29 @@ export function SubscriptionCard({ subscription, canManage }: {
           const buyablePlans = PLAN_ORDER.filter(canBuy)
           if (buyablePlans.length === 0) return null
           return (
-            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label style={LABEL}>Paga tu inversión</label>
-                <div style={{ display: 'flex', gap: '4px' }}>
+            <div className="settings-panel">
+              <div className="settings-inline settings-inline-between">
+                <span className="settings-option-name">Paga tu inversión</span>
+                <div className="settings-inline settings-inline-tight">
                   {(['month', 'year'] as BillingCycle[]).map(c => (
                     <button
                       key={c}
+                      type="button"
+                      className="settings-cycle"
+                      aria-pressed={checkoutCycle === c}
                       onClick={() => setCheckoutCycle(c)}
-                      style={{
-                        padding: '4px 10px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer',
-                        border: `1px solid ${checkoutCycle === c ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                        background: checkoutCycle === c ? 'rgba(201,169,110,0.08)' : 'transparent',
-                        color: checkoutCycle === c ? 'var(--accent-gold)' : 'var(--text-muted)',
-                      }}
                     >
                       {BILLING_CYCLE_LABELS[c]}
                     </button>
                   ))}
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div className="settings-stack settings-stack-tight">
                 {buyablePlans.map(p => (
-                  <div key={p} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px',
-                    padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: '8px',
-                  }}>
+                  <div key={p} className="settings-option settings-option-center">
                     <span>
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{PLAN_CONFIG[p].label}</span>
-                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--accent-gold)', marginTop: '2px' }}>
+                      <span className="settings-option-name">{PLAN_CONFIG[p].label}</span>
+                      <span className="settings-option-price">
                         {checkoutCycle === 'year' ? PLANS[p].inversionAnual : PLANS[p].inversion}
                       </span>
                     </span>
@@ -192,110 +194,99 @@ export function SubscriptionCard({ subscription, canManage }: {
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              <p className="settings-note">
                 Al pagar se abre el checkout seguro de Paddle. El equipo ITMANO recibe la
                 confirmación de inmediato.
-              </div>
+              </p>
             </div>
           )
         })()}
 
         {canManage && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
-            <button
-              onClick={openPortal}
-              disabled={portalPending}
-              style={{ ...BTN_GHOST, opacity: portalPending ? 0.6 : 1 }}
-            >
+          <div className="settings-stack settings-stack-tight settings-stack-start">
+            <button type="button" className="btn btn-ghost" onClick={openPortal} disabled={portalPending}>
               {portalPending ? 'Abriendo…' : 'Gestionar inversión y facturas'}
             </button>
             {portalError && (
-              <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'rgba(201,123,107,0.08)', borderRadius: '6px' }}>
-                {portalError}
-              </div>
+              <p className="settings-alert" role="alert">
+                <AlertCircle size={13} aria-hidden="true" /> {portalError}
+              </p>
             )}
           </div>
         )}
 
         {/* Selector de cambio de plan */}
         {mode === 'changing' && (
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <label style={LABEL}>Elige el nuevo plan</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="settings-panel">
+            <span className="settings-option-name">Elige el nuevo plan</span>
+            <div className="settings-stack settings-stack-tight" role="radiogroup" aria-label="Nuevo plan">
               {PLAN_ORDER.filter(p => p !== subscription.plan).map(p => (
-                <label key={p} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px',
-                  border: `1px solid ${selectedPlan === p ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                  borderRadius: '8px', cursor: 'pointer',
-                  background: selectedPlan === p ? 'rgba(201,169,110,0.06)' : 'transparent',
-                }}>
+                <label key={p} className="settings-option settings-option-radio" data-selected={selectedPlan === p}>
                   <input
                     type="radio"
                     name="plan"
                     checked={selectedPlan === p}
                     onChange={() => setSelectedPlan(p)}
-                    style={{ marginTop: '2px', accentColor: 'var(--accent-gold)' }}
                   />
                   <span>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                      {PLAN_CONFIG[p].label}
-                    </span>
-                    <span style={{ fontSize: '12px', color: 'var(--accent-gold)', marginLeft: '8px' }}>{PLAN_CONFIG[p].inversion}</span>
-                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{PLAN_CONFIG[p].blurb}</span>
+                    <span className="settings-option-name">{PLAN_CONFIG[p].label}</span>
+                    <span className="settings-option-price settings-option-price-inline">{PLAN_CONFIG[p].inversion}</span>
+                    <span className="settings-note settings-note-gap">{PLAN_CONFIG[p].blurb}</span>
                   </span>
                 </label>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className="settings-inline settings-inline-tight">
               <button
+                type="button"
+                className="btn btn-primary"
                 onClick={() => selectedPlan && run(() => requestSubscriptionChange(selectedPlan))}
                 disabled={pending || !selectedPlan}
-                style={{ ...BTN_PRIMARY, opacity: pending || !selectedPlan ? 0.6 : 1 }}
               >
                 {pending ? 'Enviando…' : 'Solicitar cambio'}
               </button>
-              <button onClick={() => { setMode('view'); setSelectedPlan(null); setError(null) }} style={BTN_GHOST}>Cancelar</button>
+              <button type="button" className="btn btn-ghost" onClick={() => { setMode('view'); setSelectedPlan(null); setError(null) }}>Cancelar</button>
             </div>
           </div>
         )}
 
         {/* Confirmación de cancelación */}
         {mode === 'confirmCancel' && (
-          <div style={{ background: 'rgba(224,64,64,0.06)', border: '1px solid rgba(224,64,64,0.25)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+          <div className="settings-panel settings-panel-danger">
+            <p className="settings-value settings-confirm-text">
               ¿Solicitar la cancelación de tu suscripción? El equipo ITMANO te contactará para
               confirmarla. Tus datos no se eliminan al enviar la solicitud.
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            </p>
+            <div className="settings-inline settings-inline-tight">
               <button
+                type="button"
+                className="btn btn-danger"
                 onClick={() => run(requestSubscriptionCancel)}
                 disabled={pending}
-                style={{ ...BTN_PRIMARY, background: '#E04040', opacity: pending ? 0.6 : 1 }}
               >
                 {pending ? 'Enviando…' : 'Sí, solicitar cancelación'}
               </button>
-              <button onClick={() => { setMode('view'); setError(null) }} style={BTN_GHOST}>Volver</button>
+              <button type="button" className="btn btn-ghost" onClick={() => { setMode('view'); setError(null) }}>Volver</button>
             </div>
           </div>
         )}
 
-        {error && <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>{error}</div>}
+        {error && (
+          <p className="settings-alert" role="alert">
+            <AlertCircle size={13} aria-hidden="true" /> {error}
+          </p>
+        )}
 
         {/* Acciones — solo owner/super y sin solicitud pendiente */}
         {canManage && mode === 'view' && !hasPendingRequest && subscription.status !== 'cancelled' && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button onClick={() => { setMode('changing'); setError(null) }} style={BTN_PRIMARY}>Cambiar de plan</button>
-            <button onClick={() => { setMode('confirmCancel'); setError(null) }} style={{ ...BTN_GHOST, color: 'var(--accent-coral)', borderColor: 'rgba(224,64,64,0.3)' }}>
+          <div className="settings-inline settings-inline-tight">
+            <button type="button" className="btn btn-primary" onClick={() => { setMode('changing'); setError(null) }}>Cambiar de plan</button>
+            <button type="button" className="btn btn-danger" onClick={() => { setMode('confirmCancel'); setError(null) }}>
               Cancelar suscripción
             </button>
           </div>
         )}
-
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          El plan Partner se define a medida con nuestro equipo. Para cancelar tu
-          suscripción, usa el portal de inversión o escríbenos.
-        </div>
       </div>
-    </div>
+    </SettingsCard>
   )
 }
