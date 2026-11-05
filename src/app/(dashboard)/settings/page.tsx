@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getScoreRulesBundle } from '@/lib/data/score-rules'
-import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
+import { getAiUsageSummary, getAgentAiBreakdown } from '@/lib/data/ai-usage'
+import { maskAiCosts } from '@/lib/ai-usage/view'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { getTenantRow } from '@/lib/data/tenants'
@@ -135,17 +136,7 @@ async function SettingsContent() {
   // usuarios del tenant se ceroan ANTES de cruzar al cliente (no basta con
   // ocultarlos en la UI — no deben viajar en el payload RSC).
   const showAiCosts = ctx.role === 'super_admin'
-  const zeroCost = <T extends { costUsd: number }>(x: T): T => ({ ...x, costUsd: 0 })
-  const aiUsage: AiUsageSummary = showAiCosts ? aiUsageRaw : {
-    allTime:   zeroCost(aiUsageRaw.allTime),
-    last30d:   zeroCost(aiUsageRaw.last30d),
-    byFeature: aiUsageRaw.byFeature.map(zeroCost),
-    byTenant:  null,
-    recent:    aiUsageRaw.recent.map(zeroCost),
-  }
-  const aiByAgent: AgentAiBreakdown | null = aiByAgentRaw
-    ? (showAiCosts ? aiByAgentRaw : { ...aiByAgentRaw, agents: aiByAgentRaw.agents.map(zeroCost) })
-    : null
+  const { summary: aiUsage, byAgent: aiByAgent } = maskAiCosts(aiUsageRaw, aiByAgentRaw, showAiCosts)
 
   return (
     <SettingsClient

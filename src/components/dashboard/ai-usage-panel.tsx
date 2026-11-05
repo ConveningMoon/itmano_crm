@@ -1,4 +1,6 @@
-import type { AiUsageSummary, AiUsageTotals, AgentAiBreakdown } from '@/lib/data/ai-usage'
+import type { AiUsageSummary, AiUsageTotals, AiUsageByFeature, AiUsageRequestRow, AgentAiBreakdown } from '@/lib/data/ai-usage'
+import type { AiUsageLimitView } from '@/lib/ai-usage/view'
+import { InfoHint } from '@/components/ui/info-hint'
 import { AI_FEATURE_LABELS } from '@/lib/services/ai-feature-labels'
 import { Sparkles, ArrowDownToLine, ArrowUpFromLine, DollarSign } from 'lucide-react'
 
@@ -13,11 +15,11 @@ function featureLabel(f: string): string {
   return AI_FEATURE_LABELS[f] ?? f
 }
 
-function fmtInt(n: number): string {
+export function fmtInt(n: number): string {
   return n.toLocaleString('es-419')
 }
 
-function fmtCost(v: number): string {
+export function fmtCost(v: number): string {
   if (v === 0) return '$0.00'
   if (v < 0.01) return `$${v.toFixed(4)}`
   if (v < 1) return `$${v.toFixed(3)}`
@@ -98,11 +100,160 @@ function numHeaders(showCosts: boolean) {
   )
 }
 
-// Estado del límite mensual SIN montos (misma forma que AiLimitIndicator).
-export interface AiUsageLimitView {
-  unlimited: boolean
-  usedRatio: number
-  blocked:   boolean
+// El tipo vive en lib/ai-usage/view (sin server-only); se reexporta para no
+// romper a quien lo importaba de aquí.
+export type { AiUsageLimitView }
+
+// Desglose por agente — vista del owner (mes en curso).
+export function AiByAgentCard({ byAgent, showCosts }: { byAgent: AgentAiBreakdown | null; showCosts: boolean }) {
+  if (!byAgent || byAgent.agents.length === 0) return null
+  return (
+    <div style={CARD}>
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+        Uso por agente · mes en curso
+        <InfoHint label="Qué cuenta el uso por agente">
+          Sólo cuenta lo generado por agentes con acceso; los procesos automáticos no se atribuyen a nadie.
+        </InfoHint>
+        {byAgent.splitApplies && (
+          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)' }}>
+            (el límite del equipo se reparte en partes iguales entre {byAgent.agentCount} agentes)
+          </span>
+        )}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={TH}>Agente</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Requests</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Tokens entrada</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Tokens salida</th>
+              {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
+              <th style={{ ...TH, width: '190px' }}>
+                {byAgent.splitApplies ? 'De su parte del límite' : 'Del uso del equipo'}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {byAgent.agents.map(a => {
+              const ratio = byAgent.splitApplies ? (a.shareRatio ?? 0) : a.ofTeamRatio
+              const pct = Math.round(ratio * 100)
+              const barColor = byAgent.splitApplies && ratio >= 0.8 ? 'var(--accent-coral)' : a.agentColor
+              return (
+                <tr key={a.agentId}>
+                  <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                    <span style={{
+                      display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                      background: a.agentColor, marginRight: '8px',
+                    }} />
+                    {a.agentName}
+                    {!a.hasLogin && (
+                      <span style={{ marginLeft: '6px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                        sin acceso
+                      </span>
+                    )}
+                  </td>
+                  <td style={NUM}>{fmtInt(a.requests)}</td>
+                  <td style={NUM}>{fmtInt(a.inputTokens)}</td>
+                  <td style={NUM}>{fmtInt(a.outputTokens)}</td>
+                  {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(a.costUsd)}</td>}
+                  <td style={TD}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: '3px',
+                          width: `${Math.min(100, Math.max(a.requests > 0 ? 3 : 0, pct))}%`,
+                          background: barColor,
+                        }} />
+                      </div>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', width: '38px', textAlign: 'right' }}>
+                        {pct}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// Desglose por función.
+export function AiByFeatureCard({ byFeature, showCosts }: { byFeature: AiUsageByFeature[]; showCosts: boolean }) {
+  return (
+  <div style={CARD}>
+    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+      Uso por función
+    </div>
+    {byFeature.length === 0 ? (
+      <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+        Aún no hay uso de IA registrado.
+      </div>
+    ) : (
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={TH}>Función</th>{numHeaders(showCosts)}</tr></thead>
+          <tbody>
+            {byFeature.map(f => (
+              <tr key={f.feature}>
+                <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500 }}>{featureLabel(f.feature)}</td>
+                {totalsRow(f, showCosts)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+  )
+}
+
+// Requests recientes.
+export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[]; showCosts: boolean }) {
+  return (
+  <div style={CARD}>
+    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+      Requests recientes
+    </div>
+    {recent.length === 0 ? (
+      <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+        Aún no hay requests. Cuando se genere contenido con IA (propiedades, correos, secuencias) aparecerá aquí con su costo.
+      </div>
+    ) : (
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={TH}>Fecha</th>
+              <th style={TH}>Función</th>
+              {recent.some(r => r.tenantName) && <th style={TH}>Tenant</th>}
+              <th style={TH}>Modelo</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Entrada</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Salida</th>
+              {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {recent.map(r => (
+              <tr key={r.id}>
+                <td style={{ ...TD, whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
+                <td style={{ ...TD, color: 'var(--text-primary)' }}>{featureLabel(r.feature)}</td>
+                {recent.some(x => x.tenantName) && <td style={TD}>{r.tenantName ?? '—'}</td>}
+                <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px' }}>{r.model}</td>
+                <td style={NUM}>{fmtInt(r.inputTokens)}</td>
+                <td style={NUM}>{fmtInt(r.outputTokens)}</td>
+                {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)' }}>{fmtCost(r.costUsd)}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+  )
 }
 
 // showCosts: los montos en USD (costo por request, tarifas) son información
@@ -214,145 +365,11 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null, limitSub
         </div>
       )}
 
-      {/* Desglose por agente — vista del owner (mes en curso) */}
-      {byAgent && byAgent.agents.length > 0 && (
-        <div style={CARD}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Uso por agente · mes en curso
-            {byAgent.splitApplies && (
-              <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)' }}>
-                (el límite del equipo se reparte en partes iguales entre {byAgent.agentCount} agentes)
-              </span>
-            )}
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={TH}>Agente</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Requests</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Tokens entrada</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Tokens salida</th>
-                  {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
-                  <th style={{ ...TH, width: '190px' }}>
-                    {byAgent.splitApplies ? 'De su parte del límite' : 'Del uso del equipo'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {byAgent.agents.map(a => {
-                  const ratio = byAgent.splitApplies ? (a.shareRatio ?? 0) : a.ofTeamRatio
-                  const pct = Math.round(ratio * 100)
-                  const barColor = byAgent.splitApplies && ratio >= 0.8 ? 'var(--accent-coral)' : a.agentColor
-                  return (
-                    <tr key={a.agentId}>
-                      <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                        <span style={{
-                          display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
-                          background: a.agentColor, marginRight: '8px',
-                        }} />
-                        {a.agentName}
-                        {!a.hasLogin && (
-                          <span style={{ marginLeft: '6px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
-                            sin acceso
-                          </span>
-                        )}
-                      </td>
-                      <td style={NUM}>{fmtInt(a.requests)}</td>
-                      <td style={NUM}>{fmtInt(a.inputTokens)}</td>
-                      <td style={NUM}>{fmtInt(a.outputTokens)}</td>
-                      {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(a.costUsd)}</td>}
-                      <td style={TD}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
-                            <div style={{
-                              height: '100%', borderRadius: '3px',
-                              width: `${Math.min(100, Math.max(a.requests > 0 ? 3 : 0, pct))}%`,
-                              background: barColor,
-                            }} />
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', width: '38px', textAlign: 'right' }}>
-                            {pct}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <AiByAgentCard byAgent={byAgent} showCosts={showCosts} />
 
-      {/* Desglose por función */}
-      <div style={CARD}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-          Uso por función
-        </div>
-        {byFeature.length === 0 ? (
-          <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-            Aún no hay uso de IA registrado.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><th style={TH}>Función</th>{numHeaders(showCosts)}</tr></thead>
-              <tbody>
-                {byFeature.map(f => (
-                  <tr key={f.feature}>
-                    <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500 }}>{featureLabel(f.feature)}</td>
-                    {totalsRow(f, showCosts)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <AiByFeatureCard byFeature={byFeature} showCosts={showCosts} />
 
-      {/* Requests recientes */}
-      {showRecent && (
-      <div style={CARD}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-          Requests recientes
-        </div>
-        {recent.length === 0 ? (
-          <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-            Aún no hay requests. Cuando se genere contenido con IA (propiedades, correos, secuencias) aparecerá aquí con su costo.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={TH}>Fecha</th>
-                  <th style={TH}>Función</th>
-                  {recent.some(r => r.tenantName) && <th style={TH}>Tenant</th>}
-                  <th style={TH}>Modelo</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Entrada</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Salida</th>
-                  {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map(r => (
-                  <tr key={r.id}>
-                    <td style={{ ...TD, whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
-                    <td style={{ ...TD, color: 'var(--text-primary)' }}>{featureLabel(r.feature)}</td>
-                    {recent.some(x => x.tenantName) && <td style={TD}>{r.tenantName ?? '—'}</td>}
-                    <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px' }}>{r.model}</td>
-                    <td style={NUM}>{fmtInt(r.inputTokens)}</td>
-                    <td style={NUM}>{fmtInt(r.outputTokens)}</td>
-                    {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)' }}>{fmtCost(r.costUsd)}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-      )}
+      {showRecent && <AiRecentCard recent={recent} showCosts={showCosts} />}
 
       {showCosts ? (
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>

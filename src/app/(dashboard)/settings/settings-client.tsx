@@ -6,9 +6,9 @@ import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import type { ScoreRule } from '@/lib/data/score-rules'
 import type { AiUsageSummary } from '@/lib/data/ai-usage'
-import { AiUsagePanel, type AiUsageLimitView } from '@/components/dashboard/ai-usage-panel'
+import type { AiUsageLimitView } from '@/lib/ai-usage/view'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
-import { AiCapacityRequest } from './ai-capacity-request'
+import { AiUsageSection } from './ai-usage-section'
 import type { TenantSubscription } from '@/lib/subscriptions'
 import { ScoringSection } from './scoring-section'
 import { CalibrationPanel } from './calibration-panel'
@@ -130,29 +130,14 @@ export function SettingsClient({
         </div>
       ),
       ia: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {userRole === 'agent' ? (
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-              Estás viendo tu propia actividad de IA: tus requests y el porcentaje de tu
-              parte del límite del equipo.
-            </p>
-          ) : userRole === 'agent_owner' && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, maxWidth: '460px' }}>
-                Uso de IA de tu equipo este mes. ¿Se está quedando corto el límite?
-                Solicita más capacidad y lo ampliamos.
-              </p>
-              <AiCapacityRequest />
-            </div>
-          )}
-          <AiUsagePanel
-            summary={aiUsage}
-            showCosts={aiShowCosts}
-            limit={aiLimit}
-            limitSubtitle={aiLimitSubtitle}
-            byAgent={aiByAgent}
-          />
-        </div>
+        <AiUsageSection
+          summary={aiUsage}
+          showCosts={aiShowCosts}
+          limit={aiLimit}
+          limitSubtitle={aiLimitSubtitle}
+          byAgent={aiByAgent}
+          userRole={userRole}
+        />
       ),
       cuenta: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

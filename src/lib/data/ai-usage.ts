@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { discretionaryLimitUsd } from '@/lib/services/ai-budget'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { getTenantShellRow, getTenantNames } from '@/lib/data/tenants'
+import { DEFAULT_TENANT_COLOR } from '@/lib/config'
+import { aiUsageByMonth, type AiUsageMonthPoint } from '@/lib/ai-usage/view'
 
 // Agregaciones de uso de IA para los dashboards:
 //   - Configuración → "Uso de IA" (scoped a un tenant)
@@ -45,6 +47,8 @@ export interface AiUsageSummary {
   // Solo poblado en la vista global (tenantId = null).
   byTenant:  AiUsageByTenant[] | null
   recent:    AiUsageRequestRow[]
+  // Últimos 6 meses (UTC), con ceros; sale de las mismas filas, sin otra consulta.
+  byMonth:   AiUsageMonthPoint[]
 }
 
 interface EventRow {
@@ -140,7 +144,7 @@ export async function getAiUsageSummary(
     tenantName:   tenantId ? null : (r.tenant_id ? (tenantName.get(r.tenant_id) ?? r.tenant_id) : 'ITMANO'),
   }))
 
-  return { allTime, last30d, byFeature, byTenant, recent }
+  return { allTime, last30d, byFeature, byTenant, recent, byMonth: aiUsageByMonth(rows, new Date()) }
 }
 
 // ── Desglose por agente (mes en curso) ────────────────────────────────────────
@@ -226,7 +230,7 @@ export async function getAgentAiBreakdown(tenantId: string): Promise<AgentAiBrea
     return {
       agentId:      a.id as string,
       agentName:    a.name as string,
-      agentColor:   (a.accent_color as string) ?? '#C9A96E',
+      agentColor:   (a.accent_color as string) ?? DEFAULT_TENANT_COLOR,
       hasLogin:     !!a.user_id,
       requests:     acc.requests,
       inputTokens:  acc.input,
