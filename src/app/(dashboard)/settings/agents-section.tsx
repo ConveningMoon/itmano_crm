@@ -60,9 +60,9 @@ export function AgentsSection({
 
       {/* Upsell: los planes de un solo agente no pueden crear/gestionar más. */}
       {canManage && !multiAgent && (
-        <p className="settings-note settings-note-gold settings-inline settings-agent-upsell">
+        <p className="settings-note settings-note-gold settings-inline settings-inline-nowrap settings-agent-upsell">
           <Sparkles size={15} aria-hidden="true" />
-          Tu plan actual incluye un solo agente. Para sumar más, necesitas el plan Partner.
+          <span className="settings-note-text">Tu plan actual incluye un solo agente. Para sumar más, necesitas el plan Partner.</span>
           <InfoHint label="Más agentes en tu equipo">
             Para agregar y gestionar más agentes de tu equipo (cada uno con su propio acceso y sus leads),
             adquiere el plan Partner. Escríbenos y lo activamos.

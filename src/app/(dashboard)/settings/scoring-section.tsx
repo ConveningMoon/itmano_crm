@@ -6,7 +6,6 @@ import { computeScoreReach, type ReachRule } from '@/lib/scoring/reach'
 import { QUALITY_CUTS } from '@/lib/scoring/score-bands'
 import { QUALITY_CONFIG } from '@/lib/scoring/priority'
 import { TriangleAlert } from 'lucide-react'
-import { InfoHint } from '@/components/ui/info-hint'
 import { SettingsCard } from '@/components/ui/settings-row'
 import { updateScoreRules } from './actions'
 
@@ -125,10 +124,10 @@ function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) 
     <div className={warnings.length ? 'settings-card-alert-wrap' : undefined}>
       <SettingsCard
         title="Alcance de esta configuración"
-        action={(
-          <InfoHint label="Qué mide el alcance">
+        hint={(
+          <>
             Con pocos leads activos las bandas de calidad usan cortes fijos. Esto comprueba que un lead pueda llegar a ellas.
-          </InfoHint>
+          </>
         )}
       >
         {/* Alcanzabilidad por banda — la respuesta directa */}
@@ -328,10 +327,10 @@ export function ScoringSection({ rules, canEdit, recommended }: {
       {/* AUTOMÁTICO */}
       <SettingsCard
         title="Automático"
-        action={(
-          <InfoHint label="Qué es el scoring automático">
+        hint={(
+          <>
             Perfil (fit) y señales de actividad — se aplican sin intervención del agente.
-          </InfoHint>
+          </>
         )}
       >
         <div className="settings-group-title">Fit · perfil del lead</div>
@@ -355,10 +354,10 @@ export function ScoringSection({ rules, canEdit, recommended }: {
       {/* MANUAL */}
       <SettingsCard
         title="Manual"
-        action={(
-          <InfoHint label="Qué es el scoring manual">
+        hint={(
+          <>
             Acciones que el agente registra durante el seguimiento.
-          </InfoHint>
+          </>
         )}
       >
         {manual.map(r => (

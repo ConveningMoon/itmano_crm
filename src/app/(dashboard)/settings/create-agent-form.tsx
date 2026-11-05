@@ -68,8 +68,8 @@ export function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDon
         </div>
       </div>
 
-      <p className="settings-note settings-inline">
-        Sobre el idioma principal y el acceso
+      <p className="settings-note settings-inline settings-inline-nowrap">
+        <span className="settings-note-text">Sobre el idioma principal y el acceso</span>
         <InfoHint label="Sobre el idioma principal y el acceso">
           El idioma principal es el idioma base del agente (puedes agregar más desde &quot;Idiomas&quot;). El acceso de login se otorga después con &quot;Invitar acceso&quot;.
         </InfoHint>

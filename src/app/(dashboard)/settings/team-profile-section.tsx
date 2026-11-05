@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Building2, AlertCircle, Check } from 'lucide-react'
 import { updateTenantName, updateTenantLogo, removeTenantLogo } from './actions'
 import { SettingsCard, SettingsRow, SettingsSectionHead } from '@/components/ui/settings-row'
-import { InfoHint } from '@/components/ui/info-hint'
 
 // ─── Perfil del equipo ────────────────────────────────────────────────────────
 
@@ -72,7 +71,7 @@ export function TenantSection({ tenant, canManage }: { tenant: { id: string; nam
       <div className="settings-stack">
         <SettingsCard title="Marca">
           {/* Logo del equipo — visible para todos; editable para owner/super */}
-          <SettingsRow label="Logo">
+          <SettingsRow label="Logo" hint="Se muestra en el menú lateral del CRM. PNG, JPG, WebP o SVG · máx. 2 MB.">
             <div className="settings-inline">
               {tenant.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -102,9 +101,6 @@ export function TenantSection({ tenant, canManage }: { tenant: { id: string; nam
                   />
                 </>
               )}
-              <InfoHint label="Formatos del logo">
-                Se muestra en el menú lateral del CRM. PNG, JPG, WebP o SVG · máx. 2 MB.
-              </InfoHint>
             </div>
             {logoError && (
               <p className="settings-alert settings-alert-gap" role="alert">
@@ -138,13 +134,8 @@ export function TenantSection({ tenant, canManage }: { tenant: { id: string; nam
           </SettingsRow>
 
           {/* Slug (sólo lectura) */}
-          <SettingsRow label="Slug">
-            <div className="settings-inline">
-              <span className="settings-value-mono">{tenant.slug}</span>
-              <InfoHint label="Para qué sirve el slug">
-                Identificador del equipo en las direcciones de tus páginas. No se puede cambiar desde aquí.
-              </InfoHint>
-            </div>
+          <SettingsRow label="Slug" hint="Identificador del equipo en las direcciones de tus páginas. No se puede cambiar desde aquí.">
+            <span className="settings-value-mono">{tenant.slug}</span>
           </SettingsRow>
 
           {error && (

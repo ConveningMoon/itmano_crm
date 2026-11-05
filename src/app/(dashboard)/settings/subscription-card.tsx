@@ -9,7 +9,6 @@ import { PLANS, trialDaysLeft } from '@/lib/plans'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { FechaLocal } from '@/components/ui/local-date'
 import { SettingsCard, SettingsRow } from '@/components/ui/settings-row'
-import { InfoHint } from '@/components/ui/info-hint'
 
 // ─── Subscription card ────────────────────────────────────────────────────────
 // Sales-led: sin procesador de pagos todavía, el owner SOLICITA cambio o
@@ -71,14 +70,11 @@ export function SubscriptionCard({ subscription, canManage }: {
         </span>
       }
     >
-      <SettingsRow label="Plan">
-        <div className="settings-inline">
-          <span className="settings-value">Plan {cfg.label}</span>
-          <InfoHint label="Sobre el plan Partner">
-            El plan Partner se define a medida con nuestro equipo. Para cancelar tu
-            suscripción, usa el portal de inversión o escríbenos.
-          </InfoHint>
-        </div>
+      <SettingsRow
+        label="Plan"
+        hint="El plan Partner se define a medida con nuestro equipo. Para cancelar tu suscripción, usa el portal de inversión o escríbenos."
+      >
+        <span className="settings-value">Plan {cfg.label}</span>
         <p className="settings-note settings-note-gap">{cfg.blurb}</p>
       </SettingsRow>
 

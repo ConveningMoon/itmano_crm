@@ -11,7 +11,6 @@ import { saveBusinessProfile } from './actions'
 import { TimeZoneSelect } from '@/components/dashboard/time-zone-select'
 import { inferTimeZoneFromAreas, timeZoneLabel } from '@/lib/time-zones'
 import { SettingsCard, SettingsRow, SettingsSectionHead } from '@/components/ui/settings-row'
-import { InfoHint } from '@/components/ui/info-hint'
 
 // Copy exacto (no se arma con JSX + `{'{slug}'}` intercalado a propósito: la
 // forma en que JSX pliega espacios en blanco entre texto y expresiones es
@@ -124,12 +123,12 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
       <div className="settings-stack">
         <SettingsCard
           title="Rangos de presupuesto"
-          action={(
-            <InfoHint label="Qué son los rangos de presupuesto">
+          hint={(
+            <>
               Qué significa &quot;presupuesto alto&quot; en tu mercado. El CRM clasifica a cada lead
               comparándolo con estos cortes, no con una escala global: 300.000 puede ser
               un presupuesto de entrada en una ciudad y premium en otra.
-            </InfoHint>
+            </>
           )}
         >
           <SettingsRow label="Moneda" htmlFor="bp-currency">
@@ -187,67 +186,56 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
 
         <SettingsCard
           title="Zonas que atiendes"
-          action={(
-            <InfoHint label="Para qué sirven las zonas">
+          hint={(
+            <>
               Separadas por comas. El CRM las usa para saber si un lead cae en tu zona:
               fuera de ambas listas le resta puntos. Sin zonas declaradas no clasifica
               ninguna — prefiere no saber a castigar a un lead por un hueco de configuración.
-            </InfoHint>
+            </>
           )}
         >
-          <SettingsRow label="Zona principal" htmlFor="bp-primary-areas">
-            <div className="settings-field">
-              <input
-                id="bp-primary-areas"
-                className="settings-input"
-                value={draft.primaryAreas}
-                onChange={e => set('primaryAreas', e.target.value)}
-                placeholder="Virginia Beach, Norfolk"
-              />
-              <InfoHint label="Zona principal">Donde trabajas habitualmente.</InfoHint>
-            </div>
+          <SettingsRow label="Zona principal" htmlFor="bp-primary-areas" hint="Donde trabajas habitualmente.">
+            <input
+              id="bp-primary-areas"
+              className="settings-input"
+              value={draft.primaryAreas}
+              onChange={e => set('primaryAreas', e.target.value)}
+              placeholder="Virginia Beach, Norfolk"
+            />
           </SettingsRow>
-          <SettingsRow label="Zona secundaria" htmlFor="bp-secondary-areas">
-            <div className="settings-field">
-              <input
-                id="bp-secondary-areas"
-                className="settings-input"
-                value={draft.secondaryAreas}
-                onChange={e => set('secondaryAreas', e.target.value)}
-                placeholder="Chesapeake, Suffolk"
-              />
-              <InfoHint label="Zona secundaria">Las atiendes, pero no son tu foco.</InfoHint>
-            </div>
+          <SettingsRow label="Zona secundaria" htmlFor="bp-secondary-areas" hint="Las atiendes, pero no son tu foco.">
+            <input
+              id="bp-secondary-areas"
+              className="settings-input"
+              value={draft.secondaryAreas}
+              onChange={e => set('secondaryAreas', e.target.value)}
+              placeholder="Chesapeake, Suffolk"
+            />
           </SettingsRow>
-          <SettingsRow label="Zona horaria de tu zona principal" htmlFor="bp-timezone">
-            <div className="settings-field">
-              <TimeZoneSelect
-                id="bp-timezone"
-                className="settings-input"
-                value={draft.timezone}
-                onChange={tz => set('timezone', tz)}
-                emptyLabel={sugerida
-                  ? `Automática — ${timeZoneLabel(sugerida)}`
-                  : 'Automática — no se pudo deducir de tu zona principal'}
-              />
-              <InfoHint label="Cómo se elige la zona horaria">
-                La hora de tus open houses y de sus correos se escribe en esta zona. En &quot;Automática&quot; se
-                deduce de tu zona principal; elige una si la deducción no es la correcta.
-              </InfoHint>
-            </div>
+          <SettingsRow label="Zona horaria de tu zona principal" htmlFor="bp-timezone" hint={<>La hora de tus open houses y de sus correos se escribe en esta zona. En &quot;Automática&quot; se
+                deduce de tu zona principal; elige una si la deducción no es la correcta.</>}>
+            <TimeZoneSelect
+              id="bp-timezone"
+              className="settings-input"
+              value={draft.timezone}
+              onChange={tz => set('timezone', tz)}
+              emptyLabel={sugerida
+                ? `Automática — ${timeZoneLabel(sugerida)}`
+                : 'Automática — no se pudo deducir de tu zona principal'}
+            />
           </SettingsRow>
         </SettingsCard>
 
         <SettingsCard
           title="Comisión de la agencia"
-          action={(
-            <InfoHint label="Qué es la comisión de la agencia">
+          hint={(
+            <>
               Lo que la agencia factura por operación cerrada. Sirve para ordenar por valor
               esperado: dos leads igual de buenos no valen lo mismo si uno compra el doble.
               <br />
               Es lo que factura el negocio, no lo que se lleva cada agente: el split interno
               no se registra aquí y la ficha del lead lo dice tal cual.
-            </InfoHint>
+            </>
           )}
         >
           <SettingsRow label="Modelo" htmlFor="bp-commission-model">
@@ -272,20 +260,15 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
               placeholder={esPct ? '3' : '5000'}
             />
           </SettingsRow>
-          <SettingsRow label={`Venta${unidad}`} htmlFor="bp-commission-sell">
-            <div className="settings-field">
-              <input
-                id="bp-commission-sell"
-                className="settings-input"
-                inputMode="decimal"
-                value={draft.commissionSell}
-                onChange={e => set('commissionSell', e.target.value)}
-                placeholder={esPct ? '3' : '5000'}
-              />
-              <InfoHint label="Si sólo trabajas un lado">
-                Si sólo trabajas un lado del mercado, deja el otro vacío.
-              </InfoHint>
-            </div>
+          <SettingsRow label={`Venta${unidad}`} htmlFor="bp-commission-sell" hint="Si sólo trabajas un lado del mercado, deja el otro vacío.">
+            <input
+              id="bp-commission-sell"
+              className="settings-input"
+              inputMode="decimal"
+              value={draft.commissionSell}
+              onChange={e => set('commissionSell', e.target.value)}
+              placeholder={esPct ? '3' : '5000'}
+            />
           </SettingsRow>
           {comisionEjemplo !== null && (
             <p className="settings-note">
@@ -297,38 +280,30 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
 
         <SettingsCard
           title="Tu sitio web"
-          action={(
-            <InfoHint label="Para qué sirve tu sitio web">
+          hint={(
+            <>
               Para que los buscadores identifiquen tu agencia y, si publicas tu newsletter
               en tu propio dominio, sepan que esa versión es el original.
-            </InfoHint>
+            </>
           )}
         >
-          <SettingsRow label="Sitio web de la agencia" htmlFor="bp-site-url">
-            <div className="settings-field">
-              <input
-                id="bp-site-url"
-                className="settings-input"
-                value={draft.publicSiteUrl}
-                onChange={e => set('publicSiteUrl', e.target.value)}
-                placeholder="https://tuagencia.com"
-              />
-              <InfoHint label="Sitio web de la agencia">
-                La dirección de tu web. Se usa para identificar a tu agencia ante los buscadores.
-              </InfoHint>
-            </div>
+          <SettingsRow label="Sitio web de la agencia" htmlFor="bp-site-url" hint="La dirección de tu web. Se usa para identificar a tu agencia ante los buscadores.">
+            <input
+              id="bp-site-url"
+              className="settings-input"
+              value={draft.publicSiteUrl}
+              onChange={e => set('publicSiteUrl', e.target.value)}
+              placeholder="https://tuagencia.com"
+            />
           </SettingsRow>
-          <SettingsRow label="Dirección de tus ediciones en tu web" htmlFor="bp-canonical">
-            <div className="settings-field">
-              <input
-                id="bp-canonical"
-                className="settings-input"
-                value={draft.newsletterCanonicalTemplate}
-                onChange={e => set('newsletterCanonicalTemplate', e.target.value)}
-                placeholder="https://tusitio.com/newsletter/{slug}"
-              />
-              <InfoHint label="Dirección de tus ediciones">{CANONICAL_HELP}</InfoHint>
-            </div>
+          <SettingsRow label="Dirección de tus ediciones en tu web" htmlFor="bp-canonical" hint={CANONICAL_HELP}>
+            <input
+              id="bp-canonical"
+              className="settings-input"
+              value={draft.newsletterCanonicalTemplate}
+              onChange={e => set('newsletterCanonicalTemplate', e.target.value)}
+              placeholder="https://tusitio.com/newsletter/{slug}"
+            />
           </SettingsRow>
         </SettingsCard>
 

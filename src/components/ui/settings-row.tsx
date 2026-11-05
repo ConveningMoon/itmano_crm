@@ -1,23 +1,24 @@
 import type { ReactNode } from 'react'
+import { InfoHint } from '@/components/ui/info-hint'
 
 // Piezas de formulario de /settings. Sin estado: sirven igual en Server y
 // Client Components. Los estilos viven en dashboard-ui.css (.settings-*).
 
-/** Tarjeta con título y, opcionalmente, una bajada y una acción a la derecha. */
+/** Tarjeta con título, ⓘ opcional junto al título y una acción (de verdad) a la derecha. */
 export function SettingsCard({
   title, hint, action, children,
 }: {
   title: string
-  hint?: string
+  hint?: ReactNode
   action?: ReactNode
   children: ReactNode
 }) {
   return (
     <section className="settings-card">
       <div className="settings-card-head">
-        <div style={{ minWidth: 0 }}>
+        <div className="settings-card-heading">
           <h3 className="settings-card-title">{title}</h3>
-          {hint && <p className="settings-card-hint">{hint}</p>}
+          {hint && <InfoHint label={`Qué es ${title}`}>{hint}</InfoHint>}
         </div>
         {action}
       </div>
@@ -26,12 +27,15 @@ export function SettingsCard({
   )
 }
 
-/** Fila etiqueta + control. Con `htmlFor` la etiqueta enfoca el control. */
+/**
+ * Fila etiqueta + ⓘ + control. Con `htmlFor` la etiqueta enfoca el control. El ⓘ
+ * es hermano de la etiqueta, no hijo: un botón dentro de un <label> roba el clic.
+ */
 export function SettingsRow({
   label, hint, htmlFor, children,
 }: {
   label: string
-  hint?: string
+  hint?: ReactNode
   htmlFor?: string
   children: ReactNode
 }) {
@@ -39,10 +43,10 @@ export function SettingsRow({
   const Tag = htmlFor ? 'label' : 'span'
   return (
     <div className="settings-row">
-      <Tag className="settings-row-label" {...(htmlFor ? { htmlFor } : {})}>
-        {label}
-        {hint && <span className="settings-row-hint">{hint}</span>}
-      </Tag>
+      <div className="settings-row-labelwrap">
+        <Tag className="settings-row-label" {...(htmlFor ? { htmlFor } : {})}>{label}</Tag>
+        {hint && <InfoHint label={`Qué es ${label}`}>{hint}</InfoHint>}
+      </div>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>
   )

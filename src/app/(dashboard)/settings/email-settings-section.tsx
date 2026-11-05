@@ -6,7 +6,6 @@ import type { Agent } from '@/lib/types'
 import { agentLocalPart } from '@/lib/email/sender-address'
 import { updateAgentSignature, updateAgentSenderLocalPart } from './actions'
 import { SettingsCard, SettingsSectionHead } from '@/components/ui/settings-row'
-import { InfoHint } from '@/components/ui/info-hint'
 import { AgentAvatar } from './agent-avatar'
 
 // ─── Email settings: firma por agente ─────────────────────────────────────────
@@ -148,10 +147,10 @@ function SenderAddressCard({ agents, domain, canManage }: { agents: Agent[]; dom
   return (
     <SettingsCard
       title="Dirección de envío"
-      action={domain ? (
-        <InfoHint label="Cómo se arma la dirección de envío">
+      hint={domain ? (
+        <>
           Los correos salen con el nombre del agente y su dirección en <strong>{domain}</strong>. Si la dejas vacía se usa la parte de su email antes de la @.
-        </InfoHint>
+        </>
       ) : undefined}
     >
       {!domain ? (
@@ -180,14 +179,14 @@ export function EmailSettingsSection({ agents, canManage, myAgentId, senderDomai
         <SenderAddressCard agents={visible} domain={senderDomain} canManage={canManage} />
         <SettingsCard
           title="Firma de correo"
-          action={(
-            <InfoHint label="Cómo se usa la firma">
+          hint={(
+            <>
               {canManage
                 ? 'La firma de cada agente se agrega automáticamente al final de todos los correos que se envían a sus leads'
                 : 'Tu firma se agrega automáticamente al final de todos los correos que se envían a tus leads'}
               {' '}(secuencias, hitos de compra y envíos puntuales). Escríbela en tono personal, como cerrarías un
               correo a un conocido.
-            </InfoHint>
+            </>
           )}
         >
           {visible.length === 0 ? (

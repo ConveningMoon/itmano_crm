@@ -109,13 +109,13 @@ export function AiByAgentCard({ byAgent, showCosts }: { byAgent: AgentAiBreakdow
   if (!byAgent || byAgent.agents.length === 0) return null
   return (
     <div style={CARD}>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-        Uso por agente · mes en curso
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px', padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
+        <span>Uso por agente · mes en curso</span>
         <InfoHint label="Qué cuenta el uso por agente">
           Sólo cuenta lo generado por agentes con acceso; los procesos automáticos no se atribuyen a nadie.
         </InfoHint>
         {byAgent.splitApplies && (
-          <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)' }}>
             (el límite del equipo se reparte en partes iguales entre {byAgent.agentCount} agentes)
           </span>
         )}

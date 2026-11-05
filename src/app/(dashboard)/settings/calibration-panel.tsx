@@ -7,7 +7,6 @@ import {
   calibratableDimensions, currentOrder, recalibrate,
   MIN_CLOSES_FOR_EVIDENCE, type CalibrationRule, type FitEvidence,
 } from '@/lib/scoring/calibration'
-import { InfoHint } from '@/components/ui/info-hint'
 import { SettingsCard } from '@/components/ui/settings-row'
 import { applyFitCalibration } from './actions'
 
@@ -62,13 +61,13 @@ export function CalibrationPanel({ rules, evidence, tenantId }: {
   return (
     <SettingsCard
       title="Calibración por mercado"
-      action={(
-        <InfoHint label="Cómo funciona la calibración">
+      hint={(
+        <>
           Qué predice mejor un cierre en ESTE mercado. Se reparten los mismos máximos que
           ya tiene el modelo, sólo que en otro orden: el techo del score no se mueve y las
           bandas de calidad quedan intactas. Las penalizaciones no cambian — restan por su
           propio motivo, no por el peso de su factor.
-        </InfoHint>
+        </>
       )}
     >
       <div>

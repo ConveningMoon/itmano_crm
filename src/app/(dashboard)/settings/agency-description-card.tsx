@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { AlertCircle, Check } from 'lucide-react'
 import { updateTenantDescription } from './actions'
 import { SettingsCard } from '@/components/ui/settings-row'
-import { InfoHint } from '@/components/ui/info-hint'
 
 // ─── Contexto para IA: descripción de agencia + por agente ───────────────────
 // La IA consulta estos textos para el análisis de fit de leads y para
@@ -30,12 +29,12 @@ export function AgencyDescriptionCard({ initial, canManage }: { initial: string 
   return (
     <SettingsCard
       title="Lo que el formulario no captura"
-      action={(
-        <InfoHint label="Qué escribir aquí">
+      hint={(
+        <>
           Los rangos, las zonas y la comisión ya están arriba: la IA los usa como números exactos.
           Aquí va el matiz que ningún campo recoge — a quién atiendes, qué objeciones te encuentras,
           qué inventario te sobra o te falta, en qué tono hablas.
-        </InfoHint>
+        </>
       )}
     >
       <div className="settings-stack settings-stack-tight">
