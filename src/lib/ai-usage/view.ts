@@ -26,8 +26,9 @@ const monthKey = (year: number, month: number) => `${year}-${String(month + 1).p
 /**
  * Consumo de los últimos `months` meses (el actual incluido), de más viejo a más
  * nuevo y sin huecos: un mes sin uso aparece con ceros para que el eje no salte.
- * El costo se redondea a 2 decimales una sola vez, al final, para no arrastrar
- * error de coma flotante al sumar.
+ * El costo se redondea a 6 decimales una sola vez, al final (como
+ * getAgentAiBreakdown): quita el error de coma flotante sin perder centavos
+ * de fracción; el formato lo pone la capa de presentación.
  */
 export function aiUsageByMonth(
   rows: { created_at: string; cost_usd: number | string }[],
@@ -49,7 +50,7 @@ export function aiUsageByMonth(
     point.costUsd  += Number(r.cost_usd)
   }
 
-  return [...points.values()].map(p => ({ ...p, costUsd: Math.round(p.costUsd * 100) / 100 }))
+  return [...points.values()].map(p => ({ ...p, costUsd: Math.round(p.costUsd * 1_000_000) / 1_000_000 }))
 }
 
 /**
@@ -81,12 +82,12 @@ export function maskAiCosts(
 export type LimitGauge =
   | { kind: 'hidden' }
   | { kind: 'unlimited' }
-  | { kind: 'gauge'; percent: number; blocked: boolean }
+  | { kind: 'gauge'; percent: number; blocked: boolean; near: boolean }
 
 /** Qué dibuja la tarjeta "Este mes": nada, "Ilimitado" o el anillo de 0 a 100. */
 export function limitGauge(limit: AiUsageLimitView | null): LimitGauge {
   if (!limit) return { kind: 'hidden' }
   if (limit.unlimited) return { kind: 'unlimited' }
   const percent = Math.min(100, Math.max(0, Math.round(limit.usedRatio * 100)))
-  return { kind: 'gauge', percent, blocked: limit.blocked }
+  return { kind: 'gauge', percent, blocked: limit.blocked, near: percent >= 80 }
 }

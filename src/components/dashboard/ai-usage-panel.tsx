@@ -220,7 +220,7 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
     </div>
     {recent.length === 0 ? (
       <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-        Aún no hay requests. Cuando se genere contenido con IA (propiedades, correos, secuencias) aparecerá aquí con su costo.
+        Aún no hay requests. Cuando se genere contenido con IA (propiedades, correos, secuencias) aparecerá aquí{showCosts ? ' con su costo' : ''}.
       </div>
     ) : (
       <div style={{ overflowX: 'auto' }}>

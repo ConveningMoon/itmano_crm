@@ -7,12 +7,6 @@ import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced
 import type { TooltipContentProps } from 'recharts'
 import { AXIS_TICK, ChartTooltipBody, GRID_STROKE, fmt, useChartId } from './chart-shared'
 
-// Área con línea dorada, degradado hacia transparente y un brillo suave. Las series
-// se dibujan superpuestas (no apiladas): cada una es su propia cuenta. Si una
-// tarjeta necesita una composición que suma un total, es una dona o una barra.
-// El resumen en texto y el estado vacío los pone ChartFrame, en quien lo usa.
-// `decimals` es para series con fracciones (p. ej. USD): el eje admite decimales y
-// el tooltip siempre muestra 2. `unit` se pega al valor del tooltip.
 const fmtDecimals = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function AreaTooltip({ active, payload, label, unit, decimals }: TooltipContentProps & { unit?: string; decimals: boolean }) {
@@ -26,6 +20,12 @@ function AreaTooltip({ active, payload, label, unit, decimals }: TooltipContentP
   return <ChartTooltipBody title={label == null ? undefined : String(label)} rows={rows} />
 }
 
+// Área con línea dorada, degradado hacia transparente y un brillo suave. Las series
+// se dibujan superpuestas (no apiladas): cada una es su propia cuenta. Si una
+// tarjeta necesita una composición que suma un total, es una dona o una barra.
+// El resumen en texto y el estado vacío los pone ChartFrame, en quien lo usa.
+// `decimals` es para series con fracciones (p. ej. USD): el eje admite decimales y
+// el tooltip siempre muestra 2. `unit` se pega al valor del tooltip.
 export function AreaChart({ data, series, height, unit, decimals = false }: {
   data:   { label: string; [k: string]: string | number }[]
   series: { key: string; name: string; color: string }[]

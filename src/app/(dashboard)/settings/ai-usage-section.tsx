@@ -89,6 +89,12 @@ export function AiUsageSection({ summary, showCosts, limit, limitSubtitle, byAge
                       Límite alcanzado: se reinicia el día 1
                     </span>
                   )}
+                  {gauge.near && !gauge.blocked && (
+                    <span className="settings-alert">
+                      <AlertTriangle size={14} aria-hidden="true" />
+                      Cerca del límite
+                    </span>
+                  )}
                 </>
               )}
             </div>
@@ -101,13 +107,12 @@ export function AiUsageSection({ summary, showCosts, limit, limitSubtitle, byAge
         <KpiCard label="Tokens de entrada · 30 días" value={last30d.inputTokens} note={`${fmtInt(allTime.inputTokens)} en total`} />
         <KpiCard label="Tokens de salida · 30 días" value={last30d.outputTokens} note={`${fmtInt(allTime.outputTokens)} en total`} />
         {showCosts && (
-          // KpiCard anima y muestra enteros: el valor va redondeado a dólares y los
-          // centavos exactos viajan en la nota.
+          // El número animado redondea a enteros: el costo va ya formateado.
           <KpiCard
             label="Costo · 30 días"
-            value={Math.round(last30d.costUsd)}
-            suffix="USD"
-            note={`${fmtCost(last30d.costUsd)} exactos · ${fmtCost(allTime.costUsd)} en total`}
+            value={last30d.costUsd}
+            display={fmtCost(last30d.costUsd)}
+            note={`${fmtCost(allTime.costUsd)} en total`}
           />
         )}
       </div>

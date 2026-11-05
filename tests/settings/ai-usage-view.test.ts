@@ -35,14 +35,21 @@ describe('aiUsageByMonth', () => {
     expect(out.reduce((s, m) => s + m.requests, 0)).toBe(0)
   })
 
-  it('acepta cost_usd como string y redondea a 2 decimales al final', () => {
+  it('con now en día 31 no se salta ni repite meses', () => {
+    expect(aiUsageByMonth([], new Date('2026-10-31T23:59:59Z')).map(m => m.key))
+      .toEqual(['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'])
+    expect(aiUsageByMonth([], new Date('2026-03-31T12:00:00Z')).map(m => m.key))
+      .toEqual(['2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03'])
+  })
+
+  it('acepta cost_usd como string y redondea a 6 decimales al final', () => {
     const out = aiUsageByMonth([
       { created_at: '2026-11-02T00:00:00Z', cost_usd: '0.004' },
       { created_at: '2026-11-03T00:00:00Z', cost_usd: '0.004' },
       { created_at: '2026-11-04T00:00:00Z', cost_usd: 0.003 },
     ], NOW)
     expect(out[5].requests).toBe(3)
-    expect(out[5].costUsd).toBe(0.01)
+    expect(out[5].costUsd).toBe(0.011)
   })
 })
 
@@ -79,6 +86,23 @@ describe('maskAiCosts', () => {
     expect(s.byMonth[0].requests).toBe(2)
   })
 
+  it('con showCosts false, ninguna clave costUsd anidada vale distinto de 0', () => {
+    const out = maskAiCosts(summary(), breakdown(), false)
+    const vistos: number[] = []
+    const recorre = (v: unknown): void => {
+      if (Array.isArray(v)) return v.forEach(recorre)
+      if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          if (k === 'costUsd') vistos.push(x as number)
+          else recorre(x)
+        }
+      }
+    }
+    recorre(out)
+    expect(vistos.length).toBeGreaterThan(5)
+    expect(vistos.every(c => c === 0)).toBe(true)
+  })
+
   it('con showCosts false deja byTenant en null', () => {
     expect(maskAiCosts(summary(), null, false).summary.byTenant).toBeNull()
   })
@@ -103,7 +127,9 @@ describe('limitGauge', () => {
   })
 
   it('0.38 → 38; 1.4 → 100; blocked se conserva', () => {
-    expect(limitGauge({ unlimited: false, usedRatio: 0.38, blocked: false })).toEqual({ kind: 'gauge', percent: 38, blocked: false })
-    expect(limitGauge({ unlimited: false, usedRatio: 1.4, blocked: true })).toEqual({ kind: 'gauge', percent: 100, blocked: true })
+    expect(limitGauge({ unlimited: false, usedRatio: 0.38, blocked: false })).toEqual({ kind: 'gauge', percent: 38, blocked: false, near: false })
+    expect(limitGauge({ unlimited: false, usedRatio: 1.4, blocked: true })).toEqual({ kind: 'gauge', percent: 100, blocked: true, near: true })
+    expect(limitGauge({ unlimited: false, usedRatio: 0.8, blocked: false })).toMatchObject({ percent: 80, near: true })
+    expect(limitGauge({ unlimited: false, usedRatio: 0.79, blocked: false })).toMatchObject({ percent: 79, near: false })
   })
 })
