@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
@@ -17,7 +17,7 @@ import { BusinessProfileSection } from './business-profile-section'
 import { TagsSection } from './tags-section'
 import type { LeadTag } from '@/lib/leads/tags'
 import type { BusinessProfile } from '@/lib/business/profile'
-import { Tabs } from '@/components/ui/tabs'
+import { SettingsNav } from './settings-nav'
 import { settingsNavForRole, resolveSettingsTab, type SettingsTab } from '@/lib/settings/nav'
 import { TenantSection } from './team-profile-section'
 import { AgentsSection } from './agents-section'
@@ -73,96 +73,104 @@ export function SettingsClient({
   const searchParams = useSearchParams()
   // La lista depende del rol, así que un `?tab=scoring` de un enlace viejo (o
   // escrito a mano) cae a 'perfil' en vez de abrir una pestaña inexistente.
-  const tabs = settingsNavForRole(userRole).flatMap(g => g.items)
-  const [tab, setTab] = useState<SettingsTab>(resolveSettingsTab(searchParams.get('tab'), userRole))
+  const groups = settingsNavForRole(userRole)
+  const tab = resolveSettingsTab(searchParams.get('tab'), userRole)
+
+  // La sección vive en la URL: pushState se integra con useSearchParams, así
+  // que cambiar de sección no pide datos al servidor y Atrás funciona.
+  const selectTab = useCallback((next: SettingsTab) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', next)
+    window.history.pushState(null, '', `?${params.toString()}`)
+  }, [searchParams])
+
+  const content: Record<SettingsTab, React.ReactNode> = {
+      perfil: <TenantSection tenant={tenant} canManage={canManageAgents} />,
+      agentes: (
+        <AgentsSection
+          agents={agents}
+          agentAccess={agentAccess}
+          accessCount={accessCount}
+          canManage={canManageAgents}
+          multiAgent={multiAgent}
+          canLinkSelf={canLinkSelf}
+          tenantId={tenant.id}
+          isSuper={userRole === 'super_admin'}
+          myAgentId={myAgentId}
+          ownerAgentId={ownerAgentId}
+          canManageOwner={userRole === 'agent_owner' || userRole === 'super_admin'}
+          canDeleteAgents={canDeleteAgents}
+        />
+      ),
+      email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} senderDomain={senderDomain} />,
+      etiquetas: <TagsSection tags={leadTags} counts={leadTagCounts} />,
+      negocio: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <BusinessProfileSection profile={businessProfile} />
+          {/* El texto libre va DESPUÉS del formulario y reencuadrado: no es
+              otra forma de decir lo mismo, es lo que ningún campo captura.
+              Sólo la agencia — cómo se presenta cada agente lo escribe él
+              mismo, en su fila de la pestaña Agentes. */}
+          <AgencyDescriptionCard initial={tenant.description} canManage={canManageAgents} />
+        </div>
+      ),
+      scoring: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+          {fitEvidence && (
+            <CalibrationPanel
+              rules={scoringRules.map(r => ({
+                category: r.category, dimension: r.dimension,
+                matchValue: r.matchValue, points: r.points, isActive: r.isActive,
+              }))}
+              evidence={fitEvidence}
+              tenantId={tenant.id}
+            />
+          )}
+          <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />
+        </div>
+      ),
+      ia: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {userRole === 'agent' ? (
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+              Estás viendo tu propia actividad de IA: tus requests y el porcentaje de tu
+              parte del límite del equipo.
+            </p>
+          ) : userRole === 'agent_owner' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, maxWidth: '460px' }}>
+                Uso de IA de tu equipo este mes. ¿Se está quedando corto el límite?
+                Solicita más capacidad y lo ampliamos.
+              </p>
+              <AiCapacityRequest />
+            </div>
+          )}
+          <AiUsagePanel
+            summary={aiUsage}
+            showCosts={aiShowCosts}
+            limit={aiLimit}
+            limitSubtitle={aiLimitSubtitle}
+            byAgent={aiByAgent}
+          />
+        </div>
+      ),
+      cuenta: (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <SubscriptionCard subscription={subscription} canManage={canManageAgents} />
+          <AccountSection
+            userEmail={userEmail}
+            userRole={userRole}
+            canManage={canManageAgents}
+            onGoToAgents={() => selectTab('agentes')}
+          />
+        </div>
+      ),
+  }
 
   return (
-    <Tabs
-      items={tabs.map(t => ({ key: t.value, label: t.label }))}
-      value={tab}
-      onChange={k => setTab(k as SettingsTab)}
-      content={{
-        perfil: <TenantSection tenant={tenant} canManage={canManageAgents} />,
-        agentes: (
-          <AgentsSection
-            agents={agents}
-            agentAccess={agentAccess}
-            accessCount={accessCount}
-            canManage={canManageAgents}
-            multiAgent={multiAgent}
-            canLinkSelf={canLinkSelf}
-            tenantId={tenant.id}
-            isSuper={userRole === 'super_admin'}
-            myAgentId={myAgentId}
-            ownerAgentId={ownerAgentId}
-            canManageOwner={userRole === 'agent_owner' || userRole === 'super_admin'}
-            canDeleteAgents={canDeleteAgents}
-          />
-        ),
-        email: <EmailSettingsSection agents={agents} canManage={canManageAgents} myAgentId={myAgentId} senderDomain={senderDomain} />,
-        etiquetas: <TagsSection tags={leadTags} counts={leadTagCounts} />,
-        negocio: (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <BusinessProfileSection profile={businessProfile} />
-            {/* El texto libre va DESPUÉS del formulario y reencuadrado: no es
-                otra forma de decir lo mismo, es lo que ningún campo captura.
-                Sólo la agencia — cómo se presenta cada agente lo escribe él
-                mismo, en su fila de la pestaña Agentes. */}
-            <AgencyDescriptionCard initial={tenant.description} canManage={canManageAgents} />
-          </div>
-        ),
-        scoring: (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-            {fitEvidence && (
-              <CalibrationPanel
-                rules={scoringRules.map(r => ({
-                  category: r.category, dimension: r.dimension,
-                  matchValue: r.matchValue, points: r.points, isActive: r.isActive,
-                }))}
-                evidence={fitEvidence}
-                tenantId={tenant.id}
-              />
-            )}
-            <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />
-          </div>
-        ),
-        ia: (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {userRole === 'agent' ? (
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-                Estás viendo tu propia actividad de IA: tus requests y el porcentaje de tu
-                parte del límite del equipo.
-              </p>
-            ) : userRole === 'agent_owner' && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, maxWidth: '460px' }}>
-                  Uso de IA de tu equipo este mes. ¿Se está quedando corto el límite?
-                  Solicita más capacidad y lo ampliamos.
-                </p>
-                <AiCapacityRequest />
-              </div>
-            )}
-            <AiUsagePanel
-              summary={aiUsage}
-              showCosts={aiShowCosts}
-              limit={aiLimit}
-              limitSubtitle={aiLimitSubtitle}
-              byAgent={aiByAgent}
-            />
-          </div>
-        ),
-        cuenta: (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <SubscriptionCard subscription={subscription} canManage={canManageAgents} />
-            <AccountSection
-              userEmail={userEmail}
-              userRole={userRole}
-              canManage={canManageAgents}
-              onGoToAgents={() => setTab('agentes')}
-            />
-          </div>
-        ),
-      }}
-    />
+    <div className="settings-layout">
+      <SettingsNav groups={groups} active={tab} onSelect={selectTab} />
+      <div style={{ minWidth: 0 }}>{content[tab]}</div>
+    </div>
   )
 }

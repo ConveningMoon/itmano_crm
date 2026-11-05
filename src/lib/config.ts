@@ -31,3 +31,8 @@ export const LANGUAGE_CONFIG: Record<Language, { label: string; flag: string }> 
 
 // Lista ordenada de códigos — para selects/checkboxes en la UI.
 export const SUPPORTED_LANGUAGE_CODES = Object.keys(LANGUAGE_CONFIG) as Language[]
+
+// Colores por defecto que se GUARDAN como dato (no son colores de interfaz):
+// el acento de un agente nuevo y el color primario de un tenant sin color.
+export const DEFAULT_AGENT_ACCENT = '#5B8EC9'
+export const DEFAULT_TENANT_COLOR = '#C9A96E'

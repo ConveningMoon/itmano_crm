@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { DEFAULT_AGENT_ACCENT } from '@/lib/config'
 import { createAgent } from './actions'
 import { INPUT, LABEL, BTN_PRIMARY, BTN_GHOST, LANGUAGE_OPTIONS } from './settings-styles'
 
@@ -12,7 +13,7 @@ export function CreateAgentForm({ tenantId, onDone }: { tenantId?: string; onDon
   const [phone, setPhone]       = useState('')
   const [language, setLanguage] = useState('es')
   const [initials, setInitials] = useState('')
-  const [color, setColor]       = useState('#5B8EC9')
+  const [color, setColor]       = useState(DEFAULT_AGENT_ACCENT)
   const [error, setError]       = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 

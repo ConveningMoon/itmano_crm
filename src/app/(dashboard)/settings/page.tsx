@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
@@ -19,8 +20,12 @@ import { domainOf } from '@/lib/email/sender-address'
 import { SettingsClient } from './settings-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { DEFAULT_TENANT_COLOR } from '@/lib/config'
+import { SettingsBodySkeleton } from './settings-skeleton'
 
-async function SettingsPage() {
+// Todo lo que lee la sesión o la base vive aquí, detrás del Suspense de
+// SettingsPage: la cabecera y el esqueleto salen del shell estático.
+async function SettingsContent() {
   const ctx      = await requireTenantContext()
   const supabase = createAdminClient()
 
@@ -80,8 +85,8 @@ async function SettingsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
   const tenantRowAny = tenantRow as any
   const tenant = tenantRowAny
-    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
-    : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
+    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? DEFAULT_TENANT_COLOR, logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
+    : { id: tenantId, name: '', slug: '', primaryColor: DEFAULT_TENANT_COLOR, logoUrl: null, description: null }
 
   const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
 
@@ -143,10 +148,7 @@ async function SettingsPage() {
     : null
 
   return (
-    <>
-      <PageHeader title="Configuración" description="Perfil del equipo · Agentes · Cuenta" />
-
-      <SettingsClient
+    <SettingsClient
         tenant={tenant}
         agents={agents}
         agentAccess={agentAccess}
@@ -174,7 +176,17 @@ async function SettingsPage() {
         subscription={subscription}
         leadTags={leadTags}
         leadTagCounts={leadTagCounts}
-      />
+    />
+  )
+}
+
+function SettingsPage() {
+  return (
+    <>
+      <PageHeader title="Configuración" description="Ajustes del equipo, el negocio y la cuenta." />
+      <Suspense fallback={<SettingsBodySkeleton />}>
+        <SettingsContent />
+      </Suspense>
     </>
   )
 }
