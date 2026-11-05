@@ -1312,7 +1312,6 @@ a.src-row:hover { background: var(--bg-overlay); }
   padding: 0 20px 16px;
 }
 .settings-agent-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.settings-agent-text { min-width: 0; }
 .settings-agent-avatar {
   display: flex;
   align-items: center;

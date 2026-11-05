@@ -91,7 +91,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     startDanger(async () => {
       const res = await deleteAgent(agent.id)
       if (!res.ok) { setDangerErr(res.error); return }
-      setDeleteStep('idle')
+      closePanel(() => setDeleteStep('idle'))
       router.refresh()
     })
   }
@@ -107,7 +107,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
       const res = await updateAgentDescription(agent.id, desc)
       if (!res.ok) { setDescErr(res.error); return }
       setDescSaved(desc)
-      setEditingDesc(false)
+      closePanel(() => setEditingDesc(false))
       setDescOk(true)
       setTimeout(() => setDescOk(false), 2500)
     })
@@ -142,7 +142,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
       const res = await updateAgentLanguages(agent.id, langs)
       if (!res.ok) { setLangErr(res.error); return }
       setLangsSaved(langs)
-      setEditingLangs(false)
+      closePanel(() => setEditingLangs(false))
       setLangOk(true)
       setTimeout(() => setLangOk(false), 2500)
     })
@@ -153,7 +153,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     startTransition(async () => {
       const res = await updateAgent(agent.id, { name, email, phone, accentColor: color, avatarInitials: initials })
       if (!res.ok) { setError(res.error); return }
-      setEditing(false)
+      closePanel(() => setEditing(false))
     })
   }
 
@@ -163,7 +163,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
       const res = await inviteAgentAccess(agent.id, inviteEmail)
       if (!res.ok) { setAccessErr(res.error); return }
       setAccessMsg(`Listo. ${res.email} ya puede entrar en app.itmano.com con su correo (Magic Link).`)
-      setAccessMode('idle')
+      closePanel(() => setAccessMode('idle'))
     })
   }
 
@@ -172,7 +172,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     startAccess(async () => {
       const res = await revokeAgentAccess(agent.id)
       if (!res.ok) { setAccessErr(res.error); return }
-      setAccessMode('idle')
+      closePanel(() => setAccessMode('idle'))
     })
   }
 
@@ -196,6 +196,10 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     open()
   }
 
+  // Primera casilla que se puede marcar: la del idioma principal está deshabilitada
+  // y no admite foco.
+  const firstEditableLang = LANGUAGE_OPTIONS.find(o => o.value !== agent.language)?.value
+
   // Mismas condiciones que tenían los botones sueltos de la fila.
   const entries: MenuEntry[] = []
   if (canManage) {
@@ -205,7 +209,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     entries.push(
       { type: 'item', label: 'Descripción', onSelect: () => openPanel('desc', () => { setEditingDesc(v => !v); setDesc(descSaved); setDescErr(null) }) },
       { type: 'item', label: 'Portada', onSelect: () => openPanel('cover', () => { setEditingCover(v => !v); setCoverErr(null) }) },
-      { type: 'item', label: 'Idiomas', onSelect: () => openPanel('lang-first', () => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }) },
+      { type: 'item', label: 'Idiomas', onSelect: () => openPanel(firstEditableLang ? 'lang-first' : 'langs-save', () => { setEditingLangs(v => !v); setLangs(langsSaved); setLangErr(null) }) },
     )
   }
   if (canManageOwner && hasAccess && !isOwner) {
@@ -412,12 +416,12 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
                 </InfoHint>
               </div>
               <div className="settings-check-grid" role="group" aria-labelledby={fid('langs-label')}>
-                {LANGUAGE_OPTIONS.map((o, i) => {
+                {LANGUAGE_OPTIONS.map(o => {
                   const isPrimary = o.value === agent.language
                   return (
-                    <label key={o.value} className="settings-check" data-locked={isPrimary ? '' : undefined} htmlFor={fid(i === 0 ? 'lang-first' : `lang-${o.value}`)}>
+                    <label key={o.value} className="settings-check" data-locked={isPrimary ? '' : undefined} htmlFor={fid(o.value === firstEditableLang ? 'lang-first' : `lang-${o.value}`)}>
                       <input
-                        id={fid(i === 0 ? 'lang-first' : `lang-${o.value}`)}
+                        id={fid(o.value === firstEditableLang ? 'lang-first' : `lang-${o.value}`)}
                         type="checkbox"
                         checked={langs.includes(o.value)}
                         disabled={isPrimary}
@@ -431,7 +435,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
               </div>
               {langErr && <p className="settings-alert" role="alert"><AlertCircle size={13} aria-hidden="true" /> {langErr}</p>}
               <div className="settings-actions">
-                <button type="button" className="btn btn-primary" onClick={handleSaveLangs} disabled={langPending}>
+                <button type="button" id={fid('langs-save')} className="btn btn-primary" onClick={handleSaveLangs} disabled={langPending}>
                   {langPending ? 'Guardando…' : 'Guardar idiomas'}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={() => closePanel(() => { setEditingLangs(false); setLangs(langsSaved); setLangErr(null) })}>Cancelar</button>
@@ -518,7 +522,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
                 <button type="button" className="btn btn-primary" onClick={handleSave} disabled={pending}>
                   {pending ? 'Guardando…' : 'Guardar'}
                 </button>
-                <button type="button" className="btn btn-ghost" onClick={() => closePanel(() => { setEditing(false); setName(agent.name); setError(null) })}>
+                <button type="button" className="btn btn-ghost" onClick={() => closePanel(() => { setEditing(false); setName(agent.name); setEmail(agent.email ?? ''); setPhone(agent.phone ?? ''); setColor(agent.accentColor); setInitials(agent.avatarInitials); setError(null) })}>
                   Cancelar
                 </button>
               </div>
