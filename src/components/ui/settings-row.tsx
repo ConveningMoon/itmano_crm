@@ -35,12 +35,14 @@ export function SettingsRow({
   htmlFor?: string
   children: ReactNode
 }) {
+  // Sin control asociado no hay nada que enfocar: un <label> huérfano sólo ensucia el árbol de accesibilidad.
+  const Tag = htmlFor ? 'label' : 'span'
   return (
     <div className="settings-row">
-      <label className="settings-row-label" htmlFor={htmlFor}>
+      <Tag className="settings-row-label" {...(htmlFor ? { htmlFor } : {})}>
         {label}
         {hint && <span className="settings-row-hint">{hint}</span>}
-      </label>
+      </Tag>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>
   )
@@ -48,16 +50,18 @@ export function SettingsRow({
 
 /** Encabezado de una sección (17 px) con acción opcional. */
 export function SettingsSectionHead({
-  title, description, action,
+  title, description, action, titleId,
 }: {
   title: string
   description?: string
   action?: ReactNode
+  /** Hace el título enfocable por programa (tabIndex -1) para mover el foco a la sección. */
+  titleId?: string
 }) {
   return (
     <div className="settings-section-head">
       <div style={{ minWidth: 0 }}>
-        <h2 className="settings-section-title">{title}</h2>
+        <h2 className="settings-section-title" id={titleId} tabIndex={titleId ? -1 : undefined}>{title}</h2>
         {description && <p className="settings-section-desc">{description}</p>}
       </div>
       {action}

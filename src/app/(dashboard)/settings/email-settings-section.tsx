@@ -148,19 +148,21 @@ function SenderAddressCard({ agents, domain, canManage }: { agents: Agent[]; dom
   return (
     <SettingsCard
       title="Dirección de envío"
-      action={(
+      action={domain ? (
         <InfoHint label="Cómo se arma la dirección de envío">
-          {domain
-            ? <>Los correos salen con el nombre del agente y su dirección en <strong>{domain}</strong>. Si la dejas vacía se usa la parte de su email antes de la @.</>
-            : 'Tu equipo envía desde el dominio compartido de ITMANO. La dirección por agente se activa cuando el equipo envía desde su propio dominio verificado (planes Growth y Partner).'}
+          Los correos salen con el nombre del agente y su dirección en <strong>{domain}</strong>. Si la dejas vacía se usa la parte de su email antes de la @.
         </InfoHint>
-      )}
+      ) : undefined}
     >
-      {domain && (agents.length === 0 ? (
+      {!domain ? (
+        <p className="settings-note">
+          Tu equipo envía desde el dominio compartido de ITMANO. La dirección por agente se activa cuando el equipo envía desde su propio dominio verificado (planes Growth y Partner).
+        </p>
+      ) : agents.length === 0 ? (
         <p className="settings-empty">No hay agentes todavía.</p>
       ) : (
         agents.map(agent => <AgentSenderRow key={agent.id} agent={agent} domain={domain} canEdit={canManage} />)
-      ))}
+      )}
     </SettingsCard>
   )
 }

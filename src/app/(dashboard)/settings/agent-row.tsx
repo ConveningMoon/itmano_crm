@@ -232,7 +232,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     entries.push({ type: 'item', label: 'Eliminar', tone: 'danger', onSelect: () => openPanel('delete-cancel', () => { setDeleteStep('confirm1'); setDangerErr(null); setConfirmText('') }) })
   }
 
-  const hasPanels = !!dangerErr || deleteStep !== 'idle' || editingDesc || descOk || editingCover
+  const hasPanels = ownerBusy || (accessPending && accessMode === 'idle') || !!dangerErr || deleteStep !== 'idle' || editingDesc || descOk || editingCover
     || editingLangs || langOk || accessMode !== 'idle' || !!accessMsg || !!accessErr || editing
 
   return (
@@ -250,7 +250,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
           {langsSaved.map(l => <span key={l} className="pill" data-tone="mute">{LANGUAGE_LABELS[l] ?? l}</span>)}
         </div>
 
-        <span className="settings-agent-email dt-hide-md">{agent.email ?? ''}</span>
+        <span className="settings-agent-email dt-hide-md">{agent.email}</span>
 
         <span className="pill pill-dot" data-tone={hasAccess ? 'green' : 'mute'} style={{ justifySelf: 'start' }}>
           {hasAccess ? 'Con acceso' : 'Sin acceso'}
@@ -261,7 +261,12 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
             <RowMenu
               entries={entries}
               label={agent.name}
-              finalFocus={() => focusTarget ? document.getElementById(focusTarget) : null}
+              finalFocus={() => {
+                // Se usa una vez: si no, un Escape posterior del ⋯ iría a un panel viejo.
+                const target = focusTarget ? document.getElementById(focusTarget) : null
+                setFocusTarget(null)
+                return target
+              }}
             />
           )}
         </div>
@@ -269,6 +274,9 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
 
       {hasPanels && (
         <div className="settings-agent-panels">
+          {/* El menú ⋯ se cierra al elegir: el pendiente de estas dos acciones se ve aquí. */}
+          {ownerBusy && <p className="settings-note" role="status">Transfiriendo…</p>}
+          {accessPending && accessMode === 'idle' && <p className="settings-note" role="status">Vinculando…</p>}
           {dangerErr && (
             <p className="settings-alert" role="alert"><AlertCircle size={13} aria-hidden="true" /> {dangerErr}</p>
           )}
@@ -446,10 +454,8 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
             <div className="settings-panel">
               <div className="settings-field-label settings-field-label-inline">
                 <label htmlFor={fid('invite')}>Email de acceso del agente</label>
-                <InfoHint label="Sobre la invitación">
-                  No se envía email automático — comparte el mensaje de confirmación con el agente.
-                </InfoHint>
               </div>
+              <p className="settings-note">No se envía email automático — comparte el mensaje de confirmación con el agente.</p>
               <div className="settings-actions-fill">
                 <input id={fid('invite')} className="settings-input" type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="agente@email.com" />
                 <button type="button" className="btn btn-primary" onClick={handleInvite} disabled={accessPending}>

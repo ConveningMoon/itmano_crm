@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
@@ -25,6 +25,7 @@ import { EmailSettingsSection } from './email-settings-section'
 import { AgencyDescriptionCard } from './agency-description-card'
 import { SubscriptionCard } from './subscription-card'
 import { AccountSection } from './account-section'
+import { SettingsSectionHead } from '@/components/ui/settings-row'
 
 // ─── Main settings client ─────────────────────────────────────────────────────
 
@@ -79,10 +80,22 @@ export function SettingsClient({
   // La sección vive en la URL: pushState se integra con useSearchParams, así
   // que cambiar de sección no pide datos al servidor y Atrás funciona.
   const selectTab = useCallback((next: SettingsTab) => {
+    // Misma sección: no duplica entradas en el historial.
+    if (next === tab) return
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', next)
     window.history.pushState(null, '', `?${params.toString()}`)
-  }, [searchParams])
+  }, [searchParams, tab])
+
+  // El enlace "Agentes" de Cuenta cambia de sección: el botón que se pulsó
+  // desaparece, así que el foco pasa al título de la sección destino.
+  const pendingFocus = useRef<string | null>(null)
+  useEffect(() => {
+    if (pendingFocus.current && tab === 'agentes') {
+      document.getElementById(pendingFocus.current)?.focus()
+      pendingFocus.current = null
+    }
+  }, [tab])
 
   const content: Record<SettingsTab, React.ReactNode> = {
       perfil: <TenantSection tenant={tenant} canManage={canManageAgents} />,
@@ -116,6 +129,7 @@ export function SettingsClient({
       ),
       scoring: (
         <div className="settings-stack">
+          <SettingsSectionHead title="Scoring" description="Cómo se puntúa a cada lead." />
           {fitEvidence && (
             <CalibrationPanel
               rules={scoringRules.map(r => ({
@@ -141,12 +155,13 @@ export function SettingsClient({
       ),
       cuenta: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <SettingsSectionHead title="Cuenta y acceso" description="Tu plan y cómo entras al CRM." />
           <SubscriptionCard subscription={subscription} canManage={canManageAgents} />
           <AccountSection
             userEmail={userEmail}
             userRole={userRole}
             canManage={canManageAgents}
-            onGoToAgents={() => selectTab('agentes')}
+            onGoToAgents={() => { pendingFocus.current = 'settings-agents-title'; selectTab('agentes') }}
           />
         </div>
       ),

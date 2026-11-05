@@ -22,7 +22,7 @@ export function SettingsNav({
   // En móvil la navegación es una fila con scroll: el activo debe quedar a la vista.
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [])
+  }, [active])
 
   return (
     <nav className="settings-nav" aria-label="Secciones">

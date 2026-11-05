@@ -18,6 +18,7 @@ import type { FitEvidence } from '@/lib/scoring/calibration'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-identity'
 import { domainOf } from '@/lib/email/sender-address'
+import { redactPeerAgents } from '@/lib/settings/agents-view'
 import { SettingsClient } from './settings-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
@@ -89,7 +90,13 @@ async function SettingsContent() {
     ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? DEFAULT_TENANT_COLOR, logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
     : { id: tenantId, name: '', slug: '', primaryColor: DEFAULT_TENANT_COLOR, logoUrl: null, description: null }
 
-  const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+  // Un 'agent' no administra al equipo: de sus compañeros sólo viaja lo público
+  // (email, teléfono, firma, etc. se vacían antes de cruzar al cliente).
+  const agents = redactPeerAgents(
+    (rawAgents ?? []).map(r => mapAgent(r as AgentRow)),
+    ctx.agent_id,
+    ctx.role !== 'agent',
+  )
 
   // Dominio sobre el que firma cada agente (senderFromForAgent). null = el
   // equipo sale por el dominio compartido de ITMANO y la dirección por agente

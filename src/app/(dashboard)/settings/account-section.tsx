@@ -18,7 +18,7 @@ export function AccountSection({ userEmail, userRole, onGoToAgents, canManage }:
   canManage: boolean
 }) {
   return (
-    <SettingsCard title="Cuenta y acceso">
+    <SettingsCard title="Acceso al CRM">
       <SettingsRow label="Método de autenticación">
         <div className="settings-inline">
           <span className="pill" data-tone="green">Magic Link</span>
