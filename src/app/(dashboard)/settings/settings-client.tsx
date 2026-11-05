@@ -115,7 +115,7 @@ export function SettingsClient({
         </div>
       ),
       scoring: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+        <div className="settings-stack">
           {fitEvidence && (
             <CalibrationPanel
               rules={scoringRules.map(r => ({

@@ -5,63 +5,10 @@ import type { ScoreRule } from '@/lib/data/score-rules'
 import { computeScoreReach, type ReachRule } from '@/lib/scoring/reach'
 import { QUALITY_CUTS } from '@/lib/scoring/score-bands'
 import { QUALITY_CONFIG } from '@/lib/scoring/priority'
+import { TriangleAlert } from 'lucide-react'
+import { InfoHint } from '@/components/ui/info-hint'
+import { SettingsCard } from '@/components/ui/settings-row'
 import { updateScoreRules } from './actions'
-
-// ─── Style constants ──────────────────────────────────────────────────────────
-
-const CARD: React.CSSProperties = {
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '12px',
-  overflow: 'hidden',
-  marginBottom: '16px',
-}
-
-const CARD_HEADER: React.CSSProperties = {
-  padding: '16px 20px',
-  borderBottom: '1px solid var(--border-subtle)',
-}
-
-const SUBHEADER: React.CSSProperties = {
-  fontSize: '10px',
-  fontWeight: 600,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  padding: '14px 20px 6px',
-}
-
-const DIM_HEADER: React.CSSProperties = {
-  fontSize: '12px',
-  fontWeight: 600,
-  color: 'var(--text-secondary)',
-  padding: '10px 20px 2px',
-}
-
-const POINTS_INPUT: React.CSSProperties = {
-  width: '64px',
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px',
-  padding: '6px 8px',
-  fontSize: '13px',
-  fontWeight: 600,
-  textAlign: 'center',
-  color: 'var(--text-primary)',
-  outline: 'none',
-  boxSizing: 'border-box',
-}
-
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 18px',
-  fontSize: '13px',
-  fontWeight: 500,
-  color: 'var(--bg-base)',
-  background: 'var(--accent-gold)',
-  border: 'none',
-  borderRadius: '8px',
-  cursor: 'pointer',
-}
 
 // ─── Vocabulary labels (display only — never editable) ──────────────────────────
 
@@ -120,59 +67,38 @@ function RuleRow({
   const invalid = parsePoints(entry.points) === null
   const sideEffect = rule.sideEffect ? SIDE_EFFECT_LABELS[rule.sideEffect] : null
 
+  const nombre = rule.label ?? rule.matchValue ?? rule.dimension
+
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-      padding: '9px 20px',
-      borderTop: '1px solid var(--border-subtle)',
-      opacity: entry.isActive ? 1 : 0.55,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-          {rule.label ?? rule.matchValue ?? rule.dimension}
-        </div>
-        {sideEffect && (
-          <div style={{ fontSize: '11px', color: 'var(--accent-coral)', marginTop: '2px' }}>
-            {sideEffect}
-          </div>
-        )}
+    <div className="settings-rule" data-inactive={entry.isActive ? undefined : ''}>
+      <div className="settings-rule-name">
+        {nombre}
+        {sideEffect && <div className="settings-rule-effect">{sideEffect}</div>}
       </div>
 
-      {/* Points */}
-      <input
-        type="text"
-        inputMode="numeric"
-        value={entry.points}
-        disabled={!canEdit}
-        onChange={e => onChange({ ...entry, points: e.target.value })}
-        style={{
-          ...POINTS_INPUT,
-          borderColor: invalid ? 'var(--accent-coral)' : 'var(--border-subtle)',
-          cursor: canEdit ? 'text' : 'default',
-        }}
-      />
+      <div className="settings-rule-controls">
+        <input
+          type="text"
+          inputMode="numeric"
+          className={`settings-input settings-rule-points${invalid ? ' settings-input-invalid' : ''}`}
+          aria-label={`Puntos de ${nombre}`}
+          aria-invalid={invalid}
+          value={entry.points}
+          disabled={!canEdit}
+          onChange={e => onChange({ ...entry, points: e.target.value })}
+        />
 
-      {/* is_active toggle */}
-      <button
-        type="button"
-        disabled={!canEdit}
-        onClick={() => onChange({ ...entry, isActive: !entry.isActive })}
-        style={{
-          width: '78px',
-          fontSize: '11px',
-          fontWeight: 500,
-          padding: '6px 0',
-          borderRadius: '8px',
-          border: '1px solid var(--border-subtle)',
-          background: entry.isActive ? 'rgba(107,163,104,0.14)' : 'var(--bg-elevated)',
-          color: entry.isActive ? 'var(--accent-green)' : 'var(--text-muted)',
-          cursor: canEdit ? 'pointer' : 'default',
-        }}
-      >
-        {entry.isActive ? 'Activa' : 'Inactiva'}
-      </button>
+        {/* is_active toggle */}
+        <button
+          type="button"
+          className="settings-toggle"
+          aria-pressed={entry.isActive}
+          disabled={!canEdit}
+          onClick={() => onChange({ ...entry, isActive: !entry.isActive })}
+        >
+          {entry.isActive ? 'Activa' : 'Inactiva'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -196,75 +122,53 @@ function ReachPanel({ reach }: { reach: ReturnType<typeof computeScoreReach> }) 
   ]
 
   return (
-    <div style={{ ...CARD, borderColor: warnings.length ? 'var(--accent-coral)' : 'var(--border-subtle)' }}>
-      <div style={CARD_HEADER}>
-        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-          Alcance de esta configuración
-        </span>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-          Con pocos leads activos las bandas de calidad usan cortes fijos. Esto comprueba que un lead pueda llegar a ellas.
-        </div>
-      </div>
-
-      <div style={{ padding: '18px 20px' }}>
+    <div className={warnings.length ? 'settings-card-alert-wrap' : undefined}>
+      <SettingsCard
+        title="Alcance de esta configuración"
+        action={(
+          <InfoHint label="Qué mide el alcance">
+            Con pocos leads activos las bandas de calidad usan cortes fijos. Esto comprueba que un lead pueda llegar a ellas.
+          </InfoHint>
+        )}
+      >
         {/* Alcanzabilidad por banda — la respuesta directa */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
+        <div className="settings-band-list">
           {bandas.map(b => {
             const ok = reachable >= b.desde
             return (
-              <span key={b.label} style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                fontSize: '12px', padding: '5px 11px', borderRadius: '999px',
-                border: `1px solid ${ok ? 'var(--border-subtle)' : 'rgba(201,123,107,0.35)'}`,
-                background: ok ? 'var(--bg-elevated)' : 'rgba(201,123,107,0.10)',
-                color: ok ? 'var(--text-secondary)' : 'var(--accent-coral)',
-              }}>
-                <span style={{
-                  width: '6px', height: '6px', borderRadius: '50%',
-                  background: ok ? b.color : 'var(--accent-coral)',
-                }} />
+              <span key={b.label} className="settings-band" data-ok={ok}>
+                <span className="settings-band-dot" style={{ background: ok ? b.color : 'var(--alert)' }} />
                 {b.label} {ok ? 'alcanzable' : 'fuera de alcance'}
               </span>
             )
           })}
         </div>
 
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-          El mejor lead posible llega a{' '}
-          <strong style={{ color: 'var(--text-primary)', fontSize: '14px' }}>{reachable}</strong>
-          {' '}de 100
+        <div className="settings-reach-lead">
+          El mejor lead posible llega a <strong>{reachable}</strong> de 100
         </div>
 
         {/* Regla 0-100 con los cortes de banda marcados */}
-        <div style={{ position: 'relative', height: '8px', borderRadius: '4px', background: 'var(--bg-elevated)', marginBottom: '20px' }}>
-          <div style={{
-            position: 'absolute', inset: 0, width: `${reachable}%`,
-            borderRadius: '4px', background: 'var(--accent-gold)', opacity: 0.55,
-          }} />
+        <div className="settings-reach-bar">
+          <div className="settings-reach-fill" style={{ width: `${reachable}%` }} />
           {bandas.map(b => (
-            <span key={b.label} style={{
-              position: 'absolute', left: `${b.desde}%`, top: '-3px',
-              width: '2px', height: '14px', background: b.color, borderRadius: '1px',
-            }} />
+            <span key={b.label} className="settings-reach-cut" style={{ left: `${b.desde}%`, background: b.color }} />
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-muted)' }}>
-          <span>Mejor perfil <strong style={{ color: 'var(--text-secondary)' }}>{bestFit}</strong></span>
-          <span>+ Actividad <strong style={{ color: 'var(--text-secondary)' }}>{engagement}</strong></span>
-          <span>+ Acciones del agente <strong style={{ color: 'var(--text-secondary)' }}>{manual}</strong></span>
+        <div className="settings-reach-parts">
+          <span>Mejor perfil <strong>{bestFit}</strong></span>
+          <span>+ Actividad <strong>{engagement}</strong></span>
+          <span>+ Acciones del agente <strong>{manual}</strong></span>
         </div>
 
         {warnings.map(w => (
-          <div key={w.code} style={{
-            marginTop: '14px', padding: '10px 12px', borderRadius: '8px',
-            background: 'rgba(201,123,107,0.10)', border: '1px solid rgba(201,123,107,0.28)',
-            fontSize: '12px', color: 'var(--accent-coral)', lineHeight: 1.5,
-          }}>
-            {w.message}
+          <div key={w.code} className="settings-alert settings-alert-block settings-alert-wide settings-alert-gap" role="alert">
+            <TriangleAlert size={14} aria-hidden="true" />
+            <span>{w.message}</span>
           </div>
         ))}
-      </div>
+      </SettingsCard>
     </div>
   )
 }
@@ -395,25 +299,25 @@ export function ScoringSection({ rules, canEdit, recommended }: {
     })
   }
 
+  const bloqueado = !dirty || hasInvalid || pending || confirmStep > 0
+
   return (
-    <div>
+    <div className="settings-stack">
       {/* Intro — el copy cambia según quién mira. Para el cliente esto no es una
           pantalla de configuración: es la explicación de cómo se califican sus
           leads, que es parte de lo que está comprando. */}
-      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+      <p className="settings-note">
         {canEdit
           ? 'Estos son los valores globales del modelo. Aplican a todos los tenants.'
           : 'Así calificamos tus leads. Cada señal suma o resta puntos, y el total determina la temperatura que ves en el pipeline.'}
       </p>
 
       {!canEdit && (
-        <div style={{
-          fontSize: '12px', color: 'var(--text-muted)', padding: '10px 12px', marginBottom: '16px',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px',
-          lineHeight: 1.5,
-        }}>
-          El modelo lo mantiene ITMANO y se calibra con lo que aprendemos de todas las
-          operaciones. Si tu equipo necesita un ajuste, escríbenos y lo evaluamos.
+        <div className="settings-panel">
+          <p className="settings-note">
+            El modelo lo mantiene ITMANO y se calibra con lo que aprendemos de todas las
+            operaciones. Si tu equipo necesita un ajuste, escríbenos y lo evaluamos.
+          </p>
         </div>
       )}
 
@@ -422,18 +326,18 @@ export function ScoringSection({ rules, canEdit, recommended }: {
       {canEdit && <ReachPanel reach={reach} />}
 
       {/* AUTOMÁTICO */}
-      <div style={CARD}>
-        <div style={CARD_HEADER}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Automático</span>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+      <SettingsCard
+        title="Automático"
+        action={(
+          <InfoHint label="Qué es el scoring automático">
             Perfil (fit) y señales de actividad — se aplican sin intervención del agente.
-          </div>
-        </div>
-
-        <div style={SUBHEADER}>Fit · perfil del lead</div>
+          </InfoHint>
+        )}
+      >
+        <div className="settings-group-title">Fit · perfil del lead</div>
         {fitGroups.map(group => (
           <div key={group.dimension}>
-            <div style={DIM_HEADER}>{group.label}</div>
+            <div className="settings-dim-title">{group.label}</div>
             {group.rules.map(r => (
               <RuleRow key={r.id} rule={r} entry={draft[r.id]} canEdit={canEdit}
                 onChange={next => update(r.id, next)} />
@@ -441,57 +345,51 @@ export function ScoringSection({ rules, canEdit, recommended }: {
           </div>
         ))}
 
-        <div style={SUBHEADER}>Engagement · señales de actividad</div>
+        <div className="settings-group-title">Engagement · señales de actividad</div>
         {engagement.map(r => (
           <RuleRow key={r.id} rule={r} entry={draft[r.id]} canEdit={canEdit}
             onChange={next => update(r.id, next)} />
         ))}
-      </div>
+      </SettingsCard>
 
       {/* MANUAL */}
-      <div style={CARD}>
-        <div style={CARD_HEADER}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Manual</span>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+      <SettingsCard
+        title="Manual"
+        action={(
+          <InfoHint label="Qué es el scoring manual">
             Acciones que el agente registra durante el seguimiento.
-          </div>
-        </div>
+          </InfoHint>
+        )}
+      >
         {manual.map(r => (
           <RuleRow key={r.id} rule={r} entry={draft[r.id]} canEdit={canEdit}
             onChange={next => update(r.id, next)} />
         ))}
-      </div>
+      </SettingsCard>
 
       {/* Footer */}
       {canEdit && (
         <>
           {/* Doble confirmación */}
           {confirmStep > 0 && (
-            <div style={{
-              background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.3)',
-              borderRadius: '10px', padding: '14px 16px', marginBottom: '12px',
-              display: 'flex', flexDirection: 'column', gap: '12px',
-            }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+            <div className="settings-panel settings-panel-gold">
+              <p className="settings-confirm-text">
                 {confirmStep === 1 ? (
                   <>Vas a cambiar <strong>{changedCount}</strong> {changedCount === 1 ? 'valor' : 'valores'} del scoring.
                     Esto afecta cómo se priorizan tus leads y recalcula sus scores. ¿Continuar?</>
                 ) : (
-                  <><strong style={{ color: 'var(--accent-gold)' }}>Confirmación final.</strong> Los cambios se aplican al
+                  <><strong>Confirmación final.</strong> Los cambios se aplican al
                     instante y los scores de tus leads se recalcularán. ¿Aplicar los cambios?</>
                 )}
-              </div>
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => setConfirmStep(0)}
-                  style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}
-                >
+              </p>
+              <div className="settings-actions settings-actions-end">
+                <button type="button" className="btn btn-ghost" onClick={() => setConfirmStep(0)}>
                   Cancelar
                 </button>
                 {confirmStep === 1 ? (
-                  <button onClick={() => setConfirmStep(2)} style={{ ...BTN_PRIMARY }}>Continuar →</button>
+                  <button type="button" className="btn btn-primary" onClick={() => setConfirmStep(2)}>Continuar →</button>
                 ) : (
-                  <button onClick={handleSave} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
+                  <button type="button" className="btn btn-primary" onClick={handleSave} disabled={pending}>
                     {pending ? 'Aplicando…' : 'Aplicar cambios'}
                   </button>
                 )}
@@ -499,36 +397,21 @@ export function ScoringSection({ rules, canEdit, recommended }: {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'flex-end' }}>
-            {error && <span style={{ fontSize: '12px', color: 'var(--accent-coral)', flex: 1 }}>{error}</span>}
-            {saved && !dirty && <span style={{ fontSize: '12px', color: 'var(--accent-green)', flex: 1 }}>Cambios guardados.</span>}
+          <div className="settings-footer">
+            {error && <span className="settings-footer-msg settings-footer-msg-error" role="alert">{error}</span>}
+            {saved && !dirty && <span className="settings-footer-msg settings-footer-msg-ok">Cambios guardados.</span>}
             {recommended && (
               <button
+                type="button"
+                className="btn btn-ghost settings-footer-start"
                 onClick={resetToRecommended}
                 disabled={!differsFromRecommended || pending || confirmStep > 0}
                 title="Lleva todos los puntos a los valores recomendados por ITMANO (luego confirma y guarda)."
-                style={{
-                  marginRight: 'auto',
-                  padding: '8px 16px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'transparent',
-                  border: '1px solid var(--border-subtle)',
-                  color: (!differsFromRecommended || pending || confirmStep > 0) ? 'var(--text-muted)' : 'var(--text-secondary)',
-                  cursor: (!differsFromRecommended || pending || confirmStep > 0) ? 'not-allowed' : 'pointer',
-                }}
               >
                 Restablecer a recomendados
               </button>
             )}
-            <button
-              onClick={requestSave}
-              disabled={!dirty || hasInvalid || pending || confirmStep > 0}
-              style={{
-                ...BTN_PRIMARY,
-                background: (!dirty || hasInvalid || pending || confirmStep > 0) ? 'var(--bg-overlay)' : 'var(--accent-gold)',
-                color:      (!dirty || hasInvalid || pending || confirmStep > 0) ? 'var(--text-muted)' : 'var(--bg-base)',
-                cursor:     (!dirty || hasInvalid || pending || confirmStep > 0) ? 'not-allowed' : 'pointer',
-              }}
-            >
+            <button type="button" className="btn btn-primary" onClick={requestSave} disabled={bloqueado}>
               Guardar cambios
             </button>
           </div>
