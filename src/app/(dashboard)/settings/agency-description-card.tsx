@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Sparkles } from 'lucide-react'
+import { AlertCircle, Check } from 'lucide-react'
 import { updateTenantDescription } from './actions'
-import { INPUT, BTN_PRIMARY, CARD, CARD_HEADER } from './settings-styles'
+import { SettingsCard } from '@/components/ui/settings-row'
+import { InfoHint } from '@/components/ui/info-hint'
 
 // ─── Contexto para IA: descripción de agencia + por agente ───────────────────
 // La IA consulta estos textos para el análisis de fit de leads y para
@@ -27,38 +28,46 @@ export function AgencyDescriptionCard({ initial, canManage }: { initial: string 
   }
 
   return (
-    <div style={CARD}>
-      <div style={CARD_HEADER}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Sparkles size={15} color="var(--accent-gold)" />
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Lo que el formulario no captura</span>
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
+    <SettingsCard
+      title="Lo que el formulario no captura"
+      action={(
+        <InfoHint label="Qué escribir aquí">
           Los rangos, las zonas y la comisión ya están arriba: la IA los usa como números exactos.
           Aquí va el matiz que ningún campo recoge — a quién atiendes, qué objeciones te encuentras,
           qué inventario te sobra o te falta, en qué tono hablas.
-        </div>
-      </div>
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        </InfoHint>
+      )}
+    >
+      <div className="settings-stack settings-stack-tight">
         <textarea
+          id="agency-description"
+          className="settings-input settings-input-wide"
           value={value}
           onChange={e => { setValue(e.target.value); setError(null) }}
           disabled={!canManage}
           rows={6}
           maxLength={4000}
+          aria-label="Lo que el formulario no captura"
           placeholder={'Ej.: Muchas familias militares con VA Loan y traslados por PCS, así que la urgencia manda sobre el presupuesto. Nos falta inventario de 3 dormitorios bajo el rango medio. Atendemos en inglés y español; tono cercano y educativo.'}
-          style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6, opacity: canManage ? 1 : 0.7 }}
         />
-        {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+        {error && (
+          <p className="settings-alert" role="alert">
+            <AlertCircle size={13} aria-hidden="true" /> {error}
+          </p>
+        )}
         {canManage && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
+          <div className="settings-inline">
+            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={pending || !dirty}>
               {pending ? 'Guardando…' : 'Guardar descripción'}
             </button>
-            {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Guardada.</span>}
+            {ok && (
+              <span className="settings-success" role="status">
+                <Check size={13} aria-hidden="true" /> Guardada
+              </span>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </SettingsCard>
   )
 }

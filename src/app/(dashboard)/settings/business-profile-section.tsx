@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, AlertTriangle } from 'lucide-react'
+import { Check, AlertTriangle, AlertCircle } from 'lucide-react'
 import {
   CURRENCY_SYMBOL, budgetTierFor, expectedCommission, formatMoney, missingFields,
   type BusinessProfile, type Currency, type CommissionModel,
@@ -10,6 +10,8 @@ import {
 import { saveBusinessProfile } from './actions'
 import { TimeZoneSelect } from '@/components/dashboard/time-zone-select'
 import { inferTimeZoneFromAreas, timeZoneLabel } from '@/lib/time-zones'
+import { SettingsCard, SettingsRow, SettingsSectionHead } from '@/components/ui/settings-row'
+import { InfoHint } from '@/components/ui/info-hint'
 
 // Copy exacto (no se arma con JSX + `{'{slug}'}` intercalado a propósito: la
 // forma en que JSX pliega espacios en blanco entre texto y expresiones es
@@ -23,27 +25,8 @@ const CANONICAL_HELP = 'Si publicas las ediciones en tu propio sitio, escribe aq
 
 // El formulario ES la documentación: lo que aparece aquí es exactamente lo que
 // el CRM necesita saber del negocio del cliente, ni más ni menos. Por eso cada
-// bloque dice para qué sirve el dato en vez de limitarse a pedirlo.
-
-const CARD: React.CSSProperties = {
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '12px',
-  overflow: 'hidden',
-  marginBottom: '16px',
-}
-const HEAD: React.CSSProperties = { padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }
-const BODY: React.CSSProperties = { padding: '18px 20px' }
-const LABEL: React.CSSProperties = {
-  display: 'block', fontSize: '11px', textTransform: 'uppercase',
-  letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: '6px',
-}
-const INPUT: React.CSSProperties = {
-  width: '100%', padding: '8px 10px', borderRadius: '8px',
-  border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
-  color: 'var(--text-primary)', fontSize: '13px',
-}
-const HINT: React.CSSProperties = { fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }
+// bloque dice para qué sirve el dato (detrás de su InfoHint) en vez de
+// limitarse a pedirlo.
 
 type Draft = {
   currency:         Currency | ''
@@ -111,10 +94,12 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
   const faltan  = missingFields(preview)
   const esPct   = draft.commissionModel === 'percentage'
   const simbolo = draft.currency ? CURRENCY_SYMBOL[draft.currency] : ''
+  const unidad  = esPct ? ' (%)' : simbolo ? ` (${simbolo})` : ''
 
   const EJEMPLOS = [150_000, 300_000, 500_000, 800_000]
   // Lo que usaría "Automática", recalculado mientras se escriben las zonas.
   const sugerida = inferTimeZoneFromAreas(preview.primaryAreas)
+  const comisionEjemplo = expectedCommission(400_000, preview, 'buy')
 
   function set<K extends keyof Draft>(k: K, v: Draft[K]) {
     setDraft(d => ({ ...d, [k]: v })); setSaved(false); setError(null)
@@ -132,262 +117,247 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
 
   return (
     <div>
-      <div style={CARD}>
-        <div style={HEAD}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Rangos de presupuesto
-          </span>
-          <div style={HINT}>
-            Qué significa &quot;presupuesto alto&quot; en tu mercado. El CRM clasifica a cada lead
-            comparándolo con estos cortes, no con una escala global: 300.000 puede ser
-            un presupuesto de entrada en una ciudad y premium en otra.
-          </div>
-        </div>
-        <div style={BODY}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label style={LABEL}>Moneda</label>
-              <select
-                value={draft.currency}
-                onChange={e => set('currency', e.target.value as Currency | '')}
-                style={INPUT}
-              >
-                <option value="">Sin definir</option>
-                <option value="USD">USD · $</option>
-                <option value="EUR">EUR · €</option>
-              </select>
-            </div>
-            <div>
-              <label style={LABEL}>Hasta aquí es de entrada</label>
-              <input
-                inputMode="numeric"
-                value={draft.budgetEntryMax}
-                onChange={e => set('budgetEntryMax', e.target.value)}
-                placeholder="250000"
-                style={INPUT}
-              />
-            </div>
-            <div>
-              <label style={LABEL}>Desde aquí es premium</label>
-              <input
-                inputMode="numeric"
-                value={draft.budgetPremiumMin}
-                onChange={e => set('budgetPremiumMin', e.target.value)}
-                placeholder="600000"
-                style={INPUT}
-              />
-            </div>
-          </div>
+      <SettingsSectionHead
+        title="Tu negocio"
+        description="Lo que el CRM necesita saber de tu mercado para clasificar y ordenar leads."
+      />
+      <div className="settings-stack">
+        <SettingsCard
+          title="Rangos de presupuesto"
+          action={(
+            <InfoHint label="Qué son los rangos de presupuesto">
+              Qué significa &quot;presupuesto alto&quot; en tu mercado. El CRM clasifica a cada lead
+              comparándolo con estos cortes, no con una escala global: 300.000 puede ser
+              un presupuesto de entrada en una ciudad y premium en otra.
+            </InfoHint>
+          )}
+        >
+          <SettingsRow label="Moneda" htmlFor="bp-currency">
+            <select
+              id="bp-currency"
+              className="settings-input"
+              value={draft.currency}
+              onChange={e => set('currency', e.target.value as Currency | '')}
+            >
+              <option value="">Sin definir</option>
+              <option value="USD">USD · $</option>
+              <option value="EUR">EUR · €</option>
+            </select>
+          </SettingsRow>
+          <SettingsRow label="Hasta aquí es de entrada" htmlFor="bp-entry-max">
+            <input
+              id="bp-entry-max"
+              className="settings-input"
+              inputMode="numeric"
+              value={draft.budgetEntryMax}
+              onChange={e => set('budgetEntryMax', e.target.value)}
+              placeholder="250000"
+            />
+          </SettingsRow>
+          <SettingsRow label="Desde aquí es premium" htmlFor="bp-premium-min">
+            <input
+              id="bp-premium-min"
+              className="settings-input"
+              inputMode="numeric"
+              value={draft.budgetPremiumMin}
+              onChange={e => set('budgetPremiumMin', e.target.value)}
+              placeholder="600000"
+            />
+          </SettingsRow>
 
           {/* Lo que estos dos números deciden, con ejemplos concretos. */}
-          <div style={{ marginTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="settings-tiers">
             {EJEMPLOS.map(monto => {
               const tier = budgetTierFor(monto, preview)
               const color = tier === 'premium' ? 'var(--status-hot)'
                 : tier === 'mid' ? 'var(--accent-gold)'
                 : tier === 'entry' ? 'var(--text-secondary)' : 'var(--text-muted)'
               return (
-                <span key={monto} style={{
-                  fontSize: '11.5px', padding: '5px 10px', borderRadius: '999px',
-                  border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-                  background: `color-mix(in srgb, ${color} 10%, transparent)`,
-                  color, whiteSpace: 'nowrap',
-                }}>
+                <span
+                  key={monto}
+                  className="settings-tier"
+                  style={{ '--tier': color } as React.CSSProperties}
+                >
                   {simbolo}{monto.toLocaleString('es-ES')} → {tier ?? 'sin clasificar'}
                 </span>
               )
             })}
           </div>
-        </div>
-      </div>
+        </SettingsCard>
 
-      <div style={CARD}>
-        <div style={HEAD}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Zonas que atiendes
-          </span>
-          <div style={HINT}>
-            Separadas por comas. El CRM las usa para saber si un lead cae en tu zona:
-            fuera de ambas listas le resta puntos. Sin zonas declaradas no clasifica
-            ninguna — prefiere no saber a castigar a un lead por un hueco de configuración.
-          </div>
-        </div>
-        <div style={BODY}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label style={LABEL}>Zona principal</label>
+        <SettingsCard
+          title="Zonas que atiendes"
+          action={(
+            <InfoHint label="Para qué sirven las zonas">
+              Separadas por comas. El CRM las usa para saber si un lead cae en tu zona:
+              fuera de ambas listas le resta puntos. Sin zonas declaradas no clasifica
+              ninguna — prefiere no saber a castigar a un lead por un hueco de configuración.
+            </InfoHint>
+          )}
+        >
+          <SettingsRow label="Zona principal" htmlFor="bp-primary-areas">
+            <div className="settings-field">
               <input
+                id="bp-primary-areas"
+                className="settings-input"
                 value={draft.primaryAreas}
                 onChange={e => set('primaryAreas', e.target.value)}
                 placeholder="Virginia Beach, Norfolk"
-                style={INPUT}
               />
-              <div style={HINT}>Donde trabajas habitualmente.</div>
+              <InfoHint label="Zona principal">Donde trabajas habitualmente.</InfoHint>
             </div>
-            <div>
-              <label style={LABEL}>Zona secundaria</label>
+          </SettingsRow>
+          <SettingsRow label="Zona secundaria" htmlFor="bp-secondary-areas">
+            <div className="settings-field">
               <input
+                id="bp-secondary-areas"
+                className="settings-input"
                 value={draft.secondaryAreas}
                 onChange={e => set('secondaryAreas', e.target.value)}
                 placeholder="Chesapeake, Suffolk"
-                style={INPUT}
               />
-              <div style={HINT}>Las atiendes, pero no son tu foco.</div>
+              <InfoHint label="Zona secundaria">Las atiendes, pero no son tu foco.</InfoHint>
             </div>
-          </div>
-          <div style={{ marginTop: '16px', maxWidth: '520px' }}>
-            <label style={LABEL}>Zona horaria de tu zona principal</label>
-            <TimeZoneSelect
-              value={draft.timezone}
-              onChange={tz => set('timezone', tz)}
-              emptyLabel={sugerida
-                ? `Automática — ${timeZoneLabel(sugerida)}`
-                : 'Automática — no se pudo deducir de tu zona principal'}
-              style={INPUT}
-            />
-            <div style={HINT}>
-              La hora de tus open houses y de sus correos se escribe en esta zona. En &quot;Automática&quot; se
-              deduce de tu zona principal; elige una si la deducción no es la correcta.
+          </SettingsRow>
+          <SettingsRow label="Zona horaria de tu zona principal" htmlFor="bp-timezone">
+            <div className="settings-field">
+              <TimeZoneSelect
+                id="bp-timezone"
+                className="settings-input"
+                value={draft.timezone}
+                onChange={tz => set('timezone', tz)}
+                emptyLabel={sugerida
+                  ? `Automática — ${timeZoneLabel(sugerida)}`
+                  : 'Automática — no se pudo deducir de tu zona principal'}
+              />
+              <InfoHint label="Cómo se elige la zona horaria">
+                La hora de tus open houses y de sus correos se escribe en esta zona. En &quot;Automática&quot; se
+                deduce de tu zona principal; elige una si la deducción no es la correcta.
+              </InfoHint>
             </div>
-          </div>
-        </div>
-      </div>
+          </SettingsRow>
+        </SettingsCard>
 
-      <div style={CARD}>
-        <div style={HEAD}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Comisión de la agencia
-          </span>
-          <div style={HINT}>
-            Lo que la agencia factura por operación cerrada. Sirve para ordenar por valor
-            esperado: dos leads igual de buenos no valen lo mismo si uno compra el doble.
-            <br />
-            Es lo que factura el negocio, no lo que se lleva cada agente: el split interno
-            no se registra aquí y la ficha del lead lo dice tal cual.
-          </div>
-        </div>
-        <div style={BODY}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label style={LABEL}>Modelo</label>
-              <select
-                value={draft.commissionModel}
-                onChange={e => set('commissionModel', e.target.value as CommissionModel | '')}
-                style={INPUT}
-              >
-                <option value="">Sin definir</option>
-                <option value="percentage">Porcentaje de la operación</option>
-                <option value="flat">Monto fijo por operación</option>
-              </select>
-            </div>
-            <div>
-              <label style={LABEL}>Compra {esPct ? '(%)' : simbolo && `(${simbolo})`}</label>
+        <SettingsCard
+          title="Comisión de la agencia"
+          action={(
+            <InfoHint label="Qué es la comisión de la agencia">
+              Lo que la agencia factura por operación cerrada. Sirve para ordenar por valor
+              esperado: dos leads igual de buenos no valen lo mismo si uno compra el doble.
+              <br />
+              Es lo que factura el negocio, no lo que se lleva cada agente: el split interno
+              no se registra aquí y la ficha del lead lo dice tal cual.
+            </InfoHint>
+          )}
+        >
+          <SettingsRow label="Modelo" htmlFor="bp-commission-model">
+            <select
+              id="bp-commission-model"
+              className="settings-input"
+              value={draft.commissionModel}
+              onChange={e => set('commissionModel', e.target.value as CommissionModel | '')}
+            >
+              <option value="">Sin definir</option>
+              <option value="percentage">Porcentaje de la operación</option>
+              <option value="flat">Monto fijo por operación</option>
+            </select>
+          </SettingsRow>
+          <SettingsRow label={`Compra${unidad}`} htmlFor="bp-commission-buy">
+            <input
+              id="bp-commission-buy"
+              className="settings-input"
+              inputMode="decimal"
+              value={draft.commissionBuy}
+              onChange={e => set('commissionBuy', e.target.value)}
+              placeholder={esPct ? '3' : '5000'}
+            />
+          </SettingsRow>
+          <SettingsRow label={`Venta${unidad}`} htmlFor="bp-commission-sell">
+            <div className="settings-field">
               <input
-                inputMode="decimal"
-                value={draft.commissionBuy}
-                onChange={e => set('commissionBuy', e.target.value)}
-                placeholder={esPct ? '3' : '5000'}
-                style={INPUT}
-              />
-            </div>
-            <div>
-              <label style={LABEL}>Venta {esPct ? '(%)' : simbolo && `(${simbolo})`}</label>
-              <input
+                id="bp-commission-sell"
+                className="settings-input"
                 inputMode="decimal"
                 value={draft.commissionSell}
                 onChange={e => set('commissionSell', e.target.value)}
                 placeholder={esPct ? '3' : '5000'}
-                style={INPUT}
               />
+              <InfoHint label="Si sólo trabajas un lado">
+                Si sólo trabajas un lado del mercado, deja el otro vacío.
+              </InfoHint>
             </div>
-          </div>
-          <div style={HINT}>
-            Si sólo trabajas un lado del mercado, deja el otro vacío.
-            {expectedCommission(400_000, preview, 'buy') !== null && (
-              <> Con esta configuración, una compra de {formatMoney(400_000, preview.currency)} deja{' '}
-                <strong style={{ color: 'var(--accent-green)' }}>
-                  {formatMoney(expectedCommission(400_000, preview, 'buy'), preview.currency)}
-                </strong>.
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+          </SettingsRow>
+          {comisionEjemplo !== null && (
+            <p className="settings-note">
+              Con esta configuración, una compra de {formatMoney(400_000, preview.currency)} deja{' '}
+              <strong className="settings-money">{formatMoney(comisionEjemplo, preview.currency)}</strong>.
+            </p>
+          )}
+        </SettingsCard>
 
-      <div style={CARD}>
-        <div style={HEAD}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Tu sitio web
-          </span>
-          <div style={HINT}>
-            Para que los buscadores identifiquen tu agencia y, si publicas tu newsletter
-            en tu propio dominio, sepan que esa versión es el original.
-          </div>
-        </div>
-        <div style={BODY}>
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label style={LABEL}>Sitio web de la agencia</label>
+        <SettingsCard
+          title="Tu sitio web"
+          action={(
+            <InfoHint label="Para qué sirve tu sitio web">
+              Para que los buscadores identifiquen tu agencia y, si publicas tu newsletter
+              en tu propio dominio, sepan que esa versión es el original.
+            </InfoHint>
+          )}
+        >
+          <SettingsRow label="Sitio web de la agencia" htmlFor="bp-site-url">
+            <div className="settings-field">
               <input
+                id="bp-site-url"
+                className="settings-input"
                 value={draft.publicSiteUrl}
                 onChange={e => set('publicSiteUrl', e.target.value)}
                 placeholder="https://tuagencia.com"
-                style={INPUT}
               />
-              <div style={HINT}>La dirección de tu web. Se usa para identificar a tu agencia ante los buscadores.</div>
+              <InfoHint label="Sitio web de la agencia">
+                La dirección de tu web. Se usa para identificar a tu agencia ante los buscadores.
+              </InfoHint>
             </div>
-            <div>
-              <label style={LABEL}>Dirección de tus ediciones en tu web</label>
+          </SettingsRow>
+          <SettingsRow label="Dirección de tus ediciones en tu web" htmlFor="bp-canonical">
+            <div className="settings-field">
               <input
+                id="bp-canonical"
+                className="settings-input"
                 value={draft.newsletterCanonicalTemplate}
                 onChange={e => set('newsletterCanonicalTemplate', e.target.value)}
                 placeholder="https://tusitio.com/newsletter/{slug}"
-                style={INPUT}
               />
-              <div style={HINT}>{CANONICAL_HELP}</div>
+              <InfoHint label="Dirección de tus ediciones">{CANONICAL_HELP}</InfoHint>
             </div>
-          </div>
-        </div>
-      </div>
+          </SettingsRow>
+        </SettingsCard>
 
-      {faltan.length > 0 && (
-        <div style={{
-          display: 'flex', gap: '8px', alignItems: 'flex-start',
-          fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '14px',
-          padding: '10px 12px', borderRadius: '8px',
-          background: 'color-mix(in srgb, var(--accent-gold) 8%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--accent-gold) 22%, transparent)',
-        }}>
-          <AlertTriangle size={15} style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: '1px' }} />
-          <span>
-            Falta {faltan.join(', ')}. El CRM funciona igual sin esto — sólo deja de poder
-            clasificar presupuestos y de ordenar por valor esperado.
-          </span>
-        </div>
-      )}
-
-      {error && (
-        <div style={{ fontSize: '12.5px', color: 'var(--accent-coral)', marginBottom: '12px' }}>{error}</div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button
-          onClick={guardar}
-          disabled={isPending}
-          style={{
-            padding: '9px 18px', borderRadius: '8px', border: 'none',
-            background: 'var(--accent-gold)', color: '#1a1a1a',
-            fontSize: '13px', fontWeight: 500,
-            cursor: isPending ? 'default' : 'pointer', opacity: isPending ? 0.6 : 1,
-          }}
-        >
-          {isPending ? 'Guardando…' : 'Guardar perfil'}
-        </button>
-        {saved && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: 'var(--accent-green)' }}>
-            <Check size={14} /> Guardado
-          </span>
+        {faltan.length > 0 && (
+          <p className="settings-note settings-note-gold settings-missing" role="status">
+            <AlertTriangle size={15} aria-hidden="true" />
+            <span>
+              Falta {faltan.join(', ')}. El CRM funciona igual sin esto — sólo deja de poder
+              clasificar presupuestos y de ordenar por valor esperado.
+            </span>
+          </p>
         )}
+
+        {error && (
+          <p className="settings-alert" role="alert">
+            <AlertCircle size={13} aria-hidden="true" /> {error}
+          </p>
+        )}
+
+        <div className="settings-savebar settings-savebar-bare">
+          {saved && (
+            <span className="settings-success settings-savebar-status" role="status">
+              <Check size={13} aria-hidden="true" /> Guardado
+            </span>
+          )}
+          <button type="button" className="btn btn-primary" onClick={guardar} disabled={isPending}>
+            {isPending ? 'Guardando…' : 'Guardar perfil'}
+          </button>
+        </div>
       </div>
     </div>
   )

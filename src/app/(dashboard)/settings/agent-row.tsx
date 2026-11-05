@@ -8,6 +8,7 @@ import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { updateAgent, inviteAgentAccess, revokeAgentAccess, linkAgentToMyAccount, updateAgentLanguages, setAgentAsOwner, deleteAgent, updateAgentDescription, updateAgentCoverPhoto, removeAgentCoverPhoto } from './actions'
 import { RowMenu, type MenuEntry } from '@/components/ui/row-menu'
 import { InfoHint } from '@/components/ui/info-hint'
+import { AgentAvatar } from './agent-avatar'
 
 const LANGUAGE_LABELS: Record<string, string> = Object.fromEntries(
   SUPPORTED_LANGUAGE_CODES.map(code => [code, LANGUAGE_CONFIG[code].label])
@@ -238,13 +239,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     <div className="settings-agent" ref={rowRef}>
       <div className="dt-grid dt-row">
         <div className="settings-agent-who">
-          <div
-            className="settings-agent-avatar"
-            style={{ '--agent-accent': agent.accentColor } as React.CSSProperties}
-            aria-hidden="true"
-          >
-            {agent.avatarInitials}
-          </div>
+          <AgentAvatar agent={agent} />
           <div className="settings-agent-name-line">
             <span className="settings-agent-name">{agent.name}</span>
             {isOwner && <span className="pill" data-tone="gold">Propietario</span>}

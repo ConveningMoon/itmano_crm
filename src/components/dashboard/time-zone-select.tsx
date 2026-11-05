@@ -18,18 +18,20 @@ function otherZones(): string[] {
 }
 
 export function TimeZoneSelect({
-  value, onChange, style, emptyLabel,
+  value, onChange, style, className, id, emptyLabel,
 }: {
   value:       string
   onChange:    (tz: string) => void
   style?:      React.CSSProperties
+  className?:  string
+  id?:         string
   /** Si se pasa, agrega una primera opción vacía (p. ej. "Automática…"). */
   emptyLabel?: string
 }) {
   const others = useMemo(() => otherZones(), [])
 
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ cursor: 'pointer', ...style }}>
+    <select id={id} className={className} value={value} onChange={e => onChange(e.target.value)} style={{ cursor: 'pointer', ...style }}>
       {emptyLabel !== undefined && <option value="">{emptyLabel}</option>}
       {/* Una zona guardada que no está en ninguna lista se muestra igual. */}
       {value && !isCuratedTimeZone(value) && !others.includes(value) && (

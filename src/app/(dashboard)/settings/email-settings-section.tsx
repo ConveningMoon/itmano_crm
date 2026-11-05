@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { AlertCircle, Check } from 'lucide-react'
 import type { Agent } from '@/lib/types'
 import { agentLocalPart } from '@/lib/email/sender-address'
 import { updateAgentSignature, updateAgentSenderLocalPart } from './actions'
-import { INPUT, BTN_PRIMARY, CARD, CARD_HEADER } from './settings-styles'
+import { SettingsCard, SettingsSectionHead } from '@/components/ui/settings-row'
+import { InfoHint } from '@/components/ui/info-hint'
+import { AgentAvatar } from './agent-avatar'
 
 // ─── Email settings: firma por agente ─────────────────────────────────────────
 
@@ -29,37 +32,40 @@ function AgentSignatureRow({ agent, canEdit }: { agent: Agent; canEdit: boolean 
   }
 
   return (
-    <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{
-          width: '32px', height: '32px', borderRadius: '50%',
-          background: `${agent.accentColor}22`, border: `1px solid ${agent.accentColor}44`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '11px', fontWeight: 700, color: agent.accentColor, flexShrink: 0,
-        }}>
-          {agent.avatarInitials}
-        </div>
-        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
+    <div className="settings-email-row settings-email-row-col">
+      <div className="settings-email-who">
+        <AgentAvatar agent={agent} />
+        <div className="settings-email-name">{agent.name}</div>
       </div>
 
       <textarea
+        id={`firma-${agent.id}`}
+        className="settings-input settings-input-wide"
         value={value}
         onChange={e => { setValue(e.target.value); setError(null) }}
         disabled={!canEdit}
         rows={3}
         maxLength={600}
         placeholder={`Ej.:\nUn abrazo,\n${agent.name}`}
-        style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, opacity: canEdit ? 1 : 0.7 }}
+        aria-label={`Firma de ${agent.name}`}
       />
 
-      {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+      {error && (
+        <p className="settings-alert" role="alert">
+          <AlertCircle size={13} aria-hidden="true" /> {error}
+        </p>
+      )}
 
       {canEdit && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer' }}>
+        <div className="settings-inline">
+          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={pending || !dirty}>
             {pending ? 'Guardando…' : 'Guardar firma'}
           </button>
-          {ok && <span style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Firma guardada.</span>}
+          {ok && (
+            <span className="settings-success" role="status">
+              <Check size={13} aria-hidden="true" /> Firma guardada
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -95,66 +101,67 @@ function AgentSenderRow({ agent, domain, canEdit }: { agent: Agent; domain: stri
   }
 
   return (
-    <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '1 1 180px', minWidth: 0 }}>
-          <div style={{
-            width: '32px', height: '32px', borderRadius: '50%',
-            background: `${agent.accentColor}22`, border: `1px solid ${agent.accentColor}44`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '11px', fontWeight: 700, color: agent.accentColor, flexShrink: 0,
-          }}>
-            {agent.avatarInitials}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              &quot;{agent.name}&quot; &lt;{effective}&gt;
-            </div>
+    <div className="settings-email-row">
+      <div className="settings-email-who">
+        <AgentAvatar agent={agent} />
+        <div className="settings-email-who-text">
+          <div className="settings-email-name">{agent.name}</div>
+          {/* La dirección efectiva se recalcula al guardar; si es larga se
+              trunca, pero el título la muestra completa. */}
+          <div className="settings-email-effective" title={`"${agent.name}" <${effective}>`}>
+            &quot;{agent.name}&quot; &lt;{effective}&gt;
           </div>
         </div>
-        {canEdit && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '2 1 260px', minWidth: 0 }}>
-            <input
-              value={value}
-              onChange={e => { setValue(e.target.value); setError(null); setOk(false) }}
-              placeholder={derived}
-              maxLength={64}
-              aria-label={`Dirección de envío de ${agent.name}`}
-              style={{ ...INPUT, flex: 1, minWidth: 0, fontFamily: 'monospace' }}
-            />
-            <code style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>@{domain}</code>
-            <button onClick={handleSave} disabled={pending || !dirty} style={{ ...BTN_PRIMARY, opacity: pending || !dirty ? 0.5 : 1, cursor: pending || !dirty ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-              {pending ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        )}
       </div>
-      {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
-      {ok && <div style={{ fontSize: '12px', color: 'var(--accent-green)' }}>Dirección guardada.</div>}
+      {canEdit && (
+        <div className="settings-email-edit">
+          <input
+            id={`envio-${agent.id}`}
+            className="settings-input settings-input-mono"
+            value={value}
+            onChange={e => { setValue(e.target.value); setError(null); setOk(false) }}
+            placeholder={derived}
+            maxLength={64}
+            aria-label={`Dirección de envío de ${agent.name}`}
+          />
+          <code className="settings-email-domain" title={`@${domain}`}>@{domain}</code>
+          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={pending || !dirty}>
+            {pending ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="settings-alert" role="alert">
+          <AlertCircle size={13} aria-hidden="true" /> {error}
+        </p>
+      )}
+      {ok && (
+        <span className="settings-success" role="status">
+          <Check size={13} aria-hidden="true" /> Dirección guardada
+        </span>
+      )}
     </div>
   )
 }
 
 function SenderAddressCard({ agents, domain, canManage }: { agents: Agent[]; domain: string | null; canManage: boolean }) {
   return (
-    <div style={CARD}>
-      <div style={CARD_HEADER}>
-        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Dirección de envío</span>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+    <SettingsCard
+      title="Dirección de envío"
+      action={(
+        <InfoHint label="Cómo se arma la dirección de envío">
           {domain
-            ? <>Los correos salen con el nombre del agente y su dirección en <strong style={{ color: 'var(--text-secondary)' }}>{domain}</strong>. Si la dejas vacía se usa la parte de su email antes de la @.</>
+            ? <>Los correos salen con el nombre del agente y su dirección en <strong>{domain}</strong>. Si la dejas vacía se usa la parte de su email antes de la @.</>
             : 'Tu equipo envía desde el dominio compartido de ITMANO. La dirección por agente se activa cuando el equipo envía desde su propio dominio verificado (planes Growth y Partner).'}
-        </div>
-      </div>
+        </InfoHint>
+      )}
+    >
       {domain && (agents.length === 0 ? (
-        <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-          No hay agentes todavía.
-        </div>
+        <p className="settings-empty">No hay agentes todavía.</p>
       ) : (
         agents.map(agent => <AgentSenderRow key={agent.id} agent={agent} domain={domain} canEdit={canManage} />)
       ))}
-    </div>
+    </SettingsCard>
   )
 }
 
@@ -165,32 +172,34 @@ export function EmailSettingsSection({ agents, canManage, myAgentId, senderDomai
   const visible = canManage ? agents : agents.filter(a => a.id === myAgentId)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <SenderAddressCard agents={visible} domain={senderDomain} canManage={canManage} />
-      <div style={CARD}>
-        <div style={CARD_HEADER}>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Firma de correo</span>
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            {canManage
-              ? 'La firma de cada agente se agrega automáticamente al final de todos los correos que se envían a sus leads'
-              : 'Tu firma se agrega automáticamente al final de todos los correos que se envían a tus leads'}
-            {' '}(secuencias, hitos de compra y envíos puntuales). Escríbela en tono personal, como cerrarías un
-            correo a un conocido.
-          </div>
-        </div>
-        {visible.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No hay agentes todavía.
-          </div>
-        ) : (
-          visible.map(agent => (
-            <AgentSignatureRow
-              key={agent.id}
-              agent={agent}
-              canEdit={canManage || agent.id === myAgentId}
-            />
-          ))
-        )}
+    <div>
+      <SettingsSectionHead title="Email" description="Desde dónde y con qué firma salen los correos a tus leads." />
+      <div className="settings-stack">
+        <SenderAddressCard agents={visible} domain={senderDomain} canManage={canManage} />
+        <SettingsCard
+          title="Firma de correo"
+          action={(
+            <InfoHint label="Cómo se usa la firma">
+              {canManage
+                ? 'La firma de cada agente se agrega automáticamente al final de todos los correos que se envían a sus leads'
+                : 'Tu firma se agrega automáticamente al final de todos los correos que se envían a tus leads'}
+              {' '}(secuencias, hitos de compra y envíos puntuales). Escríbela en tono personal, como cerrarías un
+              correo a un conocido.
+            </InfoHint>
+          )}
+        >
+          {visible.length === 0 ? (
+            <p className="settings-empty">No hay agentes todavía.</p>
+          ) : (
+            visible.map(agent => (
+              <AgentSignatureRow
+                key={agent.id}
+                agent={agent}
+                canEdit={canManage || agent.id === myAgentId}
+              />
+            ))
+          )}
+        </SettingsCard>
       </div>
     </div>
   )
