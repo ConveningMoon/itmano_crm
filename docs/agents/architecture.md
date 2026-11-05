@@ -281,6 +281,10 @@ cliente. Pasaba en producción en la ficha del lead.
   `globals.css`. Marketing y login conservan los colores originales con
   `.mk-root` y `.brand-original`; una superficie pública nueva necesita una de
   ellas. `tests/design/tokens.test.ts` vigila ambos lados y el contraste.
+- Los ajustes (`/settings`) se componen con `SettingsCard` y `SettingsRow`
+  (`src/components/ui/settings-row.tsx`); `tests/design/settings-tokens.test.ts`
+  impide hex y rgba en `src/app/(dashboard)/settings/`. Un agente sin permiso de
+  gestión sólo recibe sus propios datos privados (`redactPeerAgents`).
 - Las explicaciones van detrás de `InfoHint` (`src/components/ui/info-hint.tsx`),
   no como párrafos siempre visibles.
 - El texto atenuado (`--text-muted`) debe mantener 4.5:1 de contraste sobre

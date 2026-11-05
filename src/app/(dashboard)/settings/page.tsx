@@ -1,8 +1,10 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { getScoreRulesBundle } from '@/lib/data/score-rules'
-import { getAiUsageSummary, getAgentAiBreakdown, type AiUsageSummary, type AgentAiBreakdown } from '@/lib/data/ai-usage'
+import { getAiUsageSummary, getAgentAiBreakdown } from '@/lib/data/ai-usage'
+import { maskAiCosts } from '@/lib/ai-usage/view'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
 import { getTenantRow } from '@/lib/data/tenants'
@@ -16,11 +18,16 @@ import type { FitEvidence } from '@/lib/scoring/calibration'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-identity'
 import { domainOf } from '@/lib/email/sender-address'
+import { redactPeerAgents } from '@/lib/settings/agents-view'
 import { SettingsClient } from './settings-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { DEFAULT_TENANT_COLOR } from '@/lib/config'
+import { SettingsBodySkeleton } from './settings-skeleton'
 
-async function SettingsPage() {
+// Todo lo que lee la sesión o la base vive aquí, detrás del Suspense de
+// SettingsPage: la cabecera y el esqueleto salen del shell estático.
+async function SettingsContent() {
   const ctx      = await requireTenantContext()
   const supabase = createAdminClient()
 
@@ -80,10 +87,16 @@ async function SettingsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
   const tenantRowAny = tenantRow as any
   const tenant = tenantRowAny
-    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? '#C9A96E', logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
-    : { id: tenantId, name: 'A&J Real Estate Group', slug: 'aj-real-estate', primaryColor: '#C9A96E', logoUrl: null, description: null }
+    ? { id: tenantRowAny.id as string, name: tenantRowAny.name as string, slug: tenantRowAny.slug as string, primaryColor: (tenantRowAny.primary_color as string) ?? DEFAULT_TENANT_COLOR, logoUrl: (tenantRowAny.logo_url as string | null) ?? null, description: canSeeBusiness ? ((tenantRowAny.description as string | null) ?? null) : null }
+    : { id: tenantId, name: '', slug: '', primaryColor: DEFAULT_TENANT_COLOR, logoUrl: null, description: null }
 
-  const agents = (rawAgents ?? []).map(r => mapAgent(r as AgentRow))
+  // Un 'agent' no administra al equipo: de sus compañeros sólo viaja lo público
+  // (email, teléfono, firma, etc. se vacían antes de cruzar al cliente).
+  const agents = redactPeerAgents(
+    (rawAgents ?? []).map(r => mapAgent(r as AgentRow)),
+    ctx.agent_id,
+    ctx.role !== 'agent',
+  )
 
   // Dominio sobre el que firma cada agente (senderFromForAgent). null = el
   // equipo sale por el dominio compartido de ITMANO y la dirección por agente
@@ -130,23 +143,10 @@ async function SettingsPage() {
   // usuarios del tenant se ceroan ANTES de cruzar al cliente (no basta con
   // ocultarlos en la UI — no deben viajar en el payload RSC).
   const showAiCosts = ctx.role === 'super_admin'
-  const zeroCost = <T extends { costUsd: number }>(x: T): T => ({ ...x, costUsd: 0 })
-  const aiUsage: AiUsageSummary = showAiCosts ? aiUsageRaw : {
-    allTime:   zeroCost(aiUsageRaw.allTime),
-    last30d:   zeroCost(aiUsageRaw.last30d),
-    byFeature: aiUsageRaw.byFeature.map(zeroCost),
-    byTenant:  null,
-    recent:    aiUsageRaw.recent.map(zeroCost),
-  }
-  const aiByAgent: AgentAiBreakdown | null = aiByAgentRaw
-    ? (showAiCosts ? aiByAgentRaw : { ...aiByAgentRaw, agents: aiByAgentRaw.agents.map(zeroCost) })
-    : null
+  const { summary: aiUsage, byAgent: aiByAgent } = maskAiCosts(aiUsageRaw, aiByAgentRaw, showAiCosts)
 
   return (
-    <>
-      <PageHeader title="Configuración" description="Perfil del equipo · Agentes · Cuenta" />
-
-      <SettingsClient
+    <SettingsClient
         tenant={tenant}
         agents={agents}
         agentAccess={agentAccess}
@@ -174,7 +174,17 @@ async function SettingsPage() {
         subscription={subscription}
         leadTags={leadTags}
         leadTagCounts={leadTagCounts}
-      />
+    />
+  )
+}
+
+function SettingsPage() {
+  return (
+    <>
+      <PageHeader title="Configuración" description="Ajustes del equipo, el negocio y la cuenta." />
+      <Suspense fallback={<SettingsBodySkeleton />}>
+        <SettingsContent />
+      </Suspense>
     </>
   )
 }

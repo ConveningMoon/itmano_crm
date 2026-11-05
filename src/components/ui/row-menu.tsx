@@ -74,10 +74,13 @@ function Entries({ entries }: { entries: MenuEntry[] }) {
   )
 }
 
-export function RowMenu({ entries, label }: {
+export function RowMenu({ entries, label, finalFocus }: {
   entries: MenuEntry[]
   /** Nombre del elemento, sólo para lectores de pantalla: "Acciones de X". */
   label:   string
+  /** A dónde va el foco al cerrar el menú. Por defecto vuelve al botón ⋯; una
+   *  entrada que abre un panel lo mueve al primer control del panel. */
+  finalFocus?: () => HTMLElement | null
 }) {
   return (
     <Menu.Root>
@@ -91,7 +94,11 @@ export function RowMenu({ entries, label }: {
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner className="menu-positioner" side="bottom" align="end" sideOffset={6}>
-          <Menu.Popup className="menu-popup" onClick={e => e.stopPropagation()}>
+          <Menu.Popup
+            className="menu-popup"
+            onClick={e => e.stopPropagation()}
+            finalFocus={finalFocus ? () => finalFocus() ?? true : undefined}
+          >
             <Entries entries={entries} />
           </Menu.Popup>
         </Menu.Positioner>
