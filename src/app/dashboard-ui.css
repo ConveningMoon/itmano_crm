@@ -2128,6 +2128,7 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
 .prop-cover-img { object-fit: cover; transition: transform 0.5s var(--ease-out-premium); }
 .prop-card:hover .prop-cover-img { transform: scale(1.04); }
 .prop-card-body { display: flex; flex: 1; flex-direction: column; gap: 10px; padding: 16px 18px 18px; min-width: 0; }
+.prop-who { flex: 1; min-width: 0; }
 .prop-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .prop-title {
   display: block;

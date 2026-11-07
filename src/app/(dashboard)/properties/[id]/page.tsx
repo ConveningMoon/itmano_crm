@@ -197,7 +197,7 @@ async function PropertyContent({
           {p.imageUrl && (
             <Image src={p.imageUrl} alt="" width={96} height={72} sizes="96px" className="prop-thumb" />
           )}
-          <div className="lead-who">
+          <div className="prop-who">
             <div className="lead-identity-name">
               <h1 className="prop-identity-name">{p.name ?? p.address}</h1>
               <span className="pill" style={{ '--tone': status?.color } as React.CSSProperties}>

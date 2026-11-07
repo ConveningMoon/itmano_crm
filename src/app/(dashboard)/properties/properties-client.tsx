@@ -194,7 +194,7 @@ function PropertyCard({ prop, showTenant, delayMs }: { prop: Property; showTenan
 
       <div className="prop-card-body">
         <div className="prop-card-top">
-          <div className="lead-who">
+          <div className="prop-who">
             <Link href={`/properties/${prop.id}`} className="prop-title">
               {prop.address}
             </Link>
