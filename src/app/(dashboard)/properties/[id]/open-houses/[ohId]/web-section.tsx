@@ -15,7 +15,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) }).catch(() => {})}
       style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
     >
-      {copied ? <Check size={13} color="var(--accent-green)" /> : <Copy size={13} />}
+      {copied ? <Check size={13} color="var(--gold-1)" /> : <Copy size={13} />}
       {copied ? 'Copiado' : label}
     </button>
   )
@@ -47,7 +47,7 @@ export function WebSection({
                 : 'Al confirmar el open house, la cuenta regresiva aparecerá sola en la ficha pública de la propiedad y en su iframe embebido.'}
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <code style={{ fontSize: '12px', color: 'var(--accent-gold)', overflowWrap: 'anywhere' }}>{publicUrl}</code>
+              <code style={{ fontSize: '12px', color: 'var(--gold-2)', overflowWrap: 'anywhere' }}>{publicUrl}</code>
               {localPreviewUrl && (
                 <a href={localPreviewUrl} target="_blank" rel="noopener noreferrer" style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', textDecoration: 'none' }}>
                   <ExternalLink size={12} /> Ver página

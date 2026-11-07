@@ -141,7 +141,7 @@ export function OpenHouseForm({
             const on = v.languages.includes(l)
             return (
               <button key={l} type="button" onClick={() => toggleLang(l)} aria-pressed={on}
-                style={{ ...BTN_GHOST, borderColor: on ? 'var(--accent-gold)' : 'var(--border-subtle)', color: on ? 'var(--accent-gold)' : 'var(--text-secondary)' }}>
+                style={{ ...BTN_GHOST, borderColor: on ? 'var(--gold-2)' : 'var(--border-subtle)', color: on ? 'var(--gold-2)' : 'var(--text-secondary)' }}>
                 {LANG_LABEL[l]}
               </button>
             )

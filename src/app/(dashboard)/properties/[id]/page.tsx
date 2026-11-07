@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
@@ -17,21 +18,15 @@ import { OpenHouseTab } from './open-houses/open-house-tab'
 import { mapBusinessProfile } from '@/lib/data/business-profile'
 import { businessTimeZone } from '@/lib/time-zones'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { STATUS_CONFIG, TYPE_LABELS } from '../property-labels'
+import { PropertyDetailSkeleton } from './property-detail-skeleton'
 
-// Detalle de una propiedad (como en fuentes): tab Descripción (todos los datos
-// del formulario, con botón Editar que abre el formulario completo COMO MODAL
-// en esta misma página) + tab Página (catálogo alojado / embebible / solicitar)
+// Detalle de una propiedad (como en fuentes): botón Editar en la cabecera, que
+// abre el formulario completo COMO MODAL en esta misma página; tab Descripción
+// (textos, fotos y ficha) + tab Página (catálogo alojado / embebible / solicitar)
 // + tab Open house (open-houses/).
 
-const TYPE_LABEL: Record<string, string> = {
-  residential: 'Residencial', condo: 'Condominio', townhouse: 'Townhouse',
-  land: 'Terreno', commercial: 'Comercial', multifamily: 'Multifamiliar',
-}
-const STATUS_LABEL: Record<string, string> = {
-  available: 'Disponible', in_process: 'En proceso', sold: 'Vendida',
-}
-
-async function PropertyDetailPage({
+async function PropertyContent({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>
@@ -73,7 +68,7 @@ async function PropertyDetailPage({
     : '—'
 
   const facts: { label: string; value: string }[] = [
-    { label: 'Tipo', value: TYPE_LABEL[p.propertyType] ?? p.propertyType },
+    { label: 'Tipo', value: TYPE_LABELS[p.propertyType] ?? p.propertyType },
     { label: 'Inversión', value: price },
     { label: 'Habitaciones', value: p.bedrooms !== null ? String(p.bedrooms) : '—' },
     { label: 'Baños', value: p.bathrooms !== null ? String(p.bathrooms) : '—' },
@@ -86,77 +81,81 @@ async function PropertyDetailPage({
     .filter(l => (p.descriptions[l]?.trim()) || (p.featuresI18n[l]?.length))
   const gallery = [p.imageUrl, ...p.gallery].filter((u): u is string => !!u)
 
-  // ── Tab Descripción: datos completos + botón que abre el modal de edición ──
+  // ── Tab Descripción: textos por idioma, fotos y notas a la izquierda; los
+  //    datos de la ficha en lista a la derecha (una columna en pantallas
+  //    estrechas, como el detalle del lead). ──────────────────────────────────
   const descripcionTab = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {canEdit && (
-        <div>
-          <EditPropertyButton property={p} allowDelete={canEdit} />
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-            Abre el formulario completo (datos, descripciones, características, fotos, PDF y publicación).
-          </p>
-        </div>
-      )}
-
-      {/* Facts */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        {facts.map(f => (
-          <div key={f.label} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '14px 16px' }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{f.label}</div>
-            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{f.value}</div>
+    <div className="lead-detail-grid">
+      <div className="lead-col">
+        {contentLangs.length === 0 && (
+          <div className="empty-card">
+            Sin descripción todavía.{canEdit && ' Edita la propiedad para añadirla en cada idioma.'}
           </div>
+        )}
+        {contentLangs.map(l => (
+          <section key={l} className="settings-card" aria-label={`Descripción en ${LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l}`}>
+            <div className="prop-lang-title">
+              {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l.toUpperCase()}
+            </div>
+            {p.descriptions[l]?.trim() && <p className="prop-text">{p.descriptions[l]}</p>}
+            {(p.featuresI18n[l]?.length ?? 0) > 0 && (
+              <ul className="prop-features">
+                {p.featuresI18n[l].map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            )}
+          </section>
         ))}
+
+        {gallery.length > 0 && (
+          <section className="settings-card">
+            <div className="settings-card-head"><h2 className="settings-card-title">Fotos</h2></div>
+            <div className="prop-gallery">
+              {gallery.map(url => (
+                <div key={url} className="prop-photo">
+                  <Image src={url} alt="" fill sizes="(max-width: 768px) 50vw, 200px" />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
-      {/* MLS / enlace externo */}
-      {(p.mlsNumber || p.externalUrl) && (
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          {p.mlsNumber && <span>MLS #{p.mlsNumber}</span>}
-          {p.externalUrl && <a href={p.externalUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>Ver listado externo</a>}
-        </div>
-      )}
-
-      {/* Descripciones y características por idioma */}
-      {contentLangs.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
-          {contentLangs.map(l => (
-            <div key={l} style={{ border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
-                {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l.toUpperCase()}
-              </div>
-              {p.descriptions[l]?.trim() && (
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{p.descriptions[l]}</p>
-              )}
-              {(p.featuresI18n[l]?.length ?? 0) > 0 && (
-                <ul style={{ margin: '12px 0 0', paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                  {p.featuresI18n[l].map((f, i) => <li key={i}>{f}</li>)}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Galería */}
-      {gallery.length > 0 && (
-        <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Fotos</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
-            {gallery.map(url => (
-              <div key={url} style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
-                <Image src={url} alt="" fill sizes="(max-width: 768px) 50vw, 200px" style={{ objectFit: 'cover' }} />
+      <div className="lead-col">
+        <section className="settings-card">
+          <div className="settings-card-head"><h2 className="settings-card-title">Ficha</h2></div>
+          <dl className="info-list">
+            {facts.map(f => (
+              <div key={f.label} className="info-row">
+                <dt className="info-label">{f.label}</dt>
+                <dd className="info-value">{f.value}</dd>
               </div>
             ))}
-          </div>
-        </div>
-      )}
+            {p.mlsNumber && (
+              <div className="info-row">
+                <dt className="info-label">MLS</dt>
+                <dd className="info-value">#{p.mlsNumber}</dd>
+              </div>
+            )}
+            {p.externalUrl && (
+              <div className="info-row">
+                <dt className="info-label">Listado</dt>
+                <dd className="info-value">
+                  <a href={p.externalUrl} target="_blank" rel="noopener noreferrer" className="feed-link">
+                    Ver listado externo
+                  </a>
+                </dd>
+              </div>
+            )}
+          </dl>
+        </section>
 
-      {p.notes && (
-        <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Notas internas</div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>{p.notes}</p>
-        </div>
-      )}
+        {p.notes && (
+          <section className="settings-card">
+            <div className="settings-card-head"><h2 className="settings-card-title">Notas internas</h2></div>
+            <p className="prop-text">{p.notes}</p>
+          </section>
+        )}
+      </div>
     </div>
   )
 
@@ -169,7 +168,7 @@ async function PropertyDetailPage({
       managedByItmano={pageManaged}
     />
   ) : (
-    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>El tenant no tiene slug configurado.</div>
+    <div className="empty-card">El tenant no tiene slug configurado.</div>
   )
 
   const openHouseTab = (
@@ -185,46 +184,39 @@ async function PropertyDetailPage({
     />
   )
 
+  const status = STATUS_CONFIG[p.status]
+
   return (
     <>
-      <div style={{ marginBottom: '20px' }}>
-        <Link href="/properties" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}>
-          <ArrowLeft size={14} /> Propiedades
-        </Link>
-      </div>
+      <Link href="/properties" className="back-link">
+        <ArrowLeft size={14} aria-hidden="true" /> Propiedades
+      </Link>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {p.imageUrl && (
-           
-          <Image src={p.imageUrl} alt={p.address} width={120} height={90} sizes="120px" style={{ width: '120px', height: '90px', objectFit: 'cover', borderRadius: '10px', border: '1px solid var(--border-subtle)' }} />
-        )}
-        <div style={{ flex: 1, minWidth: '240px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-              {p.name ?? p.address}
-            </h1>
-            <span style={{
-              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: p.status === 'available' ? 'var(--accent-green)' : p.status === 'sold' ? 'var(--text-muted)' : 'var(--accent-gold)',
-              background: 'var(--bg-elevated)',
-            }}>
-              {STATUS_LABEL[p.status] ?? p.status}
-            </span>
-            <span style={{
-              fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: p.publishedToWeb ? 'var(--accent-teal)' : 'var(--text-muted)',
-              background: p.publishedToWeb ? 'rgba(90,175,160,0.12)' : 'var(--bg-elevated)',
-            }}>
-              {p.publishedToWeb ? 'Publicada en web' : 'Sin publicar'}
-            </span>
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            {[p.address, p.neighborhood, p.city, p.state].filter(Boolean).join(', ')}
+      <div className="page-header">
+        <div className="lead-identity">
+          {p.imageUrl && (
+            <Image src={p.imageUrl} alt="" width={96} height={72} sizes="96px" className="prop-thumb" />
+          )}
+          <div className="lead-who">
+            <div className="lead-identity-name">
+              <h1 className="prop-identity-name">{p.name ?? p.address}</h1>
+              <span className="pill" style={{ '--tone': status?.color } as React.CSSProperties}>
+                {status?.label ?? p.status}
+              </span>
+              <span className="pill" data-tone={p.publishedToWeb ? undefined : 'mute'} style={p.publishedToWeb ? { '--tone': 'var(--gold-2)' } as React.CSSProperties : undefined}>
+                {p.publishedToWeb ? 'Publicada en web' : 'Sin publicar'}
+              </span>
+            </div>
+            <div className="lead-identity-meta">
+              {[p.address, p.neighborhood, p.city, p.state].filter(Boolean).join(', ')}
+            </div>
           </div>
         </div>
+        {canEdit && (
+          <div className="page-actions">
+            <EditPropertyButton property={p} allowDelete={canEdit} />
+          </div>
+        )}
       </div>
 
       <PropertyDetailTabs
@@ -235,6 +227,19 @@ async function PropertyDetailPage({
         initialTab={tab === 'openhouse' ? 'openhouse' : undefined}
       />
     </>
+  )
+}
+
+// La cabecera es dato de la propiedad, así que toda la página espera detrás
+// del Suspense (como el detalle del lead): el esqueleto sale al instante.
+function PropertyDetailPage(props: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string }>
+}) {
+  return (
+    <Suspense fallback={<PropertyDetailSkeleton />}>
+      <PropertyContent {...props} />
+    </Suspense>
   )
 }
 

@@ -46,7 +46,7 @@ function NoticeEditor({ draft, onChange }: { draft: NoticeDraft; onChange: (d: N
         <div style={{ display: 'flex', gap: '6px' }}>
           {langs.map(l => (
             <button key={l} type="button" onClick={() => setLang(l)}
-              style={{ ...BTN_GHOST, padding: '4px 10px', borderColor: l === lang ? 'var(--accent-gold)' : 'var(--border-subtle)', color: l === lang ? 'var(--accent-gold)' : 'var(--text-secondary)' }}>
+              style={{ ...BTN_GHOST, padding: '4px 10px', borderColor: l === lang ? 'var(--gold-2)' : 'var(--border-subtle)', color: l === lang ? 'var(--gold-2)' : 'var(--text-secondary)' }}>
               {LANG_LABEL[l] ?? l}
             </button>
           ))}
@@ -303,7 +303,7 @@ export function OpenHouseManager({
             <button
               disabled={pending}
               onClick={() => run(() => cancelOpenHouse(oh.id, { reason, notice: announcementSent ? noticePayload(cancelNotice) : undefined }))}
-              style={{ ...BTN_PRIMARY, background: 'var(--accent-coral)', opacity: pending ? 0.6 : 1 }}
+              style={{ ...BTN_PRIMARY, background: 'var(--alert)', opacity: pending ? 0.6 : 1 }}
             >
               {pending ? 'Cancelando…' : announcementSent ? 'Cancelar y avisar' : 'Cancelar open house'}
             </button>

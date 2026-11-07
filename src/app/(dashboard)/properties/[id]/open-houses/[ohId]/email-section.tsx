@@ -209,9 +209,9 @@ function EmailCard({
 
       {(email.status === 'sent' || email.status === 'sending' || email.recipientsFrozenAt) && (
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '12px' }}>
-          <span style={{ color: 'var(--accent-green)' }}>{email.sentCount} enviados</span>
+          <span style={{ color: 'var(--gold-1)' }}>{email.sentCount} enviados</span>
           <span style={{ color: 'var(--text-muted)' }}>{email.skippedCount} omitidos</span>
-          {email.failedCount > 0 && <span style={{ color: 'var(--accent-coral)' }}>{email.failedCount} fallidos</span>}
+          {email.failedCount > 0 && <span style={{ color: 'var(--alert)' }}>{email.failedCount} fallidos</span>}
         </div>
       )}
       {email.lastError && email.status !== 'sent' && <div style={email.status === 'failed' ? ERROR : WARN}>{email.lastError}</div>}
@@ -223,8 +223,8 @@ function EmailCard({
             <div key={lang} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
               <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{LANG_LABEL[lang] ?? lang}</span>
               {state === 'empty'
-                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--accent-coral)' }}><AlertTriangle size={10} /> Sin contenido</span>
-                : <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: state === 'crm' ? 'var(--accent-green)' : 'var(--accent-blue)' }}><Check size={10} /> {state === 'crm' ? 'Listo' : 'Template'}</span>}
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: 'var(--alert)' }}><AlertTriangle size={10} /> Sin contenido</span>
+                : <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', color: state === 'crm' ? 'var(--gold-1)' : 'var(--gold-1)' }}><Check size={10} /> {state === 'crm' ? 'Listo' : 'Template'}</span>}
               {editable && (
                 <button onClick={() => setEditingLang(lang)} aria-label={`Editar ${LANG_LABEL[lang] ?? lang}`}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '6px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', cursor: 'pointer' }}>

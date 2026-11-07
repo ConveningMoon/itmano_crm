@@ -17,15 +17,11 @@ export function EditPropertyButton({ property, allowDelete }: { property: Proper
   return (
     <>
       <button
+        type="button"
         onClick={() => { setKey(k => k + 1); setOpen(true) }}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: '6px',
-          padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-          background: 'var(--accent-gold)', color: 'var(--bg-base)',
-          borderRadius: '8px', border: 'none', cursor: 'pointer',
-        }}
+        className="btn btn-primary"
       >
-        <Pencil size={13} /> Editar propiedad
+        <Pencil size={13} aria-hidden="true" /> Editar propiedad
       </button>
 
       {open && (

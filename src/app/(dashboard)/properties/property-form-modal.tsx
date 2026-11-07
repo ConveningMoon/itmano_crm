@@ -8,6 +8,7 @@ import { createProperty, updateProperty, deleteProperty, deletePropertyMediaByUr
 import type { PropertyInput } from './actions'
 import type { AiPropertyDraft } from './ai-actions'
 import { FormSection } from '@/components/ui/form-section'
+import { TYPE_LABELS, STATUS_CONFIG } from './property-labels'
 import { Switch } from '@/components/ui/switch'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { MAX_FILE_BYTES_PER_REQUEST } from '@/lib/uploads/limits'
@@ -23,21 +24,6 @@ import {
 // abrirlo también desde la página de detalle (/properties/[id]) sin volver a
 // la lista. El caller lo monta condicionalmente; el estado se inicializa una
 // sola vez desde props (editing | aiInit | vacío).
-
-export const TYPE_LABELS: Record<PropertyType, string> = {
-  residential: 'Residencial',
-  condo:       'Condominio',
-  townhouse:   'Townhouse',
-  land:        'Terreno',
-  commercial:  'Comercial',
-  multifamily: 'Multifamiliar',
-}
-
-export const STATUS_CONFIG: Record<PropertyStatus, { label: string; color: string; bg: string }> = {
-  available: { label: 'Disponible',        color: 'var(--accent-green)', bg: 'rgba(107,163,104,0.12)' },
-  in_process: { label: 'En proceso',       color: 'var(--accent-gold)',  bg: 'rgba(201,169,110,0.12)' },
-  sold:       { label: 'Vendida',          color: 'var(--accent-blue)',  bg: 'rgba(91,142,201,0.12)'  },
-}
 
 // Kebab-case slug from a free-text name (matches the server-side SLUG_RE).
 function slugify(input: string): string {
@@ -240,7 +226,7 @@ export function PropertyFormModal({
   function fieldStyle(key: string, select = false): React.CSSProperties {
     const base = select ? selectStyle : inputStyle
     return aiFields.has(key)
-      ? { ...base, borderColor: 'var(--accent-gold)', boxShadow: '0 0 0 1px var(--accent-gold-dim)' }
+      ? { ...base, borderColor: 'var(--gold-2)', boxShadow: '0 0 0 1px color-mix(in srgb, var(--gold-2) 40%, transparent)' }
       : base
   }
 
@@ -475,7 +461,7 @@ export function PropertyFormModal({
         aria-modal="true"
         style={{
           position: 'fixed', inset: 0, zIndex: 50,
-          background: 'rgba(0,0,0,0.6)',
+          background: 'color-mix(in srgb, var(--bg-base) 75%, transparent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '16px',
         }}
@@ -513,10 +499,10 @@ export function PropertyFormModal({
               <div style={{
                 display: 'flex', alignItems: 'flex-start', gap: '8px',
                 fontSize: '12px', color: 'var(--text-secondary)',
-                background: 'rgba(201,169,110,0.1)', border: '1px solid var(--accent-gold-dim)',
+                background: 'color-mix(in srgb, var(--gold-2) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 40%, transparent)',
                 borderRadius: '8px', padding: '10px 12px',
               }}>
-                <Sparkles size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                <Sparkles size={14} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
                 <span>
                   Prellenado con IA desde el PDF. Los campos resaltados en dorado son sugerencias —
                   revísalos y corrige antes de guardar. La publicación en web queda desactivada hasta que confirmes.
@@ -791,9 +777,9 @@ export function PropertyFormModal({
                       }}
                       style={{
                         padding: '5px 10px', fontSize: '12px', fontWeight: 500, cursor: (!on && atMax) ? 'default' : 'pointer', borderRadius: '999px',
-                        background: on ? 'rgba(201,169,110,0.15)' : 'transparent',
-                        border: `1px solid ${on ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                        color: on ? 'var(--accent-gold)' : 'var(--text-muted)',
+                        background: on ? 'color-mix(in srgb, var(--gold-2) 15%, transparent)' : 'transparent',
+                        border: `1px solid ${on ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
+                        color: on ? 'var(--gold-2)' : 'var(--text-muted)',
                         opacity: (!on && atMax) ? 0.4 : 1,
                       }}
                     >
@@ -806,7 +792,7 @@ export function PropertyFormModal({
 
             {(form.content_languages ?? []).map(l => (
               <div key={l} style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-elevated)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-gold)', letterSpacing: '0.04em' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gold-2)', letterSpacing: '0.04em' }}>
                   {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.flag} {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l}
                 </div>
                 <label style={labelStyle}>
@@ -986,8 +972,8 @@ export function PropertyFormModal({
             {/* Error */}
             {formError && (
               <div style={{
-                fontSize: '12px', color: 'var(--accent-coral)',
-                background: 'rgba(201,123,107,0.1)', borderRadius: '6px', padding: '8px 12px',
+                fontSize: '12px', color: 'var(--alert)',
+                background: 'color-mix(in srgb, var(--alert) 10%, transparent)', borderRadius: '6px', padding: '8px 12px',
               }}>
                 {formError}
               </div>
@@ -1002,8 +988,8 @@ export function PropertyFormModal({
                   style={{
                     marginRight: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px',
                     padding: '8px 14px', fontSize: '13px', fontWeight: 500,
-                    background: 'transparent', color: 'var(--accent-coral)',
-                    borderRadius: '8px', border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
+                    background: 'transparent', color: 'var(--alert)',
+                    borderRadius: '8px', border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)', cursor: 'pointer',
                   }}
                 >
                   <Trash2 size={13} /> Eliminar
@@ -1025,7 +1011,7 @@ export function PropertyFormModal({
                 disabled={isPending}
                 style={{
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                  background: 'var(--gold-2)', color: 'var(--bg-base)',
                   borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
                   opacity: isPending ? 0.7 : 1,
                 }}
@@ -1042,7 +1028,7 @@ export function PropertyFormModal({
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 60,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'color-mix(in srgb, var(--bg-base) 75%, transparent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '16px',
           }}
@@ -1077,7 +1063,7 @@ export function PropertyFormModal({
                 onClick={discardAndClose}
                 style={{
                   padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--bg-elevated)', color: 'var(--accent-coral)',
+                  background: 'var(--bg-elevated)', color: 'var(--alert)',
                   borderRadius: '8px', border: '1px solid var(--border-subtle)', cursor: 'pointer',
                 }}
               >
@@ -1088,7 +1074,7 @@ export function PropertyFormModal({
                 disabled={isPending}
                 style={{
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                  background: 'var(--gold-2)', color: 'var(--bg-base)',
                   borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
                   opacity: isPending ? 0.7 : 1,
                 }}
@@ -1105,7 +1091,7 @@ export function PropertyFormModal({
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 60,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'color-mix(in srgb, var(--bg-base) 75%, transparent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '16px',
           }}
@@ -1141,7 +1127,7 @@ export function PropertyFormModal({
                 disabled={isPending}
                 style={{
                   padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--accent-coral)', color: '#fff',
+                  background: 'var(--alert)', color: 'var(--bg-base)',
                   borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
                   opacity: isPending ? 0.7 : 1,
                 }}
@@ -1303,7 +1289,7 @@ function EmbedsField({ value, onChange, draft, onDraftChange }: {
                         />
                       </label>
                     </div>
-                    {editError && <span style={{ fontSize: '12px', color: 'var(--accent-coral)' }}>{editError}</span>}
+                    {editError && <span style={{ fontSize: '12px', color: 'var(--alert)' }}>{editError}</span>}
                   </div>
                 ) : (
                   <span style={{ minWidth: 0 }}>
@@ -1319,14 +1305,14 @@ function EmbedsField({ value, onChange, draft, onDraftChange }: {
                 <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flexShrink: 0 }}>
                   {parsed.ok && <a href={parsed.url} target="_blank" rel="noopener noreferrer" style={mediaLinkStyle}>Ver</a>}
                   {editing ? (
-                    <button type="button" onClick={() => finishEditing(i)} style={{ ...mediaLinkButtonStyle, color: 'var(--accent-gold)' }}>
+                    <button type="button" onClick={() => finishEditing(i)} style={{ ...mediaLinkButtonStyle, color: 'var(--gold-2)' }}>
                       Listo
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => { setEditingIndex(i); setEditError(null) }}
-                      style={{ ...mediaRemoveStyle, color: 'var(--accent-gold)' }}
+                      style={{ ...mediaRemoveStyle, color: 'var(--gold-2)' }}
                       aria-label="Editar embed"
                       title="Editar embed"
                     >
@@ -1392,7 +1378,7 @@ function EmbedsField({ value, onChange, draft, onDraftChange }: {
           </div>
 
           {error && (
-            <span style={{ fontSize: '12px', color: 'var(--accent-coral)' }}>{error}</span>
+            <span style={{ fontSize: '12px', color: 'var(--alert)' }}>{error}</span>
           )}
 
           <button
@@ -1440,14 +1426,14 @@ const thumbStyle: React.CSSProperties = {
 const thumbRemoveStyle: React.CSSProperties = {
   position: 'absolute', top: '-6px', right: '-6px',
   width: '18px', height: '18px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-  background: 'var(--accent-coral)', color: '#fff',
+  background: 'var(--alert)', color: 'var(--bg-base)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
 }
 const mediaRowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '10px',
 }
 const mediaLinkStyle: React.CSSProperties = {
-  fontSize: '12px', color: 'var(--accent-blue)', textDecoration: 'none',
+  fontSize: '12px', color: 'var(--gold-1)', textDecoration: 'none',
 }
 const mediaLinkButtonStyle: React.CSSProperties = {
   padding: 0, border: 'none', background: 'transparent', cursor: 'pointer',
@@ -1455,6 +1441,6 @@ const mediaLinkButtonStyle: React.CSSProperties = {
 }
 const mediaRemoveStyle: React.CSSProperties = {
   padding: '4px', borderRadius: '6px', border: 'none', cursor: 'pointer',
-  background: 'var(--bg-elevated)', color: 'var(--accent-coral)',
+  background: 'var(--bg-elevated)', color: 'var(--alert)',
   display: 'flex', alignItems: 'center',
 }
