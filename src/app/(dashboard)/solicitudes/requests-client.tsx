@@ -11,10 +11,18 @@ import { FechaLocal } from '@/components/ui/local-date'
 
 type Tab = 'contact' | 'support' | 'page'
 
+const TABS: Tab[] = ['contact', 'support', 'page']
+
 const TAB_LABEL: Record<Tab, string> = {
   contact: 'Contacto (landing)',
   support: 'Soporte (equipos)',
   page:    'Páginas',
+}
+
+const TAB_NOUN: Record<Tab, string> = {
+  contact: 'contacto',
+  support: 'soporte',
+  page:    'páginas',
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -35,6 +43,8 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
   const [tab, setTab] = useState<Tab>('contact')
   // Overrides optimistas del checkbox mientras la action confirma.
   const [overrides, setOverrides] = useState<Record<string, boolean>>({})
+  // Filas cuya action sigue en curso: su botón queda deshabilitado hasta que termine.
+  const [busy, setBusy] = useState<Record<string, boolean>>({})
   const [, startTransition] = useTransition()
 
   const byTab = useMemo(() => ({
@@ -49,9 +59,11 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
   const toggle = (row: PlatformRequestRow) => {
     const next = !(overrides[row.id] ?? row.responded)
     setOverrides(prev => ({ ...prev, [row.id]: next }))
+    setBusy(prev => ({ ...prev, [row.id]: true }))
     startTransition(async () => {
       const res = await setRequestResponded(row.id, next)
       if (!res.ok) setOverrides(prev => ({ ...prev, [row.id]: !next }))
+      setBusy(prev => ({ ...prev, [row.id]: false }))
     })
   }
 
@@ -59,142 +71,88 @@ export function RequestsClient({ requests }: { requests: PlatformRequestRow[] })
 
   return (
     <>
-      <style>{`
-        .req-card { transition: border-color 0.15s; }
-        .req-card:hover { border-color: var(--border-accent) !important; }
-        .req-check { cursor: pointer; background: none; border: none; padding: 0; display: inline-flex; align-items: center; gap: 6px; }
-      `}</style>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        {(['contact', 'support', 'page'] as Tab[]).map(t => {
-          const active = tab === t
-          const pending = pendingCount(t)
-          return (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '8px',
-                padding: '7px 16px', fontSize: '13px', fontWeight: 500,
-                borderRadius: '8px', cursor: 'pointer',
-                background: active ? 'var(--bg-elevated)' : 'transparent',
-                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                border: `1px solid ${active ? 'var(--border-accent)' : 'var(--border-subtle)'}`,
-              }}
-            >
-              {TAB_LABEL[t]}
-              {pending > 0 && (
-                <span style={{
-                  fontSize: '11px', fontWeight: 500, color: 'var(--accent-gold)',
-                  background: 'rgba(201,169,110,0.15)', padding: '1px 7px', borderRadius: '10px',
-                }}>
-                  {pending}
-                </span>
-              )}
-            </button>
-          )
-        })}
+      <div className="toolbar">
+        <div className="filter-tabs" role="tablist" aria-label="Tipo de solicitud">
+          {TABS.map(t => {
+            const pending = pendingCount(t)
+            return (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                className="filter-tab"
+                aria-selected={tab === t}
+                onClick={() => setTab(t)}
+              >
+                {TAB_LABEL[t]}
+                {pending > 0 && <span className="filter-tab-count" aria-label={`${pending} sin responder`}>{pending}</span>}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {rows.length === 0 ? (
-        <div style={{
-          background: 'var(--bg-surface)', border: '1px dashed rgba(255,255,255,0.1)',
-          borderRadius: '12px', padding: '56px 48px', textAlign: 'center',
-        }}>
-          <div style={{
-            width: '40px', height: '40px', borderRadius: '10px',
-            background: 'rgba(201,169,110,0.1)', margin: '0 auto 14px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Inbox size={18} color="var(--accent-gold)" />
-          </div>
-          <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-            No hay solicitudes de {tab === 'contact' ? 'contacto' : tab === 'page' ? 'páginas' : 'soporte'} todavía.
-          </div>
+        <div className="empty-card">
+          <span className="empty-card-icon" aria-hidden="true"><Inbox size={18} /></span>
+          No hay solicitudes de {TAB_NOUN[tab]} todavía.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="feed" role="tabpanel">
           {rows.map(row => {
             const responded = overrides[row.id] ?? row.responded
             const meta = row.metadata ?? {}
             const metaEntries = Object.entries(meta).filter(([k]) => k !== 'category_label')
+            const who = row.kind === 'contact'
+              ? [row.requester_name, row.company].filter(Boolean).join(' · ') || row.requester_email
+              : row.tenant_name ?? row.requester_email
             return (
-              <div
-                key={row.id}
-                className="req-card"
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  padding: '16px 20px',
-                  opacity: responded ? 0.6 : 1,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ minWidth: 0 }}>
-                    {/* Identidad */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                        {row.kind === 'contact'
-                          ? [row.requester_name, row.company].filter(Boolean).join(' · ') || row.requester_email
-                          : row.tenant_name ?? row.requester_email}
+              <div key={row.id} className="feed-row" data-done={responded || undefined}>
+                <div className="feed-body">
+                  <div className="feed-head">
+                    <span className="feed-title">{who}</span>
+                    {row.category && (
+                      <span className="pill" style={{ '--tone': row.category === 'ai_capacity' ? 'var(--gold-1)' : 'var(--gold-3)' } as React.CSSProperties}>
+                        {CATEGORY_LABELS[row.category] ?? row.category}
                       </span>
-                      {row.category && (
-                        <span style={{
-                          fontSize: '10px', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase',
-                          color: row.category === 'ai_capacity' ? 'var(--accent-teal)' : 'var(--accent-gold)',
-                          background: row.category === 'ai_capacity' ? 'rgba(90,175,160,0.12)' : 'rgba(201,169,110,0.1)',
-                          padding: '2px 8px', borderRadius: '10px',
-                        }}>
-                          {CATEGORY_LABELS[row.category] ?? row.category}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                      <a href={`mailto:${row.requester_email}`} style={{ color: 'var(--accent-blue)', textDecoration: 'none' }}>
-                        {row.requester_email}
-                      </a>
-                      {row.requester_role && <> · {row.requester_role}</>}
-                      {' · '}{formatDate(row.created_at)}
-                    </div>
+                    )}
+                  </div>
+                  <div className="feed-meta">
+                    <a href={`mailto:${row.requester_email}`}>{row.requester_email}</a>
+                    {row.requester_role && <> · {row.requester_role}</>}
+                    {' · '}{formatDate(row.created_at)}
                   </div>
 
-                  {/* Checkbox respondido */}
-                  <button className="req-check" onClick={() => toggle(row)} aria-pressed={responded}>
-                    {responded
-                      ? <CheckCircle2 size={17} color="var(--accent-green)" />
-                      : <Circle size={17} color="var(--text-muted)" />}
-                    <span style={{ fontSize: '12px', color: responded ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                      {responded ? 'Respondida' : 'Marcar respondida'}
-                    </span>
-                  </button>
+                  {row.subject && <div className="feed-title" style={{ display: 'block', marginTop: '10px' }}>{row.subject}</div>}
+                  <p className="feed-text feed-text-pre" style={row.subject ? undefined : { marginTop: '10px' }}>{row.message}</p>
+
+                  {/* Metadata interna (plan, uso de IA...) */}
+                  {metaEntries.length > 0 && (
+                    <div className="feed-facts">
+                      {metaEntries.map(([k, v]) => (
+                        <span key={k}>
+                          <span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</span>: <b>{String(v)}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Asunto + mensaje */}
-                {row.subject && (
-                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '12px' }}>
-                    {row.subject}
-                  </div>
-                )}
-                <p style={{
-                  fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6,
-                  margin: `${row.subject ? '6px' : '12px'} 0 0`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
-                }}>
-                  {row.message}
-                </p>
-
-                {/* Metadata interna (plan, uso de IA...) */}
-                {metaEntries.length > 0 && (
-                  <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '12px' }}>
-                    {metaEntries.map(([k, v]) => (
-                      <span key={k} style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        <span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</span>:{' '}
-                        <span style={{ color: 'var(--text-secondary)' }}>{String(v)}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                <div className="feed-side">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => toggle(row)}
+                    aria-pressed={responded}
+                    disabled={busy[row.id]}
+                    aria-busy={busy[row.id] || undefined}
+                  >
+                    {responded
+                      ? <CheckCircle2 size={15} aria-hidden="true" style={{ color: 'var(--gold-2)' }} />
+                      : <Circle size={15} aria-hidden="true" />}
+                    {responded ? 'Respondida' : 'Marcar respondida'}
+                  </button>
+                </div>
               </div>
             )
           })}
