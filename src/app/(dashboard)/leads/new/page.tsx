@@ -93,7 +93,7 @@ async function NewLeadContent() {
 
 function NewLeadPage() {
   return (
-    <>
+    <div className="form-narrow">
       <PageHeader
         title="Registrar nuevo lead"
         description="Completa los datos del lead para añadirlo al sistema"
@@ -108,7 +108,7 @@ function NewLeadPage() {
       <Suspense fallback={<NewLeadFormSkeleton />}>
         <NewLeadContent />
       </Suspense>
-    </>
+    </div>
   )
 }
 

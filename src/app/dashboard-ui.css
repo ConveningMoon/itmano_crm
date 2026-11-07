@@ -1939,7 +1939,7 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 /* ── /leads/new: alta manual e importación ──────────────────────────────────── */
 .form-narrow { max-width: 640px; }
 .form-narrow .settings-input { max-width: none; }
-.form-field + .form-field { margin-top: 12px; }
+.form-field { margin-top: 12px; }
 .form-hint { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 6px; }
 .form-count { margin-top: 4px; text-align: right; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .form-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; }
