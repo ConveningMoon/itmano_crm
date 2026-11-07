@@ -4,21 +4,7 @@ import {
   Area, AreaChart as RAreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { usePrefersReducedMotion } from '@/components/motion/use-prefers-reduced-motion'
-import type { TooltipContentProps } from 'recharts'
-import { AXIS_TICK, ChartTooltipBody, GRID_STROKE, fmt, useChartId } from './chart-shared'
-
-const fmtDecimals = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-function AreaTooltip({ active, payload, label, unit, decimals }: TooltipContentProps & { unit?: string; decimals: boolean }) {
-  if (!active || !payload?.length) return null
-  const format = decimals ? fmtDecimals : fmt
-  const rows = payload.map(p => ({
-    name:  String(p.name ?? ''),
-    color: String(p.color ?? p.stroke ?? p.payload?.color ?? 'currentColor'),
-    value: `${format(Number(p.value ?? 0))}${unit ? ` ${unit}` : ''}`,
-  }))
-  return <ChartTooltipBody title={label == null ? undefined : String(label)} rows={rows} />
-}
+import { AXIS_TICK, GRID_STROKE, SeriesTooltip, fmt, fmtDecimals, useChartId } from './chart-shared'
 
 // Área con línea dorada, degradado hacia transparente y un brillo suave. Las series
 // se dibujan superpuestas (no apiladas): cada una es su propia cuenta. Si una
@@ -52,7 +38,7 @@ export function AreaChart({ data, series, height, unit, decimals = false }: {
           <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={16} />
           <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={decimals} width={44} />
           <Tooltip
-            content={p => <AreaTooltip {...p} unit={unit} decimals={decimals} />}
+            content={p => <SeriesTooltip {...p} unit={unit} format={decimals ? fmtDecimals : fmt} />}
             cursor={{ stroke: 'var(--border-hover)', strokeWidth: 1 }}
           />
           {series.map(s => (

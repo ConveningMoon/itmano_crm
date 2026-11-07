@@ -12,6 +12,9 @@ export const GRID_STROKE = 'rgba(255,255,255,0.06)'
 
 export const fmt = (n: number) => n.toLocaleString('en-US')
 
+/** Siempre dos decimales: series con fracciones, como USD. */
+export const fmtDecimals = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 /** id estable para <defs>: useId trae ":" y eso rompe url(#...) en algunos navegadores. */
 export function useChartId(prefix: string): string {
   return `${prefix}-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
@@ -39,13 +42,19 @@ export function ChartTooltipBody({ title, rows }: { title?: string; rows: Toolti
   )
 }
 
-/** Contenido de <Tooltip> para series numéricas: una fila por serie visible. */
-export function SeriesTooltip({ active, payload, label, unit }: TooltipContentProps & { unit?: string }) {
+/**
+ * Contenido de <Tooltip> para series numéricas: una fila por serie visible.
+ * `format` cambia cómo se escribe el valor (por defecto, entero con separadores).
+ */
+export function SeriesTooltip({ active, payload, label, unit, format = fmt }: TooltipContentProps & {
+  unit?:   string
+  format?: (n: number) => string
+}) {
   if (!active || !payload?.length) return null
   const rows = payload.map(p => ({
     name:  String(p.name ?? ''),
     color: String(p.color ?? p.stroke ?? p.payload?.color ?? 'currentColor'),
-    value: `${fmt(Number(p.value ?? 0))}${unit ? ` ${unit}` : ''}`,
+    value: `${format(Number(p.value ?? 0))}${unit ? ` ${unit}` : ''}`,
   }))
   return <ChartTooltipBody title={label == null ? undefined : String(label)} rows={rows} />
 }
