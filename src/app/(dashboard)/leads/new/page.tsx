@@ -1,8 +1,14 @@
+import { Suspense } from 'react'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { NewLeadClient } from './new-lead-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
+import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
+import { NewLeadFormSkeleton } from './new-lead-skeleton'
 
 export interface ChannelOption {
   id:          string
@@ -21,7 +27,9 @@ export interface TenantOption {
   name: string
 }
 
-async function NewLeadPage() {
+// Lo que lee la sesión o la base vive aquí, detrás del Suspense de NewLeadPage:
+// la cabecera sale del shell estático.
+async function NewLeadContent() {
   const ctx      = await requireTenantContext()
   // El picker de tenant solo aplica a un super_admin SIN selección — estado hoy
   // inalcanzable aquí (requireTenantContext lo manda al hub), pero la expresión
@@ -80,6 +88,27 @@ async function NewLeadPage() {
       tenants={tenants}
       myAgentId={myAgentId}
     />
+  )
+}
+
+function NewLeadPage() {
+  return (
+    <>
+      <PageHeader
+        title="Registrar nuevo lead"
+        description="Completa los datos del lead para añadirlo al sistema"
+        actions={
+          <Link href="/leads" className="btn btn-ghost">
+            <ArrowLeft size={14} aria-hidden="true" />
+            Leads
+            <LinkPendingSpinner />
+          </Link>
+        }
+      />
+      <Suspense fallback={<NewLeadFormSkeleton />}>
+        <NewLeadContent />
+      </Suspense>
+    </>
   )
 }
 
