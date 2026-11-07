@@ -287,5 +287,11 @@ cliente. Pasaba en producción en la ficha del lead.
   gestión sólo recibe sus propios datos privados (`redactPeerAgents`).
 - Las explicaciones van detrás de `InfoHint` (`src/components/ui/info-hint.tsx`),
   no como párrafos siempre visibles.
+- Feeds y bandejas (Actividad, Notificaciones, Solicitudes) usan `.feed` con
+  filas `.feed-row` hermanas (el separador lo pone el CSS); los vacíos,
+  `.empty-card`; los filtros que son enlaces, `.filter-tab` con
+  `aria-current="page"`. `tests/design/rediseno-fase-5-tokens.test.ts` impide
+  hex, rgba y `--accent-*` en las carpetas ya rediseñadas de la fase 5; cada
+  tanda añade las suyas.
 - El texto atenuado (`--text-muted`) debe mantener 4.5:1 de contraste sobre
   `--bg-surface` y `--bg-elevated`; si cambias el token, vuelve a medirlo.
