@@ -1757,3 +1757,181 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 .form-aside { max-width: 620px; margin-top: 14px; font-size: 12px; line-height: 1.55; color: var(--text-muted); }
 .form-aside a { color: var(--gold-2); }
 .visually-hidden-field { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* ── /leads: lista, kanban y controles de filtro ─────────────────────────────
+   Los colores de etapa, calidad y agente llegan por `--tone` desde
+   STAGE_CONFIG, QUALITY_CONFIG o el accent del agente: aquí no se fija ninguno. */
+
+/* Búsqueda con icono y select con chevron propio: mismo control que settings-input. */
+.search-field { position: relative; display: flex; align-items: center; flex: 1 1 220px; max-width: 280px; }
+.search-field > svg { position: absolute; left: 11px; color: var(--text-muted); pointer-events: none; }
+.search-field .settings-input { padding-left: 34px; }
+.select-field { position: relative; display: inline-flex; align-items: center; }
+.select-field > select { appearance: none; min-width: 160px; padding-right: 32px; cursor: pointer; }
+.select-field > svg { position: absolute; right: 10px; color: var(--text-muted); pointer-events: none; }
+.select-field option { background: var(--bg-elevated); }
+.select-field-full { display: flex; width: 100%; }
+.select-field-full > select { max-width: none; }
+
+/* Botón con estado activo (p. ej. "Filtros (2)"). */
+.btn[data-active] { color: var(--gold-2); border-color: color-mix(in srgb, var(--gold-2) 40%, transparent); }
+
+.toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.leads-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; }
+
+/* Chips de filtro activo: un clic lo quita. */
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gold-2) 35%, transparent);
+  background: color-mix(in srgb, var(--gold-2) 10%, transparent);
+  color: var(--gold-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.chip-remove:hover { background: color-mix(in srgb, var(--gold-2) 18%, transparent); }
+
+/* Barra de selección múltiple. */
+.selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid color-mix(in srgb, var(--gold-2) 35%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.selection-bar .settings-link-btn { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.selection-bar-fill { flex: 1; }
+
+/* Iniciales con el color del agente. */
+.avatar {
+  --tone: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 15%, transparent);
+}
+.avatar-sm { width: 24px; height: 24px; font-size: 9px; }
+
+.check-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.check-btn[aria-pressed='true'] { color: var(--gold-2); }
+
+.dt-row[data-selected] { background: color-mix(in srgb, var(--gold-2) 6%, transparent); }
+.dt-row:focus-visible,
+.kanban-card:focus-visible,
+.check-btn:focus-visible { outline: 2px solid var(--gold-3); outline-offset: -2px; }
+.lead-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lead-name-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.cell-inline { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-secondary); }
+.cell-inline > svg { flex-shrink: 0; }
+.cell-text { display: block; min-width: 0; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-muted { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.quality-cell { display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.quality-cell > small { font-size: 10.5px; font-weight: 400; }
+
+.pill[data-tone='alert'] { --tone: var(--alert); }
+.pill-xs { height: 18px; gap: 3px; padding: 0 6px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.pill-square { border-radius: 5px; }
+
+.tag-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.tag-chip {
+  max-width: 130px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
+}
+.tag-chips-more { align-self: center; font-size: 10px; color: var(--text-muted); }
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Kanban: una columna por etapa; en móvil cada columna ocupa casi la pantalla. */
+.kanban { display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 12px; scroll-snap-type: x proximity; }
+.kanban-col {
+  --tone: var(--gold-2);
+  flex: 0 0 248px;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--tone);
+  box-shadow: var(--highlight-top);
+  scroll-snap-align: start;
+}
+.kanban-col-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.kanban-col-name { display: inline-flex; align-items: center; gap: 6px; }
+.kanban-col-name::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); }
+.kanban-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
+}
+.kanban-card:hover { border-color: var(--border-hover); box-shadow: var(--highlight-top), var(--shadow-sm); transform: translateY(-2px); }
+.kanban-card:active { transform: scale(0.99); }
+.kanban-card-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.kanban-card-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kanban-card-meta { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-muted); }
+.kanban-card .tag-chips { margin-top: 0; }
+.kanban-note { padding: 16px 0; text-align: center; font-size: 12px; color: var(--text-muted); }
+.kanban-note-sm { padding: 6px 0; font-size: 11px; }
+@media (max-width: 760px) {
+  .kanban-col { flex-basis: min(82vw, 300px); max-height: none; }
+  .search-field { max-width: none; }
+}

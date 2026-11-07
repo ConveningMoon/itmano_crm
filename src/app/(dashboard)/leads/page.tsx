@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { scopeFor } from '@/lib/auth/visibility'
@@ -8,12 +9,16 @@ import { listLeadTags } from '@/lib/data/lead-tags'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
+import { LeadsListSkeleton } from './leads-skeleton'
 
-async function LeadsPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
+
+// Lo que lee la URL, la sesión o la base vive aquí, detrás del Suspense de
+// LeadsPage: la cabecera sale del shell estático. Al cambiar un filtro, la
+// navegación va en una transición (leads-client.tsx), así que el Suspense no
+// vuelve a mostrar el esqueleto: la lista vieja se atenúa con RefreshingPill.
+async function LeadsContent({ searchParams }: { searchParams: SearchParams }) {
   // Búsqueda, filtros, orden y página viven en la URL: el servidor devuelve sólo
   // la página pedida (ver src/lib/data/leads.ts), no todos los leads del tenant.
   const filters = parseLeadListFilters(await searchParams)
@@ -74,6 +79,20 @@ async function LeadsPage({
       viewerRole={role}
       viewerAgentId={scope.agentId}
     />
+  )
+}
+
+function LeadsPage({ searchParams }: { searchParams: SearchParams }) {
+  return (
+    <>
+      <PageHeader
+        title="Leads"
+        hint="La calidad dice qué tan buen prospecto es el lead y no baja porque deje de responder; la urgencia dice cuándo toca actuar. Ordena por Prioridad para ver primero lo que caduca."
+      />
+      <Suspense fallback={<LeadsListSkeleton />}>
+        <LeadsContent searchParams={searchParams} />
+      </Suspense>
+    </>
   )
 }
 
