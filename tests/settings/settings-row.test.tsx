@@ -8,7 +8,7 @@ describe('SettingsRow', () => {
       <SettingsRow label="Zona" hint="Donde trabajas"><input /></SettingsRow>,
     )
     expect(html).toContain('info-hint')
-    expect(html).toContain('aria-label="Qué es Zona"')
+    expect(html).toContain('aria-label="Más información sobre Zona"')
     expect(html).not.toContain('settings-row-hint')
   })
 
@@ -42,7 +42,7 @@ describe('SettingsCard', () => {
   it('con hint pinta el ⓘ junto al título, sin párrafo de bajada', () => {
     const html = renderToStaticMarkup(<SettingsCard title="Rangos" hint="Explicación"><div /></SettingsCard>)
     expect(html).toContain('info-hint')
-    expect(html).toContain('aria-label="Qué es Rangos"')
+    expect(html).toContain('aria-label="Más información sobre Rangos"')
     expect(html).not.toContain('settings-card-hint')
   })
 

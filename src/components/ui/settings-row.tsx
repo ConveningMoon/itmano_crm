@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { InfoHint } from '@/components/ui/info-hint'
+import { hintLabel } from '@/components/ui/hint-label'
 
 // Piezas de formulario de /settings. Sin estado: sirven igual en Server y
 // Client Components. Los estilos viven en dashboard-ui.css (.settings-*).
@@ -18,7 +19,7 @@ export function SettingsCard({
       <div className="settings-card-head">
         <div className="settings-card-heading">
           <h3 className="settings-card-title">{title}</h3>
-          {hint && <InfoHint label={`Qué es ${title}`}>{hint}</InfoHint>}
+          {hint && <InfoHint label={hintLabel(title)}>{hint}</InfoHint>}
         </div>
         {action}
       </div>
@@ -45,7 +46,7 @@ export function SettingsRow({
     <div className="settings-row">
       <div className="settings-row-labelwrap">
         <Tag className="settings-row-label" {...(htmlFor ? { htmlFor } : {})}>{label}</Tag>
-        {hint && <InfoHint label={`Qué es ${label}`}>{hint}</InfoHint>}
+        {hint && <InfoHint label={hintLabel(label)}>{hint}</InfoHint>}
       </div>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>

@@ -1,4 +1,5 @@
 import { InfoHint } from '@/components/ui/info-hint'
+import { hintLabel } from '@/components/ui/hint-label'
 
 // Encabezado con el que abre toda página del dashboard: título, bajada y, a la
 // derecha, las acciones de la página. Es un Server Component: sólo emite marcado
@@ -16,7 +17,7 @@ export function PageHeader({ title, description, hint, actions }: {
         {hint ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 className="page-title">{title}</h1>
-            <InfoHint label={`Qué es ${title}`}>{hint}</InfoHint>
+            <InfoHint label={hintLabel(title)}>{hint}</InfoHint>
           </div>
         ) : (
           <h1 className="page-title">{title}</h1>
