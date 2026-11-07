@@ -1,13 +1,12 @@
 import type { AiUsageSummary, AiUsageTotals, AiUsageByFeature, AiUsageRequestRow, AgentAiBreakdown } from '@/lib/data/ai-usage'
-import type { AiUsageLimitView } from '@/lib/ai-usage/view'
 import { InfoHint } from '@/components/ui/info-hint'
 import { AI_FEATURE_LABELS } from '@/lib/services/ai-feature-labels'
 import { Sparkles, ArrowDownToLine, ArrowUpFromLine, DollarSign } from 'lucide-react'
 
-// Panel de uso de IA (tokens + costo). Componente presentacional puro, sin
-// hooks: lo renderiza el Centro de control (server) y el tab "Uso de IA" de
-// Configuración (dentro del client de settings). Los datos llegan ya agregados
-// desde getAiUsageSummary.
+// Piezas del uso de IA (tokens + costo). Presentacionales puras, sin hooks:
+// AiUsagePanel es la vista del Centro de control (server) y las tarjetas sueltas
+// las compone el tab "Uso de IA" de Configuración (client). Los datos llegan ya
+// agregados desde getAiUsageSummary.
 
 // El fallback `?? f` cubre una feature de una fila vieja que ya no exista en
 // el mapa: se muestra el literal antes que romper la pantalla.
@@ -99,10 +98,6 @@ function numHeaders(showCosts: boolean) {
     </>
   )
 }
-
-// El tipo vive en lib/ai-usage/view (sin server-only); se reexporta para no
-// romper a quien lo importaba de aquí.
-export type { AiUsageLimitView }
 
 // Desglose por agente — vista del owner (mes en curso).
 export function AiByAgentCard({ byAgent, showCosts }: { byAgent: AgentAiBreakdown | null; showCosts: boolean }) {
@@ -256,20 +251,31 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
   )
 }
 
-// showCosts: los montos en USD (costo por request, tarifas) son información
-// interna de ITMANO — true solo para el super_admin (Centro de control).
-// Los usuarios del tenant ven requests/tokens y su límite como porcentaje.
-// byAgent: desglose por agente del mes en curso (vista del owner). showRecent:
-// el Centro de control lo apaga y muestra el diagrama diario en su lugar.
-export function AiUsagePanel({ summary, showCosts = true, limit = null, limitSubtitle, byAgent = null, showRecent = true }: {
-  summary: AiUsageSummary
-  showCosts?: boolean
-  limit?: AiUsageLimitView | null
-  limitSubtitle?: string
-  byAgent?: AgentAiBreakdown | null
-  showRecent?: boolean
-}) {
-  const { allTime, last30d, byFeature, byTenant, recent } = summary
+// Cómo se calcula el uso. Con costos (super_admin), la tarifa del modelo; sin
+// ellos, cómo funciona el límite del equipo. Una sola fuente para el Centro de
+// control y para Configuración → "Uso de IA".
+export function AiCostExplanation({ showCosts }: { showCosts: boolean }) {
+  return showCosts ? (
+    <>
+      El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo
+      (claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón de salida). Los adjuntos
+      (p. ej. el PDF de un lead magnet) aumentan los tokens de entrada, por eso esas generaciones
+      cuestan más.
+    </>
+  ) : (
+    <>
+      Cada generación con IA (propiedades, correos, secuencias) consume parte del límite mensual del
+      equipo. Los documentos adjuntos consumen más. El contador se reinicia el día 1 de cada mes; si
+      necesitas ampliar el límite, contacta a ITMANO.
+    </>
+  )
+}
+
+// Vista global del Centro de control (sólo super_admin, siempre con costos).
+// Los requests recientes no van aquí: el hub muestra el diagrama diario en su
+// lugar. Configuración compone sus propias tarjetas (AiUsageSection).
+export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
+  const { allTime, last30d, byFeature, byTenant } = summary
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -296,54 +302,16 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null, limitSub
           value={fmtInt(last30d.outputTokens)}
           sub={`${fmtInt(allTime.outputTokens)} en total`}
         />
-        {showCosts ? (
-          <KpiCard
-            icon={<DollarSign size={14} />}
-            color="var(--accent-green)"
-            label="Costo · 30 días"
-            value={fmtCost(last30d.costUsd)}
-            sub={`${fmtCost(allTime.costUsd)} en total`}
-          />
-        ) : limit ? (
-          <div style={{ ...CARD, padding: '18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-              <div style={{
-                width: '28px', height: '28px', borderRadius: '8px',
-                background: 'color-mix(in srgb, var(--accent-green) 12%, transparent)', color: 'var(--accent-green)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Sparkles size={14} />
-              </div>
-              <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 500 }}>
-                Límite mensual
-              </span>
-            </div>
-            {limit.unlimited ? (
-              <div style={{ fontSize: '24px', fontWeight: 500, color: 'var(--accent-teal)', lineHeight: 1.1 }}>Ilimitado</div>
-            ) : (
-              <>
-                <div style={{ fontSize: '24px', fontWeight: 500, color: limit.blocked ? 'var(--accent-coral)' : 'var(--text-primary)', lineHeight: 1.1 }}>
-                  {Math.round(limit.usedRatio * 100)}%
-                </div>
-                <div style={{ marginTop: '8px', height: '5px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%', borderRadius: '3px',
-                    width: `${Math.max(3, Math.round(limit.usedRatio * 100))}%`,
-                    background: limit.blocked || limit.usedRatio >= 0.8 ? 'var(--accent-coral)' : 'var(--accent-gold)',
-                  }} />
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                  {limit.blocked
-                    ? 'Límite alcanzado — se reinicia el día 1'
-                    : (limitSubtitle ?? 'del límite del mes utilizado')}
-                </div>
-              </>
-            )}
-          </div>
-        ) : null}
+        <KpiCard
+          icon={<DollarSign size={14} />}
+          color="var(--accent-green)"
+          label="Costo · 30 días"
+          value={fmtCost(last30d.costUsd)}
+          sub={`${fmtCost(allTime.costUsd)} en total`}
+        />
       </div>
 
-      {/* Desglose por tenant — solo vista global (super_admin) */}
+      {/* Desglose por tenant */}
       {byTenant && byTenant.length > 0 && (
         <div style={CARD}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
@@ -351,12 +319,12 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null, limitSub
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr><th style={TH}>Tenant</th>{numHeaders(showCosts)}</tr></thead>
+              <thead><tr><th style={TH}>Tenant</th>{numHeaders(true)}</tr></thead>
               <tbody>
                 {byTenant.map(t => (
                   <tr key={t.tenantId ?? 'none'}>
                     <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500 }}>{t.tenantName}</td>
-                    {totalsRow(t, showCosts)}
+                    {totalsRow(t, true)}
                   </tr>
                 ))}
               </tbody>
@@ -365,26 +333,11 @@ export function AiUsagePanel({ summary, showCosts = true, limit = null, limitSub
         </div>
       )}
 
-      <AiByAgentCard byAgent={byAgent} showCosts={showCosts} />
+      <AiByFeatureCard byFeature={byFeature} showCosts />
 
-      <AiByFeatureCard byFeature={byFeature} showCosts={showCosts} />
-
-      {showRecent && <AiRecentCard recent={recent} showCosts={showCosts} />}
-
-      {showCosts ? (
-        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo
-          (claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón de salida). Los adjuntos
-          (p. ej. el PDF de un lead magnet) aumentan los tokens de entrada — por eso esas generaciones
-          cuestan más.
-        </p>
-      ) : (
-        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          Cada generación con IA (propiedades, correos, secuencias) consume parte del límite mensual del
-          equipo. Los documentos adjuntos consumen más. El contador se reinicia el día 1 de cada mes; si
-          necesitas ampliar el límite, contacta a ITMANO.
-        </p>
-      )}
+      <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        <AiCostExplanation showCosts />
+      </p>
     </div>
   )
 }
