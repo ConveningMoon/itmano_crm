@@ -87,6 +87,7 @@ async function NewLeadContent() {
       isSuperAdmin={needsTenantPicker}
       tenants={tenants}
       myAgentId={myAgentId}
+      lockedAgentId={ctx.role === 'agent' ? ctx.agent_id : null}
     />
   )
 }

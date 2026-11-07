@@ -160,17 +160,22 @@ export function NewLeadClient({
   isSuperAdmin = false,
   tenants = [],
   myAgentId = null,
+  lockedAgentId = null,
 }: {
   agents: Agent[]
   channels: ChannelOption[]
   isSuperAdmin?: boolean
   tenants?: TenantOption[]
   myAgentId?: string | null
+  // Rol 'agent': el servidor le atribuye siempre sus leads, así que el
+  // formulario no le ofrece elegir agente.
+  lockedAgentId?: string | null
 }) {
   const router = useRouter()
   const fieldId = useId()
 
-  const [form, setForm] = useState<FormData>(INITIAL_FORM)
+  const initialForm: FormData = { ...INITIAL_FORM, agentId: lockedAgentId ?? '' }
+  const [form, setForm] = useState<FormData>(initialForm)
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -408,7 +413,7 @@ export function NewLeadClient({
   }
 
   const handleReset = () => {
-    setForm(INITIAL_FORM)
+    setForm(initialForm)
     setErrors({})
     setSubmitSuccess(false)
     resetImport()
@@ -596,21 +601,27 @@ export function NewLeadClient({
           {/* Asignación */}
           <section className="settings-card">
             <div className="settings-card-head"><h2 className="settings-card-title">Asignación</h2></div>
-            <label htmlFor={id('agent')} className="settings-field-label">Agente asignado *</label>
-            <SelectField
-              id={id('agent')}
-              value={form.agentId}
-              onChange={e => handleAgentChange(e.target.value)}
-              invalid={errors.agentId}
-            >
-              <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
-              {visibleAgents.map(agent => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
-                </option>
-              ))}
-            </SelectField>
-            <FieldError message={errors.agentId} />
+            {lockedAgentId ? (
+              <p className="settings-note">Los leads que registras se te asignan automáticamente.</p>
+            ) : (
+              <>
+                <label htmlFor={id('agent')} className="settings-field-label">Agente asignado *</label>
+                <SelectField
+                  id={id('agent')}
+                  value={form.agentId}
+                  onChange={e => handleAgentChange(e.target.value)}
+                  invalid={errors.agentId}
+                >
+                  <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
+                  {visibleAgents.map(agent => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
+                    </option>
+                  ))}
+                </SelectField>
+                <FieldError message={errors.agentId} />
+              </>
+            )}
 
             {selectedAgent && (
               <div className="agent-preview">
