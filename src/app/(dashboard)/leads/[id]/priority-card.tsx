@@ -76,7 +76,7 @@ function FactRow({ label, items, negative = false }: {
       </span>
       <span style={{
         fontSize: '13px', lineHeight: 1.55,
-        color: negative ? 'var(--accent-coral)' : 'var(--text-secondary)',
+        color: negative ? 'var(--alert)' : 'var(--text-secondary)',
       }}>
         {items.join(' · ')}
       </span>
@@ -117,7 +117,7 @@ export function PriorityCard({ priority, breakdown, opportunities, potentialValu
           {position ? (
             <div style={{
               fontSize: '18px', fontWeight: 600,
-              color: position.top ? 'var(--accent-gold)' : 'var(--text-primary)',
+              color: position.top ? 'var(--gold-2)' : 'var(--text-primary)',
             }}>
               {position.text}
             </div>
@@ -159,10 +159,10 @@ export function PriorityCard({ priority, breakdown, opportunities, potentialValu
           {opportunities.map(o => (
             <div key={o.key} style={{
               marginTop: '12px', padding: '10px 12px', borderRadius: '8px',
-              background: 'color-mix(in srgb, var(--accent-green) 8%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--accent-green) 22%, transparent)',
+              background: 'color-mix(in srgb, var(--gold-1) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--gold-1) 22%, transparent)',
             }}>
-              <div style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--accent-green)' }}>
+              <div style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--gold-1)' }}>
                 {o.label}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.5 }}>
@@ -199,7 +199,7 @@ export function PriorityCard({ priority, breakdown, opportunities, potentialValu
             </strong>
             {potentialValue.commission !== null ? (
               <> · la agencia factura{' '}
-                <strong style={{ color: 'var(--accent-green)' }}>
+                <strong style={{ color: 'var(--gold-1)' }}>
                   {formatMoney(potentialValue.commission, potentialValue.currency)}
                 </strong>
               </>

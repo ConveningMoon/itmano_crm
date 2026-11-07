@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // se queda fuera de la paleta dorada. Cada tanda nueva añade sus carpetas aquí.
 
 const DASHBOARD = path.resolve(__dirname, '../../src/app/(dashboard)')
-const REDISENADAS = ['activity', 'notifications', 'soporte', 'solicitudes']
+const REDISENADAS = ['activity', 'notifications', 'soporte', 'solicitudes', 'leads']
 
 function archivos(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(e => {

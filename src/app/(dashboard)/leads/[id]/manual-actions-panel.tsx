@@ -71,8 +71,8 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
           marginBottom: '12px',
           padding:      '8px 12px',
           borderRadius: '6px',
-          background:   'rgba(201,123,107,0.08)',
-          border:       '1px solid rgba(201,123,107,0.2)',
+          background:   'color-mix(in srgb, var(--alert) 8%, transparent)',
+          border:       '1px solid color-mix(in srgb, var(--alert) 20%, transparent)',
           fontSize:     '12px',
           color:        'var(--text-muted)',
         }}>
@@ -108,8 +108,8 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
                 fontWeight:   600,
                 padding:      '1px 7px',
                 borderRadius: '4px',
-                background:   a.points >= 0 ? 'rgba(107,163,104,0.14)' : 'rgba(201,123,107,0.14)',
-                color:        a.points >= 0 ? 'var(--accent-green)' : 'var(--accent-coral)',
+                background:   a.points >= 0 ? 'color-mix(in srgb, var(--gold-1) 14%, transparent)' : 'color-mix(in srgb, var(--alert) 14%, transparent)',
+                color:        a.points >= 0 ? 'var(--gold-1)' : 'var(--alert)',
               }}>
                 {a.points >= 0 ? `+${a.points}` : a.points}
               </span>
@@ -130,7 +130,7 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
                   disabled={isPending}
                   style={{
                     padding: '7px 14px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
-                    border: 'none', background: 'var(--accent-coral)', color: 'var(--bg-base)',
+                    border: 'none', background: 'var(--alert)', color: 'var(--bg-base)',
                     cursor: isPending ? 'wait' : 'pointer',
                   }}
                 >
@@ -155,8 +155,8 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '8px',
                   padding: '8px 14px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  border: '1px solid rgba(201,123,107,0.35)', background: 'transparent',
-                  color: 'var(--accent-coral)', cursor: 'pointer',
+                  border: '1px solid color-mix(in srgb, var(--alert) 35%, transparent)', background: 'transparent',
+                  color: 'var(--alert)', cursor: 'pointer',
                 }}
               >
                 {disqualify.label}
@@ -172,7 +172,7 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
           fontSize: '12px',
           marginTop: '14px',
           marginBottom: 0,
-          color: error ? 'var(--accent-coral)' : 'var(--accent-green)',
+          color: error ? 'var(--alert)' : 'var(--gold-1)',
         }}>
           {error ?? feedback}
         </p>

@@ -23,8 +23,8 @@ export interface AiFitBriefing {
 // Premura → etiqueta + color. NO es la temperatura del lead (esa mide qué tan
 // buen prospecto es): mide qué tan pronto conviene actuar.
 const WHEN_META: Record<NextActionWhen, { label: string; color: string; bg: string }> = {
-  hoy:         { label: 'Hoy',          color: '#E07B3A', bg: 'rgba(224,123,58,0.14)' },
-  esta_semana: { label: 'Esta semana',  color: '#5B8EC9', bg: 'rgba(91,142,201,0.14)' },
+  hoy:         { label: 'Hoy',          color: 'var(--alert)', bg: 'color-mix(in srgb, var(--alert) 14%, transparent)' },
+  esta_semana: { label: 'Esta semana',  color: 'var(--gold-1)', bg: 'color-mix(in srgb, var(--gold-1) 14%, transparent)' },
   sin_apuro:   { label: 'Sin apuro',    color: 'var(--text-muted)', bg: 'var(--bg-elevated)' },
 }
 
@@ -63,7 +63,7 @@ export function AiFitCard({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '14px' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-          <Sparkles size={15} color="var(--accent-gold)" /> Briefing del lead (IA)
+          <Sparkles size={15} color="var(--gold-2)" /> Briefing del lead (IA)
         </span>
         <button
           onClick={run}
@@ -100,7 +100,7 @@ export function AiFitCard({
               borderRadius: '10px', padding: '12px 14px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--accent-gold)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--gold-2)' }}>
                   <ArrowRight size={13} /> Próximo paso
                 </span>
                 {whenMeta && (
@@ -137,10 +137,10 @@ export function AiFitCard({
               display: 'flex', alignItems: 'flex-start', gap: '8px',
               fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5,
               padding: '10px 12px', borderRadius: '8px',
-              background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.22)',
+              background: 'color-mix(in srgb, var(--alert) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--alert) 22%, transparent)',
             }}>
-              <AlertTriangle size={14} color="var(--accent-coral)" style={{ flexShrink: 0, marginTop: '1px' }} />
-              <span><strong style={{ color: 'var(--accent-coral)' }}>A tener en cuenta:</strong> {data.watchOut}</span>
+              <AlertTriangle size={14} color="var(--alert)" style={{ flexShrink: 0, marginTop: '1px' }} />
+              <span><strong style={{ color: 'var(--alert)' }}>A tener en cuenta:</strong> {data.watchOut}</span>
             </div>
           )}
 
@@ -159,7 +159,7 @@ export function AiFitCard({
       )}
 
       {error && (
-        <div style={{ fontSize: '12px', color: 'var(--accent-coral)', marginTop: '10px', padding: '8px 12px', background: 'rgba(201,123,107,0.08)', borderRadius: '8px', lineHeight: 1.5 }}>
+        <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '10px', padding: '8px 12px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '8px', lineHeight: 1.5 }}>
           {error}
         </div>
       )}

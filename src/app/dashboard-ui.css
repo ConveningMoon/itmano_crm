@@ -2080,3 +2080,13 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 .action-confirm > .btn:first-child { flex: 1; }
 .form-required { color: var(--alert); }
 .input-date { color-scheme: dark; }
+
+/* Cabecera dentro de un .feed y enlace de acción de una fila. */
+.feed-caption { display: flex; align-items: center; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--border-subtle); }
+.feed-caption + .feed-row { border-top: 0; }
+.feed-link { display: inline-flex; align-items: center; gap: 3px; margin-top: 4px; padding: 0; border: 0; background: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--gold-2); cursor: pointer; }
+.feed-link:hover { color: var(--gold-1); }
+
+/* Opciones de los select nativos sobre fondo oscuro (el desplegable lo pinta el
+   sistema y no hereda el fondo del control). */
+select option { background: var(--bg-elevated); color: var(--text-primary); }

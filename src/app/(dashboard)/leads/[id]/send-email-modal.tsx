@@ -115,15 +115,15 @@ export function SendEmailModal({
 
         {done ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '32px 0' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(107,163,104,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Check size={22} color="var(--accent-green)" />
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'color-mix(in srgb, var(--gold-1) 12%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Check size={22} color="var(--gold-1)" />
             </div>
             <span style={{ fontSize: '14px', color: 'var(--text-primary)', textAlign: 'center' }}>
               {done === 'corporate' ? 'Correo enviado.' : 'Abrimos tu cliente de correo con el mensaje listo.'}
             </span>
             <button
               onClick={handleClose}
-              style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer' }}
+              style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer' }}
             >
               Cerrar
             </button>
@@ -140,11 +140,11 @@ export function SendEmailModal({
                     onClick={() => { setMode(o.key); setError(null) }}
                     style={{
                       textAlign: 'left', cursor: 'pointer', padding: '12px 14px', borderRadius: '10px',
-                      background: active ? 'rgba(201,169,110,0.08)' : 'var(--bg-elevated)',
-                      border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                      background: active ? 'color-mix(in srgb, var(--gold-2) 8%, transparent)' : 'var(--bg-elevated)',
+                      border: `1px solid ${active ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
                     }}
                   >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: active ? 'var(--accent-gold)' : 'var(--text-primary)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: active ? 'var(--gold-2)' : 'var(--text-primary)' }}>
                       {o.icon} {o.title}
                     </span>
                     <span style={{ display: 'block', fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '5px' }}>
@@ -160,9 +160,9 @@ export function SendEmailModal({
               <div style={{
                 display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '16px',
                 padding: '10px 12px', borderRadius: '8px',
-                background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.28)',
+                background: 'color-mix(in srgb, var(--gold-2) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 28%, transparent)',
               }}>
-                <AlertTriangle size={15} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                <AlertTriangle size={15} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
                   {sending?.sendingDomain
                     ? <>El dominio <strong style={{ color: 'var(--text-primary)' }}>{sending.sendingDomain}</strong> aún no está verificado.</>
@@ -189,7 +189,7 @@ export function SendEmailModal({
               <button
                 onClick={handleSend}
                 disabled={pending}
-                style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}
+                style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}
               >
                 {pending ? 'Enviando…' : mode === 'corporate' ? 'Enviar correo' : 'Abrir en mi correo'}
               </button>
