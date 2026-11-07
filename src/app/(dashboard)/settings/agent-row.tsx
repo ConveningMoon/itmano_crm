@@ -43,6 +43,10 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
   const [accessMsg, setAccessMsg]     = useState<string | null>(null)
   const [accessErr, setAccessErr]     = useState<string | null>(null)
   const [accessPending, startAccess]  = useTransition()
+  // Vincular tiene su propia transición: si compartiera la de invitar/revocar,
+  // al cerrar esos paneles (accessMode → idle) con la revalidación aún en curso
+  // se vería un instante "Vinculando…".
+  const [linkPending, startLink]      = useTransition()
 
   // Cómo se presenta el agente. Lo escribe él; la IA lo usa para personalizar el
   // análisis y el contenido. Antes vivía en la pestaña del negocio y sólo lo
@@ -179,7 +183,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
 
   function handleLinkSelf() {
     setAccessErr(null); setAccessMsg(null)
-    startAccess(async () => {
+    startLink(async () => {
       const res = await linkAgentToMyAccount(agent.id)
       if (!res.ok) { setAccessErr(res.error); return }
       setAccessMsg(`Vinculado. Ahora figuras como ${agent.name} (p. ej. para importar leads).`)
@@ -222,7 +226,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
       entries.push({ type: 'item', label: 'Revocar acceso', onSelect: () => openPanel('revoke-cancel', () => { setAccessMode('confirmRevoke'); setAccessErr(null) }) })
     } else {
       if (canLinkSelf) {
-        entries.push({ type: 'item', label: 'Vincular a mi cuenta', disabled: accessPending, onSelect: () => { setFocusTarget(null); handleLinkSelf() } })
+        entries.push({ type: 'item', label: 'Vincular a mi cuenta', disabled: accessPending || linkPending, onSelect: () => { setFocusTarget(null); handleLinkSelf() } })
       }
       entries.push({ type: 'item', label: 'Invitar acceso', onSelect: () => openPanel('invite', () => { setInviteEmail(agent.email ?? ''); setAccessMode('inviting'); setAccessErr(null); setAccessMsg(null) }) })
     }
@@ -232,7 +236,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
     entries.push({ type: 'item', label: 'Eliminar', tone: 'danger', onSelect: () => openPanel('delete-cancel', () => { setDeleteStep('confirm1'); setDangerErr(null); setConfirmText('') }) })
   }
 
-  const hasPanels = ownerBusy || (accessPending && accessMode === 'idle') || !!dangerErr || deleteStep !== 'idle' || editingDesc || descOk || editingCover
+  const hasPanels = ownerBusy || linkPending || !!dangerErr || deleteStep !== 'idle' || editingDesc || descOk || editingCover
     || editingLangs || langOk || accessMode !== 'idle' || !!accessMsg || !!accessErr || editing
 
   return (
@@ -276,7 +280,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
         <div className="settings-agent-panels">
           {/* El menú ⋯ se cierra al elegir: el pendiente de estas dos acciones se ve aquí. */}
           {ownerBusy && <p className="settings-note" role="status">Transfiriendo…</p>}
-          {accessPending && accessMode === 'idle' && <p className="settings-note" role="status">Vinculando…</p>}
+          {linkPending && <p className="settings-note" role="status">Vinculando…</p>}
           {dangerErr && (
             <p className="settings-alert" role="alert"><AlertCircle size={13} aria-hidden="true" /> {dangerErr}</p>
           )}
