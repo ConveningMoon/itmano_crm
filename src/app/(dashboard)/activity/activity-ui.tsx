@@ -40,34 +40,28 @@ function ActivityIcon({ name }: { name: string }) {
   }
 }
 
-// One activity row (icon circle + text + relative time). `showTenant` adds the
-// tenant badge for the super_admin multi-tenant view.
-export function ActivityRow({ item, showTenant = false }: { item: ActivityItem; showTenant?: boolean }) {
+// Una fila de actividad (icono + texto + tiempo relativo) con las clases .feed-*
+// de dashboard-ui.css. Las filas van como hermanas directas dentro de su
+// contenedor: el separador entre ellas lo pone el CSS. `showTenant` añade la
+// etiqueta del tenant en la vista multi-tenant del super_admin; `compact` es la
+// versión del Dashboard, con menos aire.
+export function ActivityRow({ item, showTenant = false, compact = false }: {
+  item:        ActivityItem
+  showTenant?: boolean
+  compact?:    boolean
+}) {
   const meta = EVENT_META[item.type] ?? { icon: 'ArrowRightCircle', color: 'var(--gold-2)' }
   return (
-    <div style={{ display: 'flex', gap: '10px', padding: '8px 0' }}>
-      <div style={{
-        width: '28px', height: '28px', borderRadius: '50%',
-        background: `color-mix(in srgb, ${meta.color} 12%, transparent)`, color: meta.color,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
+    <div className="feed-row" style={compact ? { paddingBlock: '9px' } : undefined}>
+      <span className="feed-icon" style={{ '--tone': meta.color } as React.CSSProperties} aria-hidden="true">
         <ActivityIcon name={meta.icon} />
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <span>{item.description}</span>
-          {showTenant && item.tenantName && (
-            <span style={{
-              fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '4px',
-              background: 'var(--bg-overlay)', color: 'var(--text-secondary)',
-            }}>
-              {item.tenantName}
-            </span>
-          )}
+      </span>
+      <div className="feed-body">
+        <div className="feed-head">
+          <span className="feed-text" style={{ margin: 0 }}>{item.description}</span>
+          {showTenant && item.tenantName && <span className="feed-tag">{item.tenantName}</span>}
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-          {item.author} · {timeAgo(item.createdAt)}
-        </div>
+        <div className="feed-meta">{item.author} · {timeAgo(item.createdAt)}</div>
       </div>
     </div>
   )

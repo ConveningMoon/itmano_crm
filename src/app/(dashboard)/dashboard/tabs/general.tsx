@@ -244,12 +244,7 @@ export async function GeneralTab({ ctx }: TabProps) {
               No hay actividad todavía.
             </div>
           ) : (
-            activity.map((item, idx) => (
-              <div key={item.id}>
-                <ActivityRow item={item} />
-                {idx < activity.length - 1 && <div style={{ height: '1px', background: 'var(--border-subtle)' }} />}
-              </div>
-            ))
+            activity.map(item => <ActivityRow key={item.id} item={item} compact />)
           )}
         </ChartCard>
       </div>

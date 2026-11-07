@@ -1,19 +1,21 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, History } from 'lucide-react'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getAllActivity } from '@/lib/data/activity'
 import { ActivityRow } from './activity-ui'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { ListCardSkeleton } from '@/components/ui/page-skeleton'
 
 const PAGE = 30
 
-async function ActivityPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ count?: string }>
-}) {
+type SearchParams = Promise<{ count?: string }>
+
+// Lo que lee la sesión, la base o la URL vive aquí, detrás del Suspense de
+// ActivityPage: la cabecera sale del shell estático.
+async function ActivityContent({ searchParams }: { searchParams: SearchParams }) {
   const { tenant_id, role, user_id } = await requireTenantContext()
   const isSuper = role === 'super_admin'
 
@@ -26,53 +28,46 @@ async function ActivityPage({
   const visible = items.slice(0, count)
 
   return (
-    <div style={{ maxWidth: '760px' }}>
-      {/* Back nav */}
-      <div style={{ marginBottom: '16px' }}>
-        <Link
-          href="/dashboard"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
-        >
-          <ArrowLeft size={14} />
-          Dashboard
-        </Link>
-      </div>
-
-      <PageHeader title="Actividad" />
-
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '8px 20px' }}>
-        {visible.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            No hay actividad todavía.
-          </div>
-        ) : (
-          visible.map((item, idx) => (
-            <div key={item.id}>
-              <ActivityRow item={item} showTenant={isSuper} />
-              {idx < visible.length - 1 && (
-                <div style={{ height: '1px', background: 'var(--border-subtle)' }} />
-              )}
-            </div>
-          ))
-        )}
-      </div>
+    <>
+      {visible.length === 0 ? (
+        <div className="empty-card feed-narrow">
+          <span className="empty-card-icon" aria-hidden="true"><History size={18} /></span>
+          No hay actividad todavía.
+        </div>
+      ) : (
+        <div className="feed feed-narrow">
+          {visible.map(item => <ActivityRow key={item.id} item={item} showTenant={isSuper} />)}
+        </div>
+      )}
 
       {hasMore && (
-        <div style={{ textAlign: 'center', marginTop: '16px' }}>
-          <Link
-            href={`/activity?count=${count + PAGE}`}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500,
-              color: 'var(--text-secondary)', textDecoration: 'none',
-              border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '8px 18px',
-            }}
-          >
+        <div className="feed-more feed-narrow">
+          <Link href={`/activity?count=${count + PAGE}`} className="btn btn-ghost" scroll={false}>
             Cargar más
             <LinkPendingSpinner />
           </Link>
         </div>
       )}
-    </div>
+    </>
+  )
+}
+
+function ActivityPage({ searchParams }: { searchParams: SearchParams }) {
+  return (
+    <>
+      <PageHeader
+        title="Actividad"
+        actions={
+          <Link href="/dashboard" className="btn btn-ghost">
+            <ArrowLeft size={14} aria-hidden="true" />
+            Dashboard
+          </Link>
+        }
+      />
+      <Suspense fallback={<ListCardSkeleton rows={12} />}>
+        <ActivityContent searchParams={searchParams} />
+      </Suspense>
+    </>
   )
 }
 
