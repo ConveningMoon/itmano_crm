@@ -16,7 +16,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -3119,6 +3119,14 @@ export type Database = {
           reset_at: string
         }[]
       }
+      ai_usage_summary: {
+        Args: { p_agent_id: string; p_months?: number; p_tenant_id: string }
+        Returns: Json
+      }
+      channel_leads_trend: {
+        Args: { p_days: number; p_tenant_id: string; p_time_zone: string }
+        Returns: Json
+      }
       channel_metrics: {
         Args: { p_channel_ids: string[]; p_window_days?: number }
         Returns: Json
@@ -3137,6 +3145,15 @@ export type Database = {
       }
       email_broadcast_metrics: {
         Args: { p_broadcast_ids: string[]; p_tenant_id: string }
+        Returns: Json
+      }
+      email_dashboard_stats: {
+        Args: {
+          p_agent_id: string
+          p_days: number
+          p_tenant_id: string
+          p_time_zone: string
+        }
         Returns: Json
       }
       ensure_tag_email_sequences: {
@@ -3169,6 +3186,14 @@ export type Database = {
           p_include_manual_rules?: boolean
           p_tenant_id?: string
         }
+        Returns: Json
+      }
+      lead_score_histogram: {
+        Args: { p_agent_id: string; p_tenant_id: string }
+        Returns: number[]
+      }
+      newsletter_growth: {
+        Args: { p_months: number; p_tenant_id: string }
         Returns: Json
       }
       recalc_lead_score: { Args: { p_lead_id: string }; Returns: undefined }

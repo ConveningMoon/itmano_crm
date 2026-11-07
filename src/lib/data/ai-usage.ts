@@ -5,13 +5,15 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import { getTenantShellRow, getTenantNames } from '@/lib/data/tenants'
 import { DEFAULT_TENANT_COLOR } from '@/lib/config'
 import { aiUsageByMonth, type AiUsageMonthPoint } from '@/lib/ai-usage/view'
+import { columns } from '@/lib/supabase/columns'
 
 // Agregaciones de uso de IA para los dashboards:
 //   - Configuración → "Uso de IA" (scoped a un tenant)
 //   - Centro de control (tenantId = null → global, con desglose por tenant)
 //
-// Cómputo en memoria: el volumen es de decenas-cientos de requests/mes.
-// TODO: migrar a una RPC agregada si ai_usage_events supera ~10k filas.
+// Los totales salen de la RPC ai_usage_summary, que agrega en la base: leer las
+// filas y sumarlas aquí se quedaba corto en cuanto hubiera más de 1000 eventos
+// (el tope de filas de la Data API). Sólo los recientes se leen fila a fila.
 
 export interface AiUsageTotals {
   requests:     number
@@ -47,29 +49,38 @@ export interface AiUsageSummary {
   // Solo poblado en la vista global (tenantId = null).
   byTenant:  AiUsageByTenant[] | null
   recent:    AiUsageRequestRow[]
-  // Últimos 6 meses (UTC), con ceros; sale de las mismas filas, sin otra consulta.
+  // Últimos 6 meses (UTC), con ceros.
   byMonth:   AiUsageMonthPoint[]
 }
 
-interface EventRow {
-  id:            string
-  tenant_id:     string | null
-  agent_id:      string | null
-  feature:       string
-  model:         string
-  input_tokens:  number
-  output_tokens: number
-  cost_usd:      number | string
-  created_at:    string
+// Forma del jsonb de ai_usage_summary (supabase/migrations/20261107120000_ai_usage_summary.sql).
+// Los numeric pueden llegar como número o string; se normalizan con Number().
+type RawTotals = { requests: number; inputTokens: number; outputTokens: number; costUsd: number | string }
+interface RawSummary {
+  allTime:   RawTotals
+  last30d:   RawTotals
+  byFeature: (RawTotals & { feature: string })[]
+  byTenant:  (RawTotals & { tenantId: string | null })[] | null
+  byMonth:   { key: string; requests: number; costUsd: number | string }[]
 }
+
+const RECENT_COLUMNS = columns('ai_usage_events', [
+  'id', 'tenant_id', 'feature', 'model', 'input_tokens', 'output_tokens', 'cost_usd', 'created_at',
+])
+const RECENT_LIMIT = 25
 
 const emptyTotals = (): AiUsageTotals => ({ requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 })
 
-function accumulate(t: AiUsageTotals, r: EventRow) {
-  t.requests     += 1
-  t.inputTokens  += r.input_tokens
-  t.outputTokens += r.output_tokens
-  t.costUsd      += Number(r.cost_usd)
+const round6 = (n: number) => Math.round(n * 1_000_000) / 1_000_000
+
+function totals(t: RawTotals | null | undefined): AiUsageTotals {
+  if (!t) return emptyTotals()
+  return {
+    requests:     Number(t.requests),
+    inputTokens:  Number(t.inputTokens),
+    outputTokens: Number(t.outputTokens),
+    costUsd:      round6(Number(t.costUsd)),
+  }
 }
 
 /**
@@ -82,69 +93,57 @@ export async function getAiUsageSummary(
   opts?: { agentId?: string },
 ): Promise<AiUsageSummary> {
   const supabase = createAdminClient()
+  const agentId = opts?.agentId ?? null
 
-  let q = supabase
+  let recentQ = supabase
     .from('ai_usage_events')
-    .select('id, tenant_id, agent_id, feature, model, input_tokens, output_tokens, cost_usd, created_at')
+    .select(RECENT_COLUMNS)
     .order('created_at', { ascending: false })
-  if (tenantId) q = q.eq('tenant_id', tenantId)
-  if (opts?.agentId) q = q.eq('agent_id', opts.agentId)
+    .limit(RECENT_LIMIT)
+  if (tenantId) recentQ = recentQ.eq('tenant_id', tenantId)
+  if (agentId) recentQ = recentQ.eq('agent_id', agentId)
 
-  // Nombres de tenant para la vista global (y para la columna de recientes),
-  // en paralelo con los eventos y deduplicados por request (getTenantNames).
-  const [{ data }, tenantName] = await Promise.all([
-    q,
+  // Agregados, recientes y nombres de tenant (sólo la vista global) en paralelo.
+  const [summaryRes, recentRes, tenantName] = await Promise.all([
+    supabase.rpc('ai_usage_summary', { p_tenant_id: tenantId, p_agent_id: agentId, p_months: 6 }),
+    recentQ,
     tenantId ? Promise.resolve(new Map<string, string>()) : getTenantNames(),
   ])
-  const rows = (data ?? []) as EventRow[]
+  if (summaryRes.error) console.error('[ai_usage_summary]', summaryRes.error.message)
+  if (recentRes.error) console.error('[ai_usage_events recent]', recentRes.error.message)
 
-  const cutoff30d = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+  const raw = (summaryRes.data ?? null) as RawSummary | null
 
-  const allTime = emptyTotals()
-  const last30d = emptyTotals()
-  const byFeatureMap = new Map<string, AiUsageTotals>()
-  const byTenantMap  = new Map<string, AiUsageTotals>()
-
-  for (const r of rows) {
-    accumulate(allTime, r)
-    if (r.created_at >= cutoff30d) accumulate(last30d, r)
-
-    if (!byFeatureMap.has(r.feature)) byFeatureMap.set(r.feature, emptyTotals())
-    accumulate(byFeatureMap.get(r.feature)!, r)
-
-    if (!tenantId) {
-      const key = r.tenant_id ?? '__none__'
-      if (!byTenantMap.has(key)) byTenantMap.set(key, emptyTotals())
-      accumulate(byTenantMap.get(key)!, r)
-    }
-  }
-
-  const byFeature: AiUsageByFeature[] = [...byFeatureMap.entries()]
-    .map(([feature, t]) => ({ feature, ...t }))
-    .sort((a, b) => b.costUsd - a.costUsd)
+  const byFeature: AiUsageByFeature[] = (raw?.byFeature ?? []).map(f => ({ feature: f.feature, ...totals(f) }))
 
   const byTenant: AiUsageByTenant[] | null = tenantId
     ? null
-    : [...byTenantMap.entries()]
-        .map(([key, t]) => ({
-          tenantId:   key === '__none__' ? null : key,
-          tenantName: key === '__none__' ? 'ITMANO (sin tenant)' : (tenantName.get(key) ?? key),
-          ...t,
-        }))
-        .sort((a, b) => b.costUsd - a.costUsd)
+    : (raw?.byTenant ?? []).map(t => ({
+        tenantId:   t.tenantId,
+        tenantName: t.tenantId ? (tenantName.get(t.tenantId) ?? t.tenantId) : 'ITMANO (sin tenant)',
+        ...totals(t),
+      }))
 
-  const recent: AiUsageRequestRow[] = rows.slice(0, 25).map(r => ({
-    id:           r.id,
-    feature:      r.feature,
-    model:        r.model,
-    inputTokens:  r.input_tokens,
-    outputTokens: r.output_tokens,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recent: AiUsageRequestRow[] = ((recentRes.data ?? []) as any[]).map(r => ({
+    id:           r.id as string,
+    feature:      r.feature as string,
+    model:        r.model as string,
+    inputTokens:  r.input_tokens as number,
+    outputTokens: r.output_tokens as number,
     costUsd:      Number(r.cost_usd),
-    createdAt:    r.created_at,
-    tenantName:   tenantId ? null : (r.tenant_id ? (tenantName.get(r.tenant_id) ?? r.tenant_id) : 'ITMANO'),
+    createdAt:    r.created_at as string,
+    tenantName:   tenantId ? null : (r.tenant_id ? (tenantName.get(r.tenant_id as string) ?? (r.tenant_id as string)) : 'ITMANO'),
   }))
 
-  return { allTime, last30d, byFeature, byTenant, recent, byMonth: aiUsageByMonth(rows, new Date()) }
+  return {
+    allTime: totals(raw?.allTime),
+    last30d: totals(raw?.last30d),
+    byFeature,
+    byTenant,
+    recent,
+    byMonth: aiUsageByMonth(raw?.byMonth ?? [], new Date()),
+  }
 }
 
 // ── Desglose por agente (mes en curso) ────────────────────────────────────────

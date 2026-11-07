@@ -16,21 +16,22 @@ describe('aiUsageByMonth', () => {
     expect(out.map(m => m.key)).toEqual(['2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02'])
   })
 
-  it('cuenta el último instante del mes en ese mes, en UTC', () => {
+  it('coloca cada mes agregado en su posición y deja ceros en los demás', () => {
     const out = aiUsageByMonth([
-      { created_at: '2026-10-31T23:59:59.999Z', cost_usd: 1 },
-      { created_at: '2026-11-01T00:00:00.000Z', cost_usd: 2 },
+      { key: '2026-10', requests: 3, costUsd: 1 },
+      { key: '2026-11', requests: 1, costUsd: 2 },
     ], NOW)
     const oct = out.find(m => m.key === '2026-10')!
     const nov = out.find(m => m.key === '2026-11')!
-    expect([oct.requests, oct.costUsd]).toEqual([1, 1])
+    expect([oct.requests, oct.costUsd]).toEqual([3, 1])
     expect([nov.requests, nov.costUsd]).toEqual([1, 2])
+    expect(out.find(m => m.key === '2026-09')!.requests).toBe(0)
   })
 
-  it('ignora eventos fuera de la ventana', () => {
+  it('ignora meses fuera de la ventana', () => {
     const out = aiUsageByMonth([
-      { created_at: '2026-05-31T23:59:59.999Z', cost_usd: 5 },
-      { created_at: '2026-12-01T00:00:00.000Z', cost_usd: 7 },
+      { key: '2026-05', requests: 5, costUsd: 5 },
+      { key: '2026-12', requests: 7, costUsd: 7 },
     ], NOW)
     expect(out.reduce((s, m) => s + m.requests, 0)).toBe(0)
   })
@@ -42,11 +43,9 @@ describe('aiUsageByMonth', () => {
       .toEqual(['2025-10', '2025-11', '2025-12', '2026-01', '2026-02', '2026-03'])
   })
 
-  it('acepta cost_usd como string y redondea a 6 decimales al final', () => {
+  it('acepta el costo como string (numeric) y redondea a 6 decimales', () => {
     const out = aiUsageByMonth([
-      { created_at: '2026-11-02T00:00:00Z', cost_usd: '0.004' },
-      { created_at: '2026-11-03T00:00:00Z', cost_usd: '0.004' },
-      { created_at: '2026-11-04T00:00:00Z', cost_usd: 0.003 },
+      { key: '2026-11', requests: 3, costUsd: '0.0110000001' },
     ], NOW)
     expect(out[5].requests).toBe(3)
     expect(out[5].costUsd).toBe(0.011)
