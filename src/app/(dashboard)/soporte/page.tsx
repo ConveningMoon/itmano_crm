@@ -1,5 +1,7 @@
+import { Suspense } from 'react'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { SupportForm } from './support-form'
+import { SupportFormSkeleton } from './support-skeleton'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 
@@ -7,20 +9,27 @@ import { PageHeader } from '@/components/ui/page-header'
 // ITMANO. La solicitud se registra en el CRM (platform_requests → /solicitudes
 // del super_admin, con aviso por Telegram) con la identidad del solicitante
 // adjuntada automáticamente.
-async function SoportePage() {
+async function SupportContent() {
   // Guard (redirige a /login sin sesión) y, de paso, el email del solicitante:
   // sale del claim ya validado, sin pedírselo otra vez al servidor de auth.
   const { email: userEmail } = await getCurrentTenantContext()
 
+  return <SupportForm userEmail={userEmail} />
+}
+
+// La cabecera y el correo alternativo salen del shell estático; el formulario,
+// que necesita el email de la sesión, llega detrás del Suspense.
+function SoportePage() {
   return (
     <>
-      <PageHeader title="Soporte técnico" description="¿Algo no funciona o tienes una duda? Escríbenos y te ayudamos." />
+      <PageHeader title="Soporte técnico" description="¿Algo no funciona o tienes una duda? Escríbenos." />
 
-      <SupportForm userEmail={userEmail} />
+      <Suspense fallback={<SupportFormSkeleton />}>
+        <SupportContent />
+      </Suspense>
 
-      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '16px', maxWidth: '620px', lineHeight: 1.55 }}>
-        ¿Prefieres el correo? Escríbenos directamente a{' '}
-        <a href="mailto:support@itmano.com" style={{ color: 'var(--accent-gold)' }}>support@itmano.com</a>.
+      <p className="form-aside">
+        También puedes escribir a <a href="mailto:support@itmano.com">support@itmano.com</a>.
       </p>
     </>
   )
