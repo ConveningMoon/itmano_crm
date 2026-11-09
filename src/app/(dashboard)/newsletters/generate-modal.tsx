@@ -115,7 +115,7 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            <Sparkles size={16} color="var(--accent-gold)" />
+            <Sparkles size={16} color="var(--gold-2)" />
             Generar con IA
           </div>
           <button
@@ -158,7 +158,7 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
               style={{ ...INPUT_STYLE, cursor: busy ? 'not-allowed' : 'pointer' }}
             >
               {SUPPORTED_LANGUAGE_CODES.map(code => (
-                <option key={code} value={code} style={{ background: '#16181C' }}>{LANGUAGE_CONFIG[code].label}</option>
+                <option key={code} value={code}>{LANGUAGE_CONFIG[code].label}</option>
               ))}
             </select>
           </div>
@@ -193,7 +193,7 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
               </>
             ) : (
               <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                <Globe size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                <Globe size={14} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
                   En esta primera generación se preparan las fuentes de tu mercado
                   a partir de las zonas de <strong style={{ color: 'var(--text-primary)' }}>Tu negocio</strong>:
@@ -209,12 +209,12 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
               está en curso. */}
           {busy && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-              <Loader2 size={14} className="animate-spin" color="var(--accent-gold)" />
+              <Loader2 size={14} className="animate-spin" color="var(--gold-2)" />
               <span>{stage === 'researching' ? 'Investigando en tus fuentes…' : 'Redactando…'}</span>
             </div>
           )}
 
-          {error && <p style={{ fontSize: '12px', color: 'var(--accent-coral)', margin: 0 }}>{error}</p>}
+          {error && <p style={{ fontSize: '12px', color: 'var(--alert)', margin: 0 }}>{error}</p>}
 
           {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
@@ -237,7 +237,7 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
+                background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
                 cursor: busy ? 'not-allowed' : 'pointer',
                 opacity: busy ? 0.6 : 1,
               }}

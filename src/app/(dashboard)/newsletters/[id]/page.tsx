@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { notFound, redirect } from 'next/navigation'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -11,6 +12,7 @@ import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { EditionSkeleton } from './edition-skeleton'
 
 // Editor de una edición. Server Component: hace todo el fetch (edición,
 // biblioteca del Estudio, slug del tenant) y se lo pasa como props a
@@ -32,7 +34,9 @@ export const maxDuration = 300
 // editor la muestra en el círculo del preview, igual que la página pública.
 const AGENT_OPTION_COLUMNS = columns('agents', ['id', 'name', 'cover_photo_url'])
 
-async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
+type Params = Promise<{ id: string }>
+
+async function EditionContent({ params }: { params: Params }) {
   const { id } = await params
   const ctx = await requireTenantContext()
   if (!ctx.tenant_id) redirect('/newsletters')
@@ -40,11 +44,19 @@ async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
 
   const db = createAdminClient()
 
-  // El plan (lectura cacheada que ya hace el shell) y la edición no dependen
-  // uno del otro: van en paralelo y la guarda se evalúa con ambos resueltos.
-  const [subscription, edition] = await Promise.all([
+  // Nada de esto depende de lo demás: el plan (lectura cacheada que ya hace el
+  // shell), la edición, la biblioteca del Estudio, la fila del tenant y los
+  // agentes van en una sola ola (antes eran dos, la segunda esperando a la
+  // edición). Las guardas se evalúan con todo resuelto; si no pasan, lo leído
+  // (todo acotado al tenant) se descarta sin llegar al cliente.
+  const [subscription, edition, studioImages, tenantRow, { data: agentRows }] = await Promise.all([
     getSubscription(tenantId),
     getEditionById(id, tenantId),
+    getStudioImages(tenantId),
+    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
+    getTenantRow(tenantId),
+    db.from('agents').select(AGENT_OPTION_COLUMNS)
+      .eq('tenant_id', tenantId).eq('active', true).order('name'),
   ])
   const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
@@ -53,13 +65,6 @@ async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
 
   const canEdit = ctx.role !== 'agent' || edition.createdByUserId === ctx.user_id
 
-  const [studioImages, tenantRow, { data: agentRows }] = await Promise.all([
-    getStudioImages(tenantId),
-    // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
-    getTenantRow(tenantId),
-    db.from('agents').select(AGENT_OPTION_COLUMNS)
-      .eq('tenant_id', tenantId).eq('active', true).order('name'),
-  ])
   // reason: ver arriba.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tenantSlug = ((tenantRow as any)?.slug as string | undefined) ?? ''
@@ -91,6 +96,16 @@ async function EditionPage({ params }: { params: Promise<{ id: string }> }) {
       agents={agents}
       tenantName={tenantName}
     />
+  )
+}
+
+// El editor entero es dato de la edición: todo espera detrás del Suspense y el
+// esqueleto sale al instante.
+function EditionPage({ params }: { params: Params }) {
+  return (
+    <Suspense fallback={<EditionSkeleton />}>
+      <EditionContent params={params} />
+    </Suspense>
   )
 }
 

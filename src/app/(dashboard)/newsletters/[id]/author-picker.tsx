@@ -40,7 +40,7 @@ export function AuthorAvatar({
     width: `${size}px`, height: `${size}px`, borderRadius: '50%',
     flexShrink: 0, overflow: 'hidden', display: 'inline-flex',
     alignItems: 'center', justifyContent: 'center',
-    background: 'var(--bg-elevated, #22252A)',
+    background: 'var(--bg-elevated)',
   }
 
   if (photoUrl) {
@@ -125,7 +125,7 @@ export function AuthorPicker({
           checked={signWithOrg}
           disabled={disabled}
           onChange={e => onSignWithOrgChange(e.target.checked)}
-          style={{ accentColor: 'var(--accent-gold)', cursor: 'inherit' }}
+          style={{ accentColor: 'var(--gold-2)', cursor: 'inherit' }}
         />
         Firmar también con {tenantName || 'la agencia'}
       </label>

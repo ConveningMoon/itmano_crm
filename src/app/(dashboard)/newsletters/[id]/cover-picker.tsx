@@ -141,9 +141,9 @@ export function CoverPicker({
                   onClick={() => setTab(t.key)}
                   style={{
                     padding: '6px 12px', fontSize: '12px', fontWeight: 500, borderRadius: '8px', cursor: 'pointer',
-                    background: tab === t.key ? 'rgba(201,169,110,0.12)' : 'transparent',
-                    color: tab === t.key ? 'var(--accent-gold)' : 'var(--text-muted)',
-                    border: `1px solid ${tab === t.key ? 'rgba(201,169,110,0.3)' : 'var(--border-subtle)'}`,
+                    background: tab === t.key ? 'color-mix(in srgb, var(--gold-2) 12%, transparent)' : 'transparent',
+                    color: tab === t.key ? 'var(--gold-2)' : 'var(--text-muted)',
+                    border: `1px solid ${tab === t.key ? 'color-mix(in srgb, var(--gold-2) 30%, transparent)' : 'var(--border-subtle)'}`,
                   }}
                 >
                   {t.label}
@@ -217,7 +217,7 @@ export function CoverPicker({
                       onClick={() => onChange({ coverImageUrl: img.rendered_url as string, coverSource: 'studio' })}
                       style={{
                         width: '72px', height: '72px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0,
-                        border: coverImageUrl === img.rendered_url ? '2px solid var(--accent-gold)' : '1px solid var(--border-subtle)',
+                        border: coverImageUrl === img.rendered_url ? '2px solid var(--gold-2)' : '1px solid var(--border-subtle)',
                         padding: 0, cursor: 'pointer', background: 'var(--bg-elevated)',
                       }}
                     >
@@ -230,7 +230,7 @@ export function CoverPicker({
             )
           )}
 
-          {error && <p style={{ fontSize: '12px', color: 'var(--accent-coral)', margin: '8px 0 0' }}>{error}</p>}
+          {error && <p style={{ fontSize: '12px', color: 'var(--alert)', margin: '8px 0 0' }}>{error}</p>}
 
           {!canEdit && (
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>

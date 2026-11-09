@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getSourceDomainsFor } from '@/lib/data/newsletters'
@@ -7,6 +8,7 @@ import { getSubscription } from '@/lib/data/subscriptions'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { NewEditionSkeleton } from './new-edition-skeleton'
 
 // Creación de una edición nueva. Server Component: fetch de la biblioteca del
 // Estudio y las fuentes del tenant, luego el formulario (client) hace su
@@ -31,7 +33,7 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 // la action, no a la que tenía el botón.
 export const maxDuration = 300
 
-async function NewEditionPage() {
+async function NewEditionContent() {
   const ctx = await requireTenantContext()
   if (!ctx.tenant_id) redirect('/newsletters')
   const tenantId = ctx.tenant_id
@@ -50,10 +52,17 @@ async function NewEditionPage() {
   const plan: SubscriptionPlan = subscription?.plan ?? 'esencial'
   if (!canUseNewsletters({ role: ctx.role }, plan)) redirect('/newsletters')
 
+  return <NewEditionForm studioImages={studioImages} sourceDomains={sourceDomains} />
+}
+
+// La cabecera vive en el formulario (sus botones abren los paneles de IA en
+// esta misma página), así que todo espera detrás del Suspense: el esqueleto
+// sale al instante.
+function NewEditionPage() {
   return (
-    <div style={{ maxWidth: '560px' }}>
-      <NewEditionForm studioImages={studioImages} sourceDomains={sourceDomains} />
-    </div>
+    <Suspense fallback={<NewEditionSkeleton />}>
+      <NewEditionContent />
+    </Suspense>
   )
 }
 
