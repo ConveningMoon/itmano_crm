@@ -7,7 +7,12 @@ import { describe, expect, it } from 'vitest'
 // se queda fuera de la paleta dorada. Cada tanda nueva añade sus carpetas aquí.
 
 const DASHBOARD = path.resolve(__dirname, '../../src/app/(dashboard)')
-const REDISENADAS = ['activity', 'notifications', 'soporte', 'solicitudes', 'leads', 'properties']
+const REDISENADAS = ['activity', 'notifications', 'soporte', 'solicitudes', 'leads', 'properties', 'newsletters', 'studio']
+
+// Archivos cuyo color no es interfaz del CRM y no sale de la paleta a propósito.
+// El tema del editor de código del Estudio fija el resaltado de sintaxis, elegido
+// por contraste contra su fondo (ver el comentario de cada color en el archivo).
+const EXCEPCIONES = new Set(['studio/plantillas/code-editor.tsx'])
 
 function archivos(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -22,6 +27,7 @@ describe('fase 5: pantallas rediseñadas sin colores sueltos', () => {
     const dir = path.join(DASHBOARD, carpeta)
     const hallazgos: string[] = []
     for (const archivo of archivos(dir)) {
+      if (EXCEPCIONES.has(path.relative(DASHBOARD, archivo).split(path.sep).join('/'))) continue
       readFileSync(archivo, 'utf8').split(/\r?\n/).forEach((linea, i) => {
         if (/#[0-9a-fA-F]{3,8}\b/.test(linea) || /rgba?\(/.test(linea) || /--accent-/.test(linea)) {
           hallazgos.push(`${path.relative(DASHBOARD, archivo)}:${i + 1}  ${linea.trim()}`)
