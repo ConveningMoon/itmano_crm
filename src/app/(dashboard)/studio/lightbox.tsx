@@ -41,7 +41,7 @@ export function Lightbox({ src, alt, downloadName, onClose }: {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.86)',
+        background: 'color-mix(in srgb, var(--bg-base) 86%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '32px',
       }}
@@ -54,7 +54,7 @@ export function Lightbox({ src, alt, downloadName, onClose }: {
         onClick={e => e.stopPropagation()}
         style={{
           maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
-          borderRadius: '8px', boxShadow: '0 12px 48px rgba(0,0,0,0.5)',
+          borderRadius: '8px', boxShadow: '0 12px 48px color-mix(in srgb, var(--bg-base) 50%, transparent)',
         }}
       />
 
@@ -68,7 +68,7 @@ export function Lightbox({ src, alt, downloadName, onClose }: {
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
               padding: '8px 12px', borderRadius: '8px', fontSize: '12px',
-              background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', textDecoration: 'none',
+              background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', color: 'var(--text-primary)', textDecoration: 'none',
             }}
           >
             <Download size={14} /> Descargar
@@ -81,7 +81,7 @@ export function Lightbox({ src, alt, downloadName, onClose }: {
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: '34px', height: '34px', borderRadius: '8px', cursor: 'pointer',
-            background: 'rgba(255,255,255,0.12)', border: 'none', color: '#FFFFFF',
+            background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)', border: 'none', color: 'var(--text-primary)',
           }}
         >
           <X size={16} />

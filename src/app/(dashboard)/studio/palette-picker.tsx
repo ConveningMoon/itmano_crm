@@ -37,15 +37,15 @@ export function PalettePicker({ value, onChange, tenantColor }: {
                 display: 'flex', alignItems: 'center', gap: '7px',
                 padding: '5px 9px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer',
                 background: 'transparent',
-                border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
+                border: `1px solid ${active ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
+                color: active ? 'var(--gold-2)' : 'var(--text-muted)',
               }}
             >
               <span style={{ display: 'flex' }}>
                 {[preset.palette.brand, preset.palette.surface, preset.palette.ink].map((c, i) => (
                   <span key={i} style={{
                     width: '11px', height: '11px', background: c, borderRadius: '2px',
-                    marginLeft: i ? '-2px' : 0, border: '1px solid rgba(0,0,0,0.25)',
+                    marginLeft: i ? '-2px' : 0, border: '1px solid color-mix(in srgb, var(--bg-base) 25%, transparent)',
                   }} />
                 ))}
               </span>

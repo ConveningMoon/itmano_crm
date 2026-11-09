@@ -32,14 +32,14 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
         color: 'var(--text-muted)', lineHeight: 1.5,
       }}>
         Todavía no hay diseños para esta receta. Créalos en
-        {' '}<a href="/studio/plantillas" style={{ color: 'var(--accent-gold)' }}>el editor de plantillas</a>.
+        {' '}<a href="/studio/plantillas" style={{ color: 'var(--gold-2)' }}>el editor de plantillas</a>.
       </div>
     )
   }
 
   return (
     <div style={{ marginBottom: '18px' }}>
-      <style>{`.tpl-card:hover { border-color: var(--accent-gold) !important; }`}</style>
+      <style>{`.tpl-card:hover { border-color: var(--gold-2) !important; }`}</style>
       <label style={{
         display: 'block', fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase',
         letterSpacing: '0.06em', marginBottom: '6px', fontWeight: 500,
@@ -60,7 +60,7 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
               style={{
                 padding: '8px', textAlign: 'left', cursor: 'pointer',
                 background: 'var(--bg-surface)', borderRadius: '12px',
-                border: `${active ? 2 : 1}px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                border: `${active ? 2 : 1}px solid ${active ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
                 transition: 'border-color var(--dur-fast)',
               }}
             >
@@ -85,7 +85,7 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
                     position: 'absolute', top: '6px', right: '6px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: '26px', height: '26px', borderRadius: '6px', cursor: 'zoom-in',
-                    background: 'rgba(0,0,0,0.55)', color: '#FFFFFF',
+                    background: 'color-mix(in srgb, var(--bg-base) 55%, transparent)', color: 'var(--text-primary)',
                   }}
                 >
                   <Maximize2 size={13} />
@@ -98,7 +98,7 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
                 {t.hint}
               </div>
               {showFit && fit.warnings.map((w, i) => (
-                <div key={i} style={{ fontSize: '11px', color: 'var(--status-warm, #e07b3a)', marginTop: '6px', lineHeight: 1.3 }}>
+                <div key={i} style={{ fontSize: '11px', color: 'var(--gold-2)', marginTop: '6px', lineHeight: 1.3 }}>
                   {w}
                 </div>
               ))}

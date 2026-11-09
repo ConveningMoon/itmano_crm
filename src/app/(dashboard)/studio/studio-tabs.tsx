@@ -16,9 +16,6 @@ import type { TemplateMeta } from '@/lib/studio/templates/meta'
 // Mezclarlos en un formulario obligaba a esconder la mitad de los campos según
 // el caso.
 
-const gridStyle: React.CSSProperties = {
-  display: 'grid', gap: '28px', gridTemplateColumns: 'minmax(320px, 420px) 1fr', alignItems: 'start',
-}
 
 export function StudioTabs({ images, properties, agents, templates, tenantColor }: {
   images:      StudioImage[]
@@ -46,7 +43,7 @@ export function StudioTabs({ images, properties, agents, templates, tenantColor 
       ]}
       content={{
         posts: (
-          <div className="max-md:!grid-cols-1" style={gridStyle}>
+          <div className="studio-grid">
             <RecipeForm
               properties={properties}
               agents={agents}
@@ -64,7 +61,7 @@ export function StudioTabs({ images, properties, agents, templates, tenantColor 
           </div>
         ),
         mine: (
-          <div className="max-md:!grid-cols-1" style={gridStyle}>
+          <div className="studio-grid">
             <FreeImageForm onCreated={created} />
             <Library
               images={mine}

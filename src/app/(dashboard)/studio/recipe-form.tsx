@@ -234,8 +234,8 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
   return (
     <div>
       <style>{`
-        .studio-recipe:hover { border-color: var(--accent-gold) !important; color: var(--text-primary) !important; }
-        .studio-generate:hover:not(:disabled) { background: var(--accent-gold) !important; color: var(--bg-base) !important; }
+        .studio-recipe:hover { border-color: var(--gold-2) !important; color: var(--text-primary) !important; }
+        .studio-generate:hover:not(:disabled) { background: var(--gold-2) !important; color: var(--bg-base) !important; }
       `}</style>
 
       {/* Receta */}
@@ -250,9 +250,9 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
               onClick={() => changeRecipe(r.key)}
               style={{
                 padding: '6px 12px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer',
-                background: active ? 'color-mix(in srgb, var(--accent-gold) 14%, transparent)' : 'transparent',
-                border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
+                background: active ? 'color-mix(in srgb, var(--gold-2) 14%, transparent)' : 'transparent',
+                border: `1px solid ${active ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
+                color: active ? 'var(--gold-2)' : 'var(--text-muted)',
                 transition: 'color var(--dur-fast), border-color var(--dur-fast)',
               }}
             >
@@ -472,7 +472,7 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
       </Section>
 
       {error && (
-        <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>
+        <p style={{ fontSize: '12px', color: 'var(--alert)', margin: '0 0 12px' }}>{error}</p>
       )}
 
       {/* Previsualizar solo existe donde es gratis. Con escena generada, cada
@@ -523,8 +523,8 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           width: '100%', padding: '11px', fontSize: '13px', fontWeight: 500,
           borderRadius: '8px', cursor: pending ? 'default' : 'pointer',
-          background: 'transparent', border: '1px solid var(--accent-gold)',
-          color: 'var(--accent-gold)', opacity: pending ? 0.6 : 1,
+          background: 'transparent', border: '1px solid var(--gold-2)',
+          color: 'var(--gold-2)', opacity: pending ? 0.6 : 1,
           transition: 'background-color var(--dur-fast), color var(--dur-fast)',
         }}
       >

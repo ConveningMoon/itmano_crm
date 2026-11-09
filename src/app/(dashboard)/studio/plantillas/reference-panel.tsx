@@ -15,7 +15,7 @@ const chip: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: '10px', padding: '1px 5px', borderRadius: '4px',
   // `--bg-elevated` y no un respaldo a negro translúcido: el CRM es oscuro, y
-  // un negro al 5% sobre #0B0C0E deja el chip invisible — que fue justo lo que
+  // un negro al 5% sobre --bg-base deja el chip invisible — que fue justo lo que
   // pasó. Sobre el fondo elevado sí se lee como algo que se puede pulsar.
   background: 'var(--bg-elevated)', color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)', cursor: 'pointer',
@@ -51,7 +51,7 @@ export function ReferencePanel({ claveActual, clasesActivas, familias }: {
 
       <div style={{ padding: '0 10px 12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {copiado && (
-          <span style={{ fontSize: '10px', color: 'var(--accent-gold)' }}>Copiado: {copiado}</span>
+          <span style={{ fontSize: '10px', color: 'var(--gold-2)' }}>Copiado: {copiado}</span>
         )}
 
         {/* Lo primero, porque es lo que se pierde: dónde está el archivo. */}
@@ -119,8 +119,8 @@ export function ReferencePanel({ claveActual, clasesActivas, familias }: {
                     type="button"
                     style={{
                       ...chip,
-                      background: activa ? 'rgba(201, 169, 110, 0.25)' : chip.background,
-                      borderColor: activa ? 'var(--accent-gold)' : 'var(--border-subtle)',
+                      background: activa ? 'color-mix(in srgb, var(--gold-2) 25%, transparent)' : chip.background,
+                      borderColor: activa ? 'var(--gold-2)' : 'var(--border-subtle)',
                     }}
                     onClick={() => copiar(`html.${real ?? c.clave} `)}
                   >

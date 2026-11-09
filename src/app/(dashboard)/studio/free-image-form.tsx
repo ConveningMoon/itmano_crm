@@ -55,7 +55,7 @@ export function FreeImageForm({ onCreated }: { onCreated: (image: StudioImage) =
   return (
     <div>
       <style>{`
-        .studio-generate:hover:not(:disabled) { background: var(--accent-gold) !important; color: var(--bg-base) !important; }
+        .studio-generate:hover:not(:disabled) { background: var(--gold-2) !important; color: var(--bg-base) !important; }
       `}</style>
 
       <Field
@@ -78,7 +78,7 @@ export function FreeImageForm({ onCreated }: { onCreated: (image: StudioImage) =
       <ReferencePicker files={references} onChange={setReferences} />
 
       {error && (
-        <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)', margin: '0 0 12px' }}>{error}</p>
+        <p style={{ fontSize: '12px', color: 'var(--alert)', margin: '0 0 12px' }}>{error}</p>
       )}
 
       <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
@@ -94,8 +94,8 @@ export function FreeImageForm({ onCreated }: { onCreated: (image: StudioImage) =
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           width: '100%', padding: '11px', fontSize: '13px', fontWeight: 500,
           borderRadius: '8px', cursor: pending || prompt.trim().length < 3 ? 'default' : 'pointer',
-          background: 'transparent', border: '1px solid var(--accent-gold)',
-          color: 'var(--accent-gold)', opacity: pending || prompt.trim().length < 3 ? 0.6 : 1,
+          background: 'transparent', border: '1px solid var(--gold-2)',
+          color: 'var(--gold-2)', opacity: pending || prompt.trim().length < 3 ? 0.6 : 1,
           transition: 'background-color var(--dur-fast), color var(--dur-fast)',
         }}
       >

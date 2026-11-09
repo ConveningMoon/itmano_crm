@@ -67,7 +67,7 @@ export function MockupPanel({ claves, imagenes, propias, onCambio }: {
 
   return (
     <div style={{ marginTop: '16px' }}>
-      <style>{`.mk-card:hover { border-color: var(--accent-gold) !important; }`}</style>
+      <style>{`.mk-card:hover { border-color: var(--gold-2) !important; }`}</style>
 
       <div style={{
         display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '8px',
@@ -123,7 +123,7 @@ export function MockupPanel({ claves, imagenes, propias, onCambio }: {
               <div style={{ display: 'flex', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
                 <label style={{
                   display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer',
-                  fontSize: '10px', color: 'var(--accent-gold)',
+                  fontSize: '10px', color: 'var(--gold-2)',
                 }}>
                   <ImageUp size={12} />
                   Cambiar
@@ -164,7 +164,7 @@ export function MockupPanel({ claves, imagenes, propias, onCambio }: {
       </div>
 
       {error && (
-        <p style={{ fontSize: '11px', color: 'var(--status-lost, #c96b6b)', marginTop: '8px' }}>{error}</p>
+        <p style={{ fontSize: '11px', color: 'var(--alert)', marginTop: '8px' }}>{error}</p>
       )}
       <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '8px', lineHeight: 1.4 }}>
         Sirven sólo para diseñar. Una pieza real usa las fotos de su propiedad y el

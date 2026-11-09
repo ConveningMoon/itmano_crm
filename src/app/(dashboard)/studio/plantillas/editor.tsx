@@ -115,7 +115,7 @@ export function TemplateEditor({
   return (
     <div style={{ display: 'grid', gap: '20px', gridTemplateColumns: 'minmax(0, 1fr) 420px', alignItems: 'start' }}
          className="max-md:!grid-cols-1">
-      <style>{`.tpl-tab:hover{border-color:var(--accent-gold)!important}`}</style>
+      <style>{`.tpl-tab:hover{border-color:var(--gold-2)!important}`}</style>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -179,13 +179,13 @@ export function TemplateEditor({
           <button type="button" onClick={save} disabled={pending}
                   style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px',
                            padding: '8px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                           background: 'var(--accent-gold)', color: 'var(--bg-base)', fontSize: '12px', fontWeight: 500 }}>
+                           background: 'var(--gold-2)', color: 'var(--bg-base)', fontSize: '12px', fontWeight: 500 }}>
             {pending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Guardar
           </button>
         </div>
 
-        {error && <p style={{ fontSize: '12px', color: 'var(--status-lost, #c96b6b)' }}>{error}</p>}
+        {error && <p style={{ fontSize: '12px', color: 'var(--alert)' }}>{error}</p>}
         {saved && <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Guardado, con su miniatura.</p>}
       </div>
 
@@ -204,7 +204,7 @@ export function TemplateEditor({
                       // que se diseña), no interfaz del CRM: se queda fijo
                       // pase lo que pase con el tema, igual que el fondo de
                       // una hoja en cualquier editor de diseño.
-                      background: '#fff' }}>
+                      background: 'white' }}>
           {/* `allow-same-origin` SIN `allow-scripts`. La combinación de los dos
               es la peligrosa —un marco con script y origen propio puede quitarse
               su propio sandbox—, pero por separado el primero es sólo lo que

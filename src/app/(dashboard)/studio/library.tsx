@@ -83,7 +83,7 @@ export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: 
               {/* Qué piezas costaron dinero. El costo es la única marca honesta
                   de que hubo IA: una compuesta con sharp vale exactamente 0. */}
               {img.cost_usd > 0 && (
-                <span title="Generada con IA" style={{ display: 'flex', color: 'var(--accent-gold)' }}>
+                <span title="Generada con IA" style={{ display: 'flex', color: 'var(--gold-2)' }}>
                   <Sparkles size={12} />
                 </span>
               )}
@@ -97,7 +97,7 @@ export function Library({ images, emptyHint, onCreated, onUpdated, onDeleted }: 
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
               {img.rendered_url && (
-                <button type="button" onClick={() => setZoom(img)} style={{ ...actionStyle, color: 'var(--accent-gold)' }}>
+                <button type="button" onClick={() => setZoom(img)} style={{ ...actionStyle, color: 'var(--gold-2)' }}>
                   Ver
                 </button>
               )}
