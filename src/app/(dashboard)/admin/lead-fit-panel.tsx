@@ -27,7 +27,7 @@ export function LeadFitPanel({ summary }: { summary: LeadFitUsageSummary }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        <Sparkles size={15} color="var(--accent-gold)" />
+        <Sparkles size={15} color="var(--gold-2)" />
         Costo de cada análisis de fit con IA por lead. Se ejecuta solo en tenants con el análisis activado.
       </div>
 
@@ -65,7 +65,7 @@ export function LeadFitPanel({ summary }: { summary: LeadFitUsageSummary }) {
                     <td style={{ ...CELL, color: 'var(--text-primary)', fontWeight: 500 }}>{r.leadName}</td>
                     <td style={CELL}>{r.tenantName ?? '—'}</td>
                     <td style={CELL}>{r.inputTokens.toLocaleString('es')} / {r.outputTokens.toLocaleString('es')}</td>
-                    <td style={{ ...CELL, textAlign: 'right', color: 'var(--accent-gold)', fontWeight: 500 }}>{usd(r.costUsd)}</td>
+                    <td style={{ ...CELL, textAlign: 'right', color: 'var(--gold-2)', fontWeight: 500 }}>{usd(r.costUsd)}</td>
                     <td style={{ ...CELL, textAlign: 'right', color: 'var(--text-muted)' }}>{fmtDate(r.createdAt)}</td>
                   </tr>
                 ))}

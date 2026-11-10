@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { Building2, Users, Flame, TrendingUp } from 'lucide-react'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
@@ -9,18 +10,21 @@ import { AiUsagePanel } from '@/components/dashboard/ai-usage-panel'
 import { AiUsageDailyChart } from '@/components/charts/lazy'
 import { LeadFitPanel } from './lead-fit-panel'
 import { BriefingOutcomesPanel } from './briefing-outcomes-panel'
-import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
-import { AnimatedNumber } from '@/components/motion/animated-number'
+import { StatCard } from '@/components/ui/stat-card'
+import { QUALITY_CONFIG } from '@/lib/scoring/priority'
 import { Tabs } from '@/components/ui/tabs'
 import { AdminClient } from './admin-client'
 import { TenantCard } from './tenant-card'
 import { HubFeed } from './hub-feed'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { AdminSkeleton } from './admin-skeleton'
 
 // Centro de control del super_admin: pulso de la plataforma, entrada al CRM de
 // cada tenant y gestión (crear tenant / provisionar owner). Guarded server-side.
-async function AdminPage() {
+// Lo que lee la sesión o la base vive aquí, detrás del Suspense de AdminPage:
+// la cabecera sale del shell estático.
+async function AdminContent() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
@@ -35,54 +39,20 @@ async function AdminPage() {
   ])
 
   const kpiCards = [
-    { label: 'Tenants', value: kpis.tenants, icon: <Building2 size={16} />, color: 'var(--accent-gold)' },
-    { label: 'Leads totales', value: kpis.totalLeads, icon: <Users size={16} />, color: 'var(--accent-blue)' },
-    { label: 'Calidad alta', value: kpis.highQualityLeads, icon: <Flame size={16} />, color: 'var(--status-hot)' },
-    { label: 'Nuevos · 30 días', value: kpis.newLeads30d, icon: <TrendingUp size={16} />, color: 'var(--accent-green)' },
+    { label: 'Tenants', value: kpis.tenants, icon: <Building2 size={16} />, color: 'var(--gold-2)' },
+    { label: 'Leads totales', value: kpis.totalLeads, icon: <Users size={16} />, color: 'var(--gold-1)' },
+    { label: 'Calidad alta', value: kpis.highQualityLeads, icon: <Flame size={16} />, color: QUALITY_CONFIG.alta.color },
+    { label: 'Nuevos · 30 días', value: kpis.newLeads30d, icon: <TrendingUp size={16} />, color: 'var(--gold-3)' },
   ]
 
   return (
     <>
-      <PageHeader title="Centro de control" description={<>Plataforma ITMANO · {kpis.tenants} {kpis.tenants === 1 ? 'tenant' : 'tenants'}</>} />
-
       {/* KPIs de plataforma — siempre visibles, encima de los tabs */}
-      <StaggerGroup className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
+      <div className="nl-kpis">
         {kpiCards.map(card => (
-          <StaggerItem
-            key={card.label}
-            className="card-interactive"
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '12px',
-              padding: '20px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  background: `color-mix(in srgb, ${card.color} 12%, transparent)`,
-                  color: card.color,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {card.icon}
-              </div>
-              <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 500 }}>
-                {card.label}
-              </span>
-            </div>
-            <div style={{ fontSize: '32px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1 }}>
-              <AnimatedNumber value={card.value} />
-            </div>
-          </StaggerItem>
+          <StatCard key={card.label} label={card.label} value={card.value} icon={card.icon} tone={card.color} />
         ))}
-      </StaggerGroup>
+      </div>
 
       <Tabs
         items={[
@@ -94,10 +64,7 @@ async function AdminPage() {
         content={{
           tenants: (
             <>
-              <div
-                className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                style={{ marginBottom: '24px' }}
-              >
+              <div className="admin-tenant-grid">
                 {tenants.map(t => (
                   <TenantCard
                     key={t.id}
@@ -110,14 +77,14 @@ async function AdminPage() {
             </>
           ),
           ia: (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="settings-stack">
               {/* El diagrama diario reemplaza al listado de requests recientes */}
               <AiUsageDailyChart series={aiDaily} />
               <AiUsagePanel summary={aiUsage} />
             </div>
           ),
           fit: (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="settings-stack">
               <BriefingOutcomesPanel outcomes={briefingOutcomes} />
               <LeadFitPanel summary={leadFit} />
             </div>
@@ -125,6 +92,20 @@ async function AdminPage() {
           gestion: <AdminClient tenants={tenants} />,
         }}
       />
+    </>
+  )
+}
+
+function AdminPage() {
+  return (
+    <>
+      <PageHeader
+        title="Centro de control"
+        description="Plataforma ITMANO: el pulso de todos los tenants, la entrada a su CRM y su gestión."
+      />
+      <Suspense fallback={<AdminSkeleton />}>
+        <AdminContent />
+      </Suspense>
     </>
   )
 }

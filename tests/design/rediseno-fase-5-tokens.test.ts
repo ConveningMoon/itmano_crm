@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // se queda fuera de la paleta dorada. Cada tanda nueva añade sus carpetas aquí.
 
 const DASHBOARD = path.resolve(__dirname, '../../src/app/(dashboard)')
-const REDISENADAS = ['activity', 'notifications', 'soporte', 'solicitudes', 'leads', 'properties', 'newsletters', 'studio']
+const REDISENADAS = ['activity', 'notifications', 'soporte', 'solicitudes', 'leads', 'properties', 'newsletters', 'studio', 'admin']
 
 // Archivos cuyo color no es interfaz del CRM y no sale de la paleta a propósito.
 // El tema del editor de código del Estudio fija el resaltado de sintaxis, elegido

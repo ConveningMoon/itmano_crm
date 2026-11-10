@@ -20,7 +20,7 @@ export function HubFeed({ notifications }: { notifications: NotificationRow[] })
         <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           Actividad reciente
         </span>
-        <Link href="/notifications" style={{ fontSize: '12px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500 }}>
+        <Link href="/notifications" style={{ fontSize: '12px', color: 'var(--gold-2)', textDecoration: 'none', fontWeight: 500 }}>
           Ver todas →
         </Link>
       </div>
@@ -49,7 +49,7 @@ export function HubFeed({ notifications }: { notifications: NotificationRow[] })
                   height: '7px',
                   borderRadius: '50%',
                   flexShrink: 0,
-                  background: n.read ? 'var(--bg-overlay)' : 'var(--accent-gold)',
+                  background: n.read ? 'var(--bg-overlay)' : 'var(--gold-2)',
                 }}
               />
               {n.tenantName && (
