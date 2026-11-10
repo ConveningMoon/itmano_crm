@@ -1,6 +1,7 @@
 import 'server-only'
 import { cookies } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
 // Cookie de "tenant seleccionado" del super_admin. Solo se honra cuando el
 // perfil del request es super_admin (revalidado en tenant-context) — para
@@ -33,6 +34,6 @@ export async function getSelectedTenant(): Promise<SelectedTenant | null> {
   return {
     id: data.id as string,
     name: data.name as string,
-    primaryColor: (data.primary_color as string) ?? '#1E3A5F',
+    primaryColor: (data.primary_color as string) ?? DEFAULT_TENANT_PRIMARY_COLOR,
   }
 }
