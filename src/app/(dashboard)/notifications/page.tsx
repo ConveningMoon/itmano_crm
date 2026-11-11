@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import {
@@ -8,29 +9,33 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getNotifications } from '@/lib/data/notifications'
 import { MarkReadOnMount } from './mark-read-on-mount'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
+import { ListCardSkeleton } from '@/components/ui/page-skeleton'
 
-// ─── Per-type presentation ──────────────────────────────────────────────────
+// ─── Presentación por tipo ───────────────────────────────────────────────────
+// Rampa dorada para todo; coral sólo para el lead caliente, que es una alerta y
+// siempre va con icono y etiqueta. Los tipos de archivo/borrado van atenuados.
 interface TypeMeta { label: string; icon: LucideIcon; color: string }
 
 const TYPE_CONFIG: Record<string, TypeMeta> = {
-  hot_lead:              { label: 'Lead caliente',     icon: Flame,        color: 'var(--accent-coral)' },
-  contact_us:            { label: 'Contact Us',        icon: Mail,         color: 'var(--accent-blue)' },
-  contact_form_question: { label: 'Contacto',          icon: Mail,         color: 'var(--accent-blue)' },
+  hot_lead:              { label: 'Lead caliente',     icon: Flame,        color: 'var(--alert)' },
+  contact_us:            { label: 'Contact Us',        icon: Mail,         color: 'var(--gold-1)' },
+  contact_form_question: { label: 'Contacto',          icon: Mail,         color: 'var(--gold-1)' },
   lead_deleted:          { label: 'Lead eliminado',    icon: Trash2,       color: 'var(--text-muted)' },
-  event_added:           { label: 'Evento',            icon: CalendarPlus, color: 'var(--accent-teal)' },
+  event_added:           { label: 'Evento',            icon: CalendarPlus, color: 'var(--gold-2)' },
   event_deleted:         { label: 'Evento archivado',  icon: Trash2,       color: 'var(--text-muted)' },
-  lm_added:              { label: 'Lead magnet',       icon: FileText,     color: 'var(--accent-teal)' },
+  lm_added:              { label: 'Lead magnet',       icon: FileText,     color: 'var(--gold-3)' },
   lm_deleted:            { label: 'Lead magnet archivado', icon: Trash2,   color: 'var(--text-muted)' },
-  // Historical types (no longer emitted, kept so older rows still render)
-  score_threshold:       { label: 'Umbral de score',   icon: TrendingUp,   color: 'var(--accent-gold)' },
-  lead_created:          { label: 'Nuevo lead',        icon: UserPlus,     color: 'var(--accent-green)' },
+  // Tipos históricos (ya no se emiten; se conservan para que las filas viejas se vean)
+  score_threshold:       { label: 'Umbral de score',   icon: TrendingUp,   color: 'var(--gold-2)' },
+  lead_created:          { label: 'Nuevo lead',        icon: UserPlus,     color: 'var(--gold-2)' },
 }
 
 function metaFor(type: string): TypeMeta {
   return TYPE_CONFIG[type] ?? { label: type, icon: Bell, color: 'var(--text-secondary)' }
 }
 
-// Filter chips — the current emitted set (historical types still show under "Todas")
+// Filtros: el conjunto que se emite hoy (los históricos siguen saliendo en "Todas").
 const FILTER_TYPES = [
   'hot_lead', 'contact_us', 'contact_form_question',
   'lead_deleted', 'event_added', 'event_deleted', 'lm_added', 'lm_deleted',
@@ -49,11 +54,11 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-async function NotificationsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ type?: string }>
-}) {
+type SearchParams = Promise<{ type?: string }>
+
+// Sesión, base y filtro de la URL detrás del Suspense de NotificationsPage: la
+// cabecera sale del shell estático.
+async function NotificationsContent({ searchParams }: { searchParams: SearchParams }) {
   const ctx        = await getCurrentTenantContext()
   const { type }   = await searchParams
   const typeFilter = type ?? null
@@ -66,150 +71,73 @@ async function NotificationsPage({
   const hasUnread     = notifications.some(n => !n.read)
 
   return (
-    <div style={{ maxWidth: '760px' }}>
+    <>
       <MarkReadOnMount hasUnread={hasUnread} />
 
-      {/* Filter chips */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
-        <FilterChip label="Todas" href="/notifications" active={typeFilter === null} />
-        {FILTER_TYPES.map(t => (
-          <FilterChip
-            key={t}
-            label={metaFor(t).label}
-            href={`/notifications?type=${t}`}
-            active={typeFilter === t}
-          />
-        ))}
-      </div>
+      <nav className="toolbar" aria-label="Filtrar notificaciones">
+        <div className="filter-tabs">
+          <FilterTab label="Todas" href="/notifications" active={typeFilter === null} />
+          {FILTER_TYPES.map(t => (
+            <FilterTab key={t} label={metaFor(t).label} href={`/notifications?type=${t}`} active={typeFilter === t} />
+          ))}
+        </div>
+      </nav>
 
       {notifications.length === 0 ? (
-        <div
-          style={{
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '12px',
-            backgroundColor: 'var(--bg-surface)',
-            padding: '48px 24px',
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: '13px',
-          }}
-        >
-          No hay notificaciones todavía.
+        <div className="empty-card feed-narrow">
+          <span className="empty-card-icon" aria-hidden="true"><Bell size={18} /></span>
+          {typeFilter ? 'No hay notificaciones de este tipo.' : 'No hay notificaciones todavía.'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className="feed feed-narrow">
           {notifications.map(n => {
             const meta = metaFor(n.type)
             const Icon = meta.icon
-            const row = (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                  padding: '14px 16px',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  backgroundColor: n.read ? 'var(--bg-surface)' : 'var(--bg-elevated)',
-                }}
-              >
-                {/* Icon */}
-                <div
-                  style={{
-                    flexShrink: 0,
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: 'var(--bg-overlay)',
-                    color: meta.color,
-                  }}
-                >
-                  <Icon size={16} strokeWidth={2} />
-                </div>
-
-                {/* Body */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {meta.label}
-                    </span>
-                    {isSuper && n.tenantName && (
-                      <span
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 500,
-                          padding: '1px 7px',
-                          borderRadius: '4px',
-                          backgroundColor: 'var(--bg-overlay)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        {n.tenantName}
-                      </span>
-                    )}
+            const body = (
+              <>
+                <span className="feed-icon" style={{ '--tone': meta.color } as React.CSSProperties} aria-hidden="true">
+                  <Icon size={15} strokeWidth={2} />
+                </span>
+                <div className="feed-body">
+                  <div className="feed-head">
+                    <span className="feed-title">{meta.label}</span>
+                    {isSuper && n.tenantName && <span className="feed-tag">{n.tenantName}</span>}
                   </div>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.45, wordBreak: 'break-word' }}>
-                    {n.message}
-                  </p>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {relativeTime(n.createdAt)}
-                  </span>
+                  <p className="feed-text">{n.message}</p>
+                  <div className="feed-meta">{relativeTime(n.createdAt)}</div>
                 </div>
-
-                {/* Unread dot */}
-                {!n.read && (
-                  <span
-                    title="No leída"
-                    style={{
-                      flexShrink: 0,
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor: 'var(--accent-gold)',
-                      marginTop: '6px',
-                    }}
-                  />
-                )}
-              </div>
+                {!n.read && <span className="feed-unread" role="img" aria-label="No leída" />}
+              </>
             )
 
-            // Link to the lead when the notification carries one
+            // Si la notificación trae un lead, la fila entera lleva a él.
             return n.leadId ? (
-              <Link key={n.id} href={`/leads/${n.leadId}`} style={{ textDecoration: 'none' }}>
-                {row}
-              </Link>
+              <Link key={n.id} href={`/leads/${n.leadId}`} className="feed-row">{body}</Link>
             ) : (
-              <div key={n.id}>{row}</div>
+              <div key={n.id} className="feed-row">{body}</div>
             )
           })}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
-// ─── Filter chip (server-rendered link) ──────────────────────────────────────
-function FilterChip({ label, href, active }: { label: string; href: string; active: boolean }) {
+function NotificationsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
-    <Link
-      href={href}
-      style={{
-        fontSize: '12px',
-        fontWeight: 500,
-        padding: '5px 12px',
-        borderRadius: '6px',
-        textDecoration: 'none',
-        border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-        backgroundColor: active ? 'var(--accent-gold)' : 'var(--bg-surface)',
-        color: active ? '#0B0C0E' : 'var(--text-secondary)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-      }}
-    >
+    <>
+      <PageHeader title="Notificaciones" />
+      <Suspense fallback={<ListCardSkeleton rows={10} />}>
+        <NotificationsContent searchParams={searchParams} />
+      </Suspense>
+    </>
+  )
+}
+
+// ─── Pestaña de filtro (enlace renderizado en servidor) ──────────────────────
+function FilterTab({ label, href, active }: { label: string; href: string; active: boolean }) {
+  return (
+    <Link href={href} className="filter-tab" aria-current={active ? 'page' : undefined}>
       {label}
       {!active && <LinkPendingSpinner />}
     </Link>
