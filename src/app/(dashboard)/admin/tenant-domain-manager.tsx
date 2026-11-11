@@ -10,10 +10,10 @@ interface DomainRecord { record?: string; type?: string; name?: string; value?: 
 
 const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   not_configured:    { label: 'Sin dominio',   color: 'var(--text-muted)',    bg: 'var(--bg-elevated)' },
-  pending:           { label: 'Pendiente',     color: 'var(--accent-gold)',   bg: 'rgba(201,169,110,0.14)' },
-  verified:          { label: 'Verificado',    color: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.14)' },
-  failed:            { label: 'Falló',         color: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.14)' },
-  temporary_failure: { label: 'Reintentando',  color: 'var(--accent-gold)',   bg: 'rgba(201,169,110,0.14)' },
+  pending:           { label: 'Pendiente',     color: 'var(--gold-2)',   bg: 'color-mix(in srgb, var(--gold-2) 14%, transparent)' },
+  verified:          { label: 'Verificado',    color: 'var(--gold-1)',  bg: 'color-mix(in srgb, var(--gold-1) 14%, transparent)' },
+  failed:            { label: 'Falló',         color: 'var(--alert)',  bg: 'color-mix(in srgb, var(--alert) 14%, transparent)' },
+  temporary_failure: { label: 'Reintentando',  color: 'var(--gold-2)',   bg: 'color-mix(in srgb, var(--gold-2) 14%, transparent)' },
 }
 
 function CopyValue({ text }: { text: string }) {
@@ -22,7 +22,7 @@ function CopyValue({ text }: { text: string }) {
     <button
       onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
       title="Copiar"
-      style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? 'var(--accent-green)' : 'var(--text-muted)', display: 'inline-flex', padding: '2px', flexShrink: 0 }}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color: copied ? 'var(--gold-1)' : 'var(--text-muted)', display: 'inline-flex', padding: '2px', flexShrink: 0 }}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
     </button>
@@ -68,7 +68,7 @@ function SenderEditor({ tenantId, domain, current }: { tenantId: string; domain:
           <code style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>@{domain}</code>
         </span>
         <button onClick={save} disabled={disabled}
-          style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+          style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
           {pending ? 'Guardando…' : saved ? 'Guardado' : 'Guardar'}
         </button>
       </div>
@@ -76,7 +76,7 @@ function SenderEditor({ tenantId, domain, current }: { tenantId: string; domain:
         {current ? <>Actual: <code style={{ color: 'var(--text-secondary)' }}>{current}</code>. </> : 'Sin remitente: los correos siguen saliendo por el dominio de ITMANO. '}
         Cada agente envía con su nombre y la parte local de su email sobre este dominio.
       </div>
-      {error && <div style={{ fontSize: '11.5px', color: 'var(--accent-coral)' }}>{error}</div>}
+      {error && <div style={{ fontSize: '11.5px', color: 'var(--alert)' }}>{error}</div>}
     </div>
   )
 }
@@ -115,11 +115,11 @@ export function TenantDomainManager({
         display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px',
         border: '1px solid var(--border-subtle)', borderRadius: '10px', background: 'var(--bg-elevated)',
       }}>
-        <ShieldCheck size={14} color="var(--accent-green)" />
+        <ShieldCheck size={14} color="var(--gold-1)" />
         <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text-primary)' }}>Dominio de envío</span>
         <span style={{
           fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '8px',
-          color: 'var(--accent-green)', background: 'rgba(107,163,104,0.14)',
+          color: 'var(--gold-1)', background: 'color-mix(in srgb, var(--gold-1) 14%, transparent)',
         }}>
           Administrado por ITMANO
         </span>
@@ -145,7 +145,7 @@ export function TenantDomainManager({
           background: 'var(--bg-elevated)', border: 'none', cursor: 'pointer', textAlign: 'left',
         }}
       >
-        <Globe size={14} color="var(--accent-gold)" />
+        <Globe size={14} color="var(--gold-2)" />
         <span style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text-primary)' }}>Dominio de envío</span>
         <span style={{ fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '8px', color: st.color, background: st.bg }}>{st.label}</span>
         <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)' }}>Cuenta: {resendAccount === 'aj' ? 'A&J (legacy)' : 'ITMANO'}</span>
@@ -171,7 +171,7 @@ export function TenantDomainManager({
                 <button
                   onClick={() => run(() => addTenantDomain({ tenantId, domain }))}
                   disabled={pending || !domain.trim()}
-                  style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: (pending || !domain.trim()) ? 'default' : 'pointer', opacity: (pending || !domain.trim()) ? 0.6 : 1 }}
+                  style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: (pending || !domain.trim()) ? 'default' : 'pointer', opacity: (pending || !domain.trim()) ? 0.6 : 1 }}
                 >
                   {pending ? '…' : 'Agregar'}
                 </button>
@@ -180,14 +180,14 @@ export function TenantDomainManager({
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <code style={{ fontSize: '12.5px', color: 'var(--accent-gold)', fontFamily: 'monospace' }}>{sendingDomain}</code>
+                <code style={{ fontSize: '12.5px', color: 'var(--gold-2)', fontFamily: 'monospace' }}>{sendingDomain}</code>
                 <div style={{ flex: 1 }} />
                 <button onClick={() => run(() => refreshTenantDomain(tenantId))} disabled={pending}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '11.5px', borderRadius: '7px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)', cursor: pending ? 'default' : 'pointer' }}>
                   <RefreshCw size={12} /> Verificar
                 </button>
                 <button onClick={() => run(() => removeTenantDomain(tenantId))} disabled={pending}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '11.5px', borderRadius: '7px', background: 'transparent', border: '1px solid rgba(201,123,107,0.3)', color: 'var(--accent-coral)', cursor: pending ? 'default' : 'pointer' }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '11.5px', borderRadius: '7px', background: 'transparent', border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)', color: 'var(--alert)', cursor: pending ? 'default' : 'pointer' }}>
                   <Trash2 size={12} /> Quitar
                 </button>
               </div>
@@ -213,7 +213,7 @@ export function TenantDomainManager({
                           <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', fontFamily: 'monospace', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>{r.value}{r.value && <CopyValue text={r.value} />}</span>
                           </td>
-                          <td style={{ padding: '6px 8px', color: r.status === 'verified' ? 'var(--accent-green)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>{r.status || '—'}</td>
+                          <td style={{ padding: '6px 8px', color: r.status === 'verified' ? 'var(--gold-1)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>{r.status || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -227,7 +227,7 @@ export function TenantDomainManager({
             </>
           )}
 
-          {error && <div style={{ fontSize: '11.5px', color: 'var(--accent-coral)' }}>{error}</div>}
+          {error && <div style={{ fontSize: '11.5px', color: 'var(--alert)' }}>{error}</div>}
         </div>
       )}
     </div>

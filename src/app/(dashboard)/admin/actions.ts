@@ -14,6 +14,7 @@ import { initialAiBudgetUsd, planAiBudgetUsd } from '@/lib/services/ai-budget'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
+import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as updateScoreRules. The admin client (service_role) is the correct
@@ -115,7 +116,7 @@ export async function createTenant(
     id,
     name:          parsed.data.name,
     slug:          parsed.data.slug,
-    primary_color: parsed.data.primaryColor ?? '#1E3A5F',
+    primary_color: parsed.data.primaryColor ?? DEFAULT_TENANT_PRIMARY_COLOR,
     ai_monthly_limit_usd: initialAiBudgetUsd(parsed.data.plan, parsed.data.startTrial),
   })
   if (error) return { ok: false, error: error.message }

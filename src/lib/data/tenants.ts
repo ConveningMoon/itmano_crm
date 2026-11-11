@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { ownSendingDomain } from '@/lib/email/sender-address'
+import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
 export interface SwitcherTenant {
   id: string
@@ -20,7 +21,7 @@ export async function getTenantsForSwitcher(): Promise<SwitcherTenant[]> {
   return ((data ?? []) as { id: string; name: string; primary_color: string | null }[]).map(t => ({
     id: t.id,
     name: t.name,
-    color: t.primary_color ?? '#1E3A5F',
+    color: t.primary_color ?? DEFAULT_TENANT_PRIMARY_COLOR,
   }))
 }
 
@@ -229,7 +230,7 @@ export async function getTenantsWithOwners(): Promise<TenantWithOwner[]> {
       id:           t.id,
       name:         t.name,
       slug:         t.slug,
-      primaryColor: t.primary_color ?? '#1E3A5F',
+      primaryColor: t.primary_color ?? DEFAULT_TENANT_PRIMARY_COLOR,
       logoUrl:      t.logo_url ?? null,
       ownerEmail,
       aiMonthlyLimitUsd:  Number(t.ai_monthly_limit_usd ?? 10),

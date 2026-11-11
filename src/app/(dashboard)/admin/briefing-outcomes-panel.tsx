@@ -15,7 +15,7 @@ export function BriefingOutcomesPanel({ outcomes: o }: { outcomes: BriefingOutco
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        <Target size={15} color="var(--accent-gold)" />
+        <Target size={15} color="var(--gold-2)" />
         Efecto de seguir el briefing de IA — de los leads donde el agente actuó tras la recomendación, cuántos
         avanzaron en el embudo (últimos {o.windowDays} días).
       </div>
@@ -29,11 +29,11 @@ export function BriefingOutcomesPanel({ outcomes: o }: { outcomes: BriefingOutco
         <>
           {/* Comparación central: siguieron vs. no siguieron */}
           <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-            <div style={{ ...STAT, borderColor: 'rgba(107,163,104,0.35)' }}>
+            <div style={{ ...STAT, borderColor: 'color-mix(in srgb, var(--gold-1) 35%, transparent)' }}>
               <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '8px' }}>
                 Siguieron la recomendación
               </div>
-              <div style={{ fontSize: '30px', fontWeight: 600, color: 'var(--accent-green)', lineHeight: 1 }}>
+              <div style={{ fontSize: '30px', fontWeight: 600, color: 'var(--gold-1)', lineHeight: 1 }}>
                 {o.rateFollowed !== null ? `${o.rateFollowed}%` : '—'}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
@@ -53,11 +53,11 @@ export function BriefingOutcomesPanel({ outcomes: o }: { outcomes: BriefingOutco
               </div>
             </div>
 
-            <div style={{ ...STAT, background: 'rgba(201,169,110,0.06)', borderColor: 'rgba(201,169,110,0.3)' }}>
+            <div style={{ ...STAT, background: 'color-mix(in srgb, var(--gold-2) 6%, transparent)', borderColor: 'color-mix(in srgb, var(--gold-2) 30%, transparent)' }}>
               <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '8px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <TrendingUp size={12} /> Diferencia
               </div>
-              <div style={{ fontSize: '30px', fontWeight: 600, color: 'var(--accent-gold)', lineHeight: 1 }}>
+              <div style={{ fontSize: '30px', fontWeight: 600, color: 'var(--gold-2)', lineHeight: 1 }}>
                 {o.lift !== null ? `${o.lift > 0 ? '+' : ''}${o.lift} pts` : '—'}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>

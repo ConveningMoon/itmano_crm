@@ -9,6 +9,7 @@ import { updateTenantLogo, removeTenantLogo } from '../settings/actions'
 import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type SubscriptionPlan, type SubscriptionStatus, type BillingCycle } from '@/lib/subscriptions'
 import { TRIAL, trialDaysLeft, trialEndsAtFromNow } from '@/lib/plans'
 import { FechaLocal } from '@/components/ui/local-date'
+import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
 // Estado editable del select de suscripción: las solicitudes pendientes
 // (change/cancel_requested) se editan como 'active' — guardar las resuelve.
@@ -39,13 +40,9 @@ const INPUT: React.CSSProperties = {
   borderRadius: '8px', padding: '9px 12px', fontSize: '13px', color: 'var(--text-primary)',
   outline: 'none', boxSizing: 'border-box',
 }
-const LABEL: React.CSSProperties = {
-  fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase',
-  letterSpacing: '0.06em', marginBottom: '6px', display: 'block',
-}
 const BTN_PRIMARY: React.CSSProperties = {
   padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--accent-gold)', border: 'none', borderRadius: '8px', cursor: 'pointer',
+  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
 }
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
@@ -55,8 +52,6 @@ const CARD_HEADER: React.CSSProperties = {
   padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)',
   fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)',
 }
-const ERROR: React.CSSProperties = { fontSize: '12px', color: 'var(--accent-coral)', marginTop: '8px' }
-const OK: React.CSSProperties = { fontSize: '12px', color: 'var(--accent-green)', marginTop: '8px' }
 
 function slugify(name: string): string {
   return name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -99,7 +94,7 @@ function CreateTenantCard() {
   const [name, setName]   = useState('')
   const [slug, setSlug]   = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
-  const [color, setColor] = useState('#1E3A5F')
+  const [color, setColor] = useState(DEFAULT_TENANT_PRIMARY_COLOR)
   const [plan, setPlan]   = useState<SubscriptionPlan>('esencial')
   const [startTrial, setStartTrial] = useState(false)
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -129,7 +124,7 @@ function CreateTenantCard() {
       }
 
       setOk(`Tenant creado: ${res.id}${logoNote}`)
-      setName(''); setSlug(''); setSlugTouched(false); setColor('#1E3A5F'); setPlan('esencial')
+      setName(''); setSlug(''); setSlugTouched(false); setColor(DEFAULT_TENANT_PRIMARY_COLOR); setPlan('esencial')
       setStartTrial(false)
       setLogoFile(null)
       if (logoInputRef.current) logoInputRef.current.value = ''
@@ -142,11 +137,11 @@ function CreateTenantCard() {
       <div style={CARD_HEADER}>Crear tenant</div>
       <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
-          <label style={LABEL}>Nombre</label>
+          <label className="settings-field-label">Nombre</label>
           <input style={INPUT} value={name} onChange={e => setName(e.target.value)} placeholder="A&J Real Estate Group" />
         </div>
         <div>
-          <label style={LABEL}>Slug</label>
+          <label className="settings-field-label">Slug</label>
           <input
             style={INPUT}
             value={effectiveSlug}
@@ -158,7 +153,7 @@ function CreateTenantCard() {
           </div>
         </div>
         <div>
-          <label style={LABEL}>Color primario</label>
+          <label className="settings-field-label">Color primario</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <input type="color" value={color} onChange={e => setColor(e.target.value)}
               style={{ width: '40px', height: '36px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer' }} />
@@ -166,7 +161,7 @@ function CreateTenantCard() {
           </div>
         </div>
         <div>
-          <label style={LABEL}>Plan de suscripción</label>
+          <label className="settings-field-label">Plan de suscripción</label>
           <select
             value={plan}
             onChange={e => setPlan(e.target.value as SubscriptionPlan)}
@@ -182,7 +177,7 @@ function CreateTenantCard() {
               type="checkbox"
               checked={startTrial}
               onChange={e => setStartTrial(e.target.checked)}
-              style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+              style={{ cursor: 'pointer', accentColor: 'var(--gold-2)' }}
             />
             Iniciar en período de prueba ({TRIAL.days} días · experiencia {PLAN_CONFIG[TRIAL.plan].label})
           </label>
@@ -194,7 +189,7 @@ function CreateTenantCard() {
           )}
         </div>
         <div>
-          <label style={LABEL}>Logo (opcional)</label>
+          <label className="settings-field-label">Logo (opcional)</label>
           <input
             ref={logoInputRef}
             type="file"
@@ -210,8 +205,8 @@ function CreateTenantCard() {
           <button style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }} disabled={pending} onClick={handleCreate}>
             {pending ? 'Creando…' : 'Crear tenant'}
           </button>
-          {error && <div style={ERROR}>{error}</div>}
-          {ok && <div style={OK}>{ok}</div>}
+          {error && <p role="alert" className="form-error admin-msg">{error}</p>}
+          {ok && <p role="status" className="settings-success admin-msg">{ok}</p>}
         </div>
       </div>
     </div>
@@ -238,7 +233,7 @@ function ProvisionOwnerForm({ tenantId }: { tenantId: string }) {
     })
   }
 
-  if (ok) return <div style={OK}>{ok}</div>
+  if (ok) return <p role="status" className="settings-success admin-msg">{ok}</p>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
@@ -251,7 +246,7 @@ function ProvisionOwnerForm({ tenantId }: { tenantId: string }) {
           {pending ? 'Provisionando…' : 'Provisionar owner'}
         </button>
       </div>
-      {error && <div style={ERROR}>{error}</div>}
+      {error && <p role="alert" className="form-error admin-msg">{error}</p>}
     </div>
   )
 }
@@ -372,7 +367,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             {tenant.pagesManagedByItmano && (
               <span style={{
                 fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
-                color: 'var(--accent-green)', background: 'color-mix(in srgb, var(--accent-green) 12%, transparent)',
+                color: 'var(--gold-1)', background: 'color-mix(in srgb, var(--gold-1) 12%, transparent)',
               }}>
                 Administrado por ITMANO
               </span>
@@ -383,9 +378,9 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             IA este mes:{' '}
             <span style={{
               color: tenant.aiUnlimited
-                ? 'var(--accent-teal)'
+                ? 'var(--gold-2)'
                 : tenant.aiUsedThisMonthUsd >= tenant.aiMonthlyLimitUsd
-                  ? 'var(--accent-coral)'
+                  ? 'var(--alert)'
                   : 'var(--text-secondary)',
               fontWeight: 500,
             }}>
@@ -395,7 +390,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
           </div>
           <div style={{ fontSize: '11px', marginTop: '2px', color: 'var(--text-muted)' }}>
             Suscripción:{' '}
-            <span style={{ color: tenant.subscriptionStatus === 'cancelled' ? 'var(--accent-coral)' : 'var(--text-secondary)', fontWeight: 500 }}>
+            <span style={{ color: tenant.subscriptionStatus === 'cancelled' ? 'var(--alert)' : 'var(--text-secondary)', fontWeight: 500 }}>
               {tenant.subscriptionPlan ? PLAN_CONFIG[tenant.subscriptionPlan as SubscriptionPlan]?.label ?? tenant.subscriptionPlan : 'Sin plan'}
               {tenant.subscriptionStatus && tenant.subscriptionStatus !== 'active'
                 ? ` · ${SUBSCRIPTION_STATUS_LABELS[tenant.subscriptionStatus as SubscriptionStatus] ?? tenant.subscriptionStatus}`
@@ -404,8 +399,8 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             {tenant.subscriptionStatus === 'trial' && tenant.subscriptionTrialEndsAt && (
               <span style={{
                 marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
-                color: trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0 ? 'var(--accent-gold)' : 'var(--accent-coral)',
-                background: trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0 ? 'rgba(201,169,110,0.12)' : 'rgba(201,123,107,0.12)',
+                color: trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0 ? 'var(--gold-2)' : 'var(--alert)',
+                background: trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0 ? 'color-mix(in srgb, var(--gold-2) 12%, transparent)' : 'color-mix(in srgb, var(--alert) 12%, transparent)',
               }}>
                 {trialDaysLeft(tenant.subscriptionTrialEndsAt) > 0
                   ? `Vence en ${trialDaysLeft(tenant.subscriptionTrialEndsAt)} día${trialDaysLeft(tenant.subscriptionTrialEndsAt) === 1 ? '' : 's'}`
@@ -415,7 +410,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             {(tenant.subscriptionStatus === 'change_requested' || tenant.subscriptionStatus === 'cancel_requested') && (
               <span style={{
                 marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
-                color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.12)',
+                color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
               }}>
                 {tenant.subscriptionStatus === 'change_requested' && tenant.subscriptionRequestedPlan
                   ? `Solicita: ${PLAN_CONFIG[tenant.subscriptionRequestedPlan as SubscriptionPlan]?.label ?? tenant.subscriptionRequestedPlan}`
@@ -432,13 +427,13 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               : 'sin ciclo'}
             {tenant.subscriptionCurrentPeriodEnd && <> · renueva {fmtDate(tenant.subscriptionCurrentPeriodEnd)}</>}
             {tenant.subscriptionDegradedAt && (
-              <span style={{ color: 'var(--accent-coral)' }}> · degradada el {fmtDate(tenant.subscriptionDegradedAt)}</span>
+              <span style={{ color: 'var(--alert)' }}> · degradada el {fmtDate(tenant.subscriptionDegradedAt)}</span>
             )}
             {tenant.subscriptionPaddlePriceId && <> · precio <code>{tenant.subscriptionPaddlePriceId}</code></>}
             {tenant.subscriptionBillingExempt && (
               <span style={{
                 marginLeft: '6px', fontSize: '10px', fontWeight: 500, padding: '1px 7px', borderRadius: '10px',
-                color: 'var(--accent-teal)', background: 'color-mix(in srgb, var(--accent-teal) 12%, transparent)',
+                color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
               }}>
                 Exenta de facturación
               </span>
@@ -449,13 +444,13 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
           {tenant.ownerEmail ? (
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{tenant.ownerEmail}</span>
           ) : (
-            <span style={{ fontSize: '12px', color: 'var(--accent-coral)' }}>Sin owner</span>
+            <span style={{ fontSize: '12px', color: 'var(--alert)' }}>Sin owner</span>
           )}
         </div>
         {mode === 'view' && (
           <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
             <button
-              style={BTN_GHOST}
+              className="btn btn-ghost"
               onClick={() => {
                 setName(tenant.name); setColor(tenant.primaryColor)
                 setAiLimit(tenant.aiMonthlyLimitUsd.toFixed(2)); setAiUnlimited(tenant.aiUnlimited)
@@ -471,7 +466,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               Editar
             </button>
             <button
-              style={{ ...BTN_GHOST, color: 'var(--accent-coral)', borderColor: 'rgba(224,64,64,0.35)' }}
+              style={{ ...BTN_GHOST, color: 'var(--alert)', borderColor: 'color-mix(in srgb, var(--alert) 35%, transparent)' }}
               onClick={() => { setMode('confirmDelete'); setConfirmSlug('') }}
             >
               Eliminar
@@ -485,11 +480,11 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
         <div style={{ marginTop: '14px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 220px' }}>
-              <label style={LABEL}>Nombre</label>
+              <label className="settings-field-label">Nombre</label>
               <input style={INPUT} value={name} onChange={e => setName(e.target.value)} />
             </div>
             <div>
-              <label style={LABEL}>Color primario</label>
+              <label className="settings-field-label">Color primario</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input type="color" value={color} onChange={e => setColor(e.target.value)}
                   style={{ width: '40px', height: '36px', background: 'none', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer' }} />
@@ -498,7 +493,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             </div>
           </div>
           <div>
-            <label style={LABEL}>Logo</label>
+            <label className="settings-field-label">Logo</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <LogoThumb logoUrl={tenant.logoUrl} name={tenant.name} />
               <input
@@ -509,7 +504,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
                 style={{ ...INPUT, flex: '1 1 220px', padding: '7px 12px', cursor: 'pointer' }}
               />
               {tenant.logoUrl && (
-                <button style={BTN_GHOST} disabled={pending} onClick={handleLogoRemove}>Quitar logo</button>
+                <button className="btn btn-ghost" disabled={pending} onClick={handleLogoRemove}>Quitar logo</button>
               )}
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
@@ -517,7 +512,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             </div>
           </div>
           <div>
-            <label style={LABEL}>Límite mensual de IA</label>
+            <label className="settings-field-label">Límite mensual de IA</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>$</span>
@@ -537,7 +532,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
                   type="checkbox"
                   checked={aiUnlimited}
                   onChange={e => setAiUnlimited(e.target.checked)}
-                  style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+                  style={{ cursor: 'pointer', accentColor: 'var(--gold-2)' }}
                 />
                 Acceso ilimitado
               </label>
@@ -548,13 +543,13 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             </div>
           </div>
           <div>
-            <label style={LABEL}>Páginas y dominio</label>
+            <label className="settings-field-label">Páginas y dominio</label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={pagesManaged}
                 onChange={e => setPagesManaged(e.target.checked)}
-                style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+                style={{ cursor: 'pointer', accentColor: 'var(--gold-2)' }}
               />
               Administrado por ITMANO
             </label>
@@ -565,9 +560,9 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             </div>
           </div>
           <div>
-            <label style={LABEL}>Suscripción</label>
+            <label className="settings-field-label">Suscripción</label>
             {(tenant.subscriptionStatus === 'change_requested' || tenant.subscriptionStatus === 'cancel_requested') && (
-              <div style={{ fontSize: '12px', color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 25%, transparent)', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px' }}>
                 {tenant.subscriptionStatus === 'change_requested' && tenant.subscriptionRequestedPlan
                   ? <>El tenant solicitó cambiar a <strong>{PLAN_CONFIG[tenant.subscriptionRequestedPlan as SubscriptionPlan]?.label}</strong>. Selecciona el plan y guarda para aplicarlo (o deja el actual para rechazar).</>
                   : <>El tenant solicitó <strong>cancelar</strong> su suscripción. Desmarca &quot;Activa&quot; y guarda para confirmarla (o guarda sin cambios para rechazarla).</>}
@@ -611,7 +606,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             </div>
           </div>
           <div>
-            <label style={LABEL}>Paddle</label>
+            <label className="settings-field-label">Paddle</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <input
                 style={{ ...INPUT, width: '260px', fontFamily: 'monospace' }}
@@ -624,7 +619,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
                   type="checkbox"
                   checked={billingExempt}
                   onChange={e => setBillingExempt(e.target.checked)}
-                  style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+                  style={{ cursor: 'pointer', accentColor: 'var(--gold-2)' }}
                 />
                 Exenta de facturación
               </label>
@@ -634,23 +629,23 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               (sin él, ve el flujo de solicitud). Marca &quot;Exenta&quot; para tenants como A&J que nunca pasan por Paddle.
             </div>
           </div>
-          {error && <div style={ERROR}>{error}</div>}
+          {error && <p role="alert" className="form-error admin-msg">{error}</p>}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }} disabled={pending} onClick={handleSave}>
               {pending ? 'Guardando…' : 'Guardar cambios'}
             </button>
-            <button style={BTN_GHOST} onClick={resetToView}>Cancelar</button>
+            <button className="btn btn-ghost" onClick={resetToView}>Cancelar</button>
           </div>
         </div>
       )}
 
       {/* Confirmación de eliminación — requiere teclear el slug exacto */}
       {mode === 'confirmDelete' && (
-        <div style={{ marginTop: '14px', background: 'rgba(224,64,64,0.06)', border: '1px solid rgba(224,64,64,0.25)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ marginTop: '14px', background: 'color-mix(in srgb, var(--alert) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
             Esta acción elimina el tenant <strong>{tenant.name}</strong> de forma permanente.
             Si tiene datos operativos (leads, agentes, canales…), la base de datos rechazará el borrado.
-            Escribe <code style={{ color: 'var(--accent-coral)' }}>{tenant.slug}</code> para confirmar.
+            Escribe <code style={{ color: 'var(--alert)' }}>{tenant.slug}</code> para confirmar.
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input
@@ -660,15 +655,15 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               placeholder={tenant.slug}
             />
             <button
-              style={{ ...BTN_PRIMARY, background: '#E04040', opacity: pending || confirmSlug.trim() !== tenant.slug ? 0.6 : 1 }}
+              style={{ ...BTN_PRIMARY, background: 'var(--alert)', opacity: pending || confirmSlug.trim() !== tenant.slug ? 0.6 : 1 }}
               disabled={pending || confirmSlug.trim() !== tenant.slug}
               onClick={handleDelete}
             >
               {pending ? 'Eliminando…' : 'Eliminar tenant'}
             </button>
-            <button style={BTN_GHOST} onClick={resetToView}>Cancelar</button>
+            <button className="btn btn-ghost" onClick={resetToView}>Cancelar</button>
           </div>
-          {error && <div style={ERROR}>{error}</div>}
+          {error && <p role="alert" className="form-error admin-msg">{error}</p>}
         </div>
       )}
 

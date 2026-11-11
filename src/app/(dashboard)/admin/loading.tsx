@@ -1,11 +1,11 @@
-import { PageHeaderSkeleton, StatCardsSkeleton, ListCardSkeleton } from '@/components/ui/page-skeleton'
+import { PageHeaderSkeleton } from '@/components/ui/page-skeleton'
+import { AdminSkeleton } from './admin-skeleton'
 
 export default function AdminLoading() {
   return (
     <>
       <PageHeaderSkeleton width="210px" />
-      <StatCardsSkeleton count={4} />
-      <ListCardSkeleton rows={6} />
+      <AdminSkeleton />
     </>
   )
 }

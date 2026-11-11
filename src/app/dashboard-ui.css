@@ -2201,3 +2201,8 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
 .studio-teaser { display: flex; flex-direction: column; gap: 20px; max-width: 760px; }
 .studio-teaser-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
 .nl-tabs-skeleton { margin-bottom: 20px; }
+
+/* ── Centro de control (fase 5, tanda 5) ───────────────────────────────────── */
+.admin-tenant-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
+@media (min-width: 768px) { .admin-tenant-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.admin-msg { margin-top: 8px; }

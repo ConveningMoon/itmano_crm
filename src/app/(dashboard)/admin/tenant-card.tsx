@@ -45,8 +45,8 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
                 fontWeight: 500,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
-                color: 'var(--accent-gold)',
-                background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
+                color: 'var(--gold-2)',
+                background: 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
                 padding: '2px 8px',
                 borderRadius: '10px',
               }}
@@ -65,7 +65,7 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
           {tenant.ownerEmail}
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--accent-coral)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--alert)' }}>
           <AlertTriangle size={13} /> Sin owner provisionado
         </div>
       )}
@@ -78,7 +78,7 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
           <strong style={{ color: 'var(--status-hot)', fontWeight: 500 }}>{tenant.highQualityLeads}</strong> de calidad alta
         </span>
         <span style={{ color: 'var(--text-secondary)' }}>
-          <strong style={{ color: 'var(--accent-green)', fontWeight: 500 }}>+{tenant.newLeads30d}</strong> 30d
+          <strong style={{ color: 'var(--gold-1)', fontWeight: 500 }}>+{tenant.newLeads30d}</strong> 30d
         </span>
       </div>
 
@@ -112,7 +112,7 @@ export function TenantCard({ tenant, isActive }: { tenant: TenantOverview; isAct
             fontSize: '13px',
             fontWeight: 500,
             borderRadius: '8px',
-            background: 'var(--accent-gold)',
+            background: 'var(--gold-2)',
             color: 'var(--bg-base)',
             border: 'none',
             cursor: 'pointer',
