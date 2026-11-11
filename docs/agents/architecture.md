@@ -293,5 +293,13 @@ cliente. Pasaba en producción en la ficha del lead.
   `aria-current="page"`. `tests/design/rediseno-fase-5-tokens.test.ts` impide
   hex, rgba y `--accent-*` en las carpetas ya rediseñadas de la fase 5; cada
   tanda añade las suyas.
+- Listas con filtros (Leads): búsqueda `.search-field`, selects `.select-field`
+  sobre `settings-input`, chips de filtro activo `.chip-remove` y selección
+  múltiple `.selection-bar`. Las tablas usan `.dt` con `DataScope` y ocultan
+  columnas en vez de hacer scroll lateral; lo que sale de una columna pasa a
+  la línea `.dt-meta`. El kanban usa `.kanban-col` / `.kanban-card`. Los
+  colores de etapa, calidad, etiqueta o agente llegan por `--tone` desde su
+  config, nunca como literal. Fichas de detalle: `settings-card` con `.info-row`
+  y rejilla `.lead-detail-grid`, que pasa a una columna por debajo de 1100px.
 - El texto atenuado (`--text-muted`) debe mantener 4.5:1 de contraste sobre
   `--bg-surface` y `--bg-elevated`; si cambias el token, vuelve a medirlo.

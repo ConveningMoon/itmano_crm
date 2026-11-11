@@ -11,6 +11,8 @@ import {
 import { ModalShell } from '@/components/motion/modal-shell'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { RefreshingPill } from '@/components/ui/loading-indicator'
+import { DataScope } from '@/components/ui/data-table'
+import { TABLE_COLS, TABLE_COLS_MD, TABLE_COLS_SM } from './leads-table-cols'
 import { LANGUAGE_CONFIG } from '@/lib/config'
 import {
   QUALITY_BANDS, QUALITY_CONFIG, URGENCY_CONFIG,
@@ -21,11 +23,10 @@ import type { Agent } from '@/lib/types'
 import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/list-filters'
 import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
 import type { ChannelOption } from './new/page'
-import { tagChipStyle, type LeadTag } from '@/lib/leads/tags'
+import type { LeadTag } from '@/lib/leads/tags'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
 import { createBroadcastFromLeadFilters, createBroadcastFromLeads } from '../emails/broadcast-actions'
-import { PageHeader } from '@/components/ui/page-header'
 import { FechaLocal } from '@/components/ui/local-date'
 
 // Source kind → icon (reuses the leads/new source icons; brand icons unavailable in
@@ -50,19 +51,27 @@ const CHANNEL_TYPE_LABELS: Record<string, string> = {
   manual:        'Manual',
 }
 
+// Estilo con variables CSS (`--tone`), que React no tipa.
+const tone = (color: string) => ({ '--tone': color }) as React.CSSProperties
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(dateStr: string) {
   return <FechaLocal fecha={dateStr} opciones={{ month: 'short', day: 'numeric' }} />
 }
 
-// Las bandas (y sus colores) viven en scoring/temperature-band: mismo corte que
-// usa el trigger para asignar el estado, así el color nunca contradice al badge.
-
 function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)
   const l = lastName.charAt(0)
   return (f + l).toUpperCase() || f.toUpperCase()
+}
+
+// Enter o espacio sobre una fila o tarjeta enfocada abre el lead, como el clic.
+function onActivate(open: () => void) {
+  return (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() }
+  }
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
@@ -74,120 +83,64 @@ function QualityCell({ band, urgency }: {
   band: QualityBand | null
   urgency: Urgency | null
 }) {
-  if (!band) return <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
+  if (!band) return <span className="cell-muted">—</span>
   const q = QUALITY_CONFIG[band]
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-      <span style={{ fontSize: '12px', color: q.color, fontWeight: 500, whiteSpace: 'nowrap' }}>
-        {q.label}
-      </span>
+    <span className="quality-cell" style={{ color: q.color }}>
+      {q.label}
       {urgency && urgency !== 'sin_apuro' && (
-        <span style={{ fontSize: '10.5px', color: URGENCY_CONFIG[urgency].color, whiteSpace: 'nowrap' }}>
-          {URGENCY_CONFIG[urgency].label}
-        </span>
+        <small style={{ color: URGENCY_CONFIG[urgency].color }}>{URGENCY_CONFIG[urgency].label}</small>
       )}
-    </div>
+    </span>
   )
 }
 
 function StageBadge({ stage }: { stage: Stage }) {
   const cfg = STAGE_CONFIG[stage]
+  return <span className="pill pill-square" style={tone(cfg.color)}>{cfg.label}</span>
+}
+
+function LeadAvatar({ lead, agent, small = false }: { lead: LeadListItem; agent: Agent | undefined; small?: boolean }) {
   return (
-    <span style={{
-      fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-      background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap',
-    }}>
-      {cfg.label}
+    <span
+      className={small ? 'avatar avatar-sm' : 'avatar'}
+      style={agent ? tone(agent.accentColor) : undefined}
+      aria-hidden="true"
+    >
+      {getInitials(lead.firstName, lead.lastName)}
     </span>
   )
 }
 
-function LeadAvatar({ lead, agents, size = 32 }: { lead: LeadListItem; agents: Agent[]; size?: number }) {
-  const agent = agents.find(a => a.id === lead.agentId)
-  const initials = getInitials(lead.firstName, lead.lastName)
-  return (
-    <div style={{
-      width: `${size}px`, height: `${size}px`, borderRadius: '50%',
-      background: agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)',
-      color: agent?.accentColor ?? 'var(--text-muted)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: `${Math.floor(size * 0.37)}px`, fontWeight: 600, flexShrink: 0,
-    }}>
-      {initials}
-    </div>
-  )
-}
-
-function AgentAvatar({ agentId, agents, size = 'md' }: { agentId: string; agents: Agent[]; size?: 'sm' | 'md' }) {
-  const agent = agents.find(a => a.id === agentId)
-  const px = size === 'sm' ? 24 : 32
-  if (!agent) return null
-  return (
-    <div style={{
-      width: `${px}px`, height: `${px}px`, borderRadius: '50%',
-      background: `${agent.accentColor}26`, color: agent.accentColor,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size === 'sm' ? '9px' : '11px', fontWeight: 600, flexShrink: 0,
-    }}>
-      {agent.avatarInitials}
-    </div>
-  )
-}
-
 function FilterSelect({
-  value, onChange, options, fullWidth = false,
+  value, onChange, options, label, fullWidth = false,
 }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string }[]
+  label: string
   // true dentro del panel de filtros: el select ocupa todo el ancho disponible.
   fullWidth?: boolean
 }) {
   return (
-    <div style={{ position: 'relative', display: fullWidth ? 'flex' : 'inline-flex', alignItems: 'center', width: fullWidth ? '100%' : undefined }}>
+    <span className={fullWidth ? 'select-field select-field-full' : 'select-field'}>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
-        style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '8px',
-          padding: '7px 32px 7px 12px',
-          color: 'var(--text-primary)',
-          fontSize: '13px',
-          outline: 'none',
-          appearance: 'none',
-          cursor: 'pointer',
-          minWidth: '160px',
-          width: fullWidth ? '100%' : undefined,
-        }}
+        className="settings-input"
+        aria-label={label}
       >
         {options.map(opt => (
-          <option key={opt.value} value={opt.value} style={{ background: '#16181C' }}>
-            {opt.label}
-          </option>
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
-      <ChevronDown
-        size={14}
-        style={{ position: 'absolute', right: '10px', color: 'var(--text-muted)', pointerEvents: 'none' }}
-      />
-    </div>
+      <ChevronDown size={14} aria-hidden="true" />
+    </span>
   )
 }
 
 // Source kinds that have acquisition channels behind them → show channel sub-filter.
 const CHANNEL_SOURCE_TYPES = ['lead_magnet', 'event', 'contact_form']
-
-const FILTER_LABEL: React.CSSProperties = {
-  display: 'block',
-  fontSize: '11px',
-  fontWeight: 500,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--text-muted)',
-  marginBottom: '6px',
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -200,6 +153,12 @@ const KANBAN_COLUMNS = STAGES.map(key => ({
   label: STAGE_CONFIG[key].label,
   color: STAGE_CONFIG[key].color,
 }))
+
+const SORT_OPTIONS = [
+  ['recientes', 'Recientes', 'Orden por fecha de registro'],
+  ['prioridad', 'Prioridad', 'Primero lo que caduca, y dentro de eso lo de mejor calidad'],
+  ['valor',     'Valor',     'Por el monto que declaró el lead. Los que no lo declararon van al final'],
+] as const
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
@@ -239,44 +198,20 @@ function TagChips({ tagIds, catalog, max = 2 }: { tagIds: string[]; catalog: Lea
   const hidden = resolved.length - shown.length
 
   return (
-    <div
-      style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '3px' }}
-      title={resolved.map(t => t.name).join(' · ')}
-    >
-      {shown.map(t => {
-        const chip = tagChipStyle(t.color)
-        return (
-          <span
-            key={t.id}
-            style={{
-              fontSize: '10px', fontWeight: 500, padding: '1px 6px', borderRadius: '5px',
-              color: chip.color, background: chip.background, border: chip.border,
-              whiteSpace: 'nowrap', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}
-          >
-            {t.name}
-          </span>
-        )
-      })}
-      {hidden > 0 && (
-        <span style={{ fontSize: '10px', color: 'var(--text-muted)', alignSelf: 'center' }}>
-          +{hidden}
-        </span>
-      )}
-    </div>
+    <span className="tag-chips" title={resolved.map(t => t.name).join(' · ')}>
+      {shown.map(t => (
+        <span key={t.id} className="tag-chip" style={tone(t.color)}>{t.name}</span>
+      ))}
+      {hidden > 0 && <span className="tag-chips-more">+{hidden}</span>}
+    </span>
   )
 }
 
 // Chip "Hoy": la IA marcó que la próxima acción de este lead es de hoy.
 function TodayChip() {
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '3px',
-      fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
-      padding: '1px 6px', borderRadius: '8px',
-      color: '#E07B3A', background: 'rgba(224,123,58,0.14)',
-    }}>
-      <Clock size={9} /> Hoy
+    <span className="pill pill-xs" data-tone="alert">
+      <Clock size={9} aria-hidden="true" /> Hoy
     </span>
   )
 }
@@ -510,181 +445,142 @@ export function LeadsClient({
     activeChips.push({ label: `"${filters.q}"`, onRemove: () => pushFilters({ q: '' }) })
   }
 
+  const summary = `${total} ${total === 1 ? 'lead' : 'leads'} · ${highQualityCount} de calidad alta${urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}`
+  const showFilterBroadcast = filters.view === 'table' && selected.size === 0 && hasFilters && total > 0
+
   return (
     <div>
       <NavLoadingOverlay show={navPending} />
-      <style>{`
-        .kanban-card { transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
-        .kanban-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-sm); }
-        .filter-input:focus { border-color: var(--border-accent) !important; outline: none; }
-        .clear-btn:hover { color: var(--text-secondary) !important; }
-        .page-btn:not(:disabled):hover { border-color: var(--border-accent) !important; color: var(--text-primary) !important; }
-      `}</style>
 
-      {/* ── ZONA 1: Header ── */}
-      <PageHeader
-        title="Leads"
-        description={`${total} ${total === 1 ? 'lead' : 'leads'} · ${highQualityCount} de calidad alta${urgentTodayCount > 0 ? ` · ${urgentTodayCount} para hoy` : ''}`}
-        actions={
-          <>
-            {/* Sort: recientes / prioridad / valor */}
-            <div className="segmented" role="group" aria-label="Orden">
-              {([['recientes', 'Recientes'], ['prioridad', 'Prioridad'], ['valor', 'Valor']] as const).map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => pushFilters({ sort: v })}
-                  aria-pressed={filters.sort === v}
-                  title={v === 'prioridad'
-                    ? 'Primero lo que caduca, y dentro de eso lo de mejor calidad'
-                    : v === 'valor'
-                    ? 'Por el monto que declaró el lead. Los que no lo declararon van al final'
-                    : 'Orden por fecha de registro'}
-                >
-                  {v === 'prioridad' && <Clock size={13} />}{label}
-                </button>
-              ))}
-            </div>
+      {/* ── Búsqueda, filtros, orden y vista ── */}
+      <div className="toolbar">
+        <div className="toolbar-group">
+          <label className="search-field">
+            <Search size={14} aria-hidden="true" />
+            <input
+              type="search"
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              placeholder="Buscar por nombre o email..."
+              aria-label="Buscar leads por nombre o email"
+              className="settings-input"
+            />
+          </label>
 
-            {/* View toggle */}
-            <div className="segmented" role="group" aria-label="Vista">
-              {(['table', 'kanban'] as const).map(v => (
-                <button
-                  key={v}
-                  onClick={() => pushFilters({ view: v })}
-                  aria-pressed={filters.view === v}
-                >
-                  {v === 'table' ? <List size={14} /> : <LayoutGrid size={14} />}
-                  {v === 'table' ? 'Tabla' : 'Kanban'}
-                </button>
-              ))}
-            </div>
-          </>
-        }
-      />
+          {/* Filtros primarios — solo desktop; en móvil viven en el panel */}
+          {viewerRole !== 'agent' && (
+            <span className="max-md:hidden">
+              <FilterSelect label="Agente" value={filters.agentId} onChange={v => pushFilters({ agentId: v })} options={agentOptions} />
+            </span>
+          )}
+          <span className="max-md:hidden">
+            <FilterSelect label="Etapa" value={filters.stage} onChange={v => pushFilters({ stage: v })} options={stageOptions} />
+          </span>
 
-      {/* ── ZONA 2: Filter bar ── */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Search */}
-        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-          <Search
-            size={14}
-            style={{ position: 'absolute', left: '10px', color: 'var(--text-muted)', pointerEvents: 'none' }}
-          />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            placeholder="Buscar por nombre o email..."
-            className="filter-input"
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '8px',
-              padding: '7px 12px 7px 34px',
-              color: 'var(--text-primary)',
-              fontSize: '13px',
-              width: '240px',
-            }}
-          />
-        </div>
-
-        {/* Filtros primarios — solo desktop; en móvil viven en el panel */}
-        {viewerRole !== 'agent' && (
-          <div className="max-md:hidden">
-            <FilterSelect value={filters.agentId} onChange={v => pushFilters({ agentId: v })} options={agentOptions} />
-          </div>
-        )}
-        <div className="max-md:hidden">
-          <FilterSelect value={filters.stage} onChange={v => pushFilters({ stage: v })} options={stageOptions} />
-        </div>
-
-        {/* Filtros secundarios (Fuente, Canal, Idioma) viven solo en el panel */}
-        <button
-          onClick={() => setShowFilters(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            background: 'var(--bg-surface)',
-            border: `1px solid ${activeFilterCount > 0 ? 'var(--border-accent)' : 'var(--border-subtle)'}`,
-            borderRadius: '8px', padding: '7px 12px',
-            color: activeFilterCount > 0 ? 'var(--accent-gold)' : 'var(--text-secondary)',
-            fontSize: '13px', cursor: 'pointer',
-            transition: 'border-color var(--dur-fast), color var(--dur-fast)',
-          }}
-        >
-          <SlidersHorizontal size={14} />
-          Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-        </button>
-
-        {hasFilters && (
+          {/* Filtros secundarios (Fuente, Canal, Calidad, Etiqueta, Idioma) viven solo en el panel */}
           <button
-            onClick={clearFilters}
-            className="clear-btn"
-            style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', fontSize: '12px', padding: '4px 8px',
-            }}
+            type="button"
+            onClick={() => setShowFilters(true)}
+            className="btn btn-ghost"
+            data-active={activeFilterCount > 0 || undefined}
           >
-            <X size={12} /> Limpiar
+            <SlidersHorizontal size={14} aria-hidden="true" />
+            Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
           </button>
-        )}
+
+          {hasFilters && (
+            <button type="button" onClick={clearFilters} className="settings-link-btn">
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        <div className="toolbar-group">
+          <div className="segmented" role="group" aria-label="Orden">
+            {SORT_OPTIONS.map(([v, label, title]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => pushFilters({ sort: v })}
+                aria-pressed={filters.sort === v}
+                title={title}
+              >
+                {v === 'prioridad' && <Clock size={13} aria-hidden="true" />}{label}
+              </button>
+            ))}
+          </div>
+          <div className="segmented" role="group" aria-label="Vista">
+            {(['table', 'kanban'] as const).map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => pushFilters({ view: v })}
+                aria-pressed={filters.view === v}
+              >
+                {v === 'table' ? <List size={14} aria-hidden="true" /> : <LayoutGrid size={14} aria-hidden="true" />}
+                {v === 'table' ? 'Tabla' : 'Kanban'}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Active filter chips */}
-      {activeChips.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+      {/* Resumen, chips de filtros activos y, sin selección, correo al filtro */}
+      <div className="leads-summary">
+        <div className="chip-list">
+          <span className="toolbar-meta">{summary}</span>
           {activeChips.map((chip, i) => (
-            <button
-              key={i}
-              onClick={chip.onRemove}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '4px',
-                background: 'rgba(201,169,110,0.10)', border: '1px solid var(--border-accent)',
-                color: 'var(--accent-gold)', fontSize: '11px',
-                padding: '2px 8px', borderRadius: '20px', cursor: 'pointer',
-              }}
-            >
-              <X size={10} /> {chip.label}
+            <button key={i} type="button" onClick={chip.onRemove} className="chip-remove" aria-label={`Quitar filtro ${chip.label}`}>
+              <X size={10} aria-hidden="true" /> {chip.label}
             </button>
           ))}
         </div>
-      )}
+        {/* Sin selección: los filtros activos también son una audiencia. */}
+        {showFilterBroadcast && (
+          <button
+            type="button"
+            onClick={() => openBroadcast(() => createBroadcastFromLeadFilters(leadListFiltersToQuery(filters)))}
+            disabled={broadcastPending}
+            aria-busy={broadcastPending}
+            className="btn btn-ghost"
+          >
+            <Mail size={13} aria-hidden="true" /> {broadcastPending ? 'Abriendo…' : `Correo grupal a este filtro (${total})`}
+          </button>
+        )}
+      </div>
 
       {/* ── Panel de filtros ── Fuente/Canal/Idioma viven aquí; Etapa y Agente se
           duplican solo en móvil (mismo estado — cero desincronización). Los filtros
           aplican en vivo; "Aplicar" solo cierra. */}
       <ModalShell open={showFilters} onClose={() => setShowFilters(false)} maxWidth={400}>
-        <div style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Filtros</span>
-            <button
-              onClick={() => setShowFilters(false)}
-              aria-label="Cerrar filtros"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: '4px' }}
-            >
+        <div className="settings-modal">
+          <div className="settings-inline settings-inline-between">
+            <h2 className="settings-modal-title">Filtros</h2>
+            <button type="button" onClick={() => setShowFilters(false)} aria-label="Cerrar filtros" className="icon-btn">
               <X size={18} />
             </button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '22px' }}>
+          <div className="settings-stack settings-stack-tight">
             {viewerRole !== 'agent' && (
               <div className="md:hidden">
-                <label style={FILTER_LABEL}>Agente</label>
-                <FilterSelect value={filters.agentId} onChange={v => pushFilters({ agentId: v })} options={agentOptions} fullWidth />
+                <span className="settings-field-label">Agente</span>
+                <FilterSelect label="Agente" value={filters.agentId} onChange={v => pushFilters({ agentId: v })} options={agentOptions} fullWidth />
               </div>
             )}
             <div className="md:hidden">
-              <label style={FILTER_LABEL}>Etapa</label>
-              <FilterSelect value={filters.stage} onChange={v => pushFilters({ stage: v })} options={stageOptions} fullWidth />
+              <span className="settings-field-label">Etapa</span>
+              <FilterSelect label="Etapa" value={filters.stage} onChange={v => pushFilters({ stage: v })} options={stageOptions} fullWidth />
             </div>
             <div>
-              <label style={FILTER_LABEL}>Fuente</label>
-              <FilterSelect value={filters.source} onChange={handleSourceChange} options={sourceOptions} fullWidth />
+              <span className="settings-field-label">Fuente</span>
+              <FilterSelect label="Fuente" value={filters.source} onChange={handleSourceChange} options={sourceOptions} fullWidth />
             </div>
             {channelOptions.length > 0 && (
               <div>
-                <label style={FILTER_LABEL}>Canal</label>
+                <span className="settings-field-label">Canal</span>
                 <FilterSelect
+                  label="Canal"
                   value={filters.channelId}
                   onChange={v => pushFilters({ channelId: v })}
                   options={[
@@ -696,26 +592,26 @@ export function LeadsClient({
               </div>
             )}
             <div>
-              <label style={FILTER_LABEL}>Calidad</label>
-              <FilterSelect value={filters.quality} onChange={v => pushFilters({ quality: v })} options={qualityOptions} fullWidth />
+              <span className="settings-field-label">Calidad</span>
+              <FilterSelect label="Calidad" value={filters.quality} onChange={v => pushFilters({ quality: v })} options={qualityOptions} fullWidth />
             </div>
             {tags.length > 0 && (
               <div>
-                <label style={FILTER_LABEL}>Etiqueta</label>
-                <FilterSelect value={filters.tag} onChange={v => pushFilters({ tag: v })} options={tagOptions} fullWidth />
+                <span className="settings-field-label">Etiqueta</span>
+                <FilterSelect label="Etiqueta" value={filters.tag} onChange={v => pushFilters({ tag: v })} options={tagOptions} fullWidth />
               </div>
             )}
             <div>
-              <label style={FILTER_LABEL}>Idioma</label>
-              <FilterSelect value={filters.language} onChange={v => pushFilters({ language: v })} options={languageOptions} fullWidth />
+              <span className="settings-field-label">Idioma</span>
+              <FilterSelect label="Idioma" value={filters.language} onChange={v => pushFilters({ language: v })} options={languageOptions} fullWidth />
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
-            <button onClick={clearFilters} disabled={!hasFilters} className="btn btn-ghost">
+          <div className="settings-inline settings-inline-between">
+            <button type="button" onClick={clearFilters} disabled={!hasFilters} className="btn btn-ghost">
               Limpiar todo
             </button>
-            <button onClick={() => setShowFilters(false)} className="btn btn-primary btn-cta">
+            <button type="button" onClick={() => setShowFilters(false)} className="btn btn-primary">
               Aplicar
             </button>
           </div>
@@ -724,82 +620,36 @@ export function LeadsClient({
 
       {/* ── Barra de selección múltiple (solo tabla) ── */}
       {filters.view === 'table' && selected.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border-accent)',
-          borderRadius: '10px', padding: '10px 14px', marginBottom: '12px',
-        }}>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            {selected.size} {selected.size === 1 ? 'lead seleccionado' : 'leads seleccionados'}
-          </span>
+        <div className="selection-bar">
+          <span>{selected.size} {selected.size === 1 ? 'lead seleccionado' : 'leads seleccionados'}</span>
+          <button type="button" onClick={clearSelection} className="settings-link-btn">Deseleccionar</button>
+          <span className="selection-bar-fill" />
           <button
-            onClick={clearSelection}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '12px', textDecoration: 'underline' }}
-          >
-            Deseleccionar
-          </button>
-          <div style={{ flex: 1 }} />
-          <button
+            type="button"
             onClick={() => openBroadcast(() => createBroadcastFromLeads([...selected.keys()]))}
             disabled={broadcastPending}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px', fontSize: '13px', borderRadius: '8px',
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)', cursor: 'pointer', opacity: broadcastPending ? 0.6 : 1,
-            }}
+            aria-busy={broadcastPending}
+            className="btn btn-ghost"
           >
-            <Mail size={14} /> {broadcastPending ? 'Abriendo…' : 'Correo grupal'}
+            <Mail size={14} aria-hidden="true" /> {broadcastPending ? 'Abriendo…' : 'Correo grupal'}
+          </button>
+          <button type="button" onClick={exportCsv} className="btn btn-ghost">
+            <Download size={14} aria-hidden="true" /> Descargar CSV
           </button>
           <button
-            onClick={exportCsv}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px', fontSize: '13px', borderRadius: '8px',
-              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)', cursor: 'pointer',
-            }}
-          >
-            <Download size={14} /> Descargar CSV
-          </button>
-          <button
+            type="button"
             onClick={() => { setDeleteStep(1); setDeleteInput(''); setBulkError(null) }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-              background: 'rgba(201,123,107,0.12)', border: '1px solid rgba(201,123,107,0.3)',
-              color: 'var(--accent-coral)', cursor: 'pointer',
-            }}
+            className="btn btn-danger"
           >
-            <Trash2 size={14} /> Eliminar ({selected.size})
+            <Trash2 size={14} aria-hidden="true" /> Eliminar ({selected.size})
           </button>
         </div>
       )}
 
-      {/* Sin selección: los filtros activos también son una audiencia. */}
-      {filters.view === 'table' && selected.size === 0 && hasActiveLeadFilters(filters) && total > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-          <button
-            onClick={() => openBroadcast(() => createBroadcastFromLeadFilters(leadListFiltersToQuery(filters)))}
-            disabled={broadcastPending}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '6px 12px', fontSize: '12px', borderRadius: '8px',
-              background: 'transparent', border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)', cursor: 'pointer', opacity: broadcastPending ? 0.6 : 1,
-            }}
-          >
-            <Mail size={13} /> {broadcastPending ? 'Abriendo…' : `Correo grupal a este filtro (${total})`}
-          </button>
-        </div>
-      )}
-      {broadcastError && (
-        <div role="alert" style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', lineHeight: 1.5 }}>{broadcastError}</div>
-      )}
+      {broadcastError && <p role="alert" className="form-error">{broadcastError}</p>}
 
-      {/* ── ZONA 3A: Table view ── (dense table; redesign deferred to Prompt C.
-          Defensive horizontal scroll on phones so columns stay readable.)
-          AnimatePresence mode="wait": crossfade de 150ms al alternar tabla↔kanban. */}
+      {/* ── Resultados ── AnimatePresence mode="wait": crossfade de 150ms al
+          alternar tabla↔kanban. */}
       <div className="results-zone" style={{ position: 'relative' }}>
       <RefreshingPill show={isPending} />
       <div style={{ opacity: isPending ? 0.55 : 1, transition: 'opacity var(--dur-fast)' }}>
@@ -811,203 +661,159 @@ export function LeadsClient({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}
         >
-          <div className="max-md:overflow-x-auto">
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}>
-                <th style={{ padding: '10px 0 10px 16px', width: '36px' }}>
-                  <button
-                    onClick={toggleAllPaged}
-                    aria-label={allPagedSelected ? 'Deseleccionar página' : 'Seleccionar página'}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: allPagedSelected ? 'var(--accent-gold)' : 'var(--text-muted)', display: 'flex', padding: 0 }}
+          {leads.length === 0 ? (
+            <div className="empty-card">
+              <span className="empty-card-icon" aria-hidden="true"><Users size={18} /></span>
+              No se encontraron leads.
+              {hasFilters && (
+                <button type="button" onClick={clearFilters} className="btn btn-ghost">Limpiar filtros</button>
+              )}
+            </div>
+          ) : (
+          <DataScope cols={TABLE_COLS} colsMd={TABLE_COLS_MD} colsSm={TABLE_COLS_SM}>
+            <div className="dt-grid dt-head">
+              <button
+                type="button"
+                onClick={toggleAllPaged}
+                aria-pressed={allPagedSelected}
+                aria-label={allPagedSelected ? 'Deseleccionar página' : 'Seleccionar página'}
+                className="check-btn"
+              >
+                {allPagedSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+              </button>
+              <span>Lead</span>
+              <span className="dt-hide-md">Agente</span>
+              <span className="dt-hide-sm">Etapa</span>
+              <span className="dt-hide-md">Fuente</span>
+              <span className="dt-hide-sm">Calidad</span>
+              <span className="dt-hide-md">Idioma</span>
+              <span className="dt-hide-sm">Fecha</span>
+              <span className="dt-show-sm">Etapa</span>
+            </div>
+
+            <div className="dt">
+              {leads.map(lead => {
+                const agent      = agents.find(a => a.id === lead.agentId)
+                const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
+                const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
+                const SrcIcon    = SOURCE_ICON[leadSource.kind]
+                const langCfg    = LANGUAGE_CONFIG[lead.language]
+                const isSelected = selected.has(lead.id)
+                const open       = () => navigate(`/leads/${lead.id}`)
+
+                return (
+                  <div
+                    key={lead.id}
+                    className="dt-grid dt-row"
+                    data-clickable
+                    data-selected={isSelected || undefined}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`${lead.firstName} ${lead.lastName}`}
+                    onClick={open}
+                    onKeyDown={onActivate(open)}
                   >
-                    {allPagedSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                  </button>
-                </th>
-                {['Lead', 'Agente', 'Etapa', 'Fuente', 'Calidad', 'Idioma', 'Fecha'].map(h => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: '10px 16px', textAlign: 'left',
-                      fontSize: '11px', fontWeight: 500,
-                      letterSpacing: '0.08em', textTransform: 'uppercase',
-                      color: 'var(--text-muted)', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {leads.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    <div style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      justifyContent: 'center', padding: '60px 20px', gap: '12px',
-                    }}>
-                      <Users size={40} style={{ color: 'var(--text-muted)' }} />
-                      <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                        <div style={{ fontSize: '14px', marginBottom: '4px' }}>No se encontraron leads</div>
-                        <div style={{ fontSize: '12px' }}>Ajusta los filtros para ver resultados</div>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); toggleSelect(lead) }}
+                      onKeyDown={e => e.stopPropagation()}
+                      aria-pressed={isSelected}
+                      aria-label={isSelected ? 'Deseleccionar lead' : 'Seleccionar lead'}
+                      className="check-btn"
+                    >
+                      {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+                    </button>
+
+                    {/* Lead */}
+                    <div className="lead-who">
+                      <LeadAvatar lead={lead} agent={agent} />
+                      <div className="dt-cell-main">
+                        <div className="lead-name-line">
+                          <span className="dt-title">{lead.firstName} {lead.lastName}</span>
+                          {lead.urgency === 'hoy' && <TodayChip />}
+                        </div>
+                        <span className="dt-sub">{lead.email}</span>
+                        <TagChips tagIds={lead.tagIds} catalog={tags} />
+                        {/* En pantallas medianas y estrechas, lo que sale de sus columnas. */}
+                        <span className="dt-meta dt-show-md">
+                          {agent && <span>{agent.name.split(' ')[0]}</span>}
+                          <span>{channel?.name ?? leadSource.label}</span>
+                          <span className="dt-show-sm">{formatDate(lead.createdAt)}</span>
+                          <span className="dt-show-sm"><QualityCell band={lead.qualityBand} urgency={null} /></span>
+                        </span>
                       </div>
                     </div>
-                  </td>
-                </tr>
-              ) : (
-                leads.map((lead, idx) => {
-                  const agent      = agents.find(a => a.id === lead.agentId)
-                  const channel    = channels.find(c => c.id === lead.acquisitionChannelId)
-                  const leadSource = getLeadSource(channel?.channelType ?? null, lead.trafficSource ?? null)
-                  const SrcIcon    = SOURCE_ICON[leadSource.kind]
-                  const langCfg    = LANGUAGE_CONFIG[lead.language]
-                  const isLast     = idx === leads.length - 1
 
-                  const isSelected = selected.has(lead.id)
-                  return (
-                    <tr
-                      key={lead.id}
-                      className="row-hover"
-                      style={{
-                        borderBottom: isLast ? 'none' : '1px solid var(--border-subtle)',
-                        cursor: 'pointer',
-                        background: isSelected ? 'rgba(201,169,110,0.06)' : undefined,
-                      }}
-                      onClick={() => navigate(`/leads/${lead.id}`)}
-                    >
-                      {/* Checkbox de selección */}
-                      <td style={{ padding: '12px 0 12px 16px', width: '36px' }} onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => toggleSelect(lead)}
-                          aria-label={isSelected ? 'Deseleccionar lead' : 'Seleccionar lead'}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: isSelected ? 'var(--accent-gold)' : 'var(--text-muted)', display: 'flex', padding: 0 }}
-                        >
-                          {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
-                        </button>
-                      </td>
-                      {/* Lead */}
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <LeadAvatar lead={lead} agents={agents} size={32} />
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                                {lead.firstName} {lead.lastName}
-                              </span>
-                              {lead.urgency === 'hoy' && <TodayChip />}
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{lead.email}</div>
-                            <TagChips tagIds={lead.tagIds} catalog={tags} />
-                          </div>
-                        </div>
-                      </td>
-                      {/* Agente */}
-                      <td style={{ padding: '12px 16px', width: '140px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <AgentAvatar agentId={lead.agentId} agents={agents} size="sm" />
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            {agent?.name.split(' ')[0] ?? '—'}
-                          </span>
-                        </div>
-                      </td>
-                      {/* Etapa */}
-                      <td style={{ padding: '12px 16px', width: '140px' }}>
-                        <StageBadge stage={lead.stage} />
-                      </td>
-                      {/* Fuente (composite: channel type / traffic source) */}
-                      <td style={{ padding: '12px 16px', width: '160px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
-                          {SrcIcon && <SrcIcon size={13} />}
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {leadSource.label}
-                            </div>
-                            {channel && (
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {channel.name}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      {/* Calidad + urgencia */}
-                      <td style={{ padding: '12px 16px', width: '120px' }}>
-                        <QualityCell band={lead.qualityBand} urgency={lead.urgency} />
-                      </td>
-                      {/* Idioma */}
-                      <td style={{ padding: '12px 16px', width: '80px' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          {langCfg.flag} {lead.language.toUpperCase()}
-                        </span>
-                      </td>
-                      {/* Fecha */}
-                      <td style={{ padding: '12px 16px', width: '100px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {formatDate(lead.createdAt)}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })
+                    {/* Agente */}
+                    <span className="cell-inline dt-hide-md">
+                      <span className="cell-text">{agent?.name.split(' ')[0] ?? '—'}</span>
+                    </span>
+
+                    {/* Etapa */}
+                    <span className="dt-hide-sm"><StageBadge stage={lead.stage} /></span>
+
+                    {/* Fuente (composite: channel type / traffic source) */}
+                    <span className="cell-inline dt-hide-md">
+                      {SrcIcon && <SrcIcon size={13} />}
+                      <span className="dt-cell-main">
+                        <span className="cell-text">{leadSource.label}</span>
+                        {channel && <span className="dt-sub cell-text">{channel.name}</span>}
+                      </span>
+                    </span>
+
+                    {/* Calidad + urgencia */}
+                    <span className="dt-hide-sm"><QualityCell band={lead.qualityBand} urgency={lead.urgency} /></span>
+
+                    {/* Idioma */}
+                    <span className="cell-muted dt-hide-md">{langCfg.flag} {lead.language.toUpperCase()}</span>
+
+                    {/* Fecha */}
+                    <span className="cell-muted dt-hide-sm">{formatDate(lead.createdAt)}</span>
+
+                    {/* Etapa en pantallas estrechas */}
+                    <span className="dt-show-sm"><StageBadge stage={lead.stage} /></span>
+                  </div>
+                )
+              })}
+
+              {/* Paginación — la página la resuelve el servidor vía ?page= */}
+              {totalPages > 1 && (
+                <div className="pager">
+                  <button
+                    type="button"
+                    onClick={() => pushFilters({ page: Math.max(1, page - 1) })}
+                    disabled={page === 1 || isPending}
+                    className="btn btn-ghost"
+                  >
+                    ← Anterior
+                  </button>
+                  <span>Página {page} de {totalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => pushFilters({ page: Math.min(totalPages, page + 1) })}
+                    disabled={page === totalPages || isPending}
+                    className="btn btn-ghost"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
               )}
-            </tbody>
-          </table>
-          </div>
-
-          {/* Pagination — la página la resuelve el servidor vía ?page= */}
-          {totalPages > 1 && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
-              padding: '12px 16px', borderTop: '1px solid var(--border-subtle)',
-            }}>
-              <button
-                onClick={() => pushFilters({ page: Math.max(1, page - 1) })}
-                disabled={page === 1 || isPending}
-                className="page-btn"
-                style={{
-                  padding: '4px 12px', fontSize: '12px', borderRadius: '6px',
-                  background: 'transparent', border: '1px solid var(--border-subtle)',
-                  color: page === 1 ? 'var(--text-muted)' : 'var(--text-secondary)',
-                  cursor: page === 1 ? 'not-allowed' : 'pointer',
-                  transition: 'border-color 150ms, color 150ms',
-                }}
-              >
-                ← Anterior
-              </button>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Página {page} de {totalPages}
-              </span>
-              <button
-                onClick={() => pushFilters({ page: Math.min(totalPages, page + 1) })}
-                disabled={page === totalPages || isPending}
-                className="page-btn"
-                style={{
-                  padding: '4px 12px', fontSize: '12px', borderRadius: '6px',
-                  background: 'transparent', border: '1px solid var(--border-subtle)',
-                  color: page === totalPages ? 'var(--text-muted)' : 'var(--text-secondary)',
-                  cursor: page === totalPages ? 'not-allowed' : 'pointer',
-                  transition: 'border-color 150ms, color 150ms',
-                }}
-              >
-                Siguiente →
-              </button>
             </div>
+          </DataScope>
           )}
         </m.div>
       ) : (
 
-      /* ── ZONA 3B: Kanban view ── Cada columna trae sus más recientes desde el
-         servidor; el contador de la cabecera es el total real de la columna. */
+      /* ── Kanban ── Cada columna trae sus más recientes desde el servidor; el
+         contador de la cabecera es el total real de la columna. */
         <m.div
           key="kanban"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '12px', minHeight: 'calc(100vh - 280px)' }}
+          className="kanban"
         >
           {KANBAN_COLUMNS.map(col => {
             const data     = (kanban ?? []).find(c => c.key === col.key)
@@ -1015,112 +821,57 @@ export function LeadsClient({
             const colTotal = data?.total ?? 0
 
             return (
-              <div
-                key={col.key}
-                style={{
-                  width: '240px', flexShrink: 0,
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  borderTop: `3px solid ${col.color}`,
-                  borderRadius: '12px',
-                  padding: '12px',
-                  height: 'fit-content',
-                  maxHeight: 'calc(100vh - 300px)',
-                  overflowY: 'auto',
-                }}
-              >
-                {/* Column header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: col.color }} />
-                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>{col.label}</span>
-                  </div>
-                  <span style={{
-                    fontSize: '11px', background: 'var(--bg-overlay)',
-                    color: 'var(--text-muted)', padding: '2px 7px', borderRadius: '10px',
-                  }}>
-                    {colTotal}
-                  </span>
+              <section key={col.key} className="kanban-col" style={tone(col.color)} aria-label={col.label}>
+                <div className="kanban-col-head">
+                  <span className="kanban-col-name">{col.label}</span>
+                  <span className="filter-tab-count">{colTotal}</span>
                 </div>
 
-                {/* Cards */}
                 {colLeads.length === 0 ? (
-                  <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', padding: '20px 0' }}>
-                    Sin leads
-                  </div>
+                  <div className="kanban-note">Sin leads</div>
                 ) : (
                   colLeads.map(lead => {
                     const agent   = agents.find(a => a.id === lead.agentId)
                     const channel = channels.find(c => c.id === lead.acquisitionChannelId)
                     const langCfg = LANGUAGE_CONFIG[lead.language]
+                    const open    = () => navigate(`/leads/${lead.id}`)
 
                     return (
-                      <m.div
+                      <div
                         key={lead.id}
                         className="kanban-card"
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        transition={{ duration: 0.15 }}
-                        style={{
-                          background:   'var(--bg-elevated)',
-                          border:       '1px solid var(--border-subtle)',
-                          borderRadius: '8px',
-                          padding:      '10px 12px',
-                          marginBottom: '8px',
-                          cursor:       'pointer',
-                        }}
-                        onClick={() => navigate(`/leads/${lead.id}`)}
+                        role="link"
+                        tabIndex={0}
+                        onClick={open}
+                        onKeyDown={onActivate(open)}
                       >
-                        {/* Row 1: avatar + name + date */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                          <LeadAvatar lead={lead} agents={agents} size={24} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {lead.firstName} {lead.lastName}
-                            </div>
-                          </div>
+                        <div className="kanban-card-top">
+                          <LeadAvatar lead={lead} agent={agent} small />
+                          <span className="kanban-card-name">{lead.firstName} {lead.lastName}</span>
                           {lead.urgency === 'hoy' && <TodayChip />}
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
-                            {formatDate(lead.createdAt)}
-                          </span>
+                          <span className="kanban-card-meta">{formatDate(lead.createdAt)}</span>
                         </div>
-                        {/* Row 2: agent name */}
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                          {agent?.name.split(' ')[0] ?? '—'}
-                        </div>
-                        {/* Etiquetas: las mismas dos que la tabla, para que las
-                            dos vistas no digan cosas distintas del mismo lead. */}
+                        <span className="kanban-card-meta">{agent?.name.split(' ')[0] ?? '—'}</span>
+                        {/* Etiquetas y calidad: el mismo criterio que la tabla, para
+                            que las dos vistas no digan cosas distintas del mismo lead. */}
                         <TagChips tagIds={lead.tagIds} catalog={tags} />
-                        {/* Row 3: calidad + urgencia — mismo criterio que la tabla,
-                            para que las dos vistas no digan cosas distintas del
-                            mismo lead. */}
-                        <div style={{ marginBottom: '6px' }}>
-                          <QualityCell band={lead.qualityBand} urgency={lead.urgency} />
-                        </div>
-                        {/* Row 4: language + channel type */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{langCfg.flag}</span>
-                          {channel && (
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                              {CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType}
-                            </span>
-                          )}
-                        </div>
-                        {/* Ya no va el badge de etapa: antes la columna
-                            "Finalizados" mezclaba cerrado, completado y perdido
-                            y hacía falta distinguirlos. Ahora cada columna ES
-                            una etapa, así que repetirla sería ruido. */}
-                      </m.div>
+                        <QualityCell band={lead.qualityBand} urgency={lead.urgency} />
+                        <span className="kanban-card-meta">
+                          <span aria-hidden="true">{langCfg.flag}</span>
+                          {channel && <span>{CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType}</span>}
+                        </span>
+                        {/* Sin badge de etapa: cada columna ES una etapa. */}
+                      </div>
                     )
                   })
                 )}
 
                 {colTotal > colLeads.length && (
-                  <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', padding: '6px 0' }}>
+                  <div className="kanban-note kanban-note-sm">
                     Mostrando {KANBAN_COLUMN_LIMIT} de {colTotal} · usa la tabla para ver el resto
                   </div>
                 )}
-              </div>
+              </section>
             )
           })}
         </m.div>
@@ -1131,65 +882,52 @@ export function LeadsClient({
 
       {/* ── Eliminar en lote — Paso 1: primera confirmación ── */}
       <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={460}>
-        <div style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar {selected.size} {selected.size === 1 ? 'lead' : 'leads'}</span>
-            <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+        <div className="settings-modal">
+          <div className="settings-inline settings-inline-between">
+            <h2 className="settings-modal-title">Eliminar {selected.size} {selected.size === 1 ? 'lead' : 'leads'}</h2>
+            <button type="button" onClick={() => setDeleteStep(0)} aria-label="Cerrar" className="icon-btn"><X size={18} /></button>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
-            Vas a eliminar <strong style={{ color: 'var(--text-primary)' }}>{selected.size}</strong> {selected.size === 1 ? 'lead' : 'leads'}.
-            Se eliminan también sus eventos, runs de secuencia y notificaciones.{' '}
-            <strong style={{ color: 'var(--accent-coral)' }}>No se puede deshacer.</strong>
+          <p className="settings-confirm-text">
+            Vas a eliminar <strong>{selected.size}</strong> {selected.size === 1 ? 'lead' : 'leads'}.
+            Se eliminan también sus eventos, runs de secuencia y notificaciones.
           </p>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={() => { setDeleteStep(2); setDeleteInput('') }} style={{
-              padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-              background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
-              border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
-            }}>Continuar →</button>
+          <span className="settings-alert settings-alert-block">No se puede deshacer.</span>
+          <div className="settings-modal-actions">
+            <button type="button" onClick={() => setDeleteStep(0)} className="btn btn-ghost">Cancelar</button>
+            <button type="button" onClick={() => { setDeleteStep(2); setDeleteInput('') }} className="btn btn-danger">
+              Continuar →
+            </button>
           </div>
         </div>
       </ModalShell>
 
       {/* ── Eliminar en lote — Paso 2: confirmación por texto ── */}
       <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
-        <div style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--accent-coral)' }}>Confirmar eliminación</span>
-            <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+        <div className="settings-modal">
+          <div className="settings-inline settings-inline-between">
+            <h2 className="settings-modal-title">Confirmar eliminación</h2>
+            <button type="button" onClick={() => setDeleteStep(0)} aria-label="Cerrar" className="icon-btn"><X size={18} /></button>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-            Para confirmar la eliminación de <strong style={{ color: 'var(--text-primary)' }}>{selected.size}</strong> {selected.size === 1 ? 'lead' : 'leads'}, escribe <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>ELIMINAR</strong>:
+          <p className="settings-confirm-text">
+            Para confirmar la eliminación de <strong>{selected.size}</strong> {selected.size === 1 ? 'lead' : 'leads'}, escribe <strong className="settings-input-mono">ELIMINAR</strong>:
           </p>
           <input
             value={deleteInput}
             onChange={e => setDeleteInput(e.target.value)}
             placeholder="ELIMINAR"
+            aria-label="Escribe ELIMINAR para confirmar"
             autoFocus
-            style={{
-              width: '100%', background: 'var(--bg-overlay)',
-              border: '1px solid rgba(201,123,107,0.3)', borderRadius: '8px',
-              padding: '9px 12px', color: 'var(--text-primary)', fontSize: '14px',
-              outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace', marginBottom: '16px',
-            }}
+            className="settings-input settings-input-mono"
           />
-          {bulkError && (
-            <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px' }}>{bulkError}</div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+          {bulkError && <p role="alert" className="form-error">{bulkError}</p>}
+          <div className="settings-modal-actions">
+            <button type="button" onClick={() => setDeleteStep(0)} className="btn btn-ghost">Cancelar</button>
             <button
+              type="button"
               onClick={handleBulkDelete}
               disabled={deleteInput !== 'ELIMINAR' || bulkPending}
-              style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: deleteInput === 'ELIMINAR' ? 'rgba(201,123,107,0.2)' : 'var(--bg-elevated)',
-                color: deleteInput === 'ELIMINAR' ? 'var(--accent-coral)' : 'var(--text-muted)',
-                border: deleteInput === 'ELIMINAR' ? '1px solid rgba(201,123,107,0.4)' : '1px solid var(--border-subtle)',
-                cursor: (deleteInput !== 'ELIMINAR' || bulkPending) ? 'not-allowed' : 'pointer',
-                opacity: bulkPending ? 0.7 : 1,
-              }}
+              aria-busy={bulkPending}
+              className="btn btn-danger"
             >
               {bulkPending ? 'Eliminando…' : 'Eliminar definitivamente'}
             </button>

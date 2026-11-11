@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   mapAgent,
@@ -33,8 +34,13 @@ import { getTagIdsWithSequence, getTagsForLead, listLeadTags } from '@/lib/data/
 import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { LeadDetailSkeleton } from './lead-detail-skeleton'
 
-async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
+type Params = Promise<{ id: string }>
+
+// La cabecera del detalle es el propio lead (nombre, etapa), así que todo lee la
+// base: el shell estático es el esqueleto y el contenido llega por streaming.
+async function LeadContent({ params }: { params: Params }) {
   const { id } = await params
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
@@ -261,6 +267,14 @@ async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
       canTag={canTag}
       emailTagIds={emailTagIds}
     />
+  )
+}
+
+function LeadPage({ params }: { params: Params }) {
+  return (
+    <Suspense fallback={<LeadDetailSkeleton />}>
+      <LeadContent params={params} />
+    </Suspense>
   )
 }
 

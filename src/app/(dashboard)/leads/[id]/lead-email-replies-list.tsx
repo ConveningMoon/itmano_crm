@@ -37,7 +37,7 @@ function ReplyItem({ reply, open, onToggle }: {
           ? <ChevronDown  size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           : <ChevronRight size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />}
 
-        <Mail size={13} style={{ color: 'var(--accent-teal)', flexShrink: 0 }} />
+        <Mail size={13} style={{ color: 'var(--gold-3)', flexShrink: 0 }} />
 
         <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {subject}

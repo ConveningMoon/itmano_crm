@@ -165,7 +165,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
               <select value={form.language} onChange={set('language')} required
                 className="edit-modal-input" style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}>
                 {Object.entries(LANGUAGE_CONFIG).map(([key, cfg]) => (
-                  <option key={key} value={key} style={{ background: '#16181C' }}>
+                  <option key={key} value={key}>
                     {cfg.flag} {cfg.label}
                   </option>
                 ))}
@@ -178,7 +178,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
               <select value={form.agentId} onChange={set('agentId')} required
                 className="edit-modal-input" style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}>
                 {agents.map(agent => (
-                  <option key={agent.id} value={agent.id} style={{ background: '#16181C' }}>
+                  <option key={agent.id} value={agent.id}>
                     {agent.name}
                   </option>
                 ))}
@@ -194,9 +194,9 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
                 className="edit-modal-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
-                <option value="" style={{ background: '#16181C' }}>— Seleccionar tipo —</option>
+                <option value="">— Seleccionar tipo —</option>
                 {CHANNEL_TYPE_ORDER.map(type => (
-                  <option key={type} value={type} style={{ background: '#16181C' }}>
+                  <option key={type} value={type}>
                     {CHANNEL_TYPE_LABELS[type]}
                   </option>
                 ))}
@@ -214,9 +214,9 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
                   className="edit-modal-input"
                   style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
                 >
-                  <option value="" style={{ background: '#16181C' }}>— Seleccionar canal —</option>
+                  <option value="">— Seleccionar canal —</option>
                   {channelsForType(form.channelType).map(ch => (
-                    <option key={ch.id} value={ch.id} style={{ background: '#16181C' }}>
+                    <option key={ch.id} value={ch.id}>
                       {ch.name}
                     </option>
                   ))}
@@ -252,7 +252,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
 
           {/* Inline error */}
           {error && (
-            <p style={{ fontSize: '12px', color: 'var(--accent-coral)', marginBottom: '12px' }}>
+            <p style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px' }}>
               {error}
             </p>
           )}
@@ -273,7 +273,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
               type="submit" disabled={isPending}
               style={{
                 padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                background: 'var(--gold-2)', color: 'var(--bg-base)',
                 border: 'none', cursor: isPending ? 'not-allowed' : 'pointer',
                 opacity: isPending ? 0.7 : 1,
               }}

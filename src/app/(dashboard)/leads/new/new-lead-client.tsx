@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useId, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Agent, Language } from '@/lib/types'
 import type { ChannelOption, TenantOption } from './page'
@@ -9,8 +9,8 @@ import { parseLeadRows, type ParseLeadsResult, type NormalizedLead } from '@/lib
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { Tabs } from '@/components/ui/tabs'
 import {
-  ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   Mail,
   Phone,
   Building2,
@@ -24,6 +24,7 @@ import {
   FileDown,
   Calendar,
   Globe,
+  X,
 } from 'lucide-react'
 
 interface FormData {
@@ -94,71 +95,32 @@ const TRAFFIC_SOURCE_BY_SOURCE: Record<string, string> = {
   whatsapp:  'whatsapp',
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px',
-  padding: '9px 12px',
-  color: 'var(--text-primary)',
-  fontSize: '13px',
-  outline: 'none',
-  boxSizing: 'border-box',
-}
-
-const inputErrorStyle: React.CSSProperties = {
-  ...inputStyle,
-  borderColor: '#E05C5C',
-}
-
-const inputWithIconStyle: React.CSSProperties = {
-  ...inputStyle,
-  paddingLeft: '36px',
-}
-
-const inputWithIconErrorStyle: React.CSSProperties = {
-  ...inputWithIconStyle,
-  borderColor: '#E05C5C',
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: '11px',
-  fontWeight: 500,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  marginBottom: '6px',
-}
-
-const errorStyle: React.CSSProperties = {
-  fontSize: '11px',
-  color: '#E05C5C',
-  marginTop: '4px',
-}
-
-const sectionHeaderStyle: React.CSSProperties = {
-  padding: '12px 20px',
-  borderBottom: '1px solid var(--border-subtle)',
-  fontSize: '12px',
-  fontWeight: 500,
-  color: 'var(--text-secondary)',
-  background: 'var(--bg-elevated)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-}
-
-const sectionBodyStyle: React.CSSProperties = {
-  padding: '20px',
-  borderBottom: '1px solid var(--border-subtle)',
-}
-
 const LANG_FLAG: Record<string, string> = Object.fromEntries(
   SUPPORTED_LANGUAGE_CODES.map(c => [c, LANGUAGE_CONFIG[c].flag])
 )
 const LANG_LABEL: Record<string, string> = Object.fromEntries(
   SUPPORTED_LANGUAGE_CODES.map(c => [c, c.toUpperCase()])
 )
+
+// Clases del input según haya error: el borde coral es la única marca del fallo
+// además del texto debajo.
+const inputClass = (invalid?: string) => invalid ? 'settings-input settings-input-invalid' : 'settings-input'
+
+// Select con el chevron de los controles del CRM.
+function SelectField({ id, invalid, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: string }) {
+  return (
+    <span className="select-field select-field-full">
+      <select id={id} className={inputClass(invalid)} aria-invalid={invalid ? true : undefined} {...props}>
+        {children}
+      </select>
+      <ChevronDown size={14} aria-hidden="true" />
+    </span>
+  )
+}
+
+function FieldError({ message }: { message?: string }) {
+  return message ? <p role="alert" className="form-error">{message}</p> : null
+}
 
 interface SuccessScreenProps {
   form: FormData
@@ -172,61 +134,19 @@ function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
   const fullName = [form.firstName, form.lastName].filter(Boolean).join(' ')
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '60vh',
-        textAlign: 'center',
-        padding: '24px',
-      }}
-    >
-      <CheckCircle2 size={64} color="var(--accent-gold)" strokeWidth={1.5} />
-      <h2 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', margin: '16px 0 8px' }}>
-        Lead registrado correctamente
-      </h2>
-      <p style={{ fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '320px', lineHeight: 1.6 }}>
-        {fullName} ha sido añadido al sistema y asignado a {agentName}.
-      </p>
-      <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px', maxWidth: '280px' }}>
-        La secuencia de email se activará automáticamente.
-      </p>
+    <div className="settings-card done-card form-narrow" role="status">
+      <span className="empty-card-icon" aria-hidden="true"><CheckCircle2 size={24} strokeWidth={1.5} /></span>
+      <h2 className="done-card-title">Lead registrado correctamente</h2>
+      <p className="done-card-text">{fullName} ha sido añadido al sistema y asignado a {agentName}.</p>
+      <p className="settings-note">La secuencia de email se activará automáticamente.</p>
       {form.lender && (
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          Prestamista: <strong>{form.lender}</strong>
-        </p>
+        <p className="settings-note">Prestamista: <strong>{form.lender}</strong></p>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '28px', width: '200px' }}>
-        <button
-          onClick={() => router.push('/leads')}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontSize: '13px',
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
+      <div className="settings-actions">
+        <button type="button" onClick={() => router.push('/leads')} className="btn btn-ghost">
           ← Ver todos los leads
         </button>
-        <button
-          onClick={onReset}
-          style={{
-            padding: '10px 20px',
-            borderRadius: '8px',
-            border: 'none',
-            background: 'var(--accent-gold)',
-            color: 'var(--bg-base)',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
+        <button type="button" onClick={onReset} className="btn btn-primary">
           + Registrar otro lead
         </button>
       </div>
@@ -240,16 +160,22 @@ export function NewLeadClient({
   isSuperAdmin = false,
   tenants = [],
   myAgentId = null,
+  lockedAgentId = null,
 }: {
   agents: Agent[]
   channels: ChannelOption[]
   isSuperAdmin?: boolean
   tenants?: TenantOption[]
   myAgentId?: string | null
+  // Rol 'agent': el servidor le atribuye siempre sus leads, así que el
+  // formulario no le ofrece elegir agente.
+  lockedAgentId?: string | null
 }) {
   const router = useRouter()
+  const fieldId = useId()
 
-  const [form, setForm] = useState<FormData>(INITIAL_FORM)
+  const initialForm: FormData = { ...INITIAL_FORM, agentId: lockedAgentId ?? '' }
+  const [form, setForm] = useState<FormData>(initialForm)
   const [errors, setErrors] = useState<FormErrors>({})
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -487,7 +413,7 @@ export function NewLeadClient({
   }
 
   const handleReset = () => {
-    setForm(INITIAL_FORM)
+    setForm(initialForm)
     setErrors({})
     setSubmitSuccess(false)
     resetImport()
@@ -527,315 +453,203 @@ export function NewLeadClient({
 
   if (submitSuccess) return <SuccessScreen form={form} agents={agents} onReset={handleReset} />
 
+  const id = (name: string) => `${fieldId}-${name}`
+
+  const warnings: string[] = []
+  if (parseResult) {
+    if (parseResult.excludedNoEmail > 0)         warnings.push(`${parseResult.excludedNoEmail} fila(s) sin email válido — omitidas`)
+    if (parseResult.excludedDuplicateInFile > 0) warnings.push(`${parseResult.excludedDuplicateInFile} email(s) duplicado(s) en el archivo — se conserva la primera`)
+    if (existingCount > 0)                       warnings.push(`${existingCount} ya existen en este tenant — omitidas`)
+    if (parseResult.stageDefaulted > 0)          warnings.push(`${parseResult.stageDefaulted} fila(s) sin etapa válida — asignadas a "Cerrado"`)
+    if (parseResult.ignoredColumns.length > 0)   warnings.push(`Columnas ignoradas: ${parseResult.ignoredColumns.join(', ')}`)
+  }
+
   return (
-    <>
-      <style>{`
-        .new-lead-input:focus { border-color: var(--accent-gold) !important; }
-        .cancel-btn:hover { color: var(--text-secondary) !important; }
-        .submit-btn:not(:disabled):hover { opacity: 0.88; }
-        .back-btn:hover { color: var(--text-secondary) !important; }
-      `}</style>
-
-      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '0 0 48px' }}>
-        {/* Header */}
-        <div style={{ marginBottom: '24px' }}>
-          <button
-            className="back-btn"
-            onClick={() => router.back()}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '13px',
-              cursor: 'pointer',
-              padding: '0',
-            }}
-          >
-            <ArrowLeft size={14} />
-            Volver a Leads
-          </button>
-          <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '16px', marginBottom: '4px' }}>
-            Registrar nuevo lead
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-            Completa los datos del lead para añadirlo al sistema
-          </p>
-        </div>
-
-        {/* Modo: registro manual o importación — el estado vive aquí (padre),
-            así que alternar tabs no pierde datos del formulario ni del import. */}
-        <Tabs
-          items={[
-            { key: 'manual', label: 'Registro manual' },
-            { key: 'import', label: 'Importar CSV/XLSX' },
-          ]}
-          value={mode}
-          onChange={m => setMode(m as 'manual' | 'import')}
-          content={{
-            manual: (
-          <>
-        {/* Form card */}
-        <div style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: '16px',
-          overflow: 'hidden',
-        }}>
-
-          {/* SECCIÓN 1 — Datos del lead */}
-          <div style={sectionHeaderStyle}>Datos del lead</div>
-          <div style={{ ...sectionBodyStyle }}>
-            {/* Nombre / Apellido */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ marginBottom: '12px' }}>
+    <div className="form-narrow">
+      {/* Modo: registro manual o importación — el estado vive aquí (padre),
+          así que alternar tabs no pierde datos del formulario ni del import. */}
+      <Tabs
+        items={[
+          { key: 'manual', label: 'Registro manual' },
+          { key: 'import', label: 'Importar CSV/XLSX' },
+        ]}
+        value={mode}
+        onChange={m => setMode(m as 'manual' | 'import')}
+        content={{
+          manual: (
+        <form
+          noValidate
+          onSubmit={e => { e.preventDefault(); handleManualSubmit() }}
+          className="settings-stack"
+        >
+          {/* Datos del lead */}
+          <section className="settings-card">
+            <div className="settings-card-head"><h2 className="settings-card-title">Datos del lead</h2></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label style={labelStyle}>Nombre *</label>
+                <label htmlFor={id('first')} className="settings-field-label">Nombre *</label>
                 <input
-                  className="new-lead-input"
+                  id={id('first')}
                   type="text"
                   placeholder="Ej. María"
                   value={form.firstName}
                   onChange={e => updateField('firstName', e.target.value)}
-                  style={errors.firstName ? inputErrorStyle : inputStyle}
+                  aria-invalid={errors.firstName ? true : undefined}
+                  className={inputClass(errors.firstName)}
                 />
-                {errors.firstName && <p style={errorStyle}>{errors.firstName}</p>}
+                <FieldError message={errors.firstName} />
               </div>
               <div>
-                <label style={labelStyle}>Apellido</label>
+                <label htmlFor={id('last')} className="settings-field-label">Apellido</label>
                 <input
-                  className="new-lead-input"
+                  id={id('last')}
                   type="text"
                   placeholder="Ej. González"
                   value={form.lastName}
                   onChange={e => updateField('lastName', e.target.value)}
-                  style={inputStyle}
+                  className="settings-input"
                 />
               </div>
             </div>
 
-            {/* Email */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={labelStyle}>Email *</label>
-              <div style={{ position: 'relative' }}>
-                <Mail
-                  size={14}
-                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}
-                />
+            <div className="form-field">
+              <label htmlFor={id('email')} className="settings-field-label">Email *</label>
+              <span className="input-icon">
+                <Mail size={14} aria-hidden="true" />
                 <input
-                  className="new-lead-input"
+                  id={id('email')}
                   type="email"
                   placeholder="correo@ejemplo.com"
                   value={form.email}
                   onChange={e => updateField('email', e.target.value)}
-                  style={errors.email ? inputWithIconErrorStyle : inputWithIconStyle}
+                  aria-invalid={errors.email ? true : undefined}
+                  className={inputClass(errors.email)}
                 />
-              </div>
-              {errors.email && <p style={errorStyle}>{errors.email}</p>}
+              </span>
+              <FieldError message={errors.email} />
             </div>
 
-            {/* Teléfono */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={labelStyle}>Teléfono</label>
-              <div style={{ position: 'relative' }}>
-                <Phone
-                  size={14}
-                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}
-                />
+            <div className="form-field">
+              <label htmlFor={id('phone')} className="settings-field-label">Teléfono</label>
+              <span className="input-icon">
+                <Phone size={14} aria-hidden="true" />
                 <input
-                  className="new-lead-input"
+                  id={id('phone')}
                   type="tel"
                   placeholder="(757) 555-0000"
                   value={form.phone}
                   onChange={e => updateField('phone', e.target.value)}
-                  style={inputWithIconStyle}
+                  className="settings-input"
                 />
-              </div>
+              </span>
             </div>
 
-            {/* Idioma */}
-            <div>
-              <label style={labelStyle}>Idioma preferido</label>
-              <div style={{ position: 'relative' }}>
-                <select
-                  className="new-lead-input"
-                  value={form.language}
-                  onChange={e => {
-                    const val = e.target.value
-                    if (val === '') {
-                      updateField('language', '')
-                    } else {
-                      handleLanguageChange(val as Language)
-                    }
-                  }}
-                  style={{ ...inputStyle, appearance: 'none', cursor: 'pointer', paddingRight: '32px' }}
-                >
-                  <option value="">-- Seleccionar --</option>
-                  <option value="es">🇪🇸 Español</option>
-                  <option value="en">🇺🇸 English</option>
-                  <option value="pt">🇧🇷 Português</option>
-                </select>
-                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
-              </div>
-            </div>
-
-            {/* Lender field — full width */}
-            <div style={{ gridColumn: '1 / -1', marginTop: '12px' }}>
-              <label style={labelStyle}>
-                Prestamista
-                <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: '6px' }}>
-                  (opcional)
-                </span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Building2
-                  size={15}
-                  style={{
-                    position: 'absolute',
-                    left: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'var(--text-muted)',
-                    pointerEvents: 'none',
-                  }}
-                />
-                <input
-                  className="new-lead-input"
-                  type="text"
-                  value={form.lender}
-                  onChange={(e) => updateField('lender', e.target.value)}
-                  placeholder="Ej. Navy Federal, Wells Fargo, prestamista privado..."
-                  style={{ ...inputStyle, paddingLeft: '34px' }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* SECCIÓN 0 — Tenant (super_admin only) */}
-          {isSuperAdmin && (
-            <>
-              <div style={sectionHeaderStyle}>Tenant</div>
-              <div style={{ ...sectionBodyStyle }}>
-                <label style={labelStyle}>Tenant destino *</label>
-                <div style={{ position: 'relative' }}>
-                  <select
-                    className="new-lead-input"
-                    value={selectedTenantId}
-                    onChange={e => handleTenantChange(e.target.value)}
-                    style={{
-                      ...(errors.tenantId ? inputErrorStyle : inputStyle),
-                      appearance: 'none',
-                      cursor: 'pointer',
-                      paddingRight: '32px',
-                    }}
-                  >
-                    <option value="">-- Seleccionar tenant --</option>
-                    {tenants.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
-                </div>
-                {errors.tenantId && <p style={errorStyle}>{errors.tenantId}</p>}
-              </div>
-            </>
-          )}
-
-          {/* SECCIÓN 2 — Asignación */}
-          <div style={sectionHeaderStyle}>Asignación</div>
-          <div style={{ ...sectionBodyStyle }}>
-            <label style={labelStyle}>Agente asignado *</label>
-
-            <div style={{ position: 'relative' }}>
-              <select
-                className="new-lead-input"
-                value={form.agentId}
-                onChange={e => handleAgentChange(e.target.value)}
-                style={{
-                  ...(errors.agentId ? inputErrorStyle : inputStyle),
-                  appearance: 'none',
-                  cursor: 'pointer',
-                  paddingRight: '32px',
+            <div className="form-field">
+              <label htmlFor={id('lang')} className="settings-field-label">Idioma preferido</label>
+              <SelectField
+                id={id('lang')}
+                value={form.language}
+                onChange={e => {
+                  const val = e.target.value
+                  if (val === '') updateField('language', '')
+                  else handleLanguageChange(val as Language)
                 }}
               >
-                <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
-                {visibleAgents.map(agent => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
-                  </option>
-                ))}
-              </select>
-              <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
+                <option value="">-- Seleccionar --</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="en">🇺🇸 English</option>
+                <option value="pt">🇧🇷 Português</option>
+              </SelectField>
             </div>
-            {errors.agentId && <p style={errorStyle}>{errors.agentId}</p>}
 
-            {/* Agent preview */}
+            <div className="form-field">
+              <label htmlFor={id('lender')} className="settings-field-label">
+                Prestamista<span className="form-hint">(opcional)</span>
+              </label>
+              <span className="input-icon">
+                <Building2 size={15} aria-hidden="true" />
+                <input
+                  id={id('lender')}
+                  type="text"
+                  value={form.lender}
+                  onChange={e => updateField('lender', e.target.value)}
+                  placeholder="Ej. Navy Federal, Wells Fargo, prestamista privado..."
+                  className="settings-input"
+                />
+              </span>
+            </div>
+          </section>
+
+          {/* Tenant (super_admin only) */}
+          {isSuperAdmin && (
+            <section className="settings-card">
+              <div className="settings-card-head"><h2 className="settings-card-title">Tenant</h2></div>
+              <label htmlFor={id('tenant')} className="settings-field-label">Tenant destino *</label>
+              <SelectField
+                id={id('tenant')}
+                value={selectedTenantId}
+                onChange={e => handleTenantChange(e.target.value)}
+                invalid={errors.tenantId}
+              >
+                <option value="">-- Seleccionar tenant --</option>
+                {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </SelectField>
+              <FieldError message={errors.tenantId} />
+            </section>
+          )}
+
+          {/* Asignación */}
+          <section className="settings-card">
+            <div className="settings-card-head"><h2 className="settings-card-title">Asignación</h2></div>
+            {lockedAgentId ? (
+              <p className="settings-note">Los leads que registras se te asignan automáticamente.</p>
+            ) : (
+              <>
+                <label htmlFor={id('agent')} className="settings-field-label">Agente asignado *</label>
+                <SelectField
+                  id={id('agent')}
+                  value={form.agentId}
+                  onChange={e => handleAgentChange(e.target.value)}
+                  invalid={errors.agentId}
+                >
+                  <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
+                  {visibleAgents.map(agent => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
+                    </option>
+                  ))}
+                </SelectField>
+                <FieldError message={errors.agentId} />
+              </>
+            )}
+
             {selectedAgent && (
-              <div style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '10px 12px',
-                marginTop: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-              }}>
-                <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  background: `${selectedAgent.accentColor}22`,
-                  border: `1px solid ${selectedAgent.accentColor}44`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  color: selectedAgent.accentColor,
-                  flexShrink: 0,
-                }}>
+              <div className="agent-preview">
+                <span className="avatar" style={{ '--tone': selectedAgent.accentColor } as React.CSSProperties} aria-hidden="true">
                   {selectedAgent.avatarInitials}
-                </div>
+                </span>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{selectedAgent.name}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}
-                  </div>
+                  <div className="agent-preview-name">{selectedAgent.name}</div>
+                  <div className="settings-note">{LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}</div>
                 </div>
               </div>
             )}
-          </div>
+          </section>
 
-          {/* SECCIÓN 3 — Origen */}
-          <div style={sectionHeaderStyle}>Origen</div>
-          <div style={{ ...sectionBodyStyle }}>
-            {/* Step 1: Source picker (icon chips) */}
-            <label style={labelStyle}>¿Cómo llegó este lead? *</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+          {/* Origen */}
+          <section className="settings-card">
+            <div className="settings-card-head"><h2 className="settings-card-title">Origen</h2></div>
+            <span className="settings-field-label" id={id('source')}>¿Cómo llegó este lead? *</span>
+            <div className="choice-chips" role="group" aria-labelledby={id('source')}>
               {SOURCE_OPTIONS.map(opt => {
-                const Icon   = opt.icon
-                const active = form.channelType === opt.value
+                const Icon = opt.icon
                 return (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => handleChannelTypeChange(opt.value)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '7px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                      background: active ? 'rgba(201,169,110,0.10)' : 'var(--bg-elevated)',
-                      color: active ? 'var(--accent-gold)' : 'var(--text-secondary)',
-                      transition: 'all 0.15s',
-                    }}
+                    aria-pressed={form.channelType === opt.value}
+                    className="choice-chip"
                   >
                     <Icon size={14} strokeWidth={1.7} />
                     {opt.label}
@@ -844,404 +658,267 @@ export function NewLeadClient({
               })}
             </div>
 
-            {/* Step 2: Specific channel — only for channel-based sources with >1 option */}
+            {/* Canal concreto — sólo para fuentes con canal y más de una opción */}
             {!DIRECT_ENTRY_SOURCES.has(form.channelType) && form.channelType && channelsForType(form.channelType).length > 1 && (
-              <div style={{ position: 'relative' }}>
-                <select
-                  className="new-lead-input"
-                  value={form.acquisitionChannelId}
-                  onChange={e => updateField('acquisitionChannelId', e.target.value)}
-                  style={{
-                    ...(errors.acquisitionChannelId ? inputErrorStyle : inputStyle),
-                    appearance: 'none',
-                    cursor: 'pointer',
-                    paddingRight: '32px',
-                  }}
-                >
-                  <option value="">-- Seleccionar {CHANNEL_TYPE_LABELS[form.channelType]} --</option>
-                  {channelsForType(form.channelType).map(ch => (
-                    <option key={ch.id} value={ch.id}>{ch.name}</option>
-                  ))}
-                </select>
-                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
-              </div>
+              <SelectField
+                aria-label={`${CHANNEL_TYPE_LABELS[form.channelType]} de origen`}
+                value={form.acquisitionChannelId}
+                onChange={e => updateField('acquisitionChannelId', e.target.value)}
+                invalid={errors.acquisitionChannelId}
+              >
+                <option value="">-- Seleccionar {CHANNEL_TYPE_LABELS[form.channelType]} --</option>
+                {channelsForType(form.channelType).map(ch => (
+                  <option key={ch.id} value={ch.id}>{ch.name}</option>
+                ))}
+              </SelectField>
             )}
 
-            {/* Auto-resolved channel name display */}
+            {/* Canal resuelto solo cuando hay una única opción */}
             {form.acquisitionChannelId && channelsForType(form.channelType).length === 1 && (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Canal: <span style={{ color: 'var(--accent-gold)' }}>
-                  {channels.find(c => c.id === form.acquisitionChannelId)?.name}
-                </span>
-              </div>
+              <p className="settings-note">
+                Canal: <span className="text-gold">{channels.find(c => c.id === form.acquisitionChannelId)?.name}</span>
+              </p>
             )}
 
-            {errors.acquisitionChannelId && <p style={errorStyle}>{errors.acquisitionChannelId}</p>}
-          </div>
+            <FieldError message={errors.acquisitionChannelId} />
+          </section>
 
-          {/* SECCIÓN 4 — Notas */}
-          <div style={{ ...sectionHeaderStyle, borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>Notas internas</span>
-            <span style={{
-              fontSize: '10px',
-              padding: '2px 7px',
-              borderRadius: '10px',
-              background: 'var(--bg-overlay)',
-              color: 'var(--text-muted)',
-              fontWeight: 400,
-              textTransform: 'none',
-              letterSpacing: 0,
-            }}>Opcional</span>
-          </div>
-          <div style={{ padding: '20px' }}>
+          {/* Notas */}
+          <section className="settings-card">
+            <div className="settings-card-head">
+              <h2 className="settings-card-title">
+                <label htmlFor={id('notes')}>Notas internas</label>
+              </h2>
+              <span className="pill" data-tone="mute">Opcional</span>
+            </div>
             <textarea
-              className="new-lead-input"
+              id={id('notes')}
               rows={4}
               maxLength={500}
               placeholder="Añade contexto sobre este lead..."
               value={form.notes}
               onChange={e => updateField('notes', e.target.value)}
-              style={{ ...inputStyle, resize: 'none', fontFamily: 'inherit' }}
+              className="settings-input settings-input-wide"
             />
-            <div style={{ textAlign: 'right', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {form.notes.length}/500
-            </div>
-          </div>
-        </div>
+            <div className="form-count">{form.notes.length}/500</div>
+          </section>
 
-        {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
-          <button
-            className="cancel-btn"
-            onClick={() => router.back()}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '13px',
-              cursor: 'pointer',
-              padding: '8px 0',
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            className="submit-btn"
-            onClick={handleManualSubmit}
-            disabled={isSubmitDisabled}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 24px',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'var(--accent-gold)',
-              color: 'var(--bg-base)',
-              fontSize: '13px',
-              fontWeight: 500,
-              cursor: isSubmitDisabled ? 'not-allowed' : 'pointer',
-              opacity: isSubmitDisabled ? 0.5 : 1,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            <CheckCircle2 size={15} />
-            {isSubmitting ? 'Registrando...' : 'Registrar lead'}
-          </button>
-        </div>
-          </>
-            ),
-            import: (
-          <div style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '16px',
-            overflow: 'hidden',
-            padding: '24px',
-          }}>
-
-            {/* PASO 1: Download template */}
-            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-              Paso 1 — Descarga la plantilla
-            </p>
-            <button
-              onClick={downloadTemplate}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 20px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                color: 'var(--accent-gold)',
-                fontSize: '13px',
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              <Download size={14} />
-              Descargar plantilla CSV
+          <div className="form-footer">
+            <button type="button" onClick={() => router.back()} className="btn btn-ghost">
+              Cancelar
             </button>
-            <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              Columnas (reconocimiento automático, es/en): nombre · apellido · email · teléfono · idioma · estatus (Nuevo/Cerrado) · prestamista · notas
-            </div>
+            <button type="submit" disabled={isSubmitDisabled} aria-busy={isSubmitting} className="btn btn-primary">
+              <CheckCircle2 size={15} aria-hidden="true" />
+              {isSubmitting ? 'Registrando...' : 'Registrar lead'}
+            </button>
+          </div>
+        </form>
+          ),
+          import: (
+        <section className="settings-card">
+          {/* PASO 1: plantilla */}
+          <p className="step-label">Paso 1 — Descarga la plantilla</p>
+          <button type="button" onClick={downloadTemplate} className="btn btn-ghost">
+            <Download size={14} aria-hidden="true" />
+            Descargar plantilla CSV
+          </button>
+          <p className="settings-note settings-note-gap">
+            Columnas (reconocimiento automático, es/en): nombre · apellido · email · teléfono · idioma · estatus (Nuevo/Cerrado) · prestamista · notas
+          </p>
 
-            <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
+          <hr className="step-sep" />
 
-            {/* PASO 2: Upload zone */}
-            <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-              Paso 2 — Sube tu archivo completado
-            </p>
+          {/* PASO 2: archivo */}
+          <p className="step-label">Paso 2 — Sube tu archivo completado</p>
 
-            {importStatus !== 'preview' && importStatus !== 'success' && (
-              <>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={(e) => {
+          {importStatus !== 'preview' && importStatus !== 'success' && (
+            <>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label="Seleccionar archivo CSV o XLSX"
+                aria-disabled={importStatus === 'parsing' || undefined}
+                onClick={() => { if (importStatus !== 'parsing') fileInputRef.current?.click() }}
+                onKeyDown={e => {
+                  if ((e.key === 'Enter' || e.key === ' ') && importStatus !== 'parsing') {
                     e.preventDefault()
-                    setIsDragging(false)
-                    const file = e.dataTransfer.files[0]
+                    fileInputRef.current?.click()
+                  }
+                }}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={e => {
+                  e.preventDefault()
+                  setIsDragging(false)
+                  const file = e.dataTransfer.files[0]
+                  if (file) handleFileUpload(file)
+                }}
+                data-dragging={isDragging || undefined}
+                className="dropzone"
+              >
+                <FileUp size={32} aria-hidden="true" />
+                <span>Arrastra tu archivo aquí, o <span className="text-gold">haz click para seleccionar</span></span>
+                <span className="settings-note">Formatos aceptados: .csv · .xlsx — Máximo 500 filas</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx"
+                  hidden
+                  onChange={e => {
+                    const file = e.target.files?.[0]
                     if (file) handleFileUpload(file)
                   }}
-                  style={{
-                    border: `2px dashed ${isDragging ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                    borderRadius: '12px',
-                    padding: '48px 24px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    background: isDragging ? 'rgba(201,169,110,0.04)' : 'var(--bg-elevated)',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <FileUp size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                    Arrastra tu archivo aquí, o{' '}
-                    <span style={{ color: 'var(--accent-gold)' }}>haz click para seleccionar</span>
-                  </p>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Formatos aceptados: .csv · .xlsx — Máximo 500 filas
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,.xlsx"
-                    style={{ display: 'none' }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) handleFileUpload(file)
-                    }}
-                  />
-                </div>
-
-                {/* Error display */}
-                {importStatus === 'error' && (
-                  <div style={{
-                    marginTop: '16px',
-                    padding: '12px 16px',
-                    background: 'rgba(201,123,107,0.1)',
-                    border: '1px solid rgba(201,123,107,0.3)',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '10px',
-                  }}>
-                    <AlertTriangle size={16} style={{ color: 'var(--accent-coral)', flexShrink: 0, marginTop: '1px' }} />
-                    <div>
-                      <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--accent-coral)', marginBottom: '4px' }}>
-                        Error al procesar el archivo
-                      </p>
-                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{importError}</p>
-                    </div>
-                  </div>
-                )}
-
-                {importStatus === 'parsing' && (
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '16px' }}>
-                    Procesando archivo...
-                  </p>
-                )}
-              </>
-            )}
-
-            {/* PASO 3: Preview + double confirmation */}
-            {importStatus === 'preview' && parseResult && (
-              <>
-                <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '20px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-                    Paso 3 — Revisa y confirma
-                  </p>
-                  <button onClick={resetImport} style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                    ✕ Cancelar
-                  </button>
-                </div>
-
-                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '10px' }}>
-                  {finalRows.length} se importarán ({newCount} Nuevos · {closedCount} Cerrados) · {parseResult.totalRows} filas en el archivo
-                </div>
-
-                {/* Warnings */}
-                {(() => {
-                  const warns: string[] = []
-                  if (parseResult.excludedNoEmail > 0)         warns.push(`${parseResult.excludedNoEmail} fila(s) sin email válido — omitidas`)
-                  if (parseResult.excludedDuplicateInFile > 0) warns.push(`${parseResult.excludedDuplicateInFile} email(s) duplicado(s) en el archivo — se conserva la primera`)
-                  if (existingCount > 0)                       warns.push(`${existingCount} ya existen en este tenant — omitidas`)
-                  if (parseResult.stageDefaulted > 0)          warns.push(`${parseResult.stageDefaulted} fila(s) sin etapa válida — asignadas a "Cerrado"`)
-                  if (parseResult.ignoredColumns.length > 0)   warns.push(`Columnas ignoradas: ${parseResult.ignoredColumns.join(', ')}`)
-                  if (warns.length === 0) return null
-                  return (
-                    <div style={{ background: 'rgba(201,169,110,0.07)', border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', padding: '12px 14px', marginBottom: '14px' }}>
-                      {warns.map((w, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '12px', color: 'var(--text-secondary)', marginTop: i === 0 ? 0 : '6px' }}>
-                          <AlertTriangle size={13} style={{ color: 'var(--accent-gold)', flexShrink: 0, marginTop: '1px' }} />
-                          <span>{w}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })()}
-
-                {/* Attribution agent */}
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={labelStyle}>Agente al que se atribuirán los leads *</label>
-                  {needsAgentSelector ? (
-                    <div style={{ position: 'relative' }}>
-                      <select
-                        className="new-lead-input"
-                        value={importAgentId}
-                        onChange={e => setImportAgentId(e.target.value)}
-                        style={{ ...inputStyle, appearance: 'none', cursor: 'pointer', paddingRight: '32px' }}
-                      >
-                        <option value="">-- Seleccionar agente --</option>
-                        {visibleAgents.map(a => (
-                          <option key={a.id} value={a.id}>{a.avatarInitials} · {a.name}</option>
-                        ))}
-                      </select>
-                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '10px' }}>▼</span>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', padding: '4px 0' }}>{attributionAgentName}</div>
-                  )}
-                </div>
-
-                {/* Preview table (insert-ready rows) — dense table, out of redesign
-                    scope; horizontally scrollable on phones (overflow-x). */}
-                {finalRows.length > 0 && (
-                  <div className="overflow-x-auto" style={{ overflowY: 'auto', maxHeight: '300px', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ background: 'var(--bg-elevated)' }}>
-                          {['#', 'Nombre', 'Email', 'Teléfono', 'Idioma', 'Prestamista', 'Estatus'].map(col => (
-                            <th key={col} style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--bg-elevated)', padding: '8px 10px', textAlign: 'left', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border-subtle)', whiteSpace: 'nowrap' }}>
-                              {col}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {finalRows.slice(0, 50).map((r, i) => (
-                          <tr key={`${r.email}-${i}`}>
-                            <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{i + 1}</td>
-                            <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}</td>
-                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.email}</td>
-                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.phone || '—'}</td>
-                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.language.toUpperCase()}</td>
-                            <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{r.lender || '—'}</td>
-                            <td style={{ padding: '8px 10px' }}>
-                              <span style={{ fontSize: '11px', color: r.stage === 'nuevo' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
-                                {r.stage === 'nuevo' ? 'Nuevo' : 'Cerrado'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {finalRows.length > 50 && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>Mostrando 50 de {finalRows.length}.</div>
-                )}
-
-                {/* Actions */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', gap: '12px', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => downloadFinal(finalRows)}
-                    disabled={finalRows.length === 0}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 16px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: 500, cursor: finalRows.length === 0 ? 'not-allowed' : 'pointer', opacity: finalRows.length === 0 ? 0.5 : 1 }}
-                  >
-                    <Download size={14} />
-                    Descargar archivo final ({fileFormat.toUpperCase()})
-                  </button>
-
-                  {!confirming ? (
-                    <button
-                      onClick={() => setConfirming(true)}
-                      disabled={finalRows.length === 0 || !attributionAgentId}
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: (finalRows.length === 0 || !attributionAgentId) ? 'not-allowed' : 'pointer', opacity: (finalRows.length === 0 || !attributionAgentId) ? 0.5 : 1 }}
-                    >
-                      Continuar
-                    </button>
-                  ) : null}
-                </div>
-
-                {/* Double confirmation */}
-                {confirming && (
-                  <div style={{ marginTop: '16px', background: 'var(--bg-elevated)', border: '1px solid var(--accent-gold)', borderRadius: '10px', padding: '16px' }}>
-                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: '0 0 12px' }}>
-                      Se registrarán <strong>{finalRows.length}</strong> leads ({newCount} Nuevos, {closedCount} Cerrados) asignados a <strong>{attributionAgentName}</strong>. Esta acción no se puede deshacer.
-                    </p>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={() => handleImport(finalRows, attributionAgentId)}
-                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        <CheckCircle2 size={14} />
-                        Confirmar e importar {finalRows.length}
-                      </button>
-                      <button onClick={() => setConfirming(false)} style={{ padding: '10px 18px', background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '13px', cursor: 'pointer' }}>
-                        Volver
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Import success screen */}
-            {importStatus === 'success' && (
-              <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-                <CheckCircle2 size={48} style={{ color: 'var(--accent-green)', marginBottom: '16px' }} />
-                <h3 style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                  Importación completada
-                </h3>
-                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
-                  {importedCount} lead(s) añadidos al sistema.
-                </p>
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                  <button
-                    onClick={() => router.push('/leads')}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}
-                  >
-                    ← Ver todos los leads
-                  </button>
-                  <button
-                    onClick={resetImport}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'var(--accent-gold)', color: 'var(--bg-base)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    + Importar otro archivo
-                  </button>
-                </div>
+                />
               </div>
-            )}
 
-          </div>
-            ),
-          }}
-        />
-      </div>
-    </>
+              {importStatus === 'error' && (
+                <div role="alert" className="settings-alert settings-alert-block settings-alert-gap">
+                  <AlertTriangle size={16} aria-hidden="true" />
+                  <span>
+                    Error al procesar el archivo
+                    <span className="settings-note settings-note-gap">{importError}</span>
+                  </span>
+                </div>
+              )}
+
+              {importStatus === 'parsing' && (
+                <p role="status" className="settings-note settings-note-gap">Procesando archivo...</p>
+              )}
+            </>
+          )}
+
+          {/* PASO 3: revisión y doble confirmación */}
+          {importStatus === 'preview' && parseResult && (
+            <>
+              <hr className="step-sep" />
+              <div className="settings-inline settings-inline-between">
+                <p className="step-label">Paso 3 — Revisa y confirma</p>
+                <button type="button" onClick={resetImport} className="settings-link-btn">
+                  <X size={12} aria-hidden="true" /> Cancelar
+                </button>
+              </div>
+
+              <p className="import-summary">
+                {finalRows.length} se importarán ({newCount} Nuevos · {closedCount} Cerrados) · {parseResult.totalRows} filas en el archivo
+              </p>
+
+              {warnings.length > 0 && (
+                <div className="settings-note settings-note-gold import-warnings">
+                  {warnings.map((w, i) => (
+                    <span key={i}><AlertTriangle size={13} aria-hidden="true" />{w}</span>
+                  ))}
+                </div>
+              )}
+
+              <div className="form-field">
+                <label htmlFor={id('import-agent')} className="settings-field-label">Agente al que se atribuirán los leads *</label>
+                {needsAgentSelector ? (
+                  <SelectField id={id('import-agent')} value={importAgentId} onChange={e => setImportAgentId(e.target.value)}>
+                    <option value="">-- Seleccionar agente --</option>
+                    {visibleAgents.map(a => (
+                      <option key={a.id} value={a.id}>{a.avatarInitials} · {a.name}</option>
+                    ))}
+                  </SelectField>
+                ) : (
+                  <p id={id('import-agent')} className="agent-preview-name">{attributionAgentName}</p>
+                )}
+              </div>
+
+              {/* Vista previa de las filas listas para insertar; la caja se
+                  desplaza por dentro, la página no. */}
+              {finalRows.length > 0 && (
+                <div className="mini-table-wrap form-field">
+                  <table className="mini-table">
+                    <thead>
+                      <tr>
+                        {['#', 'Nombre', 'Email', 'Teléfono', 'Idioma', 'Prestamista', 'Estatus'].map(col => (
+                          <th key={col} scope="col">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {finalRows.slice(0, 50).map((r, i) => (
+                        <tr key={`${r.email}-${i}`}>
+                          <td>{i + 1}</td>
+                          <td className="mini-table-strong">{[r.firstName, r.lastName].filter(Boolean).join(' ') || '—'}</td>
+                          <td>{r.email}</td>
+                          <td>{r.phone || '—'}</td>
+                          <td>{r.language.toUpperCase()}</td>
+                          <td>{r.lender || '—'}</td>
+                          <td className={r.stage === 'nuevo' ? 'text-gold' : undefined}>{r.stage === 'nuevo' ? 'Nuevo' : 'Cerrado'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {finalRows.length > 50 && (
+                <p className="settings-note settings-note-gap">Mostrando 50 de {finalRows.length}.</p>
+              )}
+
+              <div className="form-footer">
+                <button
+                  type="button"
+                  onClick={() => downloadFinal(finalRows)}
+                  disabled={finalRows.length === 0}
+                  className="btn btn-ghost"
+                >
+                  <Download size={14} aria-hidden="true" />
+                  Descargar archivo final ({fileFormat.toUpperCase()})
+                </button>
+
+                {!confirming && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(true)}
+                    disabled={finalRows.length === 0 || !attributionAgentId}
+                    className="btn btn-primary"
+                  >
+                    Continuar
+                  </button>
+                )}
+              </div>
+
+              {/* Doble confirmación */}
+              {confirming && (
+                <div className="settings-panel settings-panel-gold form-field">
+                  <p className="settings-confirm-text">
+                    Se registrarán <strong>{finalRows.length}</strong> leads ({newCount} Nuevos, {closedCount} Cerrados) asignados a <strong>{attributionAgentName}</strong>. Esta acción no se puede deshacer.
+                  </p>
+                  <div className="settings-actions">
+                    <button type="button" onClick={() => handleImport(finalRows, attributionAgentId)} className="btn btn-primary">
+                      <CheckCircle2 size={14} aria-hidden="true" />
+                      Confirmar e importar {finalRows.length}
+                    </button>
+                    <button type="button" onClick={() => setConfirming(false)} className="btn btn-ghost">
+                      Volver
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Importación terminada */}
+          {importStatus === 'success' && (
+            <div className="done-card" role="status">
+              <span className="empty-card-icon" aria-hidden="true"><CheckCircle2 size={24} /></span>
+              <h3 className="done-card-title">Importación completada</h3>
+              <p className="done-card-text">{importedCount} lead(s) añadidos al sistema.</p>
+              <div className="settings-actions">
+                <button type="button" onClick={() => router.push('/leads')} className="btn btn-ghost">
+                  ← Ver todos los leads
+                </button>
+                <button type="button" onClick={resetImport} className="btn btn-primary">
+                  + Importar otro archivo
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+          ),
+        }}
+      />
+    </div>
   )
 }

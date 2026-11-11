@@ -8,7 +8,7 @@ import type { Lead, Agent, LeadEvent, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
 import { updateLeadStage, completePurchaseProcess, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
 import {
-  ArrowLeft, MoreHorizontal, X, Trash2,
+  ArrowLeft, ChevronDown, MoreHorizontal, X, Trash2,
   Mail, XCircle,
   Copy, Check,
 } from 'lucide-react'
@@ -55,22 +55,12 @@ function getInitials(firstName: string, lastName: string): string {
   return (f + l).toUpperCase() || f.toUpperCase()
 }
 
+// Estilo con variables CSS (`--tone`), que React no tipa.
+const tone = (color: string) => ({ '--tone': color }) as React.CSSProperties
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const LOAN_TYPES = ['VA Loan', 'FHA', 'Convencional', 'USDA', 'Jumbo', 'Cash']
-
-const CARD: React.CSSProperties = {
-  background:   'var(--bg-surface)',
-  border:       '1px solid var(--border-subtle)',
-  borderRadius: '12px',
-  padding:      '20px',
-  marginBottom: '16px',
-}
-
-const CARD_TITLE: React.CSSProperties = {
-  fontSize: '13px', fontWeight: 500,
-  color: 'var(--text-primary)', marginBottom: '16px',
-}
 
 // Icono de copiar en línea (junto al email/teléfono del perfil). Maneja su
 // propio feedback de "copiado".
@@ -81,41 +71,46 @@ function InlineCopy({ text, label }: { text: string; label: string }) {
       type="button"
       onClick={() => { void navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600) }}
       title={`Copiar ${label}`}
-      aria-label={`Copiar ${label}`}
-      style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: '24px', height: '24px', borderRadius: '6px', flexShrink: 0,
-        background: 'transparent', border: 'none', cursor: 'pointer',
-        color: copied ? 'var(--accent-green)' : 'var(--text-muted)',
-        transition: 'color 0.15s',
-      }}
+      aria-label={copied ? `${label} copiado` : `Copiar ${label}`}
+      data-state={copied ? 'copied' : undefined}
+      className="icon-btn copy-btn"
     >
       {copied ? <Check size={13} /> : <Copy size={13} />}
     </button>
   )
 }
 
-const ACTION_BTN_STYLE: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px',
-  width: '100%', textAlign: 'left',
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px', padding: '9px 14px',
-  fontSize: '13px', cursor: 'pointer',
-  color: 'var(--text-secondary)',
+// Tarjeta con título: la caja de cada bloque del detalle.
+function Card({ title, end, children }: { title: string; end?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="settings-card">
+      <div className="settings-card-head">
+        <h2 className="settings-card-title">{title}</h2>
+        {end}
+      </div>
+      {children}
+    </section>
+  )
 }
 
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%', background: 'var(--bg-overlay)',
-  border: '1px solid var(--border-subtle)', borderRadius: '8px',
-  padding: '8px 12px', color: 'var(--text-primary)',
-  fontSize: '13px', outline: 'none', boxSizing: 'border-box',
+function InfoList({ rows }: { rows: { label: string; value: React.ReactNode; copy?: string }[] }) {
+  return (
+    <dl className="info-list">
+      {rows.map(row => (
+        <div key={row.label} className="info-row">
+          <dt className="info-label">{row.label}</dt>
+          <dd className="info-value">
+            {row.value}
+            {row.copy && <InlineCopy text={row.copy} label={row.label.toLowerCase()} />}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
-const LABEL_STYLE: React.CSSProperties = {
-  fontSize: '12px', color: 'var(--text-muted)',
-  display: 'block', marginBottom: '6px',
-  textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500,
+function StagePill({ stage }: { stage: Stage }) {
+  return <span className="pill pill-square" style={tone(STAGE_CONFIG[stage].color)}>{STAGE_CONFIG[stage].label}</span>
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -214,141 +209,80 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
     { label: 'Última act.', value: formatFullDate(lead.updatedAt) },
   ]
 
+  const isClosed = currentStage === 'cerrado' || currentStage === 'perdido'
+
+  function changeStage(stage: 'cerrado' | 'perdido') {
+    startTransition(async () => {
+      setActionError(null)
+      const res = await updateLeadStage(lead.id, stage)
+      if (res.ok) setCurrentStage(stage)
+      else setActionError(res.error)
+    })
+  }
+
   return (
-    <div style={{ padding: '24px' }}>
-      <style>{`
-        .back-btn:hover   { color: var(--text-secondary) !important; }
-        .action-btn       { transition: border-color 150ms, color 150ms; }
-        .action-btn:hover { border-color: var(--border-accent) !important; color: var(--text-primary) !important; }
-        .notes-area:focus { border-color: var(--border-accent) !important; outline: none; }
-        .modal-input:focus { border-color: var(--border-accent) !important; outline: none; }
-      `}</style>
+    <div>
+      {/* ── Cabecera ── */}
+      <button type="button" onClick={() => router.back()} className="back-link">
+        <ArrowLeft size={14} aria-hidden="true" /> Volver a Leads
+      </button>
 
-      {/* ── Header ── */}
-      <div style={{ marginBottom: '24px' }}>
-        <button
-          onClick={() => router.back()}
-          className="back-btn"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', fontSize: '13px', padding: '0 0 12px 0',
-          }}
-        >
-          <ArrowLeft size={14} /> Volver a Leads
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          {/* Lead identity */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{
-              width: '48px', height: '48px', borderRadius: '50%',
-              background: agent ? `${agent.accentColor}26` : 'rgba(255,255,255,0.08)',
-              color: agent?.accentColor ?? 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '16px', fontWeight: 500, flexShrink: 0,
-            }}>
-              {initials}
+      <header className="page-header">
+        <div className="lead-identity">
+          <span className="avatar avatar-lg" style={agent ? tone(agent.accentColor) : undefined} aria-hidden="true">
+            {initials}
+          </span>
+          <div className="dt-cell-main">
+            <div className="lead-identity-name">
+              <h1 className="page-title">{lead.firstName} {lead.lastName}</h1>
+              <StagePill stage={currentStage} />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '18px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                  {lead.firstName} {lead.lastName}
-                </span>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
-                  background: STAGE_CONFIG[currentStage].bg,
-                  color:      STAGE_CONFIG[currentStage].color,
-                  border:     `1px solid color-mix(in srgb, ${STAGE_CONFIG[currentStage].color} 40%, transparent)`,
-                }}>
-                  {STAGE_CONFIG[currentStage].label}
-                </span>
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <span>{lead.email}</span>
-                {lead.phone && <><span>·</span><span>{lead.phone}</span></>}
-                <span>·</span>
-                <span>{langCfg.flag} {langCfg.label}</span>
-              </div>
+            <div className="lead-identity-meta">
+              <span>{lead.email}</span>
+              {lead.phone && <><span aria-hidden="true">·</span><span>{lead.phone}</span></>}
+              <span aria-hidden="true">·</span>
+              <span>{langCfg.flag} {langCfg.label}</span>
             </div>
-          </div>
-
-          {/* Header actions */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <button
-              onClick={() => setShowEmailModal(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                height: '32px', padding: '0 12px', borderRadius: '8px',
-                background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.25)',
-                cursor: 'pointer', color: 'var(--accent-gold)', fontSize: '12px', fontWeight: 500,
-              }}
-              title="Redactar un correo (corporativo o personal), con IA opcional"
-            >
-              <Mail size={14} />
-              <span>Enviar correo</span>
-            </button>
-            <button
-              onClick={() => setShowEditModal(true)}
-              style={{
-                width: '32px', height: '32px', borderRadius: '8px',
-                background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
-                cursor: 'pointer', color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              title="Editar lead"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            <button
-              onClick={() => { setDeleteStep(1); setDeleteInput(''); setDeleteError(null) }}
-              style={{
-                width: '32px', height: '32px', borderRadius: '8px',
-                background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.25)',
-                cursor: 'pointer', color: 'var(--accent-coral)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              title="Eliminar lead"
-            >
-              <Trash2 size={15} />
-            </button>
           </div>
         </div>
-      </div>
 
-      {/* ── Two-column grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+        <div className="page-actions">
+          <button
+            type="button"
+            onClick={() => setShowEmailModal(true)}
+            className="btn btn-primary"
+            title="Redactar un correo (corporativo o personal), con IA opcional"
+          >
+            <Mail size={14} aria-hidden="true" /> Enviar correo
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            className="btn btn-ghost btn-icon"
+            title="Editar lead"
+            aria-label="Editar lead"
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => { setDeleteStep(1); setDeleteInput(''); setDeleteError(null) }}
+            className="btn btn-danger btn-icon"
+            title="Eliminar lead"
+            aria-label="Eliminar lead"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </header>
 
-        {/* ── LEFT COLUMN ── */}
-        <div>
+      {/* ── Dos columnas (una por debajo de 1100px) ── */}
+      <div className="lead-detail-grid">
 
-          {/* Card 1: Lead info */}
-          <div style={CARD}>
-            <div style={CARD_TITLE}>Información del lead</div>
-            {infoRows.map((row, idx) => (
-              <div
-                key={row.label}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 0',
-                  borderBottom: idx < infoRows.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                }}
-              >
-                <span style={{
-                  fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)',
-                  textTransform: 'uppercase', letterSpacing: '0.08em',
-                  width: '140px', flexShrink: 0,
-                }}>
-                  {row.label}
-                </span>
-                <span style={{ fontSize: '13px', color: 'var(--text-primary)', flex: 1, textAlign: 'right', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                  {row.value}
-                  {row.copy && <InlineCopy text={row.copy} label={row.label.toLowerCase()} />}
-                </span>
-              </div>
-            ))}
-          </div>
+        <div className="lead-col">
+          <Card title="Información del lead">
+            <InfoList rows={infoRows} />
+          </Card>
 
           {/* Etiquetas: lo que una persona decidió sobre el lead. Va justo debajo
               de la información y antes de prioridad porque es lo que el agente
@@ -362,37 +296,28 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             emailTagIds={emailTagIds}
           />
 
-          {/* Card 2: Prioridad — reemplaza "Temperatura del lead" y "Desglose del
-              score". El agente no trabaja con fit/engagement/manual: trabaja con
-              a quién llamar y por qué. El desglose sigue dentro, plegado. */}
+          {/* Prioridad — reemplaza "Temperatura del lead" y "Desglose del score".
+              El agente no trabaja con fit/engagement/manual: trabaja con a quién
+              llamar y por qué. El desglose sigue dentro, plegado. */}
           <PriorityCard priority={priority} breakdown={scoreBreakdown} opportunities={opportunities} potentialValue={potentialValue} />
 
-          {/* Card: Análisis de fit con IA */}
           {aiFit && (
             <AiFitCard leadId={lead.id} enabled={aiFit.enabled} briefing={aiFit.briefing} at={aiFit.at} />
           )}
 
-          {/* Card 3: Notes */}
-          <div style={CARD}>
-            <div style={CARD_TITLE}>Notas</div>
+          <Card title="Notas">
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={4}
               placeholder="Agrega notas sobre este lead..."
-              className="notes-area"
-              style={{
-                width: '100%', resize: 'none',
-                background: 'var(--bg-overlay)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px', padding: '10px 12px',
-                color: 'var(--text-primary)', fontSize: '13px',
-                fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box',
-              }}
+              aria-label="Notas del lead"
+              className="settings-input settings-input-wide"
             />
             {notes !== savedNotes && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <div className="settings-actions settings-actions-end settings-stack-top">
                 <button
+                  type="button"
                   onClick={() => {
                     startTransition(async () => {
                       setActionError(null)
@@ -401,68 +326,32 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                     })
                   }}
                   disabled={isPending}
-                  style={{
-                    background: 'var(--accent-gold)', color: 'var(--bg-base)',
-                    border: 'none', borderRadius: '6px',
-                    padding: '6px 14px', fontSize: '12px', fontWeight: 500, cursor: 'pointer',
-                  }}
+                  aria-busy={isPending}
+                  className="btn btn-primary"
                 >
-                  Guardar nota
+                  {isPending ? 'Guardando…' : 'Guardar nota'}
                 </button>
               </div>
             )}
-          </div>
+          </Card>
 
-          {/* Card 4: Process */}
-          <div style={{ ...CARD, marginBottom: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Proceso de Compra</div>
-              {isProcessActive && (
-                <span style={{
-                  fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-                  background: STAGE_CONFIG[currentStage].bg,
-                  color: STAGE_CONFIG[currentStage].color,
-                }}>
-                  {STAGE_CONFIG[currentStage].label}
-                </span>
-              )}
-            </div>
-
-            {(currentStage === 'cerrado' || currentStage === 'perdido') && (
-              <div style={{
-                marginBottom: '12px', padding: '8px 12px', borderRadius: '6px',
-                background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)',
-                fontSize: '12px', color: 'var(--text-muted)',
-              }}>
-                Proceso deshabilitado — lead cerrado.
-              </div>
+          <Card title="Proceso de Compra" end={isProcessActive ? <StagePill stage={currentStage} /> : undefined}>
+            {isClosed && (
+              <p className="settings-note settings-note-gap">Proceso deshabilitado — lead cerrado.</p>
             )}
-            <div style={{
-              opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
-              pointerEvents: currentStage === 'cerrado' || currentStage === 'perdido' ? 'none' : 'auto',
-            }}>
+            <div className={isClosed ? 'is-disabled' : undefined} aria-disabled={isClosed || undefined}>
               {isProcessActive ? (
-                <>
-                  {[
+                <div className="settings-stack settings-stack-tight">
+                  <InfoList rows={[
                     { label: 'Propiedad',   value: purchaseProcess?.address    ?? '—' },
                     { label: 'Tipo loan',   value: purchaseProcess?.loanType   ?? '—' },
                     { label: 'Inicio',      value: purchaseProcess?.createdAt  ? formatFullDate(purchaseProcess.createdAt) : '—' },
                     { label: 'Cierre est.', value: purchaseProcess?.closingDate ? formatFullDate(purchaseProcess.closingDate) : '—' },
-                  ].map((row, idx, arr) => (
-                    <div
-                      key={row.label}
-                      style={{
-                        display: 'flex', justifyContent: 'space-between', padding: '6px 0',
-                        borderBottom: idx < arr.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                      }}
-                    >
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '100px' }}>{row.label}</span>
-                      <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{row.value}</span>
-                    </div>
-                  ))}
+                  ]} />
 
                   {currentStage === 'en_proceso' && (
                     <button
+                      type="button"
                       onClick={() => {
                         startTransition(async () => {
                           setActionError(null)
@@ -471,217 +360,136 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                           else setActionError(res.error)
                         })
                       }}
-                      style={{
-                        width: '100%', padding: '8px 16px',
-                        background: 'rgba(107,163,104,0.12)', color: '#6BA368',
-                        border: '1px solid rgba(107,163,104,0.3)',
-                        borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
-                      }}
+                      disabled={isPending}
+                      aria-busy={isPending}
+                      className="btn btn-ghost btn-block"
+                      data-tone="gold"
                     >
                       Marcar como Completado
                     </button>
                   )}
-                </>
+                </div>
               ) : (
-                <>
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
-                    Este lead aún no tiene un proceso de compra activo.
-                  </p>
-                  <button
-                    onClick={() => setShowProcessModal(true)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '8px 16px', fontSize: '13px',
-                      background: 'rgba(201,169,110,0.08)',
-                      border: '1px solid var(--accent-gold)',
-                      color: 'var(--accent-gold)',
-                      borderRadius: '8px', cursor: 'pointer',
-                    }}
-                  >
+                <div className="settings-stack settings-stack-tight settings-stack-start">
+                  <p className="settings-note">Este lead aún no tiene un proceso de compra activo.</p>
+                  <button type="button" onClick={() => setShowProcessModal(true)} className="btn btn-ghost" data-tone="gold">
                     + Iniciar proceso de compra
                   </button>
-                </>
+                </div>
               )}
             </div>
-          </div>
+          </Card>
         </div>
 
-        {/* ── RIGHT COLUMN ── */}
-        <div>
-
-          {/* Agent card */}
-          <div style={CARD}>
-            <div style={CARD_TITLE}>Agente asignado</div>
+        <div className="lead-col">
+          <Card title="Agente asignado">
             {agent ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%',
-                    background: `${agent.accentColor}26`, color: agent.accentColor,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '14px', fontWeight: 600, flexShrink: 0,
-                  }}>
+              <div className="settings-stack settings-stack-tight">
+                <div className="lead-identity">
+                  <span className="avatar avatar-md" style={tone(agent.accentColor)} aria-hidden="true">
                     {agent.avatarInitials}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{agent.name}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                      {agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}
-                    </div>
+                  </span>
+                  <div className="dt-cell-main">
+                    <span className="dt-title">{agent.name}</span>
+                    <span className="dt-sub">{agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}</span>
                   </div>
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>{agent.email}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{agent.phone ?? '—'}</div>
-              </>
+                <p className="settings-note">{agent.email}<br />{agent.phone ?? '—'}</p>
+              </div>
             ) : (
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Sin agente asignado</div>
+              <p className="settings-note">Sin agente asignado</p>
             )}
-          </div>
+          </Card>
 
-          {/* Source card — composite source: channel type takes priority over traffic_source
-              (same model as /leads column and analytics donut). */}
-          <div style={CARD}>
-            <div style={CARD_TITLE}>Origen del lead</div>
+          {/* Fuente compuesta: el tipo de canal manda sobre traffic_source (mismo
+              modelo que la columna de /leads y la dona de analíticas). */}
+          <Card title="Origen del lead">
             {leadSource.label === '—' ? (
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Origen no registrado</div>
+              <p className="settings-note">Origen no registrado</p>
             ) : (
-              <>
-                <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: channel ? '2px' : '14px' }}>
-                  {leadSource.label}
+              <div className="settings-stack settings-stack-tight">
+                <div>
+                  <span className="dt-title">{leadSource.label}</span>
+                  {channel && <span className="dt-sub">{channel.name}</span>}
                 </div>
-                {channel && (
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                    {channel.name}
-                  </div>
-                )}
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
-                  Registrado
+                <div>
+                  <span className="info-label">Registrado</span>
+                  <span className="dt-sub">{formatDateTime(lead.createdAt)}</span>
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{formatDateTime(lead.createdAt)}</div>
-              </>
+              </div>
             )}
-          </div>
+          </Card>
 
-          {/* Quick actions card */}
-          <div style={{ ...CARD, marginBottom: 0 }}>
-            <div style={CARD_TITLE}>Acciones</div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {/* El envío (corporativo o personal) vive en el botón "Enviar correo"
-                  del encabezado, que abre el popup con ambas opciones. Copiar
-                  email/teléfono vive como icono junto al dato en el perfil. */}
-
-              {/* Marcar como Cerrado — inline confirm */}
+          <Card title="Acciones">
+            {/* El envío (corporativo o personal) vive en el botón "Enviar correo"
+                del encabezado. Copiar email/teléfono vive junto al dato. */}
+            <div className="action-list">
               {confirmClose ? (
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div className="action-confirm">
                   <button
-                    onClick={() => {
-                      setConfirmClose(false)
-                      startTransition(async () => {
-                        setActionError(null)
-                        const res = await updateLeadStage(lead.id, 'cerrado')
-                        if (res.ok) setCurrentStage('cerrado')
-                        else setActionError(res.error)
-                      })
-                    }}
-                    style={{
-                      flex: 1, padding: '9px 14px', fontSize: '13px', fontWeight: 500,
-                      background: 'rgba(74,155,107,0.1)', color: '#4A9B6B',
-                      border: '1px solid rgba(74,155,107,0.3)', borderRadius: '8px', cursor: 'pointer',
-                    }}
+                    type="button"
+                    onClick={() => { setConfirmClose(false); changeStage('cerrado') }}
+                    className="btn btn-primary"
                   >
                     ¿Confirmar cierre?
                   </button>
-                  <button
-                    onClick={() => setConfirmClose(false)}
-                    style={{
-                      padding: '9px 12px', fontSize: '13px',
-                      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                      color: 'var(--text-muted)', borderRadius: '8px', cursor: 'pointer',
-                    }}
-                  >
-                    ✕
+                  <button type="button" onClick={() => setConfirmClose(false)} className="btn btn-ghost btn-icon" aria-label="Cancelar cierre">
+                    <X size={14} />
                   </button>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setConfirmClose(true)}
-                  disabled={currentStage === 'cerrado' || currentStage === 'perdido'}
-                  className="action-btn"
-                  style={{
-                    ...ACTION_BTN_STYLE,
-                    opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
-                    cursor: currentStage === 'cerrado' || currentStage === 'perdido' ? 'not-allowed' : 'pointer',
-                  }}
+                  disabled={isClosed || isPending}
+                  aria-busy={isPending}
+                  className="btn btn-ghost btn-block btn-start"
                 >
-                  <XCircle size={14} style={{ color: '#4A9B6B' }} /> Marcar como Cerrado
+                  <XCircle size={14} className="text-gold" aria-hidden="true" /> Marcar como Cerrado
                 </button>
               )}
 
-              {/* Marcar como Perdido — inline confirm */}
               {confirmLost ? (
-                <div style={{ display: 'flex', gap: '6px' }}>
+                <div className="action-confirm">
                   <button
-                    onClick={() => {
-                      setConfirmLost(false)
-                      startTransition(async () => {
-                        setActionError(null)
-                        const res = await updateLeadStage(lead.id, 'perdido')
-                        if (res.ok) setCurrentStage('perdido')
-                        else setActionError(res.error)
-                      })
-                    }}
-                    style={{
-                      flex: 1, padding: '9px 14px', fontSize: '13px', fontWeight: 500,
-                      background: 'rgba(201,123,107,0.1)', color: '#C97B6B',
-                      border: '1px solid rgba(201,123,107,0.3)', borderRadius: '8px', cursor: 'pointer',
-                    }}
+                    type="button"
+                    onClick={() => { setConfirmLost(false); changeStage('perdido') }}
+                    className="btn btn-danger"
                   >
                     ¿Confirmar pérdida?
                   </button>
-                  <button
-                    onClick={() => setConfirmLost(false)}
-                    style={{
-                      padding: '9px 12px', fontSize: '13px',
-                      background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-                      color: 'var(--text-muted)', borderRadius: '8px', cursor: 'pointer',
-                    }}
-                  >
-                    ✕
+                  <button type="button" onClick={() => setConfirmLost(false)} className="btn btn-ghost btn-icon" aria-label="Cancelar pérdida">
+                    <X size={14} />
                   </button>
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setConfirmLost(true)}
-                  disabled={currentStage === 'cerrado' || currentStage === 'perdido'}
-                  className="action-btn"
-                  style={{
-                    ...ACTION_BTN_STYLE, color: 'rgba(201,123,107,0.7)',
-                    opacity: currentStage === 'cerrado' || currentStage === 'perdido' ? 0.4 : 1,
-                    cursor: currentStage === 'cerrado' || currentStage === 'perdido' ? 'not-allowed' : 'pointer',
-                  }}
+                  disabled={isClosed || isPending}
+                  aria-busy={isPending}
+                  className="btn btn-ghost btn-block btn-start"
                 >
-                  <XCircle size={14} /> Marcar como Perdido
+                  <XCircle size={14} aria-hidden="true" /> Marcar como Perdido
                 </button>
               )}
             </div>
 
-            {actionError && (
-              <p style={{ fontSize: '12px', color: '#C97B6B', marginTop: '8px' }}>{actionError}</p>
-            )}
-          </div>
+            {actionError && !showProcessModal && <p role="alert" className="form-error settings-stack-top">{actionError}</p>}
+          </Card>
         </div>
       </div>
 
-      {/* ── Manual actions panel ── */}
-      <ManualActionsPanel
-        leadId={lead.id}
-        currentStage={currentStage}
-        actions={manualActions}
-      />
+      <div className="lead-section">
+        <ManualActionsPanel
+          leadId={lead.id}
+          currentStage={currentStage}
+          actions={manualActions}
+        />
+      </div>
 
       {/* ── Historial del lead: actividad, formularios, emails y estados ── */}
-      <div id="lead-history" style={{ marginTop: '24px', scrollMarginTop: '80px' }}>
+      <div id="lead-history" className="lead-section">
         <Tabs
           value={historyTab}
           onChange={setHistoryTab}
@@ -700,7 +508,6 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
         />
       </div>
 
-      {/* ── Modal: Edit Lead ── */}
       <EditLeadModal
         lead={lead}
         agents={agents}
@@ -722,219 +529,177 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
 
       {/* ── Modal: Iniciar proceso ── */}
       <ModalShell open={showProcessModal} onClose={() => setShowProcessModal(false)} maxWidth={480}>
-          <div style={{ padding: '24px' }}>
-            {/* Modal header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Iniciar proceso de compra</div>
-              <button
-                onClick={() => setShowProcessModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: '4px' }}
-              >
-                <X size={18} />
-              </button>
+        <div className="settings-modal">
+          <div className="settings-inline settings-inline-between">
+            <div>
+              <h2 className="settings-modal-title">Iniciar proceso de compra</h2>
+              <p className="settings-note">Lead: {lead.firstName} {lead.lastName}</p>
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Lead: {lead.firstName} {lead.lastName}
-            </div>
+            <button type="button" onClick={() => setShowProcessModal(false)} aria-label="Cerrar" className="icon-btn">
+              <X size={18} />
+            </button>
+          </div>
 
-            {/* Form fields */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
-              <FormSection title="Propiedad" first>
-              <div>
-                <label style={LABEL_STYLE}>Dirección de la propiedad</label>
-                <input
-                  type="text"
-                  value={modalAddress}
-                  onChange={e => setModalAddress(e.target.value)}
-                  placeholder="123 Ocean View Dr, Norfolk, VA"
-                  className="modal-input"
-                  style={INPUT_STYLE}
-                />
-              </div>
-              <div>
-                <label style={LABEL_STYLE}>Tipo de préstamo</label>
+          <FormSection title="Propiedad" first>
+            <div>
+              <label htmlFor="process-address" className="settings-field-label">Dirección de la propiedad</label>
+              <input
+                id="process-address"
+                type="text"
+                value={modalAddress}
+                onChange={e => setModalAddress(e.target.value)}
+                placeholder="123 Ocean View Dr, Norfolk, VA"
+                className="settings-input settings-input-wide"
+              />
+            </div>
+            <div>
+              <label htmlFor="process-loan" className="settings-field-label">Tipo de préstamo</label>
+              <span className="select-field select-field-full">
                 <select
+                  id="process-loan"
                   value={modalLoanType}
                   onChange={e => setModalLoanType(e.target.value)}
-                  className="modal-input"
-                  style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
+                  className="settings-input"
                 >
-                  {LOAN_TYPES.map(lt => (
-                    <option key={lt} value={lt} style={{ background: '#16181C' }}>{lt}</option>
-                  ))}
+                  {LOAN_TYPES.map(lt => <option key={lt} value={lt}>{lt}</option>)}
                 </select>
-              </div>
-              </FormSection>
-
-              <FormSection title="Cierre">
-              <div>
-                <label style={LABEL_STYLE}>Fecha estimada de cierre <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
-                <input
-                  type="date"
-                  value={modalClosingDate}
-                  onChange={e => setModalClosingDate(e.target.value)}
-                  required
-                  min={new Date().toISOString().slice(0, 10)}
-                  className="modal-input"
-                  style={{ ...INPUT_STYLE, colorScheme: 'dark' }}
-                />
-              </div>
-              <div>
-                <label style={LABEL_STYLE}>Notas internas</label>
-                <textarea
-                  value={modalNotes}
-                  onChange={e => setModalNotes(e.target.value)}
-                  rows={3}
-                  placeholder="Detalles del proceso..."
-                  className="modal-input"
-                  style={{ ...INPUT_STYLE, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
-                />
-              </div>
-              </FormSection>
+                <ChevronDown size={14} aria-hidden="true" />
+              </span>
             </div>
+          </FormSection>
 
-            {/* Modal actions */}
-            {actionError && (
-              needsClosingEmails ? (
-                <div style={{
-                  marginBottom: '12px', padding: '12px 14px', borderRadius: '8px',
-                  background: 'rgba(201,169,110,0.08)', border: '1px solid rgba(201,169,110,0.28)',
-                }}>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.55, margin: '0 0 10px' }}>
-                    {actionError}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => router.push('/emails?tab=cierre')}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px',
-                      background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
-                    }}
-                  >
-                    Configurar emails de cierre →
-                  </button>
-                </div>
-              ) : (
-                <p style={{ fontSize: '12px', color: '#C97B6B', marginBottom: '8px' }}>{actionError}</p>
-              )
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                onClick={() => setShowProcessModal(false)}
-                style={{
-                  padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
-                  background: 'transparent', border: '1px solid var(--border-subtle)',
-                  color: 'var(--text-muted)', cursor: 'pointer',
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  startTransition(async () => {
-                    setActionError(null)
-                    setNeedsClosingEmails(false)
-                    const res = await startPurchaseProcess(lead.id, {
-                      address:     modalAddress,
-                      loanType:    modalLoanType,
-                      closingDate: modalClosingDate,
-                      notes:       modalNotes,
-                    })
-                    if (res.ok) {
-                      setShowProcessModal(false)
-                      setModalAddress('')
-                      setModalLoanType('VA Loan')
-                      setModalClosingDate('')
-                      setModalNotes('')
-                    } else {
-                      setActionError(res.error)
-                      setNeedsClosingEmails(res.needsClosingEmails === true)
-                    }
+          <FormSection title="Cierre">
+            <div>
+              <label htmlFor="process-closing" className="settings-field-label">
+                Fecha estimada de cierre <span className="form-required" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="process-closing"
+                type="date"
+                value={modalClosingDate}
+                onChange={e => setModalClosingDate(e.target.value)}
+                required
+                min={new Date().toISOString().slice(0, 10)}
+                className="settings-input settings-input-wide input-date"
+              />
+            </div>
+            <div>
+              <label htmlFor="process-notes" className="settings-field-label">Notas internas</label>
+              <textarea
+                id="process-notes"
+                value={modalNotes}
+                onChange={e => setModalNotes(e.target.value)}
+                rows={3}
+                placeholder="Detalles del proceso..."
+                className="settings-input settings-input-wide"
+              />
+            </div>
+          </FormSection>
+
+          {actionError && (
+            needsClosingEmails ? (
+              <div className="settings-note settings-note-gold settings-stack settings-stack-tight settings-stack-start">
+                <span>{actionError}</span>
+                <button type="button" onClick={() => router.push('/emails?tab=cierre')} className="btn btn-primary">
+                  Configurar emails de cierre →
+                </button>
+              </div>
+            ) : (
+              <p role="alert" className="form-error">{actionError}</p>
+            )
+          )}
+
+          <div className="settings-modal-actions">
+            <button type="button" onClick={() => setShowProcessModal(false)} className="btn btn-ghost">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                startTransition(async () => {
+                  setActionError(null)
+                  setNeedsClosingEmails(false)
+                  const res = await startPurchaseProcess(lead.id, {
+                    address:     modalAddress,
+                    loanType:    modalLoanType,
+                    closingDate: modalClosingDate,
+                    notes:       modalNotes,
                   })
-                }}
-                disabled={isPending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
-                  border: 'none', cursor: 'pointer',
-                }}
-              >
-                Iniciar proceso →
-              </button>
-            </div>
-          </div>
-      </ModalShell>
-
-      {/* ── Modal: Eliminar lead — Step 1: first confirmation ── */}
-      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={440}>
-          <div style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Eliminar lead</span>
-              <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
-              ¿Estás seguro de eliminar a <strong style={{ color: 'var(--text-primary)' }}>{lead.firstName} {lead.lastName}</strong>?
-              Esta acción eliminará todos sus eventos, runs de secuencia y notificaciones relacionadas.{' '}
-              <strong style={{ color: 'var(--accent-coral)' }}>No se puede deshacer.</strong>
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={() => { setDeleteStep(2); setDeleteInput('') }} style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
-                border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
-              }}>Continuar →</button>
-            </div>
-          </div>
-      </ModalShell>
-
-      {/* ── Modal: Eliminar lead — Step 2: type confirmation ── */}
-      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
-          <div style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--accent-coral)' }}>Confirmar eliminación</span>
-              <button onClick={() => setDeleteStep(0)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-              Para confirmar, escribe <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>ELIMINAR</strong> en el campo:
-            </p>
-            <input
-              value={deleteInput}
-              onChange={e => setDeleteInput(e.target.value)}
-              placeholder="ELIMINAR"
-              autoFocus
-              style={{
-                width: '100%', background: 'var(--bg-overlay)',
-                border: '1px solid rgba(201,123,107,0.3)', borderRadius: '8px',
-                padding: '9px 12px', color: 'var(--text-primary)', fontSize: '14px',
-                outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace',
-                marginBottom: '16px',
+                  if (res.ok) {
+                    setShowProcessModal(false)
+                    setModalAddress('')
+                    setModalLoanType('VA Loan')
+                    setModalClosingDate('')
+                    setModalNotes('')
+                  } else {
+                    setActionError(res.error)
+                    setNeedsClosingEmails(res.needsClosingEmails === true)
+                  }
+                })
               }}
-            />
-            {deleteError && (
-              <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
-                {deleteError}
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setDeleteStep(0)} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button
-                onClick={handleDeleteConfirm}
-                disabled={deleteInput !== 'ELIMINAR' || isDeleting}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: deleteInput === 'ELIMINAR' ? 'rgba(201,123,107,0.2)' : 'var(--bg-elevated)',
-                  color: deleteInput === 'ELIMINAR' ? 'var(--accent-coral)' : 'var(--text-muted)',
-                  border: deleteInput === 'ELIMINAR' ? '1px solid rgba(201,123,107,0.4)' : '1px solid var(--border-subtle)',
-                  cursor: (deleteInput !== 'ELIMINAR' || isDeleting) ? 'not-allowed' : 'pointer',
-                  opacity: isDeleting ? 0.7 : 1,
-                }}
-              >
-                {isDeleting ? 'Eliminando...' : 'Eliminar definitivamente'}
-              </button>
-            </div>
+              disabled={isPending}
+              aria-busy={isPending}
+              className="btn btn-primary"
+            >
+              {isPending ? 'Iniciando…' : 'Iniciar proceso →'}
+            </button>
           </div>
+        </div>
+      </ModalShell>
+
+      {/* ── Modal: Eliminar lead — Paso 1: primera confirmación ── */}
+      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={440}>
+        <div className="settings-modal">
+          <div className="settings-inline settings-inline-between">
+            <h2 className="settings-modal-title">Eliminar lead</h2>
+            <button type="button" onClick={() => setDeleteStep(0)} aria-label="Cerrar" className="icon-btn"><X size={18} /></button>
+          </div>
+          <p className="settings-confirm-text">
+            ¿Estás seguro de eliminar a <strong>{lead.firstName} {lead.lastName}</strong>?
+            Esta acción eliminará todos sus eventos, runs de secuencia y notificaciones relacionadas.
+          </p>
+          <span className="settings-alert settings-alert-block">No se puede deshacer.</span>
+          <div className="settings-modal-actions">
+            <button type="button" onClick={() => setDeleteStep(0)} className="btn btn-ghost">Cancelar</button>
+            <button type="button" onClick={() => { setDeleteStep(2); setDeleteInput('') }} className="btn btn-danger">
+              Continuar →
+            </button>
+          </div>
+        </div>
+      </ModalShell>
+
+      {/* ── Modal: Eliminar lead — Paso 2: confirmación por texto ── */}
+      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
+        <div className="settings-modal">
+          <div className="settings-inline settings-inline-between">
+            <h2 className="settings-modal-title">Confirmar eliminación</h2>
+            <button type="button" onClick={() => setDeleteStep(0)} aria-label="Cerrar" className="icon-btn"><X size={18} /></button>
+          </div>
+          <p className="settings-confirm-text">
+            Para confirmar, escribe <strong className="settings-input-mono">ELIMINAR</strong> en el campo:
+          </p>
+          <input
+            value={deleteInput}
+            onChange={e => setDeleteInput(e.target.value)}
+            placeholder="ELIMINAR"
+            aria-label="Escribe ELIMINAR para confirmar"
+            autoFocus
+            className="settings-input settings-input-mono"
+          />
+          {deleteError && <p role="alert" className="form-error">{deleteError}</p>}
+          <div className="settings-modal-actions">
+            <button type="button" onClick={() => setDeleteStep(0)} className="btn btn-ghost">Cancelar</button>
+            <button
+              type="button"
+              onClick={handleDeleteConfirm}
+              disabled={deleteInput !== 'ELIMINAR' || isDeleting}
+              aria-busy={isDeleting}
+              className="btn btn-danger"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar definitivamente'}
+            </button>
+          </div>
+        </div>
       </ModalShell>
     </div>
   )

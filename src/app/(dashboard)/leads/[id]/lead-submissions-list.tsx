@@ -71,8 +71,8 @@ function SubmissionItem({
             display: 'inline-flex', alignItems: 'center', gap: '4px',
             fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
             letterSpacing: '0.04em', textTransform: 'uppercase',
-            color:      sub.responded ? 'var(--accent-green)' : 'var(--accent-gold)',
-            background:  sub.responded ? 'rgba(107,163,104,0.12)' : 'rgba(201,169,110,0.12)',
+            color:      sub.responded ? 'var(--gold-1)' : 'var(--gold-2)',
+            background:  sub.responded ? 'color-mix(in srgb, var(--gold-1) 12%, transparent)' : 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
           }}>
             {sub.responded ? <Check size={10} /> : <Clock size={10} />}
             {sub.responded ? 'Respondida' : 'Pendiente'}
@@ -117,9 +117,9 @@ function SubmissionItem({
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   fontSize: '12px', fontWeight: 500,
-                  color: sub.responded ? 'var(--text-secondary)' : 'var(--accent-green)',
+                  color: sub.responded ? 'var(--text-secondary)' : 'var(--gold-1)',
                   background: 'transparent',
-                  border: `1px solid ${sub.responded ? 'var(--border-subtle)' : 'rgba(107,163,104,0.4)'}`,
+                  border: `1px solid ${sub.responded ? 'var(--border-subtle)' : 'color-mix(in srgb, var(--gold-1) 40%, transparent)'}`,
                   borderRadius: '8px', padding: '7px 14px',
                   cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.6 : 1,
                 }}
@@ -127,7 +127,7 @@ function SubmissionItem({
                 {sub.responded ? <Clock size={13} /> : <Check size={13} />}
                 {pending ? '…' : sub.responded ? 'Marcar como pendiente' : 'Marcar como respondida'}
               </button>
-              {error && <div style={{ fontSize: '11px', color: '#E04040', marginTop: '8px' }}>{error}</div>}
+              {error && <p role="alert" className="form-error settings-stack-top">{error}</p>}
             </div>
           )}
         </div>

@@ -138,7 +138,7 @@ export function LeadTagsCard({ leadId, tags, catalog, canEdit, emailTagIds }: Le
                 minWidth: '240px', maxHeight: '280px', overflowY: 'auto',
                 background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
                 borderRadius: '10px', padding: '6px',
-                boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+                boxShadow: 'var(--shadow-lg)',
               }}>
                 {available.map(tag => (
                   <button
@@ -161,7 +161,7 @@ export function LeadTagsCard({ leadId, tags, catalog, canEdit, emailTagIds }: Le
                         title="Al poner esta etiqueta se le envía un correo al lead"
                         style={{
                           display: 'inline-flex', alignItems: 'center', gap: '4px',
-                          fontSize: '10px', color: 'var(--accent-gold)', flexShrink: 0,
+                          fontSize: '10px', color: 'var(--gold-2)', flexShrink: 0,
                         }}
                       >
                         <Mail size={11} /> correo
@@ -178,14 +178,14 @@ export function LeadTagsCard({ leadId, tags, catalog, canEdit, emailTagIds }: Le
       {notice && (
         <div style={{
           fontSize: '12px', marginTop: '10px', lineHeight: 1.5,
-          color: notice.kind === 'ok' ? 'var(--accent-green)' : 'var(--accent-gold)',
+          color: notice.kind === 'ok' ? 'var(--gold-1)' : 'var(--gold-2)',
         }}>
           {notice.message}
         </div>
       )}
 
       {error && (
-        <div style={{ fontSize: '12px', color: 'var(--accent-coral)', marginTop: '10px' }}>{error}</div>
+        <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '10px' }}>{error}</div>
       )}
     </div>
   )
