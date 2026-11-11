@@ -26,12 +26,13 @@ const monthKey = (year: number, month: number) => `${year}-${String(month + 1).p
 /**
  * Consumo de los últimos `months` meses (el actual incluido), de más viejo a más
  * nuevo y sin huecos: un mes sin uso aparece con ceros para que el eje no salte.
- * El costo se redondea a 6 decimales una sola vez, al final (como
- * getAgentAiBreakdown): quita el error de coma flotante sin perder centavos
- * de fracción; el formato lo pone la capa de presentación.
+ * Recibe los meses ya agregados por la RPC ai_usage_summary (`key` YYYY-MM en
+ * UTC); los que caen fuera de la ventana se ignoran. El costo se redondea a 6
+ * decimales al final (como getAgentAiBreakdown); el formato lo pone la capa de
+ * presentación.
  */
 export function aiUsageByMonth(
-  rows: { created_at: string; cost_usd: number | string }[],
+  monthly: { key: string; requests: number; costUsd: number | string }[],
   now: Date,
   months = 6,
 ): AiUsageMonthPoint[] {
@@ -42,12 +43,11 @@ export function aiUsageByMonth(
     points.set(key, { key, label: MONTH_LABEL.format(d), requests: 0, costUsd: 0 })
   }
 
-  for (const r of rows) {
-    const d = new Date(r.created_at)
-    const point = points.get(monthKey(d.getUTCFullYear(), d.getUTCMonth()))
+  for (const m of monthly) {
+    const point = points.get(m.key)
     if (!point) continue
-    point.requests += 1
-    point.costUsd  += Number(r.cost_usd)
+    point.requests += Number(m.requests)
+    point.costUsd  += Number(m.costUsd)
   }
 
   return [...points.values()].map(p => ({ ...p, costUsd: Math.round(p.costUsd * 1_000_000) / 1_000_000 }))

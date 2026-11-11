@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Sparkline } from '@/components/charts/sparkline'
 import { AnimatedNumber } from '@/components/motion/animated-number'
 import { InfoHint } from '@/components/ui/info-hint'
+import { hintLabel } from '@/components/ui/hint-label'
 
 // Tarjeta de KPI del dashboard. `highlight` es la única tarjeta destacada de una
 // fila. Con `href` toda la tarjeta enlaza, pero el enlace es una capa aparte y no
@@ -25,7 +26,7 @@ export function KpiCard({ label, value, display, suffix, spark, note, hint, high
       {href && <Link href={href} className="kpi-card-link" aria-label={`${label}: ver detalle`} />}
       <div className="kpi-card-top">
         <span className="kpi-card-label">{label}</span>
-        {hint && <InfoHint label={`Qué es ${label}`}>{hint}</InfoHint>}
+        {hint && <InfoHint label={hintLabel(label)}>{hint}</InfoHint>}
       </div>
       <div className="kpi-card-main">
         <div className="kpi-card-value">

@@ -10,6 +10,7 @@ import { tagChipStyle } from '@/lib/leads/tags'
 import type { TagSequenceCoverage } from '@/lib/data/tag-sequences'
 import { tagMatrix, type TagCellState } from '@/lib/emails/tag-matrix'
 import { InfoHint } from '@/components/ui/info-hint'
+import { hintLabel } from '@/components/ui/hint-label'
 import { TagSequencesImportTools } from './tag-sequences-import-tools'
 import { ensureTagSequenceSlot } from './actions'
 
@@ -239,7 +240,7 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
                     {tag.name}
                   </span>
                   {tag.description && (
-                    <InfoHint label={`Qué es ${tag.name}`}>{tag.description}</InfoHint>
+                    <InfoHint label={hintLabel(tag.name)}>{tag.description}</InfoHint>
                   )}
                   {!tag.requiresSequence && (
                     <InfoHint label={`${tag.name} ya no es obligatoria`}>

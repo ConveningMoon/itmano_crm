@@ -113,7 +113,7 @@ async function AdminPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {/* El diagrama diario reemplaza al listado de requests recientes */}
               <AiUsageDailyChart series={aiDaily} />
-              <AiUsagePanel summary={aiUsage} showRecent={false} />
+              <AiUsagePanel summary={aiUsage} />
             </div>
           ),
           fit: (

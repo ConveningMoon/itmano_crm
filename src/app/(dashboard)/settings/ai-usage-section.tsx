@@ -11,29 +11,13 @@ import { ChartCard } from '@/components/ui/chart-card'
 import { ChartFrame } from '@/components/ui/chart-frame'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { SettingsSectionHead } from '@/components/ui/settings-row'
-import { AiByAgentCard, AiByFeatureCard, AiRecentCard, fmtCost, fmtInt } from '@/components/dashboard/ai-usage-panel'
+import { AiByAgentCard, AiByFeatureCard, AiCostExplanation, AiRecentCard, fmtCost, fmtInt } from '@/components/dashboard/ai-usage-panel'
 import { AiCapacityRequest } from './ai-capacity-request'
 
 const CHART_HEIGHT = 240
 
 // Los montos en USD sólo llegan al super_admin (page.tsx los pone en 0 para el
 // resto); con showCosts la gráfica cuenta dólares y sin él, requests.
-function CostExplanation({ showCosts }: { showCosts: boolean }) {
-  return showCosts ? (
-    <>
-      El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo
-      (claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón de salida). Los adjuntos
-      (p. ej. el PDF de un lead magnet) aumentan los tokens de entrada, por eso esas generaciones
-      cuestan más.
-    </>
-  ) : (
-    <>
-      Cada generación con IA (propiedades, correos, secuencias) consume parte del límite mensual del
-      equipo. Los documentos adjuntos consumen más. El contador se reinicia el día 1 de cada mes; si
-      necesitas ampliar el límite, contacta a ITMANO.
-    </>
-  )
-}
 
 export function AiUsageSection({ summary, showCosts, limit, limitSubtitle, byAgent, userRole }: {
   summary:        AiUsageSummary
@@ -61,7 +45,7 @@ export function AiUsageSection({ summary, showCosts, limit, limitSubtitle, byAge
       />
 
       <div className={gauge.kind === 'hidden' ? 'settings-split settings-split-solo' : 'settings-split'}>
-        <ChartCard title="Consumo por mes" scope="Últimos 6 meses" hint={<CostExplanation showCosts={showCosts} />}>
+        <ChartCard title="Consumo por mes" scope="Últimos 6 meses" hint={<AiCostExplanation showCosts={showCosts} />}>
           <ChartFrame height={CHART_HEIGHT} empty={empty} emptyText="Aún no hay uso de IA registrado." label={chartLabel}>
             <AreaChart
               height={CHART_HEIGHT}
