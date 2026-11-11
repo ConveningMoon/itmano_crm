@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { columns } from '@/lib/supabase/columns'
@@ -11,6 +12,7 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionsList } from './editions-list'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { NewslettersSkeleton } from './newsletters-skeleton'
 
 // Pantalla única de la newsletter del tenant — ya no hay series que elegir
 // antes: el canal implícito se prepara aquí, ANTES de leer nada, para que
@@ -23,7 +25,9 @@ import { PageHeader } from '@/components/ui/page-header'
 // en esta misma visita, no hay pasos todavía y el resultado vacío es correcto.
 const SEQUENCE_STEP_SELECT = `${columns('email_sequence_steps', ['id'])}, email_sequences!inner(id, acquisition_channels!inner(channel_type, archived_at))`
 
-async function NewslettersPage() {
+// Lo que lee la sesión o la base vive aquí, detrás del Suspense de
+// NewslettersPage: la cabecera sale del shell estático.
+async function NewslettersContent() {
   const ctx = await requireTenantContext()
   const { tenant_id, role, user_id } = ctx
   const db = createAdminClient()
@@ -54,18 +58,8 @@ async function NewslettersPage() {
 
   if (!canUseNewsletters({ role }, plan)) {
     return (
-      <div style={{ maxWidth: '640px' }}>
-        <PageHeader title="Newsletters" description="Contenido editorial con captación de suscriptores, publicado con tu marca." />
-        <div style={{
-          padding: '20px',
-          borderRadius: '12px',
-          border: '1px solid var(--border-subtle)',
-          background: 'var(--bg-surface)',
-        }}>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
-            Tu plan actual no incluye newsletters. Escríbenos y las activamos en tu cuenta.
-          </p>
-        </div>
+      <div className="empty-card form-narrow">
+        Tu plan actual no incluye newsletters. Escríbenos y las activamos en tu cuenta.
       </div>
     )
   }
@@ -106,6 +100,20 @@ async function NewslettersPage() {
       myUserId={user_id}
       isAgent={role === 'agent'}
     />
+  )
+}
+
+function NewslettersPage() {
+  return (
+    <>
+      <PageHeader
+        title="Newsletter"
+        description="Contenido editorial con captación de suscriptores, publicado con tu marca."
+      />
+      <Suspense fallback={<NewslettersSkeleton />}>
+        <NewslettersContent />
+      </Suspense>
+    </>
   )
 }
 

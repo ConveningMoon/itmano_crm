@@ -7,6 +7,7 @@ import { resolveMockups } from '@/lib/studio/mockups'
 import { StudioTeaser } from '../teaser'
 import { TemplateEditor } from './editor'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
 // El editor pide pantalla ancha —código y lienzo de 1080×1350 lado a lado— y no
 // es una cuarta pestaña a propósito: la autoría no va al mismo nivel que el
@@ -17,7 +18,14 @@ async function TemplatesPage({ searchParams }: {
   searchParams: Promise<{ key?: string }>
 }) {
   const ctx = await getCurrentTenantContext()
-  if (!canUseStudio(ctx)) return <StudioTeaser />
+  if (!canUseStudio(ctx)) {
+    return (
+      <>
+        <PageHeader title="Estudio" description="Imágenes de marketing con tu marca, generadas desde el CRM." />
+        <StudioTeaser />
+      </>
+    )
+  }
 
   const { key } = await searchParams
   const [templates, current, subidas] = await Promise.all([

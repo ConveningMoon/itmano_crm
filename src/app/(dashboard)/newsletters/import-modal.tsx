@@ -132,7 +132,7 @@ export function ImportModal({ open, onClose }: Props) {
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '8px 18px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                  background: 'var(--gold-2)', color: 'var(--bg-base)',
                   border: 'none', cursor: 'pointer',
                 }}
               >
@@ -152,7 +152,7 @@ export function ImportModal({ open, onClose }: Props) {
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
                 {NEWSLETTER_CATEGORIES.map(c => (
-                  <option key={c} value={c} style={{ background: '#16181C' }}>{CATEGORY_LABELS[c]}</option>
+                  <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
                 ))}
               </select>
             </div>
@@ -176,8 +176,8 @@ export function ImportModal({ open, onClose }: Props) {
 
             {error && (
               <p style={{
-                fontSize: '12px', color: 'var(--accent-coral)', margin: 0,
-                padding: '10px 12px', borderRadius: '8px', background: 'rgba(201,123,107,0.08)', lineHeight: 1.6,
+                fontSize: '12px', color: 'var(--alert)', margin: 0,
+                padding: '10px 12px', borderRadius: '8px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', lineHeight: 1.6,
               }}>
                 {error}
               </p>
@@ -202,7 +202,7 @@ export function ImportModal({ open, onClose }: Props) {
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
+                  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
                   cursor: (pending || !json.trim()) ? 'not-allowed' : 'pointer',
                   opacity: (pending || !json.trim()) ? 0.6 : 1,
                 }}

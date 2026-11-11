@@ -65,7 +65,7 @@ export function ReferencePicker({ files, onChange }: {
                 style={{
                   position: 'absolute', top: '-6px', right: '-6px',
                   width: '18px', height: '18px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                  background: 'var(--accent-coral)', color: '#fff', padding: 0,
+                  background: 'var(--alert)', color: 'var(--bg-base)', padding: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >

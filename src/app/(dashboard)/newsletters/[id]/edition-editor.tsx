@@ -39,7 +39,7 @@ const STATUS_LABEL: Record<NewsletterStatus, string> = {
   draft: 'Borrador', published: 'Publicada', archived: 'Archivada',
 }
 const STATUS_COLOR: Record<NewsletterStatus, string> = {
-  draft: 'var(--accent-gold)', published: 'var(--accent-green)', archived: 'var(--text-muted)',
+  draft: 'var(--gold-2)', published: 'var(--gold-1)', archived: 'var(--text-muted)',
 }
 
 export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agents, tenantName }: Props) {
@@ -167,11 +167,9 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
         .nl-editor-input:focus { border-color: var(--border-accent) !important; }
       `}</style>
 
-      <div style={{ marginBottom: '20px' }}>
-        <Link href="/newsletters" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}>
-          <ArrowLeft size={14} /> Newsletters
-        </Link>
-      </div>
+      <Link href="/newsletters" className="back-link">
+        <ArrowLeft size={14} aria-hidden="true" /> Newsletters
+      </Link>
 
       {/* Cabecera fija */}
       <div style={{
@@ -241,7 +239,7 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
               style={{ ...FIELD_INPUT_STYLE, width: '160px', cursor: 'pointer' }}
             >
               {SUPPORTED_LANGUAGE_CODES.map(code => (
-                <option key={code} value={code} style={{ background: '#16181C' }}>
+                <option key={code} value={code}>
                   {LANGUAGE_CONFIG[code].label}
                 </option>
               ))}
@@ -257,7 +255,7 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
               style={{ ...FIELD_INPUT_STYLE, width: '160px', cursor: 'pointer' }}
             >
               {NEWSLETTER_CATEGORIES.map(c => (
-                <option key={c} value={c} style={{ background: '#16181C' }}>
+                <option key={c} value={c}>
                   {CATEGORY_LABELS[c]}
                 </option>
               ))}
@@ -279,12 +277,12 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
         {canEdit && (
           <div>
             {blockers.length > 0 && (
-              <p style={{ fontSize: '12px', color: 'var(--accent-coral)', margin: '0 0 10px' }}>
+              <p style={{ fontSize: '12px', color: 'var(--alert)', margin: '0 0 10px' }}>
                 {blockers[0].detail}
               </p>
             )}
             {error && (
-              <p style={{ fontSize: '12px', color: 'var(--accent-coral)', margin: '0 0 10px' }}>
+              <p style={{ fontSize: '12px', color: 'var(--alert)', margin: '0 0 10px' }}>
                 {error}
               </p>
             )}
@@ -392,5 +390,5 @@ const SECONDARY_BUTTON: React.CSSProperties = {
 }
 const PRIMARY_BUTTON: React.CSSProperties = {
   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-  background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
+  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
 }

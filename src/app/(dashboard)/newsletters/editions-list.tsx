@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ExternalLink, Pencil, Archive, ArchiveRestore, Trash2, Plus, Code2, Copy, Check,
-  Users, FileCheck2, FilePen, Eye, EyeOff,
+  Users, FileCheck2, FilePen, Eye, EyeOff, AlertTriangle,
 } from 'lucide-react'
 import { hostedNewsletterUrl } from '@/lib/hosted-page'
 import { LANGUAGE_CONFIG } from '@/lib/config'
@@ -18,12 +18,12 @@ import {
   getNewsletterIntegrationPrompt,
 } from './actions'
 import { FechaLocal } from '@/components/ui/local-date'
-import { PageHeader } from '@/components/ui/page-header'
+import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import { StatCard } from '@/components/ui/stat-card'
 import { RowMenu } from '@/components/ui/row-menu'
 import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui/data-table'
 
-// Pantalla única de la newsletter: tira de totales, aviso de secuencia vacía y
+// Pantalla única de la newsletter: acciones, tira de totales, aviso de secuencia vacía y
 // la tabla de ediciones con sus acciones. Sustituye a series-list.tsx +
 // serie/[id]/series-detail.tsx — con una sola newsletter por tenant, ya no hay
 // nada que listar antes de llegar a las ediciones.
@@ -44,10 +44,11 @@ interface Props {
   isAgent:       boolean
 }
 
-const STATUS_LABEL: Record<NewsletterStatus, { label: string; tone: 'mute' | 'green' | 'coral' }> = {
-  draft:     { label: 'Borrador',  tone: 'mute' },
-  published: { label: 'Publicada', tone: 'green' },
-  archived:  { label: 'Archivada', tone: 'coral' },
+// Publicada en dorado; borrador y archivada neutras (archivar no es una alerta).
+const STATUS_LABEL: Record<NewsletterStatus, { label: string; tone?: 'mute' | 'gold' }> = {
+  draft:     { label: 'Borrador' },
+  published: { label: 'Publicada', tone: 'gold' },
+  archived:  { label: 'Archivada', tone: 'mute' },
 }
 
 function fmtDate(iso: string) {
@@ -69,14 +70,10 @@ function ConfirmDialog({
 }) {
   return (
     <ModalShell open={open} onClose={onCancel} maxWidth={420}>
-      <div style={{ padding: '24px' }}>
-        <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '10px' }}>
-          {title}
-        </div>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 20px' }}>
-          {detail}
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+      <div className="settings-modal">
+        <h2 className="settings-modal-title">{title}</h2>
+        <p className="settings-confirm-text">{detail}</p>
+        <div className="settings-modal-actions">
           <button type="button" onClick={onCancel} className="btn btn-ghost">Cancelar</button>
           <button
             type="button"
@@ -131,17 +128,15 @@ export function EditionsList({
 
   return (
     <>
-      {/* Cabecera */}
-      <PageHeader
-        title="Newsletter"
-        description="Contenido editorial con captación de suscriptores, publicado con tu marca."
-        actions={
-          <>
-            <Link href="/newsletters/nueva" className="btn btn-primary btn-cta">
-              <Plus size={14} />
-              Nueva edición
-            </Link>
+      {/* Acciones. La cabecera sale del shell estático (page.tsx); estas viven
+          aquí porque dependen del plan, que se lee detrás del Suspense. */}
+      <div className="toolbar">
+        <span className="toolbar-meta">
+          {editions.length} {editions.length === 1 ? 'edición' : 'ediciones'}
+        </span>
+        <div className="toolbar-group">
             <button
+              type="button"
               className="btn btn-ghost"
               disabled={pending}
               onClick={() => {
@@ -155,52 +150,44 @@ export function EditionsList({
                 })
               }}
             >
-              <Code2 size={14} /> Integración
+              <Code2 size={14} aria-hidden="true" /> Integración
             </button>
-          </>
-        }
-      />
+            <Link href="/newsletters/nueva" className="btn btn-primary btn-cta">
+              <Plus size={14} aria-hidden="true" />
+              Nueva edición
+              <LinkPendingSpinner />
+            </Link>
+        </div>
+      </div>
 
       {error && (
-        <p style={{
-          fontSize: '13px', color: 'var(--accent-coral)', margin: '0 0 16px',
-          padding: '10px 14px', borderRadius: '8px', background: 'rgba(201,123,107,0.08)',
-        }}>
+        <p role="alert" className="settings-alert settings-alert-wide nl-error">
+          <AlertTriangle size={14} aria-hidden="true" />
           {error}
         </p>
       )}
 
       {/* Tira de totales */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ marginBottom: '24px' }}>
-        <StatCard label="Suscriptores" value={stats.totals.subscribers} icon={<Users size={16} />} tone="var(--accent-blue)" />
-        <StatCard label="Publicadas"   value={stats.totals.published}   icon={<FileCheck2 size={16} />} tone="var(--accent-green)" />
+      <div className="nl-kpis">
+        <StatCard label="Suscriptores" value={stats.totals.subscribers} icon={<Users size={16} />} tone="var(--gold-1)" />
+        <StatCard label="Publicadas"   value={stats.totals.published}   icon={<FileCheck2 size={16} />} tone="var(--gold-2)" />
         <StatCard label="Borradores"   value={stats.totals.drafts}      icon={<FilePen size={16} />} tone="var(--text-secondary)" />
-        <StatCard label="Vistas"       value={stats.totals.views}       icon={<Eye size={16} />} tone="var(--accent-teal)" />
+        <StatCard label="Vistas"       value={stats.totals.views}       icon={<Eye size={16} />} tone="var(--gold-3)" />
       </div>
 
       {/* Aviso de secuencia vacía */}
       {sequenceEmpty && sequenceId && (
-        <div style={{
-          padding: '12px 16px', borderRadius: '8px', marginBottom: '20px',
-          border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
-        }}>
-          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
-            Tu secuencia <strong style={{ color: 'var(--text-secondary)' }}>Newsletter</strong> todavía
-            no tiene correos, así que quien se suscriba no recibirá nada.{' '}
-            <Link href={`/emails/${sequenceId}`} style={{ color: 'var(--accent-gold)' }}>
-              Añadir el primero →
-            </Link>
-          </p>
-        </div>
+        <p className="settings-note-gold nl-notice">
+          Tu secuencia <strong>Newsletter</strong> todavía no tiene correos, así que quien se
+          suscriba no recibirá nada.{' '}
+          <Link href={`/emails/${sequenceId}`} className="feed-link">Añadir el primero →</Link>
+        </p>
       )}
 
       {/* Ediciones */}
       {editions.length === 0 ? (
-        <div style={{
-          background: 'var(--bg-surface)', border: '1px dashed var(--border-hover)',
-          borderRadius: '12px', padding: '48px 20px', textAlign: 'center',
-          fontSize: '13px', color: 'var(--text-secondary)',
-        }}>
+        <div className="empty-card">
+          <span className="empty-card-icon" aria-hidden="true"><FilePen size={18} /></span>
           Todavía no hay ninguna edición.
         </div>
       ) : (
@@ -230,7 +217,7 @@ export function EditionsList({
         open={confirm?.kind === 'archive_edition'}
         title="Archivar edición"
         detail={confirm?.kind === 'archive_edition' ? <>
-          <strong style={{ color: 'var(--text-primary)' }}>{confirm.edition.title}</strong> saldrá
+          <strong>{confirm.edition.title}</strong> saldrá
           de la web. Su enlace público dejará de responder. Puedes restaurarla como borrador cuando quieras.
         </> : null}
         confirmLabel="Archivar edición"
@@ -241,11 +228,9 @@ export function EditionsList({
       />
 
       <ModalShell open={showIntegration} onClose={() => { setShowIntegration(false); setCopied(false) }} maxWidth={720}>
-        <div style={{ padding: '24px' }}>
-          <div style={{ marginBottom: '6px', fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Opciones de integración
-          </div>
-          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: 1.6, margin: '0 0 16px' }}>
+        <div className="settings-modal">
+          <h2 className="settings-modal-title">Opciones de integración</h2>
+          <p className="settings-note">
             Copia esto y pásaselo a quien lleva tu web —persona o IA—. Lleva el contrato
             completo: el formulario de suscripción y, si lo quieres, cómo mostrar las
             ediciones en tu propio sitio. Se genera con los datos de hoy, así que
@@ -253,18 +238,13 @@ export function EditionsList({
           </p>
 
           {integration === null ? (
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>Preparando…</p>
+            <p className="settings-note" role="status">
+              <span className="loading-spinner" aria-hidden="true" /> Preparando…
+            </p>
           ) : (
             <>
-              <pre style={{
-                margin: 0, padding: '14px', maxHeight: '46vh', overflow: 'auto',
-                background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
-                borderRadius: '8px', fontSize: '11.5px', lineHeight: 1.6,
-                color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              }}>
-                {integration}
-              </pre>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+              <pre className="nl-prompt">{integration}</pre>
+              <div className="settings-modal-actions">
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -294,7 +274,7 @@ export function EditionsList({
         open={confirm?.kind === 'delete_edition'}
         title="Eliminar edición definitivamente"
         detail={confirm?.kind === 'delete_edition' ? <>
-          Se elimina <strong style={{ color: 'var(--text-primary)' }}>{confirm.edition.title}</strong> con
+          Se elimina <strong>{confirm.edition.title}</strong> con
           su texto, sus fuentes y su portada. Esto no se puede deshacer.
         </> : null}
         confirmLabel="Eliminar definitivamente"
@@ -345,7 +325,7 @@ function EditionRow({
   const byline = [edition.authorName, edition.authorOrgName].filter(Boolean).join(' · ')
 
   return (
-    <div className="dt-grid dt-row" aria-busy={busy || undefined} style={busy ? { opacity: 0.6 } : undefined}>
+    <div className="dt-grid dt-row nl-row" aria-busy={busy || undefined}>
       <div className="dt-cell-main">
         <Link href={`/newsletters/${edition.id}`} className="dt-title">{edition.title}</Link>
         <div className="dt-meta">
@@ -361,12 +341,12 @@ function EditionRow({
         </div>
       </div>
 
-      <span className="pill pill-dot" data-tone={cfg.tone} style={{ justifySelf: 'start' }}>{cfg.label}</span>
+      <span className="pill pill-dot nl-status" data-tone={cfg.tone}>{cfg.label}</span>
 
       <span className="dt-num dt-hide-md dt-hide-sm dt-r">{edStats?.views ?? 0}</span>
       <span className="dt-num dt-hide-sm dt-r">{edStats?.subscribers ?? 0}</span>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+      <div className="nl-row-actions">
         {busy && <span className="loading-spinner" role="status" aria-label="Procesando" />}
         <RowMenu
           label={edition.title}

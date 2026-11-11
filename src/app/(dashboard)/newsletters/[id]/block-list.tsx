@@ -129,18 +129,18 @@ export function BlockList({ content, sources, canEdit, onChange }: Props) {
         .nl-preview figure { margin: 0 0 14px; }
         .nl-preview img { width: 100%; border-radius: 8px; display: block; }
         .nl-preview figcaption { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
-        .nl-preview blockquote { margin: 0 0 14px; padding: 10px 14px; border-left: 3px solid var(--accent-gold); font-style: italic; color: var(--text-secondary); font-size: 13px; }
+        .nl-preview blockquote { margin: 0 0 14px; padding: 10px 14px; border-left: 3px solid var(--gold-2); font-style: italic; color: var(--text-secondary); font-size: 13px; }
         .nl-preview cite { display: block; margin-top: 6px; font-size: 11px; color: var(--text-muted); font-style: normal; }
         .nl-callout { display: block; margin: 0 0 14px; padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
-        .nl-callout-info { background: rgba(91,142,201,0.1); border: 1px solid rgba(91,142,201,0.25); color: var(--text-secondary); }
-        .nl-callout-warning { background: rgba(201,169,110,0.1); border: 1px solid rgba(201,169,110,0.25); color: var(--text-secondary); }
+        .nl-callout-info { background: color-mix(in srgb, var(--gold-1) 10%, transparent); border: 1px solid color-mix(in srgb, var(--gold-1) 25%, transparent); color: var(--text-secondary); }
+        .nl-callout-warning { background: color-mix(in srgb, var(--gold-2) 10%, transparent); border: 1px solid color-mix(in srgb, var(--gold-2) 25%, transparent); color: var(--text-secondary); }
         .nl-stat { display: flex; flex-direction: column; gap: 2px; margin: 0 0 14px; }
-        .nl-stat-value { font-size: 24px; font-weight: 600; color: var(--accent-gold); }
+        .nl-stat-value { font-size: 24px; font-weight: 600; color: var(--gold-2); }
         .nl-stat-label { font-size: 12px; color: var(--text-muted); }
         .nl-sources { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
         .nl-sources h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin: 0 0 8px; font-weight: 600; }
         .nl-sources ol { font-size: 12px; color: var(--text-secondary); padding-left: 18px; margin: 0; }
-        .nl-sources a { color: var(--accent-blue); }
+        .nl-sources a { color: var(--gold-1); }
       `}</style>
 
       <div className="nl-editor-grid">
@@ -187,9 +187,9 @@ export function BlockList({ content, sources, canEdit, onChange }: Props) {
                 }}
                 style={{ ...SELECT_STYLE, maxWidth: '240px' }}
               >
-                <option value="" style={OPTION_BG}>+ Elegir tipo de bloque</option>
+                <option value="">+ Elegir tipo de bloque</option>
                 {(Object.keys(BLOCK_TYPE_LABEL) as NewsletterBlock['type'][]).map(t => (
-                  <option key={t} value={t} style={OPTION_BG}>{BLOCK_TYPE_LABEL[t]}</option>
+                  <option key={t} value={t}>{BLOCK_TYPE_LABEL[t]}</option>
                 ))}
               </select>
             </div>
@@ -243,7 +243,7 @@ function BlockCard({
   return (
     <div style={{
       background: 'var(--bg-surface)',
-      border: `1px solid ${statNeedsSource ? 'var(--accent-coral)' : 'var(--border-subtle)'}`,
+      border: `1px solid ${statNeedsSource ? 'var(--alert)' : 'var(--border-subtle)'}`,
       borderRadius: '12px', padding: '14px 16px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -260,7 +260,7 @@ function BlockCard({
               style={{ ...ICON_BTN, opacity: index === total - 1 ? 0.35 : 1, cursor: index === total - 1 ? 'default' : 'pointer' }}>
               <ChevronDown size={12} />
             </button>
-            <button type="button" className="nl-block-btn" onClick={onRemove} style={{ ...ICON_BTN, color: 'var(--accent-coral)' }}>
+            <button type="button" className="nl-block-btn" onClick={onRemove} style={{ ...ICON_BTN, color: 'var(--alert)' }}>
               <Trash2 size={12} />
             </button>
           </div>
@@ -275,8 +275,8 @@ function BlockCard({
             onChange={e => onChange({ ...block, level: Number(e.target.value) === 3 ? 3 : 2 })}
             style={{ ...SELECT_STYLE, width: '70px', flexShrink: 0 }}
           >
-            <option value={2} style={OPTION_BG}>H2</option>
-            <option value={3} style={OPTION_BG}>H3</option>
+            <option value={2}>H2</option>
+            <option value={3}>H3</option>
           </select>
           <input
             value={block.text}
@@ -398,7 +398,7 @@ function BlockCard({
             </label>
           )}
           {uploadError && (
-            <p style={{ fontSize: '11px', color: 'var(--accent-coral)', margin: 0 }}>{uploadError}</p>
+            <p style={{ fontSize: '11px', color: 'var(--alert)', margin: 0 }}>{uploadError}</p>
           )}
           <input
             value={block.alt}
@@ -500,7 +500,7 @@ function BlockCard({
               }}
             />
             {statNeedsSource && (
-              <p style={{ fontSize: '11px', color: 'var(--accent-coral)', margin: '6px 0 0' }}>
+              <p style={{ fontSize: '11px', color: 'var(--alert)', margin: '6px 0 0' }}>
                 Este dato cita una fuente que ya no existe.
               </p>
             )}
@@ -515,9 +515,9 @@ function toggleStyle(active: boolean, canEdit: boolean): React.CSSProperties {
   return {
     padding: '4px 10px', fontSize: '11px', fontWeight: 500, borderRadius: '6px',
     cursor: canEdit ? 'pointer' : 'default',
-    background: active ? 'rgba(201,169,110,0.12)' : 'transparent',
-    color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
-    border: `1px solid ${active ? 'rgba(201,169,110,0.3)' : 'var(--border-subtle)'}`,
+    background: active ? 'color-mix(in srgb, var(--gold-2) 12%, transparent)' : 'transparent',
+    color: active ? 'var(--gold-2)' : 'var(--text-muted)',
+    border: `1px solid ${active ? 'color-mix(in srgb, var(--gold-2) 30%, transparent)' : 'var(--border-subtle)'}`,
   }
 }
 
@@ -547,9 +547,9 @@ function SourceToggles({ sources, selected, disabled, onToggle }: {
             title={s.title}
             style={{
               padding: '3px 10px', fontSize: '11px', borderRadius: '12px', cursor: disabled ? 'default' : 'pointer',
-              background: active ? 'rgba(201,169,110,0.15)' : 'var(--bg-elevated)',
-              color: active ? 'var(--accent-gold)' : 'var(--text-muted)',
-              border: `1px solid ${active ? 'rgba(201,169,110,0.35)' : 'var(--border-subtle)'}`,
+              background: active ? 'color-mix(in srgb, var(--gold-2) 15%, transparent)' : 'var(--bg-elevated)',
+              color: active ? 'var(--gold-2)' : 'var(--text-muted)',
+              border: `1px solid ${active ? 'color-mix(in srgb, var(--gold-2) 35%, transparent)' : 'var(--border-subtle)'}`,
               maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}
           >
@@ -637,7 +637,6 @@ const INPUT_STYLE: React.CSSProperties = {
   outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 }
 const SELECT_STYLE: React.CSSProperties = { ...INPUT_STYLE, cursor: 'pointer', appearance: 'none' }
-const OPTION_BG: React.CSSProperties = { background: '#16181C' }
 const ICON_BTN: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px',
   borderRadius: '6px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
@@ -649,6 +648,6 @@ const SMALL_LABEL: React.CSSProperties = {
 }
 const GHOST_ADD_BTN: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', fontSize: '11px',
-  fontWeight: 500, color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.08)',
-  border: '1px solid rgba(201,169,110,0.2)', borderRadius: '6px', cursor: 'pointer',
+  fontWeight: 500, color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 8%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--gold-2) 20%, transparent)', borderRadius: '6px', cursor: 'pointer',
 }

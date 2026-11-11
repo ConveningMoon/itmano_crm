@@ -229,7 +229,7 @@ export function SourcesPanel({ sources, content, canEdit, onChange }: Props) {
               </div>
             </div>
 
-            {error && <p style={{ fontSize: '12px', color: 'var(--accent-coral)', margin: 0 }}>{error}</p>}
+            {error && <p style={{ fontSize: '12px', color: 'var(--alert)', margin: 0 }}>{error}</p>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
               <button onClick={closeModal} style={CANCEL_BUTTON}>Cancelar</button>
@@ -254,10 +254,10 @@ export function SourcesPanel({ sources, content, canEdit, onChange }: Props) {
           {confirmDelete && confirmDelete.count > 0 ? (
             <div style={{
               display: 'flex', gap: '8px', alignItems: 'flex-start',
-              background: 'rgba(201,169,110,0.06)', border: '1px solid rgba(201,169,110,0.18)',
+              background: 'color-mix(in srgb, var(--gold-2) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 18%, transparent)',
               borderRadius: '8px', padding: '12px 14px', marginBottom: '20px',
             }}>
-              <AlertTriangle size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+              <AlertTriangle size={14} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
                 {confirmDelete.count === 1
                   ? 'Esta fuente está citada por 1 bloque.'
@@ -284,8 +284,8 @@ export function SourcesPanel({ sources, content, canEdit, onChange }: Props) {
 const ADD_BUTTON: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '5px',
   padding: '6px 12px', fontSize: '12px', fontWeight: 500,
-  background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
-  border: '1px solid rgba(201,169,110,0.2)', borderRadius: '8px', cursor: 'pointer',
+  background: 'color-mix(in srgb, var(--gold-2) 10%, transparent)', color: 'var(--gold-2)',
+  border: '1px solid color-mix(in srgb, var(--gold-2) 20%, transparent)', borderRadius: '8px', cursor: 'pointer',
 }
 const ICON_BUTTON: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px',
@@ -294,7 +294,7 @@ const ICON_BUTTON: React.CSSProperties = {
 }
 const ICON_BUTTON_DANGER: React.CSSProperties = {
   ...ICON_BUTTON,
-  background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)', color: 'var(--accent-coral)',
+  background: 'color-mix(in srgb, var(--alert) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--alert) 20%, transparent)', color: 'var(--alert)',
 }
 const LABEL_STYLE: React.CSSProperties = {
   fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px',
@@ -312,10 +312,10 @@ const CANCEL_BUTTON: React.CSSProperties = {
 }
 const SAVE_BUTTON: React.CSSProperties = {
   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-  background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
+  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
 }
 const DELETE_BUTTON: React.CSSProperties = {
   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-  background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
-  border: '1px solid rgba(201,123,107,0.3)', cursor: 'pointer',
+  background: 'color-mix(in srgb, var(--alert) 15%, transparent)', color: 'var(--alert)',
+  border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)', cursor: 'pointer',
 }

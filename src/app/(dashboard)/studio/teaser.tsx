@@ -9,36 +9,22 @@ const RECIPES = [
   { title: 'Evento',           body: 'Seminarios y encuentros, con el lugar y cómo registrarse.' },
 ]
 
+// Sin título propio: la página pone la cabecera (en /studio, desde el shell).
 export function StudioTeaser() {
   return (
-    <div style={{ maxWidth: '760px' }}>
-      <h1 style={{ fontSize: '20px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '4px' }}>
-        Estudio
-      </h1>
-      <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 28px' }}>
-        Imágenes de marketing con tu marca, generadas desde el CRM. Disponible pronto para tu equipo.
-      </p>
+    <div className="studio-teaser">
+      <p className="settings-note-gold">Disponible pronto para tu equipo.</p>
 
-      <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <div className="studio-teaser-grid">
         {RECIPES.map(r => (
-          <div
-            key={r.title}
-            style={{
-              padding: '16px',
-              borderRadius: '12px',
-              border: '1px solid var(--border-subtle)',
-              background: 'var(--bg-surface)',
-            }}
-          >
-            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '6px' }}>
-              {r.title}
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>{r.body}</div>
+          <div key={r.title} className="settings-card settings-stack settings-stack-tight">
+            <div className="form-card-title">{r.title}</div>
+            <p className="settings-note">{r.body}</p>
           </div>
         ))}
       </div>
 
-      <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '24px', lineHeight: 1.6 }}>
+      <p className="settings-note">
         Los datos de cada pieza salen de tus propiedades, así que la dirección y el precio
         nunca se escriben dos veces. Cuando se habilite, lo verás aquí mismo.
       </p>
