@@ -57,7 +57,7 @@ export function AiCreateModal({
       onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}
       style={{
         position: 'fixed', inset: 0, zIndex: 55,
-        background: 'rgba(0,0,0,0.6)',
+        background: 'color-mix(in srgb, var(--bg-base) 75%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
       }}
     >
@@ -68,7 +68,7 @@ export function AiCreateModal({
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>
-            <Sparkles size={16} color="var(--accent-gold)" /> Crear con IA
+            <Sparkles size={16} color="var(--gold-2)" /> Crear con IA
           </h2>
           <button onClick={() => !busy && onClose()} style={{ background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', color: 'var(--text-muted)', padding: '4px', display: 'flex' }}>
             <X size={16} />
@@ -87,14 +87,14 @@ export function AiCreateModal({
           style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
             padding: '24px', borderRadius: '10px', cursor: busy ? 'default' : 'pointer', textAlign: 'center',
-            border: `1.5px dashed ${dragOver ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-            background: dragOver ? 'rgba(201,169,110,0.06)' : 'var(--bg-elevated)',
+            border: `1.5px dashed ${dragOver ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
+            background: dragOver ? 'color-mix(in srgb, var(--gold-2) 6%, transparent)' : 'var(--bg-elevated)',
             transition: 'border-color 0.15s, background 0.15s',
           }}
         >
           {file ? (
             <>
-              <FileText size={22} color="var(--accent-gold)" />
+              <FileText size={22} color="var(--gold-2)" />
               <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500, wordBreak: 'break-all' }}>{file.name}</span>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Clic para reemplazar</span>
             </>
@@ -126,9 +126,9 @@ export function AiCreateModal({
                   style={{
                     padding: '5px 10px', fontSize: '12px', fontWeight: 500, borderRadius: '999px',
                     cursor: (!on && atMax) ? 'default' : 'pointer',
-                    background: on ? 'rgba(201,169,110,0.15)' : 'transparent',
-                    border: `1px solid ${on ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
-                    color: on ? 'var(--accent-gold)' : 'var(--text-muted)',
+                    background: on ? 'color-mix(in srgb, var(--gold-2) 15%, transparent)' : 'transparent',
+                    border: `1px solid ${on ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
+                    color: on ? 'var(--gold-2)' : 'var(--text-muted)',
                     opacity: (!on && atMax) ? 0.4 : 1,
                   }}
                 >
@@ -140,7 +140,7 @@ export function AiCreateModal({
         </div>
 
         {error && (
-          <div style={{ fontSize: '12px', color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.1)', borderRadius: '6px', padding: '8px 12px', marginTop: '16px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--alert)', background: 'color-mix(in srgb, var(--alert) 10%, transparent)', borderRadius: '6px', padding: '8px 12px', marginTop: '16px' }}>
             {error}
           </div>
         )}
@@ -160,7 +160,7 @@ export function AiCreateModal({
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '6px',
               padding: '8px 20px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--accent-gold)', color: 'var(--bg-base)',
+              background: 'var(--gold-2)', color: 'var(--bg-base)',
               borderRadius: '8px', border: 'none',
               cursor: (busy || !file) ? 'default' : 'pointer', opacity: (busy || !file) ? 0.6 : 1,
             }}

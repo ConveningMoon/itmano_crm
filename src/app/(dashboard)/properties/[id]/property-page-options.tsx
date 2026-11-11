@@ -19,7 +19,7 @@ const BTN_GHOST: React.CSSProperties = {
 }
 const BTN_PRIMARY: React.CSSProperties = {
   padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--accent-gold)', border: 'none', borderRadius: '8px', cursor: 'pointer',
+  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
 }
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px',
@@ -34,7 +34,7 @@ function CopyBtn({ text }: { text: string }) {
       onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) }).catch(() => {})}
       style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
     >
-      {copied ? <Check size={12} color="var(--accent-green)" /> : <Copy size={12} />}
+      {copied ? <Check size={12} color="var(--gold-1)" /> : <Copy size={12} />}
       {copied ? 'Copiado' : 'Copiar'}
     </button>
   )
@@ -61,7 +61,7 @@ export function PropertyPageOptions({
   if (managedByItmano) {
     return (
       <div style={{ ...CARD, padding: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-        <ShieldCheck size={18} color="var(--accent-green)" />
+        <ShieldCheck size={18} color="var(--gold-1)" />
         <div style={{ flex: 1, minWidth: '220px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Página administrada por ITMANO</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -88,10 +88,10 @@ export function PropertyPageOptions({
               style={{
                 textAlign: 'left', cursor: 'pointer', padding: '16px',
                 background: active ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                border: `1px solid ${active ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
                 borderRadius: '12px',
               }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: active ? 'var(--accent-gold)' : 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: active ? 'var(--gold-2)' : 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
                 {m.icon} {m.title}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '8px' }}>{m.desc}</div>
@@ -104,13 +104,13 @@ export function PropertyPageOptions({
         <div style={{ ...CARD, padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             Estado: {published
-              ? <span style={{ color: 'var(--accent-green)', fontWeight: 500 }}>publicada en el catálogo web</span>
-              : <span style={{ color: 'var(--accent-coral)', fontWeight: 500 }}>no publicada</span>}.
+              ? <span style={{ color: 'var(--gold-1)', fontWeight: 500 }}>publicada en el catálogo web</span>
+              : <span style={{ color: 'var(--gold-2)', fontWeight: 500 }}>no publicada</span>}.
             {' '}La publicación se controla con &quot;Publicar en web&quot; en el formulario de edición de la propiedad
             (necesita nombre, slug y foto para verse bien).
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <code style={{ fontSize: '12px', color: 'var(--accent-gold)', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
+            <code style={{ fontSize: '12px', color: 'var(--gold-2)', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
               {detailUrl ?? catalogUrl}
             </code>
             <CopyBtn text={detailUrl ?? catalogUrl} />
@@ -153,7 +153,7 @@ export function PropertyPageOptions({
       {mode === 'request' && (
         <div style={{ ...CARD, padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {reqDone ? (
-            <div style={{ fontSize: '13px', color: 'var(--accent-green)' }}>
+            <div style={{ fontSize: '13px', color: 'var(--gold-1)' }}>
               Solicitud enviada. Nuestro equipo te contactará.
             </div>
           ) : (
@@ -165,7 +165,7 @@ export function PropertyPageOptions({
                 placeholder="Cuéntanos qué necesitas para la página de propiedades (web nueva, conectar tu web actual, diseño especial…)"
                 style={{ width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
               />
-              {reqErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{reqErr}</div>}
+              {reqErr && <div style={{ fontSize: '12px', color: 'var(--alert)' }}>{reqErr}</div>}
               <button
                 onClick={() => {
                   setReqErr(null)

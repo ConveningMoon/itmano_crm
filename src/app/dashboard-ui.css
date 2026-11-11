@@ -2090,3 +2090,78 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 /* Opciones de los select nativos sobre fondo oscuro (el desplegable lo pinta el
    sistema y no hereda el fondo del control). */
 select option { background: var(--bg-elevated); color: var(--text-primary); }
+
+/* ── Propiedades (fase 5, tanda 3) ─────────────────────────────────────────
+   Lista: rejilla de tarjetas con portada. El título es el enlace al detalle y
+   su ::after cubre la tarjeta; el enlace externo queda por encima. */
+/* Pestañas de estado con acciones al lado: las pestañas no se encogen (los
+   botones bajan de línea); sólo en pantallas más estrechas que ellas, scroll. */
+.filter-tabs-fit { flex: 0 0 auto; max-width: 100%; }
+.prop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.prop-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  animation: prop-rise 0.45s var(--ease-out-premium) both;
+  transition: border-color var(--dur-fast), box-shadow 0.3s, transform 0.3s var(--ease-out-premium);
+}
+.prop-card-static { animation: none; }
+.prop-card:not(.prop-card-static):hover,
+.prop-card:focus-within { border-color: var(--border-hover); box-shadow: var(--highlight-top), var(--shadow-md); transform: translateY(-3px); }
+.prop-card:has(.prop-title:focus-visible) { outline: 2px solid var(--gold-2); outline-offset: 2px; }
+.prop-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+.prop-cover-img { object-fit: cover; transition: transform 0.5s var(--ease-out-premium); }
+.prop-card:hover .prop-cover-img { transform: scale(1.04); }
+.prop-card-body { display: flex; flex: 1; flex-direction: column; gap: 10px; padding: 16px 18px 18px; min-width: 0; }
+.prop-who { flex: 1; min-width: 0; }
+.prop-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.prop-title {
+  display: block;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prop-title::after { content: ''; position: absolute; inset: 0; }
+.prop-title:focus-visible { outline: none; }
+.prop-sub { margin-top: 2px; font-size: 12px; color: var(--text-muted); }
+.prop-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.prop-price { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--gold-2); font-variant-numeric: tabular-nums; }
+.prop-specs { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); }
+.prop-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 4px; font-size: 11px; color: var(--text-muted); }
+.prop-link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 4px; color: var(--gold-2); text-decoration: none; }
+.prop-link:hover { text-decoration: underline; }
+@keyframes prop-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .prop-card, .prop-cover-img { animation: none; transition: none; }
+  .prop-card:hover, .prop-card:focus-within { transform: none; }
+}
+
+/* Detalle: identidad con miniatura, datos en lista y textos por idioma. */
+.prop-thumb { flex-shrink: 0; width: 96px; height: 72px; border: 1px solid var(--border-subtle); border-radius: 10px; object-fit: cover; }
+@media (max-width: 480px) { .prop-thumb { width: 64px; height: 48px; border-radius: 8px; } }
+.prop-identity-name { margin: 0; font-size: 20px; font-weight: 500; color: var(--text-primary); }
+.prop-lang-title { margin-bottom: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-2); }
+.prop-text { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
+.prop-features { margin: 10px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.prop-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.prop-photo { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 8px; }
+.prop-photo img { object-fit: cover; }

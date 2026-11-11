@@ -55,7 +55,7 @@ export function ConfirmPanel({
   const skipped = summary ? (Object.entries(summary.skipped) as [SkipReason, number][]).filter(([, n]) => n > 0) : []
 
   return (
-    <div style={{ ...CARD, padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px', borderColor: 'rgba(201,169,110,0.35)' }}>
+    <div style={{ ...CARD, padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px', borderColor: 'color-mix(in srgb, var(--gold-2) 35%, transparent)' }}>
       <div>
         <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Confirmar open house</div>
         <div style={{ ...HINT, marginTop: '4px' }}>
@@ -75,7 +75,7 @@ export function ConfirmPanel({
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                <strong style={{ fontSize: '20px', color: 'var(--accent-gold)' }}>{summary.toSend}</strong>{' '}
+                <strong style={{ fontSize: '20px', color: 'var(--gold-2)' }}>{summary.toSend}</strong>{' '}
                 de {summary.total} leads recibirían el anuncio
               </div>
               {Object.keys(summary.byLanguage).length > 0 && (

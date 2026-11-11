@@ -1,18 +1,18 @@
 'use client'
 
 import Image from 'next/image'
+import Link from 'next/link'
 
 import { useState } from 'react'
 import { Building2, Plus, ExternalLink, Globe, Sparkles } from 'lucide-react'
 import type { Property, PropertyStatus } from '@/lib/data/properties'
 import type { TenantRole } from '@/lib/auth/tenant-context'
 import { generatePropertyFromPdf } from './ai-actions'
-import { PropertyFormModal, TYPE_LABELS, STATUS_CONFIG, type AiInit } from './property-form-modal'
+import { PropertyFormModal, type AiInit } from './property-form-modal'
+import { TYPE_LABELS, STATUS_CONFIG } from './property-labels'
 import { AiCreateModal } from './ai-create-modal'
-import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
-import { PageHeader } from '@/components/ui/page-header'
 
-// Lista de propiedades: tarjetas clickeables → detalle. El formulario de
+// Lista de propiedades: pestañas por estado y tarjetas que abren el detalle. El formulario de
 // crear/editar vive en property-form-modal.tsx (compartido con el detalle).
 
 type FilterTab = 'all' | PropertyStatus
@@ -43,7 +43,6 @@ type ModalState = { aiInit?: AiInit | null; error?: string | null }
 
 export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
   const isSuperAdmin = viewerRole === 'super_admin'
-  const { navigate, pending: navPending } = useCardNavigation()
 
   const [tab, setTab]     = useState<FilterTab>('all')
   const [modal, setModal] = useState<ModalState | null>(null)
@@ -71,285 +70,69 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
     return { ok: true }
   }
 
+  const countFor = (t: FilterTab) => t === 'all' ? properties.length : properties.filter(p => p.status === t).length
+
   return (
     <>
-      <NavLoadingOverlay show={navPending} />
-      <style>{`
-        @keyframes prop-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        .prop-card { animation: prop-rise 0.45s cubic-bezier(0.22,1,0.36,1) both; transition: border-color 0.2s, box-shadow 0.3s, transform 0.3s cubic-bezier(0.22,1,0.36,1); }
-        .prop-card:hover { border-color: var(--border-hover) !important; box-shadow: var(--highlight-top), var(--shadow-md); transform: translateY(-3px); }
-        .prop-card:hover .prop-cover { transform: scale(1.04); }
-        .prop-cover { transition: transform 0.5s cubic-bezier(0.22,1,0.36,1); }
-        @media (prefers-reduced-motion: reduce) { .prop-card, .prop-cover { animation: none !important; transition: none !important; } }
-        .tab-btn { transition: background var(--dur-fast), color var(--dur-fast); }
-      `}</style>
-
-      {/* Header */}
-      <PageHeader
-        title="Propiedades"
-        description={`${properties.length} ${properties.length === 1 ? 'propiedad' : 'propiedades'} en el inventario`}
-        actions={
-          <>
-            {/* Crear con IA — abre el popup (PDF + idiomas). */}
-            {AI_ENABLED && (
-              <button
-                onClick={() => setShowAiModal(true)}
-                title="Sube el PDF del listado y la IA prellena el formulario"
-                className="btn btn-ghost"
-              >
-                <Sparkles size={14} color="var(--accent-gold)" />
-                Crear con IA
-              </button>
-            )}
-            <button onClick={() => openModal({})} className="btn btn-primary btn-cta">
-              <Plus size={14} />
-              Nueva propiedad
+      <div className="toolbar">
+        <div className="filter-tabs filter-tabs-fit" role="tablist" aria-label="Estado de la propiedad">
+          {TABS.map(t => (
+            <button
+              key={t.value}
+              type="button"
+              role="tab"
+              className="filter-tab"
+              aria-selected={tab === t.value}
+              onClick={() => setTab(t.value)}
+            >
+              {t.label}
+              <span className="filter-tab-count">{countFor(t.value)}</span>
             </button>
-          </>
-        }
-      />
-
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {TABS.map(t => (
-          <button
-            key={t.value}
-            className="tab-btn"
-            onClick={() => setTab(t.value)}
-            style={{
-              padding: '6px 14px', fontSize: '12px', fontWeight: 500,
-              borderRadius: '8px', border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-              background: tab === t.value ? 'var(--accent-gold)' : 'var(--bg-surface)',
-              color:      tab === t.value ? 'var(--bg-base)'     : 'var(--text-secondary)',
-            }}
-          >
-            {t.label}
-            {t.value !== 'all' && (
-              <span style={{ marginLeft: '6px', opacity: 0.7 }}>
-                ({properties.filter(p => p.status === t.value).length})
-              </span>
-            )}
+          ))}
+        </div>
+        <div className="toolbar-group">
+          {/* Crear con IA — abre el popup (PDF + idiomas). */}
+          {AI_ENABLED && (
+            <button
+              type="button"
+              onClick={() => setShowAiModal(true)}
+              title="Sube el PDF del listado y la IA prellena el formulario"
+              className="btn btn-ghost"
+            >
+              <Sparkles size={14} className="text-gold" aria-hidden="true" />
+              Crear con IA
+            </button>
+          )}
+          <button type="button" onClick={() => openModal({})} className="btn btn-primary btn-cta">
+            <Plus size={14} aria-hidden="true" />
+            Nueva propiedad
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* Empty state */}
-      {filtered.length === 0 && (
-        <div style={{
-          background: 'var(--bg-surface)', border: '1px dashed rgba(255,255,255,0.1)',
-          borderRadius: '12px', padding: '64px 48px', textAlign: 'center',
-        }}>
-          <div style={{
-            width: '40px', height: '40px', borderRadius: '10px',
-            background: 'rgba(201,169,110,0.1)', margin: '0 auto 16px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Building2 size={18} color="var(--accent-gold)" />
-          </div>
-          <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '8px' }}>
-            Sin propiedades
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '360px', margin: '0 auto 20px' }}>
-            {tab === 'all'
-              ? 'Agrega la primera propiedad del inventario de la agencia.'
-              : `No hay propiedades con estado "${STATUS_CONFIG[tab as PropertyStatus]?.label ?? tab}".`}
-          </div>
+      {filtered.length === 0 ? (
+        <div className="empty-card">
+          <span className="empty-card-icon" aria-hidden="true"><Building2 size={18} /></span>
+          {tab === 'all'
+            ? 'Todavía no hay propiedades en el inventario.'
+            : `No hay propiedades con estado "${STATUS_CONFIG[tab as PropertyStatus]?.label ?? tab}".`}
           {tab === 'all' && (
-            <button
-              onClick={() => openModal({})}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '9px 18px', fontSize: '13px', fontWeight: 500,
-                background: 'var(--accent-gold)', color: 'var(--bg-base)',
-                borderRadius: '8px', border: 'none', cursor: 'pointer',
-              }}
-            >
-              <Plus size={13} />
+            <button type="button" onClick={() => openModal({})} className="btn btn-primary">
+              <Plus size={13} aria-hidden="true" />
               Agregar propiedad
             </button>
           )}
         </div>
-      )}
-
-      {/* Property grid */}
-      {filtered.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
-          {filtered.map((prop, i) => {
-            const status = STATUS_CONFIG[prop.status]
-            return (
-              <div
-                key={prop.id}
-                className="prop-card"
-                role="link"
-                tabIndex={0}
-                onClick={() => navigate(`/properties/${prop.id}`)}
-                onKeyDown={e => { if (e.key === 'Enter') navigate(`/properties/${prop.id}`) }}
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  padding: '20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  cursor: 'pointer',
-                  overflow: 'hidden',
-                  animationDelay: `${Math.min(i * 45, 360)}ms`,
-                }}
-              >
-                {/* Cover preview — bleeds over the card padding to the rounded top edge */}
-                {prop.imageUrl ? (
-                  // La portada mide 160 px de alto en una tarjeta de ~300 px de
-                  // ancho: `sizes` es lo que hace que se baje esa variante y no
-                  // la foto original de varios cientos de kB.
-                  <div
-                    style={{
-                      position: 'relative',
-                      margin: '-20px -20px 0',
-                      width: 'calc(100% + 40px)',
-                      height: '160px',
-                      borderRadius: '11px 11px 0 0',
-                      borderBottom: '1px solid var(--border-subtle)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Image
-                      className="prop-cover"
-                      src={prop.imageUrl}
-                      alt={`Portada de ${prop.address}`}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 340px"
-                      style={{ objectFit: 'cover' }}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      margin: '-20px -20px 0',
-                      width: 'calc(100% + 40px)',
-                      height: '160px',
-                      borderRadius: '11px 11px 0 0',
-                      borderBottom: '1px solid var(--border-subtle)',
-                      background: 'var(--bg-elevated)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <Building2 size={28} strokeWidth={1.2} />
-                  </div>
-                )}
-
-                {/* Top: address + status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>
-                      {prop.address}
-                    </div>
-                    {prop.city && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {prop.city}
-                      </div>
-                    )}
-                  </div>
-                  <span style={{
-                    flexShrink: 0, fontSize: '10px', fontWeight: 500, padding: '2px 8px',
-                    borderRadius: '10px', letterSpacing: '0.06em', textTransform: 'uppercase',
-                    color: status.color, background: status.bg,
-                  }}>
-                    {status.label}
-                  </span>
-                </div>
-
-                {/* Badges: type + MLS */}
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <span style={{
-                    fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '4px',
-                    background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-                    letterSpacing: '0.04em',
-                  }}>
-                    {TYPE_LABELS[prop.propertyType]}
-                  </span>
-                  {prop.mlsNumber && (
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      MLS #{prop.mlsNumber}
-                    </span>
-                  )}
-                  {prop.publishedToWeb && (
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '3px',
-                      fontSize: '10px', fontWeight: 500, padding: '2px 7px', borderRadius: '4px',
-                      background: 'rgba(107,163,104,0.12)', color: 'var(--accent-green)',
-                      letterSpacing: '0.04em',
-                    }}>
-                      <Globe size={10} /> Web
-                    </span>
-                  )}
-                </div>
-
-                {/* Price */}
-                {prop.listPrice !== null && (
-                  <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--accent-gold)', letterSpacing: '-0.02em' }}>
-                    {fmtPrice(prop.listPrice)}
-                  </div>
-                )}
-
-                {/* Details row */}
-                {(prop.bedrooms !== null || prop.bathrooms !== null || prop.sqft !== null) && (
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {prop.bedrooms   !== null && <span>{prop.bedrooms} hab.</span>}
-                    {prop.bathrooms  !== null && <span>{prop.bathrooms} baños</span>}
-                    {prop.sqft       !== null && <span>{prop.sqft.toLocaleString('en-US')} sqft</span>}
-                    {prop.yearBuilt  !== null && <span>{prop.yearBuilt}</span>}
-                  </div>
-                )}
-
-                {/* Author + tenant */}
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {(prop.createdByAgentName || prop.createdByUserId) && (
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Agregada por {prop.createdByAgentName ?? 'Propietario'}
-                    </span>
-                  )}
-                  {isSuperAdmin && prop.tenantName && (
-                    <span style={{
-                      fontSize: '10px', padding: '1px 6px', borderRadius: '4px',
-                      background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
-                    }}>
-                      {prop.tenantName}
-                    </span>
-                  )}
-                </div>
-
-                {/* Footer: external link + abrir detalle */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                  <div>
-                    {prop.externalUrl && (
-                      <a
-                        href={prop.externalUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: '4px',
-                          fontSize: '11px', color: 'var(--accent-blue)', textDecoration: 'none',
-                        }}
-                      >
-                        <ExternalLink size={11} />
-                        Ver listado
-                      </a>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Abrir detalle →</span>
-                </div>
-              </div>
-            )
-          })}
+      ) : (
+        <div className="prop-grid">
+          {filtered.map((prop, i) => (
+            <PropertyCard
+              key={prop.id}
+              prop={prop}
+              showTenant={isSuperAdmin}
+              delayMs={Math.min(i * 45, 360)}
+            />
+          ))}
         </div>
       )}
 
@@ -376,5 +159,83 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
         />
       )}
     </>
+  )
+}
+
+// Tarjeta de la lista. El título es el enlace al detalle y su ::after cubre la
+// tarjeta entera (clic en cualquier parte); el enlace externo queda por encima.
+function PropertyCard({ prop, showTenant, delayMs }: { prop: Property; showTenant: boolean; delayMs: number }) {
+  const status = STATUS_CONFIG[prop.status]
+  const specs = [
+    prop.bedrooms  !== null ? `${prop.bedrooms} hab.` : null,
+    prop.bathrooms !== null ? `${prop.bathrooms} baños` : null,
+    prop.sqft      !== null ? `${prop.sqft.toLocaleString('en-US')} sqft` : null,
+    prop.yearBuilt !== null ? String(prop.yearBuilt) : null,
+  ].filter((s): s is string => !!s)
+
+  return (
+    <article className="prop-card" style={{ animationDelay: `${delayMs}ms` }}>
+      <div className="prop-cover">
+        {prop.imageUrl ? (
+          // La portada mide 160 px de alto en una tarjeta de ~300 px de
+          // ancho: `sizes` es lo que hace que se baje esa variante y no
+          // la foto original de varios cientos de kB.
+          <Image
+            src={prop.imageUrl}
+            alt=""
+            fill
+            sizes="(max-width: 768px) 100vw, 340px"
+            className="prop-cover-img"
+          />
+        ) : (
+          <Building2 size={28} strokeWidth={1.2} aria-hidden="true" />
+        )}
+      </div>
+
+      <div className="prop-card-body">
+        <div className="prop-card-top">
+          <div className="prop-who">
+            <Link href={`/properties/${prop.id}`} className="prop-title">
+              {prop.address}
+            </Link>
+            {prop.city && <div className="prop-sub">{prop.city}</div>}
+          </div>
+          <span className="pill" style={{ '--tone': status.color } as React.CSSProperties}>
+            {status.label}
+          </span>
+        </div>
+
+        <div className="prop-tags">
+          <span className="pill pill-xs pill-square" data-tone="mute">{TYPE_LABELS[prop.propertyType]}</span>
+          {prop.publishedToWeb && (
+            <span className="pill pill-xs pill-square" style={{ '--tone': 'var(--gold-2)' } as React.CSSProperties}>
+              <Globe size={10} aria-hidden="true" /> Web
+            </span>
+          )}
+          {prop.mlsNumber && <span>MLS #{prop.mlsNumber}</span>}
+          {showTenant && prop.tenantName && <span className="text-gold">{prop.tenantName}</span>}
+        </div>
+
+        {prop.listPrice !== null && <div className="prop-price">{fmtPrice(prop.listPrice)}</div>}
+
+        {specs.length > 0 && (
+          <div className="prop-specs">
+            {specs.map(s => <span key={s}>{s}</span>)}
+          </div>
+        )}
+
+        <div className="prop-foot">
+          <span>
+            {(prop.createdByAgentName || prop.createdByUserId) && <>Agregada por {prop.createdByAgentName ?? 'Propietario'}</>}
+          </span>
+          {prop.externalUrl && (
+            <a href={prop.externalUrl} target="_blank" rel="noopener noreferrer" className="prop-link">
+              <ExternalLink size={11} aria-hidden="true" />
+              Ver listado
+            </a>
+          )}
+        </div>
+      </div>
+    </article>
   )
 }

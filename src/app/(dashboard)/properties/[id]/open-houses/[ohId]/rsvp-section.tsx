@@ -35,7 +35,7 @@ export function RsvpSection({ rsvps, eventStarted }: { rsvps: OpenHouseRsvp[]; e
                 <Link href={`/leads/${r.leadId}`} style={{ fontSize: '13px', color: 'var(--text-primary)', textDecoration: 'none' }}>{r.leadName}</Link>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{r.leadEmail ?? ''}</div>
               </div>
-              <span style={{ fontSize: '12px', color: r.response === 'yes' ? 'var(--accent-green)' : 'var(--text-muted)', minWidth: '90px' }}>
+              <span style={{ fontSize: '12px', color: r.response === 'yes' ? 'var(--gold-1)' : 'var(--text-muted)', minWidth: '90px' }}>
                 {r.response === 'yes' ? `Asistirá${r.guests ? ` +${r.guests}` : ''}` : 'No puede'}
               </span>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', minWidth: '50px' }}>{SOURCE_LABEL[r.source]}</span>

@@ -1,10 +1,15 @@
+import { Suspense } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getProperties } from '@/lib/data/properties'
 import { PropertiesClient } from './properties-client'
+import { PropertiesListSkeleton } from './properties-skeleton'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { PageHeader } from '@/components/ui/page-header'
 
-async function PropertiesPage() {
+// Lo que lee la sesión o la base vive aquí, detrás del Suspense de
+// PropertiesPage: la cabecera sale del shell estático.
+async function PropertiesContent() {
   const ctx = await requireTenantContext()
   const { tenant_id, role } = ctx
   // Picker de tenant en el modal: solo super_admin SIN selección (hoy
@@ -32,6 +37,20 @@ async function PropertiesPage() {
       tenants={tenants}
       viewerRole={role}
     />
+  )
+}
+
+function PropertiesPage() {
+  return (
+    <>
+      <PageHeader
+        title="Propiedades"
+        hint="El inventario de la agencia. Cada propiedad puede tener su página pública y sus open houses; ábrela para editarla, publicarla o programar uno."
+      />
+      <Suspense fallback={<PropertiesListSkeleton />}>
+        <PropertiesContent />
+      </Suspense>
+    </>
   )
 }
 

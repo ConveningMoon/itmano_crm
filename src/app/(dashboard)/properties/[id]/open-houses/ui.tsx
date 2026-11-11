@@ -22,7 +22,7 @@ export const LABEL: React.CSSProperties = {
 
 export const BTN_PRIMARY: React.CSSProperties = {
   padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--accent-gold)', border: 'none', borderRadius: '8px', cursor: 'pointer',
+  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
 }
 
 export const BTN_GHOST: React.CSSProperties = {
@@ -31,26 +31,26 @@ export const BTN_GHOST: React.CSSProperties = {
 }
 
 export const BTN_DANGER: React.CSSProperties = {
-  ...BTN_GHOST, color: 'var(--accent-coral)', borderColor: 'rgba(201,123,107,0.35)',
+  ...BTN_GHOST, color: 'var(--alert)', borderColor: 'color-mix(in srgb, var(--alert) 35%, transparent)',
 }
 
 export const HINT: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }
 export const ERROR: React.CSSProperties = { fontSize: '12px', color: 'var(--alert)', lineHeight: 1.5 }
-export const WARN: React.CSSProperties  = { fontSize: '12px', color: 'var(--accent-gold)', lineHeight: 1.5 }
+export const WARN: React.CSSProperties  = { fontSize: '12px', color: 'var(--gold-2)', lineHeight: 1.5 }
 
 const STATE_COLOR: Record<OpenHouseDisplayState, { color: string; bg: string }> = {
   draft:     { color: 'var(--text-muted)',    bg: 'var(--bg-elevated)' },
-  scheduled: { color: 'var(--accent-teal)',   bg: 'rgba(90,175,160,0.12)' },
-  cancelled: { color: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.12)' },
+  scheduled: { color: 'var(--gold-2)',   bg: 'color-mix(in srgb, var(--gold-2) 12%, transparent)' },
+  cancelled: { color: 'var(--text-muted)',    bg: 'var(--bg-elevated)' },
   finished:  { color: 'var(--text-secondary)', bg: 'var(--bg-elevated)' },
 }
 
 const EMAIL_STATUS_COLOR: Record<OpenHouseEmailStatus, { color: string; bg: string }> = {
-  pending:   { color: 'var(--accent-blue)',   bg: 'rgba(91,142,201,0.12)' },
-  sending:   { color: 'var(--accent-gold)',   bg: 'rgba(201,169,110,0.12)' },
-  sent:      { color: 'var(--accent-green)',  bg: 'rgba(107,163,104,0.12)' },
+  pending:   { color: 'var(--gold-3)',   bg: 'color-mix(in srgb, var(--gold-3) 14%, transparent)' },
+  sending:   { color: 'var(--gold-2)',   bg: 'color-mix(in srgb, var(--gold-2) 12%, transparent)' },
+  sent:      { color: 'var(--gold-1)',  bg: 'color-mix(in srgb, var(--gold-1) 12%, transparent)' },
   cancelled: { color: 'var(--text-muted)',    bg: 'var(--bg-elevated)' },
-  failed:    { color: 'var(--accent-coral)',  bg: 'rgba(201,123,107,0.12)' },
+  failed:    { color: 'var(--alert)',  bg: 'color-mix(in srgb, var(--alert) 12%, transparent)' },
 }
 
 const CHIP: React.CSSProperties = {
