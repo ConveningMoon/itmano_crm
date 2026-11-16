@@ -21,9 +21,9 @@ import { DataBlock, DataHead, DataScope, type DataColumn } from '@/components/ui
 
 // Color de cada semáforo de salud (token, no hex): lo consume .pill vía --tone.
 const HEALTH_TONE: Record<'ok' | 'warn' | 'bad' | 'mute', string> = {
-  ok:   'var(--accent-green)',
-  warn: 'var(--accent-gold)',
-  bad:  'var(--accent-coral)',
+  ok:   'var(--gold-1)',
+  warn: 'var(--gold-2)',
+  bad:  'var(--alert)',
   mute: 'var(--text-muted)',
 }
 import { createLeadMagnet, createEvent, createContactForm, deleteChannelPermanently } from './actions'
@@ -79,7 +79,7 @@ function NoPageModal({ open, channelName, managedByItmano, onClose }: {
     <ModalShell open={open} onClose={onClose} maxWidth={440}>
       <div style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <AlertTriangle size={16} style={{ color: 'var(--accent-gold)' }} />
+          <AlertTriangle size={16} style={{ color: 'var(--gold-2)' }} />
           Página sin configurar
         </div>
         <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
@@ -209,7 +209,7 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
           <span>{typeLabel}</span>
           <span title="Agente responsable"><UserRound size={12} />{ch.agentName ?? 'Toda la agencia'}</span>
           {ch.emailSequenceId && (
-            <span title="Secuencia de emails activa" style={{ color: 'var(--accent-teal)' }}>
+            <span title="Secuencia de emails activa" style={{ color: 'var(--gold-2)' }}>
               <Mail size={12} />Secuencia
             </span>
           )}
@@ -266,7 +266,7 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
       </span>
 
       {/* Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió. */}
-      <span className="dt-num dt-hide-sm dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+      <span className="dt-num dt-hide-sm dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--gold-2)' : 'var(--text-muted)' }}>
         {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
       </span>
 
@@ -367,7 +367,7 @@ const BTN_PRIMARY: React.CSSProperties = {
   fontSize: '13px',
   fontWeight: 500,
   color: 'var(--bg-base)',
-  background: 'var(--accent-gold)',
+  background: 'var(--gold-2)',
   border: 'none',
   borderRadius: '8px',
   cursor: 'pointer',
@@ -498,7 +498,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: 
           <FormSection title="Básico" first>
           {isSuperAdmin && (
             <div>
-              <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <label style={LABEL}>Tenant <span className="form-required">*</span></label>
               <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
@@ -527,7 +527,7 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: 
           </FormSection>
 
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--alert)', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -618,7 +618,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
           <FormSection title="Básico" first>
           {isSuperAdmin && (
             <div>
-              <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <label style={LABEL}>Tenant <span className="form-required">*</span></label>
               <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
@@ -638,7 +638,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
           <AgentSelect agents={visibleAgents} value={agentId} onChange={setAgentId} locked={myAgentId !== null} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <label style={LABEL}>Fecha del evento <span className="form-required">*</span></label>
               <input value={eventDate} onChange={e => setEventDate(e.target.value)} style={INPUT} type="date" />
             </div>
             <div>
@@ -649,7 +649,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
           </FormSection>
 
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--alert)', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -737,7 +737,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }:
           <FormSection title="Básico" first>
           {isSuperAdmin && (
             <div>
-              <label style={LABEL}>Tenant <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <label style={LABEL}>Tenant <span className="form-required">*</span></label>
               <select value={tenantId} onChange={e => { setTenantId(e.target.value); setAgentId('') }} style={{ ...INPUT, appearance: 'none', cursor: 'pointer' }}>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
@@ -758,7 +758,7 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }:
           </FormSection>
 
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--alert)', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -814,7 +814,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
       }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={16} style={{ color: 'var(--accent-coral)' }} />
+            <AlertTriangle size={16} style={{ color: 'var(--alert)' }} />
             Eliminar permanentemente
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
@@ -829,8 +829,8 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
 
           <div style={{
             padding: '12px 14px',
-            background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--accent-coral) 20%, transparent)',
+            background: 'color-mix(in srgb, var(--alert) 8%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--alert) 20%, transparent)',
             borderRadius: '8px',
             fontSize: '12px',
             color: 'var(--text-secondary)',
@@ -840,7 +840,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
           </div>
 
           <div>
-            <label style={LABEL}>Escribe <code style={{ color: 'var(--accent-coral)', fontFamily: 'monospace', textTransform: 'none', letterSpacing: 0 }}>ELIMINAR</code> para confirmar</label>
+            <label style={LABEL}>Escribe <code style={{ color: 'var(--alert)', fontFamily: 'monospace', textTransform: 'none', letterSpacing: 0 }}>ELIMINAR</code> para confirmar</label>
             <input
               value={confirmText}
               onChange={e => setConfirmText(e.target.value)}
@@ -851,7 +851,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '6px 10px', background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--alert)', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -866,7 +866,7 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
                 fontSize: '13px',
                 fontWeight: 500,
                 color: 'var(--bg-base)',
-                background: 'var(--accent-coral)',
+                background: 'var(--alert)',
                 border: 'none',
                 borderRadius: '8px',
                 cursor: (!canDelete || pending) ? 'default' : 'pointer',

@@ -69,10 +69,10 @@ async function ChannelDetailPage({
 
   const typeLabel  = CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType
   const typeColor  = {
-    lead_magnet:   'var(--accent-gold)',
-    event:         'var(--accent-teal)',
-    contact_form:  'var(--accent-blue)',
-    manychat_flow: 'var(--accent-green)',
+    lead_magnet:   'var(--gold-2)',
+    event:         'var(--gold-2)',
+    contact_form:  'var(--gold-1)',
+    manychat_flow: 'var(--gold-1)',
     manual:        'var(--text-muted)',
   }[channel.channelType] ?? 'var(--text-muted)'
 
@@ -111,8 +111,8 @@ async function ChannelDetailPage({
             <span style={{
               fontSize: '10px',
               fontWeight: 500,
-              color: channel.active ? 'var(--accent-green)' : 'var(--text-muted)',
-              background: channel.active ? 'rgba(107,163,104,0.12)' : 'var(--bg-overlay)',
+              color: channel.active ? 'var(--gold-1)' : 'var(--text-muted)',
+              background: channel.active ? 'color-mix(in srgb, var(--gold-1) 12%, transparent)' : 'var(--bg-overlay)',
               padding: '2px 8px',
               borderRadius: '10px',
               letterSpacing: '0.06em',
@@ -166,7 +166,7 @@ async function ChannelDetailPage({
           <div style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
             {channel.metrics.leadsTotal}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--gold-2)', display: 'flex', alignItems: 'center', gap: '3px' }}>
             Ver leads <ArrowRight size={10} />
           </div>
         </Link>
@@ -186,7 +186,7 @@ async function ChannelDetailPage({
         ))}
       </div>
 
-      <style>{`.metric-link:hover { border-color: var(--accent-gold) !important; }`}</style>
+      <style>{`.metric-link:hover { border-color: var(--gold-2) !important; }`}</style>
 
       {/* Submissions — expandable Q&A list */}
       <SubmissionsList submissions={submissions} channelType={channel.channelType} />
@@ -208,7 +208,7 @@ async function ChannelDetailPage({
               agentName={channel.agentName}
             />
           ) : (
-            <div style={{ background: 'var(--bg-surface)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '12px', padding: '40px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+            <div style={{ background: 'var(--bg-surface)', border: '1px dashed color-mix(in srgb, var(--text-primary) 10%, transparent)', borderRadius: '12px', padding: '40px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
               Este tipo de canal no usa una página propia.
             </div>
           )

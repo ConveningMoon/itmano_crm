@@ -101,7 +101,7 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
               <Radio size={12} />{plural(seq.channels.length, 'fuente', 'fuentes')}
             </span>
             {seq.activeRunCount > 0 && (
-              <span title="Leads recorriendo la secuencia ahora" style={{ color: 'var(--accent-gold)' }}>
+              <span title="Leads recorriendo la secuencia ahora" style={{ color: 'var(--gold-2)' }}>
                 <Play size={12} />{plural(seq.activeRunCount, 'activo', 'activos')}
               </span>
             )}
@@ -131,7 +131,7 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
         {/* Enviados — el open rate no está a propósito: Apple Mail precarga los
             píxeles y lo infla (ver CLAUDE.md). */}
         <div className="dt-hide-sm dt-r" style={{ textAlign: 'right' }}>
-          <span className="dt-num" style={{ color: (m?.totalSends ?? 0) > 0 ? 'var(--accent-gold)' : 'var(--text-muted)' }}>
+          <span className="dt-num" style={{ color: (m?.totalSends ?? 0) > 0 ? 'var(--gold-2)' : 'var(--text-muted)' }}>
             {m?.totalSends ?? 0}
           </span>
           {m && m.uniqueLeads > 0 && <span className="dt-sub">{plural(m.uniqueLeads, 'lead', 'leads')}</span>}
@@ -142,7 +142,7 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
           className="dt-hide-sm"
           style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}
         >
-          <RateMeter label="Clics" value={m?.clickRate ?? 0} tone="var(--accent-blue)" />
+          <RateMeter label="Clics" value={m?.clickRate ?? 0} tone="var(--gold-1)" />
           <span className="dt-hide-md" style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
             {m?.replyRate ?? 0}% respuestas
           </span>

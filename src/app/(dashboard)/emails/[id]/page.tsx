@@ -17,15 +17,15 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {
-  es: 'var(--accent-gold)',
-  en: 'var(--accent-blue)',
-  pt: 'var(--accent-teal)',
+  es: 'var(--gold-2)',
+  en: 'var(--gold-1)',
+  pt: 'var(--gold-2)',
 }
 
 const RUN_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  active:    { label: 'Activo',     color: 'var(--accent-gold)',  bg: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)' },
-  completed: { label: 'Completado', color: 'var(--accent-green)', bg: 'color-mix(in srgb, var(--accent-green) 12%, transparent)' },
-  cancelled: { label: 'Cancelado',  color: 'var(--accent-coral)', bg: 'color-mix(in srgb, var(--accent-coral) 12%, transparent)' },
+  active:    { label: 'Activo',     color: 'var(--gold-2)',  bg: 'color-mix(in srgb, var(--gold-2) 12%, transparent)' },
+  completed: { label: 'Completado', color: 'var(--gold-1)', bg: 'color-mix(in srgb, var(--gold-1) 12%, transparent)' },
+  cancelled: { label: 'Cancelado',  color: 'var(--text-secondary)', bg: 'var(--bg-overlay)' },
   paused:    { label: 'Pausado',    color: 'var(--text-muted)',    bg: 'var(--bg-elevated)'     },
 }
 
@@ -42,9 +42,9 @@ const CANCEL_LABEL: Record<string, string> = {
 // Cómo se activa la secuencia. 'tag' (117) es un correo obligatorio: no se
 // lanza, se dispara al etiquetar un lead.
 const ACTIVATION_BADGE: Record<'form' | 'manual' | 'tag', { label: string; color: string; bg: string }> = {
-  form:   { label: 'Formulario', color: 'var(--accent-teal)', bg: 'color-mix(in srgb, var(--accent-teal) 12%, transparent)' },
-  manual: { label: 'Manual',     color: 'var(--accent-blue)', bg: 'color-mix(in srgb, var(--accent-blue) 12%, transparent)' },
-  tag:    { label: 'Etiqueta',   color: 'var(--accent-gold)', bg: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)' },
+  form:   { label: 'Formulario', color: 'var(--gold-2)', bg: 'color-mix(in srgb, var(--gold-2) 12%, transparent)' },
+  manual: { label: 'Manual',     color: 'var(--gold-1)', bg: 'color-mix(in srgb, var(--gold-1) 12%, transparent)' },
+  tag:    { label: 'Etiqueta',   color: 'var(--gold-2)', bg: 'color-mix(in srgb, var(--gold-2) 12%, transparent)' },
 }
 
 function formatDate(iso: string) {
@@ -60,7 +60,7 @@ function EmailMetricsSkeleton() {
       borderRadius: '12px', overflow: 'hidden', marginBottom: '20px',
     }}>
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Send size={14} color="var(--accent-gold)" />
+        <Send size={14} color="var(--gold-2)" />
         <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           Métricas de envío
         </span>
@@ -165,8 +165,8 @@ async function EmailSequenceDetailPage({
             <span style={{
               fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
               letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: sequence.active ? 'var(--accent-green)' : 'var(--text-muted)',
-              background: sequence.active ? 'color-mix(in srgb, var(--accent-green) 12%, transparent)' : 'var(--bg-elevated)',
+              color: sequence.active ? 'var(--gold-1)' : 'var(--text-muted)',
+              background: sequence.active ? 'color-mix(in srgb, var(--gold-1) 12%, transparent)' : 'var(--bg-elevated)',
             }}>
               {sequence.active ? 'Activa' : 'Inactiva'}
             </span>
@@ -188,7 +188,7 @@ async function EmailSequenceDetailPage({
           </div>
           {isSuperAdmin && sequence.tenantName && (
             <div style={{ marginBottom: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 10%, transparent)', padding: '2px 8px', borderRadius: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 10%, transparent)', padding: '2px 8px', borderRadius: '4px' }}>
                 {sequence.tenantName}
               </span>
             </div>
@@ -216,9 +216,9 @@ async function EmailSequenceDetailPage({
       {/* Run stats */}
       <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '24px' }}>
         {[
-          { label: 'Runs activos',    value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--accent-gold)" />,  color: 'var(--accent-gold)' },
-          { label: 'Completados',      value: sequence.completedRunCount, icon: <CheckCircle size={14} color="var(--accent-green)" />, color: 'var(--accent-green)' },
-          { label: 'Cancelados',       value: sequence.cancelledRunCount, icon: <XCircle size={14} color="var(--accent-coral)" />,   color: 'var(--accent-coral)' },
+          { label: 'Runs activos',    value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--gold-2)" />,  color: 'var(--gold-2)' },
+          { label: 'Completados',      value: sequence.completedRunCount, icon: <CheckCircle size={14} color="var(--gold-1)" />, color: 'var(--gold-1)' },
+          { label: 'Cancelados',       value: sequence.cancelledRunCount, icon: <XCircle size={14} color="var(--text-secondary)" />,   color: 'var(--text-secondary)' },
         ].map(stat => (
           <div key={stat.label} style={{
             background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
@@ -254,7 +254,7 @@ async function EmailSequenceDetailPage({
         {sequence.channels.length === 0 ? (
           <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
             Esta secuencia no está vinculada a ningún canal.{' '}
-            <Link href="/sources" style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>
+            <Link href="/sources" style={{ color: 'var(--gold-2)', textDecoration: 'none' }}>
               Vincúlala desde Fuentes →
             </Link>
           </div>
@@ -265,8 +265,8 @@ async function EmailSequenceDetailPage({
                 key={ch.id}
                 href={`/sources/${ch.slug}`}
                 style={{
-                  fontSize: '12px', color: 'var(--accent-gold)',
-                  background: 'color-mix(in srgb, var(--accent-gold) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-gold) 20%, transparent)',
+                  fontSize: '12px', color: 'var(--gold-2)',
+                  background: 'color-mix(in srgb, var(--gold-2) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 20%, transparent)',
                   borderRadius: '6px', padding: '4px 10px', textDecoration: 'none',
                 }}
               >
@@ -281,7 +281,7 @@ async function EmailSequenceDetailPage({
       {sequence.activationType === 'manual' && (
         <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <UserPlus size={14} color="var(--accent-blue)" />
+            <UserPlus size={14} color="var(--gold-1)" />
             <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
               Agregar leads manualmente
             </span>

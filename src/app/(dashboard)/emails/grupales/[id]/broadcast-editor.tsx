@@ -34,9 +34,9 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
       aria-pressed={active}
       style={{
         padding: '5px 12px', fontSize: '12px', borderRadius: '999px', cursor: 'pointer',
-        color: active ? 'var(--accent-gold)' : 'var(--text-secondary)',
-        background: active ? 'rgba(201,169,110,0.1)' : 'transparent',
-        border: `1px solid ${active ? 'rgba(201,169,110,0.35)' : 'var(--border-subtle)'}`,
+        color: active ? 'var(--gold-2)' : 'var(--text-secondary)',
+        background: active ? 'color-mix(in srgb, var(--gold-2) 10%, transparent)' : 'transparent',
+        border: `1px solid ${active ? 'color-mix(in srgb, var(--gold-2) 35%, transparent)' : 'var(--border-subtle)'}`,
       }}
     >
       {children}
@@ -482,7 +482,7 @@ export function BroadcastEditor({ broadcast, tags, agents, channels, postalAddre
               {audience.mode === 'segment' && audience.excludedLeadIds.length > 0 && (
                 <div style={{ ...HINT, marginTop: '6px' }}>
                   {audience.excludedLeadIds.length} quitados a mano.{' '}
-                  <button type="button" onClick={() => setAudience({ ...audience, excludedLeadIds: [] })} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-gold)', fontSize: '12px', cursor: 'pointer' }}>Volver a incluirlos</button>
+                  <button type="button" onClick={() => setAudience({ ...audience, excludedLeadIds: [] })} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--gold-2)', fontSize: '12px', cursor: 'pointer' }}>Volver a incluirlos</button>
                 </div>
               )}
               {shownPreview.rows.length > 0 && (
@@ -530,8 +530,8 @@ export function BroadcastEditor({ broadcast, tags, agents, channels, postalAddre
           return (
             <div key={l} style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
               <span style={{ width: '84px', fontSize: '13px', color: 'var(--text-secondary)' }}>{LANG_LABEL[l] ?? l}</span>
-              <span style={{ flex: '1 1 200px', minWidth: 0, fontSize: '13px', color: c ? 'var(--text-primary)' : 'var(--accent-gold)' }}>
-                {c ? <><Check size={13} style={{ verticalAlign: '-2px', marginRight: '6px', color: 'var(--accent-teal)' }} />{c.subject}</> : 'Sin escribir'}
+              <span style={{ flex: '1 1 200px', minWidth: 0, fontSize: '13px', color: c ? 'var(--text-primary)' : 'var(--gold-2)' }}>
+                {c ? <><Check size={13} style={{ verticalAlign: '-2px', marginRight: '6px', color: 'var(--gold-2)' }} />{c.subject}</> : 'Sin escribir'}
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {c && (
@@ -585,7 +585,7 @@ export function BroadcastEditor({ broadcast, tags, agents, channels, postalAddre
 
       {/* Acciones */}
       <div style={SECTION}>
-        {notice && <div style={{ fontSize: '12px', color: 'var(--accent-teal)', marginBottom: '10px' }}>{notice}</div>}
+        {notice && <div style={{ fontSize: '12px', color: 'var(--gold-2)', marginBottom: '10px' }}>{notice}</div>}
         {error && <div style={{ ...ERROR, marginBottom: '10px' }}>{error}</div>}
         {blocker && <div style={{ ...HINT, marginBottom: '10px' }}>{blocker}</div>}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>

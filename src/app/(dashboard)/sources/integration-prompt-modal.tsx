@@ -36,7 +36,7 @@ export function IntegrationPromptModal({ title, prompt, onClose, onRegenerateSec
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.55)',
+      background: 'color-mix(in srgb, var(--bg-base) 55%, transparent)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: '20px',
     }}>
@@ -88,11 +88,11 @@ export function IntegrationPromptModal({ title, prompt, onClose, onRegenerateSec
               onClick={copy}
               style={{
                 position: 'absolute', top: '8px', right: '8px',
-                background: copied ? 'var(--accent-green)' : 'var(--bg-elevated)',
+                background: copied ? 'var(--gold-1)' : 'var(--bg-elevated)',
                 border: '1px solid var(--border-subtle)', borderRadius: '6px',
                 padding: '5px 10px', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '5px',
-                fontSize: '12px', color: copied ? '#fff' : 'var(--text-muted)',
+                fontSize: '12px', color: copied ? 'var(--bg-base)' : 'var(--text-muted)',
               }}
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -101,7 +101,7 @@ export function IntegrationPromptModal({ title, prompt, onClose, onRegenerateSec
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: '#E04040', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--alert)', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
               {error}
             </div>
           )}
@@ -113,8 +113,8 @@ export function IntegrationPromptModal({ title, prompt, onClose, onRegenerateSec
                 disabled={pending}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
-                  fontSize: '12px', color: 'var(--accent-coral)',
-                  background: 'transparent', border: '1px solid rgba(201,123,107,0.3)',
+                  fontSize: '12px', color: 'var(--alert)',
+                  background: 'transparent', border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
                   borderRadius: '6px', padding: '6px 12px', cursor: pending ? 'default' : 'pointer',
                   opacity: pending ? 0.6 : 1,
                 }}
@@ -127,7 +127,7 @@ export function IntegrationPromptModal({ title, prompt, onClose, onRegenerateSec
               onClick={onClose}
               style={{
                 padding: '9px 18px', fontSize: '13px', fontWeight: 500,
-                color: 'var(--bg-base)', background: 'var(--accent-gold)',
+                color: 'var(--bg-base)', background: 'var(--gold-2)',
                 border: 'none', borderRadius: '8px', cursor: 'pointer',
               }}
             >

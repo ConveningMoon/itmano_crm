@@ -111,7 +111,7 @@ export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
       {broadcasts.length === 0 ? (
         !senderError && (
           <div style={{ background: 'var(--bg-surface)', border: '1px dashed var(--border-hover)', borderRadius: '12px', padding: '56px 24px', textAlign: 'center' }}>
-            <Users size={20} color="var(--accent-gold)" style={{ marginBottom: '12px' }} />
+            <Users size={20} color="var(--gold-2)" style={{ marginBottom: '12px' }} />
             <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '6px' }}>
               Escríbele a un grupo de leads
             </div>
@@ -139,7 +139,7 @@ export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
                 <Link key={b.id} href={`/emails/grupales/${b.id}`} className="dt-grid dt-row" style={{ textDecoration: 'none' }}>
                   <div className="dt-hide-sm" aria-hidden="true" style={{
                     width: '30px', height: '30px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'var(--accent-gold)', background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)',
+                    color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
                   }}><Send size={14} /></div>
 
                   <div className="dt-cell-main">

@@ -27,7 +27,7 @@ const LABEL: React.CSSProperties = {
 }
 const BTN_PRIMARY: React.CSSProperties = {
   padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--accent-gold)', border: 'none', borderRadius: '8px', cursor: 'pointer',
+  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
 }
 const BTN_GHOST: React.CSSProperties = {
   padding: '7px 14px', fontSize: '12px', color: 'var(--text-muted)',
@@ -163,7 +163,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <div>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</div>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gold-2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</div>
         {hint && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px', lineHeight: 1.5 }}>{hint}</div>}
       </div>
       {children}
@@ -439,15 +439,15 @@ export function HostedPageEditor({
     }}>
       {/* Header */}
       <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <Globe size={16} color="var(--accent-gold)" />
+        <Globe size={16} color="var(--gold-2)" />
         <div style={{ flex: 1, minWidth: '200px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
             Página alojada
             <span style={{
               marginLeft: '10px', fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
               letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: active ? 'var(--accent-green)' : 'var(--text-muted)',
-              background: active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
+              color: active ? 'var(--gold-1)' : 'var(--text-muted)',
+              background: active ? 'color-mix(in srgb, var(--gold-1) 12%, transparent)' : 'var(--bg-elevated)',
             }}>
               {active ? 'Activa' : initial ? 'Desactivada' : 'Sin configurar'}
             </span>
@@ -469,9 +469,9 @@ export function HostedPageEditor({
           padding: '10px 20px', borderTop: '1px solid var(--border-subtle)',
           display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         }}>
-          <code style={{ fontSize: '12px', color: 'var(--accent-gold)', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{url}</code>
+          <code style={{ fontSize: '12px', color: 'var(--gold-2)', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{url}</code>
           <button onClick={copyUrl} title="Copiar URL" style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}>
-            {copied ? <Check size={12} color="var(--accent-green)" /> : <Copy size={12} />}
+            {copied ? <Check size={12} color="var(--gold-1)" /> : <Copy size={12} />}
             {copied ? 'Copiada' : 'Copiar'}
           </button>
           <a
@@ -502,7 +502,7 @@ export function HostedPageEditor({
           {/* IA + JSON */}
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-              <Sparkles size={14} color="var(--accent-gold)" /> Generar los textos con IA
+              <Sparkles size={14} color="var(--gold-2)" /> Generar los textos con IA
             </div>
             <textarea
               rows={3}
@@ -723,7 +723,7 @@ export function HostedPageEditor({
             )}
             {!isContact && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={cfg.ask_phone} onChange={e => set('ask_phone', e.target.checked)} style={{ accentColor: 'var(--accent-gold)' }} />
+                <input type="checkbox" checked={cfg.ask_phone} onChange={e => set('ask_phone', e.target.checked)} style={{ accentColor: 'var(--gold-2)' }} />
                 Pedir teléfono
               </label>
             )}
@@ -766,11 +766,11 @@ export function HostedPageEditor({
                 <div style={{
                   display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '10px',
                   padding: '10px 12px', borderRadius: '8px',
-                  background: 'rgba(201,169,110,0.07)', border: '1px solid rgba(201,169,110,0.25)',
+                  background: 'color-mix(in srgb, var(--gold-2) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 25%, transparent)',
                 }}>
-                  <Sparkles size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <Sparkles size={14} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
                   <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Las preguntas marcadas como <strong style={{ color: 'var(--accent-gold)' }}>por defecto</strong> vienen
+                    Las preguntas marcadas como <strong style={{ color: 'var(--gold-2)' }}>por defecto</strong> vienen
                     cargadas porque son las que <strong style={{ color: 'var(--text-primary)' }}>califican al lead</strong>:
                     horizonte de compra, financiamiento, presupuesto, si ya trabaja con otro agente y zonas de interés.
                     De ahí sale su <strong style={{ color: 'var(--text-primary)' }}>score de fit</strong> (qué tan buen
@@ -793,7 +793,7 @@ export function HostedPageEditor({
                       <span style={{
                         alignSelf: 'flex-start', fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.06em',
                         textTransform: 'uppercase', padding: '2px 7px', borderRadius: '8px',
-                        color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.14)',
+                        color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 14%, transparent)',
                       }}>
                         {q.dimension ? 'Califica · opciones de tu perfil' : 'Por defecto · scoring'}
                       </span>
@@ -860,7 +860,7 @@ export function HostedPageEditor({
                       </div>
                     )}
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={q.required} onChange={e => setQuestion(i, { required: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
+                      <input type="checkbox" checked={q.required} onChange={e => setQuestion(i, { required: e.target.checked })} style={{ accentColor: 'var(--gold-2)' }} />
                       Obligatoria
                     </label>
                   </div>
@@ -982,7 +982,7 @@ export function HostedPageEditor({
             </>
           )}
 
-          {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+          {error && <div style={{ fontSize: '12px', color: 'var(--alert)' }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => handleSave(true)} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>

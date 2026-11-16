@@ -194,8 +194,8 @@ export function StepManager({
               style={{
                 display: 'flex', alignItems: 'center', gap: '5px',
                 padding: '6px 12px', fontSize: '12px', fontWeight: 500,
-                background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
-                border: '1px solid rgba(201,169,110,0.2)', borderRadius: '8px', cursor: 'pointer',
+                background: 'color-mix(in srgb, var(--gold-2) 10%, transparent)', color: 'var(--gold-2)',
+                border: '1px solid color-mix(in srgb, var(--gold-2) 20%, transparent)', borderRadius: '8px', cursor: 'pointer',
               }}
             >
               <Plus size={12} />
@@ -220,7 +220,7 @@ export function StepManager({
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '14px',
                   padding: '8px 18px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
+                  background: 'var(--gold-2)', color: 'var(--bg-base)',
                   border: 'none', borderRadius: '8px', cursor: 'pointer',
                 }}
               >
@@ -246,7 +246,7 @@ export function StepManager({
                 width: '28px', height: '28px', borderRadius: '50%',
                 background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '11px', fontWeight: 600, color: 'var(--accent-gold)',
+                fontSize: '11px', fontWeight: 600, color: 'var(--gold-2)',
                 flexShrink: 0,
               }}>
                 {idx + 1}
@@ -269,7 +269,7 @@ export function StepManager({
                     <span style={{
                       flexShrink: 0, fontSize: '9px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
                       letterSpacing: '0.05em', textTransform: 'uppercase',
-                      color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.12)',
+                      color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
                     }}>
                       CRM
                     </span>
@@ -282,7 +282,7 @@ export function StepManager({
                     {step.resendTemplateId}
                   </span>
                 ) : (
-                  <span style={{ fontSize: '12px', color: 'var(--accent-coral)', fontStyle: 'italic' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--alert)', fontStyle: 'italic' }}>
                     Sin contenido — el cron pausará este paso
                   </span>
                 )}
@@ -293,8 +293,8 @@ export function StepManager({
                     <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                       {[
                         { label: 'Env',   value: String(sm.totalSends), color: 'var(--text-muted)' },
-                        { label: 'Click', value: `${sm.clickRate}%`, color: sm.clickRate > 0 ? 'var(--accent-blue)'  : 'var(--text-muted)' },
-                        { label: 'Reply', value: `${sm.replyRate}%`, color: sm.replyRate > 0 ? 'var(--accent-green)' : 'var(--text-muted)' },
+                        { label: 'Click', value: `${sm.clickRate}%`, color: sm.clickRate > 0 ? 'var(--gold-1)'  : 'var(--text-muted)' },
+                        { label: 'Reply', value: `${sm.replyRate}%`, color: sm.replyRate > 0 ? 'var(--gold-1)' : 'var(--text-muted)' },
                       ].map(chip => (
                         <span key={chip.label} style={{ fontSize: '10px', color: chip.color, fontWeight: 500, display: 'flex', gap: '3px', alignItems: 'center' }}>
                           <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{chip.label}</span>
@@ -318,7 +318,7 @@ export function StepManager({
                 <button
                   onClick={() => openDelete(step.id)}
                   title="Eliminar"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)', color: 'var(--accent-coral)', cursor: 'pointer' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '6px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--alert) 20%, transparent)', color: 'var(--alert)', cursor: 'pointer' }}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -373,9 +373,9 @@ export function StepManager({
                       onClick={() => setForm(f => ({ ...f, contentMode: opt.key }))}
                       style={{
                         padding: '6px 14px', fontSize: '12px', fontWeight: 500, borderRadius: '8px', cursor: 'pointer',
-                        background: form.contentMode === opt.key ? 'rgba(201,169,110,0.12)' : 'transparent',
-                        color: form.contentMode === opt.key ? 'var(--accent-gold)' : 'var(--text-muted)',
-                        border: `1px solid ${form.contentMode === opt.key ? 'rgba(201,169,110,0.3)' : 'var(--border-subtle)'}`,
+                        background: form.contentMode === opt.key ? 'color-mix(in srgb, var(--gold-2) 12%, transparent)' : 'transparent',
+                        color: form.contentMode === opt.key ? 'var(--gold-2)' : 'var(--text-muted)',
+                        border: `1px solid ${form.contentMode === opt.key ? 'color-mix(in srgb, var(--gold-2) 30%, transparent)' : 'var(--border-subtle)'}`,
                       }}
                     >
                       {opt.label}
@@ -406,7 +406,7 @@ export function StepManager({
                 <>
                   <div>
                     <label style={LABEL}>
-                      Resend Template ID <span style={{ color: 'var(--accent-coral)' }}>*</span>
+                      Resend Template ID <span className="form-required">*</span>
                     </label>
                     <input
                       value={form.resendTemplateId}
@@ -422,20 +422,20 @@ export function StepManager({
 
                   {/* Template variables warning (solo aplica al modo template) */}
                   <div style={{
-                    background: 'rgba(201,169,110,0.06)', border: '1px solid rgba(201,169,110,0.18)',
+                    background: 'color-mix(in srgb, var(--gold-2) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 18%, transparent)',
                     borderRadius: '8px', padding: '12px 14px',
                     fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.6,
                   }}>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <AlertTriangle size={13} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
-                      <strong style={{ color: 'var(--accent-gold)' }}>Variables disponibles en tu template de Resend</strong>
+                      <AlertTriangle size={13} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                      <strong style={{ color: 'var(--gold-2)' }}>Variables disponibles en tu template de Resend</strong>
                     </div>
                     <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
                       {`{{{customer_name}}}  {{{agent_name}}}  {{{agent_email}}}`}<br />
                       {`{{{lead_magnet_name}}}  {{{unsubscribe_url}}}`}
                     </div>
-                    <div style={{ marginTop: '8px', color: 'var(--accent-coral)' }}>
-                      <strong>Usa triple llave</strong> {`{{{variable}}}`}, no doble. No metas {`{{{unsubscribe_url}}}`} dentro de un <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: '3px' }}>{`<a href="...">`}</code> — bug conocido de Resend; ponlo como texto plano al final del email.
+                    <div style={{ marginTop: '8px', color: 'var(--alert)' }}>
+                      <strong>Usa triple llave</strong> {`{{{variable}}}`}, no doble. No metas {`{{{unsubscribe_url}}}`} dentro de un <code style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', padding: '1px 4px', borderRadius: '3px' }}>{`<a href="...">`}</code> — bug conocido de Resend; ponlo como texto plano al final del email.
                     </div>
                   </div>
                 </>
@@ -451,7 +451,7 @@ export function StepManager({
                 disabled={pending}
                 style={{
                   padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
+                  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
                   cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
                 }}
               >
@@ -487,8 +487,8 @@ export function StepManager({
               <button onClick={closeModal} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
               <button onClick={handleDelete} disabled={pending} style={{
                 padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
-                border: '1px solid rgba(201,123,107,0.3)',
+                background: 'color-mix(in srgb, var(--alert) 15%, transparent)', color: 'var(--alert)',
+                border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
                 cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
               }}>{pending ? 'Eliminando...' : 'Eliminar'}</button>
             </div>

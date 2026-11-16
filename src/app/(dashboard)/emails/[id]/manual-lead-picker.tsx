@@ -192,7 +192,7 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
             checked={allChecked}
             ref={el => { if (el) el.indeterminate = someChecked }}
             onChange={toggleAll}
-            style={{ cursor: 'pointer', accentColor: 'var(--accent-gold)' }}
+            style={{ cursor: 'pointer', accentColor: 'var(--gold-2)' }}
           />
           <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
             {result.matched} leads disponibles
@@ -212,7 +212,7 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
               style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
                 padding: '9px 12px', cursor: 'pointer',
-                background: selected.has(lead.id) ? 'rgba(201,169,110,0.06)' : 'transparent',
+                background: selected.has(lead.id) ? 'color-mix(in srgb, var(--gold-2) 6%, transparent)' : 'transparent',
                 borderBottom: '1px solid var(--border-subtle)',
               }}
             >
@@ -220,7 +220,7 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
                 type="checkbox"
                 checked={selected.has(lead.id)}
                 onChange={() => toggle(lead.id)}
-                style={{ cursor: 'pointer', flexShrink: 0, accentColor: 'var(--accent-gold)' }}
+                style={{ cursor: 'pointer', flexShrink: 0, accentColor: 'var(--gold-2)' }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
@@ -256,7 +256,7 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '8px 18px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-            background: selected.size === 0 || pending ? 'var(--bg-elevated)' : 'var(--accent-gold)',
+            background: selected.size === 0 || pending ? 'var(--bg-elevated)' : 'var(--gold-2)',
             color: selected.size === 0 || pending ? 'var(--text-muted)' : 'var(--bg-base)',
             border: 'none', cursor: selected.size === 0 || pending ? 'not-allowed' : 'pointer',
           }}
@@ -270,9 +270,9 @@ export function ManualLeadPicker({ sequenceId, initial, agents }: Props) {
       {toast && (
         <div style={{
           marginTop: '10px', padding: '8px 12px', borderRadius: '6px', fontSize: '12px',
-          background: toast.startsWith('Error') ? 'rgba(224,64,64,0.08)' : 'rgba(107,163,104,0.10)',
-          color: toast.startsWith('Error') ? '#E04040' : 'var(--accent-green)',
-          border: `1px solid ${toast.startsWith('Error') ? 'rgba(224,64,64,0.2)' : 'rgba(107,163,104,0.2)'}`,
+          background: toast.startsWith('Error') ? 'color-mix(in srgb, var(--alert) 8%, transparent)' : 'color-mix(in srgb, var(--gold-1) 10%, transparent)',
+          color: toast.startsWith('Error') ? 'var(--alert)' : 'var(--gold-1)',
+          border: `1px solid ${toast.startsWith('Error') ? 'color-mix(in srgb, var(--alert) 20%, transparent)' : 'color-mix(in srgb, var(--gold-1) 20%, transparent)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
         }}>
           <span>{toast}</span>
