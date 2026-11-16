@@ -62,16 +62,10 @@ export function ReferencePanel({ claveActual, clasesActivas, familias }: {
             con comodidad y siembra con <code>npm run studio:seed</code>.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '4px' }}>
-            <button className="btn btn-ghost btn-sm" type="button" style={{ // `--bg-elevated` y no un respaldo a negro translúcido: el CRM es oscuro, y
-  // un negro al 5% sobre --bg-base deja el chip invisible — que fue justo lo que
-  // pasó. Sobre el fondo elevado sí se lee como algo que se puede pulsar.
-  background: 'var(--bg-elevated)', textAlign: 'left' }} onClick={() => copiar(rutas.html)}>
+            <button type="button" style={{ ...chip, textAlign: 'left' }} onClick={() => copiar(rutas.html)}>
               {rutas.html}
             </button>
-            <button className="btn btn-ghost btn-sm" type="button" style={{ // `--bg-elevated` y no un respaldo a negro translúcido: el CRM es oscuro, y
-  // un negro al 5% sobre --bg-base deja el chip invisible — que fue justo lo que
-  // pasó. Sobre el fondo elevado sí se lee como algo que se puede pulsar.
-  background: 'var(--bg-elevated)', textAlign: 'left' }} onClick={() => copiar(rutas.css)}>
+            <button type="button" style={{ ...chip, textAlign: 'left' }} onClick={() => copiar(rutas.css)}>
               {rutas.css}
             </button>
           </div>
@@ -93,10 +87,7 @@ export function ReferencePanel({ claveActual, clasesActivas, familias }: {
             <ul style={lista}>
               {g.claves.map(c => (
                 <li key={c.clave}>
-                  <button className="btn btn-ghost btn-sm" type="button" style={{ // `--bg-elevated` y no un respaldo a negro translúcido: el CRM es oscuro, y
-  // un negro al 5% sobre --bg-base deja el chip invisible — que fue justo lo que
-  // pasó. Sobre el fondo elevado sí se lee como algo que se puede pulsar.
-  background: 'var(--bg-elevated)' }}
+                  <button type="button" style={chip}
                           onClick={() => copiar(g.titulo === 'Colores y lienzo' ? `var(--${c.clave})` : `{{${c.clave}}}`)}>
                     {c.clave}
                   </button>
