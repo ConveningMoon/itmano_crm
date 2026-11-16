@@ -50,7 +50,7 @@ export function NavLoadingOverlay({ show, label = 'Abriendo…' }: { show: boole
       <div
         style={{
           width: '34px', height: '34px', borderRadius: '50%',
-          border: '3px solid var(--border-subtle)', borderTopColor: 'var(--accent-gold)',
+          border: '3px solid var(--border-subtle)', borderTopColor: 'var(--gold-2)',
           animation: 'itm-nav-spin 0.7s linear infinite',
         }}
       />

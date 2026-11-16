@@ -2,13 +2,13 @@ import { AnimatedNumber } from '@/components/motion/animated-number'
 
 // Tarjeta de KPI. El número cuenta desde 0 sólo en el primer montaje (el HTML
 // del servidor ya trae el valor final) y el color de acento se pasa como token.
-export function StatCard({ label, value, suffix, icon, tone = 'var(--accent-gold)' }: {
+export function StatCard({ label, value, suffix, icon, tone = 'var(--gold-2)' }: {
   label:   string
   value:   number
   /** Texto fijo tras el número, p. ej. "%". */
   suffix?: string
   icon:    React.ReactNode
-  /** Un token de color, p. ej. `var(--accent-teal)`. */
+  /** Un token de color, p. ej. `var(--gold-2)`. */
   tone?:   string
 }) {
   return (

@@ -169,7 +169,7 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
             {EJEMPLOS.map(monto => {
               const tier = budgetTierFor(monto, preview)
               const color = tier === 'premium' ? 'var(--status-hot)'
-                : tier === 'mid' ? 'var(--accent-gold)'
+                : tier === 'mid' ? 'var(--gold-2)'
                 : tier === 'entry' ? 'var(--text-secondary)' : 'var(--text-muted)'
               return (
                 <span

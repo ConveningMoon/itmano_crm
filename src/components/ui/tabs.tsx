@@ -68,7 +68,7 @@ export function Tabs({ items, content, defaultKey, value, onChange }: TabsProps)
                 padding: '8px 16px',
                 fontSize: '13px',
                 fontWeight: isActive ? 500 : 400,
-                color: isActive ? 'var(--accent-gold)' : 'var(--text-muted)',
+                color: isActive ? 'var(--gold-2)' : 'var(--text-muted)',
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
@@ -86,9 +86,9 @@ export function Tabs({ items, content, defaultKey, value, onChange }: TabsProps)
                     padding: '1px 6px',
                     borderRadius: '10px',
                     background: isActive
-                      ? 'color-mix(in srgb, var(--accent-gold) 12%, transparent)'
+                      ? 'color-mix(in srgb, var(--gold-2) 12%, transparent)'
                       : 'var(--bg-overlay)',
-                    color: isActive ? 'var(--accent-gold)' : 'var(--text-muted)',
+                    color: isActive ? 'var(--gold-2)' : 'var(--text-muted)',
                   }}
                 >
                   {item.badge}
@@ -112,7 +112,7 @@ export function Tabs({ items, content, defaultKey, value, onChange }: TabsProps)
                     right: 0,
                     bottom: '-1px',
                     height: '2px',
-                    background: 'var(--accent-gold)',
+                    background: 'var(--gold-2)',
                   }}
                 />
               )}

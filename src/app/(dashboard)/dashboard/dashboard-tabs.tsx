@@ -58,8 +58,8 @@ export function DashboardTabs({ tabs, active, period, showPeriod, children }: Pr
                 style={{
                   padding: '10px 14px', fontSize: '13px', fontWeight: 500, cursor: 'pointer',
                   background: 'transparent', border: 'none', whiteSpace: 'nowrap',
-                  color: selected ? 'var(--accent-gold)' : 'var(--text-muted)',
-                  borderBottom: `2px solid ${selected ? 'var(--accent-gold)' : 'transparent'}`,
+                  color: selected ? 'var(--gold-2)' : 'var(--text-muted)',
+                  borderBottom: `2px solid ${selected ? 'var(--gold-2)' : 'transparent'}`,
                   marginBottom: '-1px',
                 }}
               >
@@ -82,8 +82,8 @@ export function DashboardTabs({ tabs, active, period, showPeriod, children }: Pr
                   style={{
                     padding: '4px 10px', fontSize: '12px', cursor: 'pointer', borderRadius: '6px',
                     border: '1px solid var(--border-subtle)',
-                    background: selected ? 'color-mix(in srgb, var(--accent-gold) 14%, transparent)' : 'transparent',
-                    color: selected ? 'var(--accent-gold)' : 'var(--text-muted)',
+                    background: selected ? 'color-mix(in srgb, var(--gold-2) 14%, transparent)' : 'transparent',
+                    color: selected ? 'var(--gold-2)' : 'var(--text-muted)',
                   }}
                 >
                   {p.label}

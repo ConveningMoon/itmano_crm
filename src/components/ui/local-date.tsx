@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react'
 // Un Client Component se renderiza dos veces: en el servidor (Vercel corre en
 // UTC) y al hidratar en el navegador (en la zona de cada usuario). Un
 // `toLocaleString('es-ES', …)` sin `timeZone` da una hora distinta en cada
-// lado; React detecta el texto distinto (error #418), tira el HTML del
+// lado; React detecta el texto distinto (error 418 de React), tira el HTML del
 // servidor y vuelve a renderizar todo ese tramo en el cliente.
 //
 // Aquí el servidor y la hidratación formatean en UTC —el mismo texto en los

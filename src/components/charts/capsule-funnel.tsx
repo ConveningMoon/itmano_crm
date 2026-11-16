@@ -28,9 +28,11 @@ export function CapsuleFunnel({ stages }: {
           <rect width="6" height="6" fill="var(--bg-overlay)" />
           <rect width="2" height="6" fill={GOLD_RAMP[4]} />
         </pattern>
+        {/* Volumen de la cápsula: luz arriba y sombra abajo sobre el tono de
+            la rampa. No son colores de la paleta, sino brillo y sombra. */}
         <linearGradient id="cf-shade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity={0.22} />
-          <stop offset="1" stopColor="#000" stopOpacity={0.18} />
+          <stop offset="0" stopColor="white" stopOpacity={0.22} />
+          <stop offset="1" stopColor="black" stopOpacity={0.18} />
         </linearGradient>
       </defs>
       {stages.map((s, i) => {
@@ -42,13 +44,13 @@ export function CapsuleFunnel({ stages }: {
         return (
           <g key={s.key}>
             <title>{`${s.label}: ${s.count.toLocaleString('en-US')}`}</title>
-            <rect x={x} y={TOP} width={barW} height={lane} rx={barW / 2} fill="rgba(255,255,255,0.025)" />
+            <rect x={x} y={TOP} width={barW} height={lane} rx={barW / 2} fill="color-mix(in srgb, var(--text-primary) 2%, transparent)" />
             {h > 0 && (
               <>
                 <rect
                   x={x} y={y} width={barW} height={h} rx={r}
                   fill={lost ? 'url(#cf-hatch)' : STAGE_HEX[s.key]}
-                  style={i === peak ? { filter: 'drop-shadow(0 0 9px rgba(221,185,104,0.5))' } : undefined}
+                  style={i === peak ? { filter: 'drop-shadow(0 0 9px color-mix(in srgb, var(--gold-2) 50%, transparent))' } : undefined}
                 />
                 {!lost && <rect x={x} y={y} width={barW} height={h} rx={r} fill="url(#cf-shade)" />}
               </>

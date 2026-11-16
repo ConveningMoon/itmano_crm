@@ -18,7 +18,7 @@ export function RingGauge({ value, label }: { value: number; label: string }) {
             cx="41" cy="41" r={R} fill="none" stroke={GOLD_RAMP[1]} strokeWidth={8} strokeLinecap="round"
             strokeDasharray={`${(v / 100) * CIRCUMFERENCE} ${CIRCUMFERENCE}`}
             transform="rotate(-90 41 41)"
-            style={{ filter: 'drop-shadow(0 0 5px rgba(221,185,104,0.4))' }}
+            style={{ filter: 'drop-shadow(0 0 5px color-mix(in srgb, var(--gold-2) 40%, transparent))' }}
           />
         )}
         <text x="41" y="46" textAnchor="middle" fontSize={16} fontWeight={600} fill="var(--text-primary)">

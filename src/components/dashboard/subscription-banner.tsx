@@ -19,7 +19,7 @@ interface SubscriptionBannerProps {
 export function SubscriptionBanner({ banner }: SubscriptionBannerProps) {
   if (!banner) return null
 
-  const accent = banner.tone === 'amber' ? 'var(--accent-gold)' : 'var(--accent-coral)'
+  const accent = banner.tone === 'amber' ? 'var(--gold-2)' : 'var(--alert)'
   const Icon = banner.tone === 'amber' ? AlertTriangle : OctagonAlert
 
   return (
