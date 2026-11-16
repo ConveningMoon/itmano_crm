@@ -14,6 +14,7 @@ import { SourceTabs } from './source-tabs'
 import { PageOptions } from './page-options'
 import { parseHostedPage } from '@/lib/hosted-page'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { formatConversion } from '@/lib/sources/conversion'
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',
@@ -174,7 +175,7 @@ async function ChannelDetailPage({
         {[
           { label: 'Leads (30d)',     value: String(channel.metrics.leadsInWindow) },
           { label: 'Vistas (30d)',    value: String(channel.metrics.pageViewsInWindow) },
-          { label: 'Conversión',      value: `${channel.metrics.conversionRate}%` },
+          { label: 'Conversión',      value: formatConversion(channel.metrics.conversionRate) },
           { label: 'Score promedio',  value: channel.metrics.avgTempScore !== null ? String(channel.metrics.avgTempScore) : '—' },
         ].map((m, i) => (
           <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '16px' }}>

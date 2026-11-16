@@ -31,6 +31,7 @@ import { FormSection } from '@/components/ui/form-section'
 import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loading'
 import { IntegrationPromptModal } from './integration-prompt-modal'
 import { FechaLocal } from '@/components/ui/local-date'
+import { formatConversion } from '@/lib/sources/conversion'
 
 type TabValue = ChannelType | 'all' | 'archived'
 
@@ -267,7 +268,7 @@ function ChannelRow({ ch, health, trend, tenant, folders, folderId }: {
 
       {/* Sin vistas no hay denominador: un 0% afirmaría que nadie convirtió. */}
       <span className="dt-num dt-hide-sm dt-r" style={{ color: ch.metrics.conversionRate ? 'var(--gold-2)' : 'var(--text-muted)' }}>
-        {ch.metrics.conversionRate === null ? '—' : `${ch.metrics.conversionRate}%`}
+        {formatConversion(ch.metrics.conversionRate)}
       </span>
 
       {/* Los botones y el menú no navegan a la fila: cada clic o tecla es para sí
