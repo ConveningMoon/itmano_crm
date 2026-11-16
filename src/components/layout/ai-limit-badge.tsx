@@ -16,7 +16,7 @@ export function AiLimitBadge({ status }: { status: AiLimitIndicator }) {
   const router = useRouter()
   const pct = Math.round(status.usedRatio * 100)
   const warn = !status.unlimited && status.usedRatio >= 0.8
-  const accent = status.blocked || warn ? 'var(--accent-coral)' : 'var(--accent-gold)'
+  const state = status.blocked ? 'blocked' : warn ? 'warn' : undefined
 
   const title = status.unlimited
     ? 'Generación con IA: acceso ilimitado'
@@ -26,27 +26,23 @@ export function AiLimitBadge({ status }: { status: AiLimitIndicator }) {
 
   return (
     <button
+      type="button"
       onClick={() => router.push('/settings')}
       title={title}
       aria-label={title}
-      className="btn-icon"
-      style={{
-        display: 'flex', alignItems: 'center', gap: '7px',
-        height: '34px', padding: '0 10px', borderRadius: '8px',
-        border: `1px solid ${status.blocked ? 'rgba(201,123,107,0.4)' : 'var(--border-subtle)'}`,
-        cursor: 'pointer', flexShrink: 0,
-      }}
+      className="topbar-btn"
+      data-state={state}
     >
-      <Sparkles size={13} color={accent} />
+      <Sparkles size={13} className={state ? undefined : 'text-gold'} aria-hidden="true" />
       {status.unlimited ? (
-        <InfinityIcon size={13} color="var(--accent-teal)" />
+        <InfinityIcon size={13} className="text-gold" aria-hidden="true" />
       ) : (
         <>
           {/* Barra de progreso — siempre visible, incluso en móvil */}
-          <span style={{ width: '44px', height: '4px', borderRadius: '2px', background: 'var(--bg-elevated)', overflow: 'hidden', display: 'inline-block' }}>
-            <span style={{ display: 'block', height: '100%', width: `${Math.max(4, pct)}%`, background: accent, borderRadius: '2px' }} />
+          <span className="ai-meter" aria-hidden="true">
+            <i style={{ width: `${Math.max(4, Math.min(100, pct))}%` }} />
           </span>
-          <span className="hidden sm:inline" style={{ fontSize: '11px', color: status.blocked ? 'var(--accent-coral)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          <span className="ai-meter-pct hidden sm:inline">
             {status.blocked ? 'Límite alcanzado' : `${pct}%`}
           </span>
         </>

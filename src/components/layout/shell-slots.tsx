@@ -95,7 +95,7 @@ async function PlanLabelSlot() {
   const { planLabel } = await getShellData(ctx)
   if (!planLabel) return null
   return (
-    <div style={{ fontSize: '10px', color: 'var(--accent-gold)', letterSpacing: '0.04em', marginTop: '2px' }}>
+    <div style={{ fontSize: '10px', color: 'var(--gold-2)', letterSpacing: '0.04em', marginTop: '2px' }}>
       {planLabel}
     </div>
   )

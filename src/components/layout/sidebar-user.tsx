@@ -25,14 +25,14 @@ export function SidebarUser({ email, role, planLabel = null }: {
           width: '32px',
           height: '32px',
           borderRadius: '50%',
-          backgroundColor: 'rgba(91,142,201,0.15)',
-          border: '1px solid rgba(91,142,201,0.25)',
+          backgroundColor: 'color-mix(in srgb, var(--gold-1) 15%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--gold-1) 25%, transparent)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: '11px',
           fontWeight: '600',
-          color: 'var(--accent-blue)',
+          color: 'var(--gold-1)',
           flexShrink: 0,
         }}
       >

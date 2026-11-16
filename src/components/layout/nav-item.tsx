@@ -121,8 +121,8 @@ export function NavItem({ label, href, icon, badge, badgeLabel, indicatorId = 'n
           style={{
             fontSize: '11px',
             fontWeight: '500',
-            color: 'var(--accent-gold)',
-            backgroundColor: 'rgba(201,169,110,0.15)',
+            color: 'var(--gold-2)',
+            backgroundColor: 'color-mix(in srgb, var(--gold-2) 15%, transparent)',
             padding: '1px 6px',
             borderRadius: '10px',
           }}

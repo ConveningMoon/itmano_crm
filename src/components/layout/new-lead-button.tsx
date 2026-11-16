@@ -15,27 +15,14 @@ export function NewLeadButton() {
   useEffect(() => { router.prefetch('/leads/new') }, [router])
   return (
     <button
-      className="btn-cta"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        padding: '7px 14px',
-        borderRadius: '8px',
-        border: 'none',
-        backgroundColor: 'var(--accent-gold)',
-        color: 'var(--bg-base)',
-        fontSize: '12px',
-        fontWeight: '600',
-        letterSpacing: '0.04em',
-        cursor: 'pointer',
-      }}
+      type="button"
+      className="btn btn-primary btn-cta"
       onClick={() => router.push('/leads/new')}
-      aria-label="Registrar Lead"
+      aria-label="Registrar lead"
     >
-      <Plus size={14} strokeWidth={2} />
+      <Plus size={14} strokeWidth={2} aria-hidden="true" />
       {/* Label collapses to an icon-only button on phones; full text at sm:+. */}
-      <span className="hidden sm:inline">Registrar Lead</span>
+      <span className="hidden sm:inline">Registrar lead</span>
     </button>
   )
 }
