@@ -176,10 +176,8 @@ export function TemplateEditor({
               {r.label}
             </label>
           ))}
-          <button type="button" onClick={save} disabled={pending}
-                  style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px',
-                           padding: '8px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                           background: 'var(--gold-2)', color: 'var(--bg-base)', fontSize: '12px', fontWeight: 500 }}>
+          <button className="btn btn-primary" type="button" onClick={save} disabled={pending}
+                  style={{ marginLeft: 'auto' }}>
             {pending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Guardar
           </button>

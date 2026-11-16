@@ -96,7 +96,7 @@ export function TagSequencesImportTools({ coverage }: { coverage: TagSequenceCov
         </div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
           <button type="button" onClick={close} style={BUTTON}>{result ? 'Cerrar' : 'Cancelar'}</button>
-          {!result && <button type="button" onClick={runImport} disabled={pending || !rawJson} style={{ ...BUTTON, background: 'var(--gold-2)', color: 'var(--bg-base)', opacity: pending || !rawJson ? .55 : 1 }}>{pending ? 'Importando…' : 'Importar todo'}</button>}
+          {!result && <button className="btn btn-primary" type="button" onClick={runImport} disabled={pending || !rawJson} >{pending ? 'Importando…' : 'Importar todo'}</button>}
         </div>
       </div>
     </ModalShell>

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Pencil, Search, X } from 'lucide-react'
 import {
-  BTN_DANGER, BTN_GHOST, BTN_PRIMARY, CARD, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN,
+  CARD, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN,
 } from '@/app/(dashboard)/properties/[id]/open-houses/ui'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { EmailComposer, composerValueFrom, composerValueToInput, type ComposerValue } from '@/components/dashboard/email-composer'
@@ -16,8 +16,7 @@ import { QUALITY_BANDS, QUALITY_CONFIG, STAGES, STAGE_CONFIG } from '@/lib/scori
 import type { BroadcastAudiencePreview } from '@/lib/services/broadcast-audience'
 import type { Language } from '@/lib/types'
 import {
-  confirmBroadcast, deleteBroadcast, previewBroadcastAudience, saveBroadcast, saveBroadcastContent,
-  savePostalAddress, searchLeadsForBroadcast, sendBroadcastTest,
+  confirmBroadcast, deleteBroadcast, previewBroadcastAudience, saveBroadcast, saveBroadcastContent, savePostalAddress, searchLeadsForBroadcast, sendBroadcastTest,
 } from '../../broadcast-actions'
 import { SKIP_REASON_TEXT } from './labels'
 
@@ -233,8 +232,8 @@ function ContentModal({ language, current, senderAgentId, beforeSave, broadcastI
         />
         {error && <div style={{ ...ERROR, marginTop: '12px' }}>{error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px' }}>
-          <button type="button" onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-          <button type="button" onClick={save} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>{pending ? 'Guardando…' : 'Guardar'}</button>
+          <button className="btn btn-ghost" type="button" onClick={onClose} >Cancelar</button>
+          <button className="btn btn-primary" type="button" onClick={save} disabled={pending} >{pending ? 'Guardando…' : 'Guardar'}</button>
         </div>
       </div>
     </ModalShell>
@@ -293,8 +292,8 @@ function ConfirmModal({ broadcastId, toSend, beforeConfirm, onClose }: {
         )}
         {error && <div style={{ ...ERROR, marginBottom: '12px' }}>{error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          <button type="button" onClick={onClose} style={BTN_GHOST}>Volver</button>
-          <button type="button" onClick={confirm} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
+          <button className="btn btn-ghost" type="button" onClick={onClose} >Volver</button>
+          <button className="btn btn-primary" type="button" onClick={confirm} disabled={pending} >
             {pending ? 'Confirmando…' : mode === 'now' ? `Enviar a ${toSend}` : 'Programar envío'}
           </button>
         </div>
@@ -535,11 +534,11 @@ export function BroadcastEditor({ broadcast, tags, agents, channels, postalAddre
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 {c && (
-                  <button type="button" onClick={() => sendTest(l)} disabled={testing} style={{ ...BTN_GHOST, opacity: testing ? 0.6 : 1 }}>
+                  <button className="btn btn-ghost" type="button" onClick={() => sendTest(l)} disabled={testing} >
                     {testing ? 'Enviando…' : 'Enviarme una prueba'}
                   </button>
                 )}
-                <button type="button" onClick={() => setEditingLanguage(l)} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <button className="btn btn-ghost" type="button" onClick={() => setEditingLanguage(l)} >
                   <Pencil size={12} /> {c ? 'Editar' : 'Escribir'}
                 </button>
               </div>
@@ -570,7 +569,7 @@ export function BroadcastEditor({ broadcast, tags, agents, channels, postalAddre
             <textarea id="broadcast-address" value={address} onChange={e => setAddress(e.target.value)} maxLength={300} rows={2} style={{ ...INPUT, resize: 'vertical' }} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginTop: '8px' }}>
               <span style={HINT}>La ley CAN-SPAM la exige en el pie de todo correo comercial. Es la misma para todo el equipo.</span>
-              <button type="button" onClick={saveAddress} disabled={savingAddress || address.trim() === savedAddress} style={{ ...BTN_GHOST, opacity: savingAddress || address.trim() === savedAddress ? 0.6 : 1 }}>
+              <button className="btn btn-ghost" type="button" onClick={saveAddress} disabled={savingAddress || address.trim() === savedAddress} >
                 {savingAddress ? 'Guardando…' : 'Guardar dirección'}
               </button>
             </div>
@@ -590,13 +589,13 @@ export function BroadcastEditor({ broadcast, tags, agents, channels, postalAddre
         {blocker && <div style={{ ...HINT, marginBottom: '10px' }}>{blocker}</div>}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
           {confirmingDelete ? (
-            <button type="button" onClick={removeDraft} disabled={deleting} style={{ ...BTN_DANGER, opacity: deleting ? 0.6 : 1 }}>{deleting ? 'Borrando…' : 'Sí, borrar borrador'}</button>
+            <button className="btn btn-danger" type="button" onClick={removeDraft} disabled={deleting} >{deleting ? 'Borrando…' : 'Sí, borrar borrador'}</button>
           ) : (
-            <button type="button" onClick={() => setConfirmingDelete(true)} style={BTN_DANGER}>Borrar</button>
+            <button className="btn btn-danger" type="button" onClick={() => setConfirmingDelete(true)} >Borrar</button>
           )}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button type="button" onClick={save} disabled={saving} style={{ ...BTN_GHOST, opacity: saving ? 0.6 : 1 }}>{saving ? 'Guardando…' : 'Guardar borrador'}</button>
-            <button type="button" onClick={() => setConfirming(true)} disabled={!!blocker || previewing} style={{ ...BTN_PRIMARY, opacity: blocker || previewing ? 0.5 : 1, cursor: blocker || previewing ? 'not-allowed' : 'pointer' }}>
+            <button className="btn btn-ghost" type="button" onClick={save} disabled={saving} >{saving ? 'Guardando…' : 'Guardar borrador'}</button>
+            <button className="btn btn-primary" type="button" onClick={() => setConfirming(true)} disabled={!!blocker || previewing} >
               Revisar y enviar
             </button>
           </div>

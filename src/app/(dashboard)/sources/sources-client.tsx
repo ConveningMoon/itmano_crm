@@ -362,26 +362,7 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '9px 18px',
-  fontSize: '13px',
-  fontWeight: 500,
-  color: 'var(--bg-base)',
-  background: 'var(--gold-2)',
-  border: 'none',
-  borderRadius: '8px',
-  cursor: 'pointer',
-}
 
-const BTN_GHOST: React.CSSProperties = {
-  padding: '8px 14px',
-  fontSize: '13px',
-  color: 'var(--text-muted)',
-  background: 'transparent',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px',
-  cursor: 'pointer',
-}
 
 type AgentOption = { id: string; name: string; tenantId: string }
 
@@ -533,8 +514,8 @@ function LeadMagnetModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: 
           )}
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-            <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+            <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} >
               {pending ? 'Creando…' : 'Crear Lead Magnet'}
             </button>
           </div>
@@ -655,8 +636,8 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
           )}
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-            <button onClick={handleSubmit} disabled={!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+            <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={!name.trim() || !eventDate || pending || (isSuperAdmin && !tenantId)} >
               {pending ? 'Creando…' : 'Crear Evento'}
             </button>
           </div>
@@ -764,8 +745,8 @@ function ContactFormModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }:
           )}
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-            <button onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} style={{ ...BTN_PRIMARY, opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.6 : 1 }}>
+            <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)} >
               {pending ? 'Creando…' : 'Crear Formulario'}
             </button>
           </div>
@@ -857,21 +838,10 @@ function DeleteChannelModal({ channel, onClose, onDeleted }: {
           )}
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-            <button
+            <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+            <button className="btn btn-danger-solid"
               onClick={handleDelete}
               disabled={!canDelete || pending}
-              style={{
-                padding: '9px 18px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--bg-base)',
-                background: 'var(--alert)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: (!canDelete || pending) ? 'default' : 'pointer',
-                opacity: (!canDelete || pending) ? 0.5 : 1,
-              }}
             >
               {pending ? 'Eliminando…' : 'Eliminar permanentemente'}
             </button>

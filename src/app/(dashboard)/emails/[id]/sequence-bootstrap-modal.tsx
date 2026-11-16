@@ -173,19 +173,12 @@ export function SequenceBootstrapModal({
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          <button onClick={handleClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <button className="btn btn-ghost" onClick={handleClose} >
             Cancelar
           </button>
-          <button
+          <button className="btn btn-primary"
             onClick={handleGenerate}
             disabled={pending || !canSubmit}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-              background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
-              cursor: pending || !canSubmit ? 'not-allowed' : 'pointer',
-              opacity: pending || !canSubmit ? 0.6 : 1,
-            }}
           >
             <Sparkles size={13} />
             {pending ? 'Generando los 3 correos…' : 'Generar los 3 correos'}

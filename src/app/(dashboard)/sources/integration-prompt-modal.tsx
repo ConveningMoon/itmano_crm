@@ -123,13 +123,8 @@ export function IntegrationPromptModal({ title, prompt, onClose, onRegenerateSec
                 {pending ? 'Generando…' : 'Generar nuevo secret'}
               </button>
             ) : <span />}
-            <button
+            <button className="btn btn-primary"
               onClick={onClose}
-              style={{
-                padding: '9px 18px', fontSize: '13px', fontWeight: 500,
-                color: 'var(--bg-base)', background: 'var(--gold-2)',
-                border: 'none', borderRadius: '8px', cursor: 'pointer',
-              }}
             >
               Listo
             </button>

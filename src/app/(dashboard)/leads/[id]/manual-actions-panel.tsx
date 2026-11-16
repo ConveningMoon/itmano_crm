@@ -125,25 +125,15 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                   Esto marca el lead como <strong>Perdido</strong> y congela el score. ¿Confirmar?
                 </span>
-                <button
+                <button className="btn btn-danger-solid"
                   onClick={() => run(disqualify.dimension, disqualify.label)}
                   disabled={isPending}
-                  style={{
-                    padding: '7px 14px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
-                    border: 'none', background: 'var(--alert)', color: 'var(--bg-base)',
-                    cursor: isPending ? 'wait' : 'pointer',
-                  }}
                 >
                   {isPending ? 'Descalificando…' : 'Sí, descalificar'}
                 </button>
-                <button
+                <button className="btn btn-ghost"
                   onClick={() => setConfirming(null)}
                   disabled={isPending}
-                  style={{
-                    padding: '7px 14px', fontSize: '12px', borderRadius: '8px',
-                    border: '1px solid var(--border-subtle)', background: 'transparent',
-                    color: 'var(--text-muted)', cursor: 'pointer',
-                  }}
                 >
                   Cancelar
                 </button>

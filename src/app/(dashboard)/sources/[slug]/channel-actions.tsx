@@ -139,16 +139,8 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
         >
           <Pencil size={12} /> Editar
         </button>
-        <button
+        <button className="btn btn-danger"
           onClick={() => setMode('confirm_archive')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-            color: 'var(--alert)',
-            background: 'color-mix(in srgb, var(--alert) 8%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)',
-            borderRadius: '8px', cursor: 'pointer',
-          }}
         >
           <Trash2 size={12} /> Archivar
         </button>
@@ -286,19 +278,13 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')}
-                style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')}
+                >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-primary"
                 onClick={handleSave}
                 disabled={!name.trim() || pending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--gold-2)', color: 'var(--bg-base)',
-                  border: 'none', cursor: (!name.trim() || pending) ? 'not-allowed' : 'pointer',
-                  opacity: (!name.trim() || pending) ? 0.7 : 1,
-                }}
               >
                 {pending ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -335,20 +321,13 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')}
-                style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')}
+                >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-danger"
                 onClick={handleArchive}
                 disabled={pending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'color-mix(in srgb, var(--alert) 12%, transparent)', color: 'var(--alert)',
-                  border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
-                  cursor: pending ? 'not-allowed' : 'pointer',
-                  opacity: pending ? 0.7 : 1,
-                }}
               >
                 {pending ? 'Archivando...' : 'Confirmar archivo'}
               </button>

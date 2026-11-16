@@ -121,19 +121,13 @@ export function ImportModal({ open, onClose }: Props) {
               {prompt}
             </pre>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
-              <button
+              <button className="btn btn-primary"
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(prompt).then(
                     () => { setCopied(true); setTimeout(() => setCopied(false), 2000) },
                     () => setError('Tu navegador no dejó copiar. Selecciona el texto y cópialo a mano.'),
                   )
-                }}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '8px 18px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--gold-2)', color: 'var(--bg-base)',
-                  border: 'none', cursor: 'pointer',
                 }}
               >
                 {copied ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar prompt</>}
@@ -184,28 +178,16 @@ export function ImportModal({ open, onClose }: Props) {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '2px' }}>
-              <button
+              <button className="btn btn-ghost"
                 type="button"
                 onClick={handleClose}
                 disabled={pending}
-                style={{
-                  padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
-                  background: 'transparent', border: '1px solid var(--border-subtle)',
-                  color: 'var(--text-muted)', cursor: 'pointer',
-                }}
               >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-primary"
                 type="submit"
                 disabled={pending || !json.trim()}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
-                  cursor: (pending || !json.trim()) ? 'not-allowed' : 'pointer',
-                  opacity: (pending || !json.trim()) ? 0.6 : 1,
-                }}
               >
                 {pending
                   ? <><Loader2 size={14} className="animate-spin" /> Importando…</>

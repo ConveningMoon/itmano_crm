@@ -67,8 +67,8 @@ function SenderEditor({ tenantId, domain, current }: { tenantId: string; domain:
           <input value={local} onChange={e => { setLocal(e.target.value); setSaved(false) }} placeholder="hola" style={{ ...inputStyle, flex: 1, fontFamily: 'monospace' }} />
           <code style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>@{domain}</code>
         </span>
-        <button onClick={save} disabled={disabled}
-          style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+        <button className="btn btn-primary" onClick={save} disabled={disabled}
+          >
           {pending ? 'Guardando…' : saved ? 'Guardado' : 'Guardar'}
         </button>
       </div>
@@ -168,10 +168,9 @@ export function TenantDomainManager({
                   placeholder="mail.tudominio.com"
                   style={{ flex: 1, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '7px 10px', fontSize: '12.5px', color: 'var(--text-primary)', outline: 'none' }}
                 />
-                <button
+                <button className="btn btn-primary"
                   onClick={() => run(() => addTenantDomain({ tenantId, domain }))}
                   disabled={pending || !domain.trim()}
-                  style={{ padding: '7px 14px', fontSize: '12.5px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: (pending || !domain.trim()) ? 'default' : 'pointer', opacity: (pending || !domain.trim()) ? 0.6 : 1 }}
                 >
                   {pending ? '…' : 'Agregar'}
                 </button>

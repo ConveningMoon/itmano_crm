@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { BTN_DANGER, BTN_PRIMARY, CARD, ERROR, HINT, LABEL, LANG_LABEL } from '@/app/(dashboard)/properties/[id]/open-houses/ui'
+import { CARD, ERROR, HINT, LABEL, LANG_LABEL } from '@/app/(dashboard)/properties/[id]/open-houses/ui'
 import { FechaLocal } from '@/components/ui/local-date'
 import type { BroadcastDetail, BroadcastMetrics } from '@/lib/data/email-broadcasts'
 import { canCancelBroadcast, canResumeBroadcast } from '@/lib/broadcasts/model'
@@ -61,16 +61,16 @@ export function BroadcastProgress({ broadcast: b, metrics, issues }: {
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {canResumeBroadcast(b.status) && (
-              <button type="button" onClick={() => run(() => resumeBroadcast(b.id))} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
+              <button className="btn btn-primary" type="button" onClick={() => run(() => resumeBroadcast(b.id))} disabled={pending} >
                 {pending ? 'Reanudando…' : 'Reanudar envío'}
               </button>
             )}
             {canCancelBroadcast(b.status) && (confirmingCancel ? (
-              <button type="button" onClick={() => run(() => cancelBroadcast(b.id))} disabled={pending} style={{ ...BTN_DANGER, opacity: pending ? 0.6 : 1 }}>
+              <button className="btn btn-danger" type="button" onClick={() => run(() => cancelBroadcast(b.id))} disabled={pending} >
                 {pending ? 'Cancelando…' : 'Sí, cancelar lo que falta'}
               </button>
             ) : (
-              <button type="button" onClick={() => setConfirmingCancel(true)} style={BTN_DANGER}>Cancelar envío</button>
+              <button className="btn btn-danger" type="button" onClick={() => setConfirmingCancel(true)} >Cancelar envío</button>
             ))}
           </div>
         </div>

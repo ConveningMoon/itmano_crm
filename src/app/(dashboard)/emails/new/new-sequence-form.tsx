@@ -196,23 +196,15 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
       )}
 
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button
+        <button className="btn btn-ghost"
           type="button"
           onClick={() => window.history.back()}
-          style={{ padding: '9px 18px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}
         >
           Cancelar
         </button>
-        <button
+        <button className="btn btn-primary"
           type="submit"
           disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)}
-          style={{
-            padding: '9px 24px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-            background: 'var(--gold-2)', color: 'var(--bg-base)',
-            border: 'none',
-            cursor: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 'not-allowed' : 'pointer',
-            opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.7 : 1,
-          }}
         >
           {pending ? 'Creando...' : 'Crear secuencia'}
         </button>

@@ -110,19 +110,9 @@ export function LeadTagsCard({ leadId, tags, catalog, canEdit, emailTagIds }: Le
 
         {canEdit && (
           <div style={{ position: 'relative' }}>
-            <button
+            <button className="btn btn-ghost btn-sm"
               onClick={() => setOpen(o => !o)}
               disabled={pending || available.length === 0}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '5px',
-                padding: '4px 10px', borderRadius: '6px',
-                fontSize: '12px', fontWeight: 500,
-                background: 'transparent',
-                border: '1px dashed var(--border-subtle)',
-                color: 'var(--text-muted)',
-                cursor: pending || available.length === 0 ? 'default' : 'pointer',
-                opacity: available.length === 0 ? 0.5 : 1,
-              }}
               title={available.length === 0
                 ? (catalog.length === 0
                     ? 'No hay etiquetas en el catálogo. Se crean en Configuración.'

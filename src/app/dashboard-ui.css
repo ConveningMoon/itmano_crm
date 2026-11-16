@@ -80,6 +80,8 @@
 .btn-primary { background: var(--gold-2); color: var(--bg-base); }
 /* La acción principal de la pantalla: degradado de marca, brillo sutil. */
 .btn-primary.btn-cta { background: var(--gold-gradient); }
+/* Botón compacto para filas densas (añadir, copiar, quitar). */
+.btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
 .btn-pill { height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; }
 .btn-primary.btn-cta:hover:not(:disabled) { box-shadow: var(--gold-glow); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
@@ -101,6 +103,9 @@
 .btn-danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--alert) 22%, transparent);
 }
+/* Confirmación final de algo irreversible (borrar, descalificar): coral lleno. */
+.btn-danger-solid { background: var(--alert); color: var(--bg-base); }
+.btn-danger-solid:hover:not(:disabled) { filter: brightness(1.08); }
 
 .icon-btn {
   display: inline-flex;

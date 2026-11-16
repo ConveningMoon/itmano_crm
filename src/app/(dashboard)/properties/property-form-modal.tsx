@@ -1006,15 +1006,9 @@ export function PropertyFormModal({
               >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-primary"
                 type="submit"
                 disabled={isPending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--gold-2)', color: 'var(--bg-base)',
-                  borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
-                  opacity: isPending ? 0.7 : 1,
-                }}
               >
                 {isPending ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Agregar propiedad'}
               </button>
@@ -1069,15 +1063,9 @@ export function PropertyFormModal({
               >
                 Descartar
               </button>
-              <button
+              <button className="btn btn-primary"
                 onClick={submitForm}
                 disabled={isPending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--gold-2)', color: 'var(--bg-base)',
-                  borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
-                  opacity: isPending ? 0.7 : 1,
-                }}
               >
                 {isPending ? 'Guardando…' : 'Guardar cambios'}
               </button>
@@ -1122,15 +1110,9 @@ export function PropertyFormModal({
               >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-danger-solid"
                 onClick={handleDelete}
                 disabled={isPending}
-                style={{
-                  padding: '8px 16px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--alert)', color: 'var(--bg-base)',
-                  borderRadius: '8px', border: 'none', cursor: isPending ? 'default' : 'pointer',
-                  opacity: isPending ? 0.7 : 1,
-                }}
               >
                 {isPending ? 'Eliminando…' : 'Eliminar'}
               </button>

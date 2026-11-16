@@ -11,9 +11,8 @@ import { BTN_GHOST, CARD, HINT } from '../ui'
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
   return (
-    <button
+    <button className="btn btn-ghost"
       onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) }).catch(() => {})}
-      style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
     >
       {copied ? <Check size={13} color="var(--gold-1)" /> : <Copy size={13} />}
       {copied ? 'Copiado' : label}
@@ -73,7 +72,7 @@ export function WebSection({
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <CopyButton text={integrationPrompt} label="Copiar prompt" />
-          <button onClick={() => setShowPrompt(s => !s)} style={BTN_GHOST}>{showPrompt ? 'Ocultar' : 'Ver prompt'}</button>
+          <button className="btn btn-ghost" onClick={() => setShowPrompt(s => !s)} >{showPrompt ? 'Ocultar' : 'Ver prompt'}</button>
         </div>
         {showPrompt && (
           <pre style={{ margin: 0, maxHeight: '360px', overflow: 'auto', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>

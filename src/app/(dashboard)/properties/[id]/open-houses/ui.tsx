@@ -20,19 +20,12 @@ export const LABEL: React.CSSProperties = {
   letterSpacing: '0.06em', marginBottom: '6px', display: 'block',
 }
 
-export const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
-}
 
 export const BTN_GHOST: React.CSSProperties = {
   padding: '7px 14px', fontSize: '12px', color: 'var(--text-secondary)',
   background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
 }
 
-export const BTN_DANGER: React.CSSProperties = {
-  ...BTN_GHOST, color: 'var(--alert)', borderColor: 'color-mix(in srgb, var(--alert) 35%, transparent)',
-}
 
 export const HINT: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }
 export const ERROR: React.CSSProperties = { fontSize: '12px', color: 'var(--alert)', lineHeight: 1.5 }

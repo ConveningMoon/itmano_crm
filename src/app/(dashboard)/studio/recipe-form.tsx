@@ -480,17 +480,10 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
       {template && !usesAi && (
         <button
           type="button"
-          className="studio-generate"
+          className="btn btn-ghost studio-generate"
           disabled={pending}
           onClick={doPreview}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            width: '100%', padding: '11px', fontSize: '13px', fontWeight: 500,
-            borderRadius: '8px', cursor: pending ? 'default' : 'pointer', marginBottom: '10px',
-            background: 'transparent', border: '1px solid var(--border-subtle)',
-            color: 'var(--text-secondary)', opacity: pending ? 0.6 : 1,
-            transition: 'background-color var(--dur-fast), color var(--dur-fast)',
-          }}
+          style={{ width: '100%', marginBottom: '10px' }}
         >
           <Eye size={14} /> Previsualizar
         </button>

@@ -116,14 +116,8 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
         </button>
 
         {!isTagSequence && (
-          <button
+          <button className="btn btn-danger"
             onClick={() => setMode('confirm_delete')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-              color: 'var(--alert)', background: 'color-mix(in srgb, var(--alert) 8%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)', borderRadius: '8px', cursor: 'pointer',
-            }}
           >
             <Trash2 size={12} /> Eliminar
           </button>
@@ -181,12 +175,8 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
             {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleSave} disabled={!name.trim() || pending} style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
-                cursor: (!name.trim() || pending) ? 'not-allowed' : 'pointer', opacity: (!name.trim() || pending) ? 0.7 : 1,
-              }}>{pending ? 'Guardando...' : 'Guardar cambios'}</button>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')} >Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim() || pending} >{pending ? 'Guardando...' : 'Guardar cambios'}</button>
             </div>
           </div>
         </>
@@ -216,13 +206,8 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
             )}
             {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleDelete} disabled={pending} style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'color-mix(in srgb, var(--alert) 15%, transparent)', color: 'var(--alert)',
-                border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
-                cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
-              }}>{pending ? 'Eliminando...' : 'Eliminar'}</button>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')} >Cancelar</button>
+              <button className="btn btn-danger" onClick={handleDelete} disabled={pending} >{pending ? 'Eliminando...' : 'Eliminar'}</button>
             </div>
           </div>
         </>

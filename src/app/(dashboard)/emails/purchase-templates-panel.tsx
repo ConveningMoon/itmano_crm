@@ -113,8 +113,8 @@ function EditModal({
                 Usar template de Resend (avanzado)
               </button>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={onClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={handleSaveContent} disabled={pending} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+                <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+                <button className="btn btn-primary" onClick={handleSaveContent} disabled={pending} >
                   {pending ? 'Guardando…' : 'Guardar contenido'}
                 </button>
               </div>
@@ -140,8 +140,8 @@ function EditModal({
                 ← Crear contenido en el CRM
               </button>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={onClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-                <button onClick={handleSaveTemplate} disabled={pending} style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+                <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+                <button className="btn btn-primary" onClick={handleSaveTemplate} disabled={pending} >
                   {pending ? 'Guardando…' : 'Guardar template'}
                 </button>
               </div>

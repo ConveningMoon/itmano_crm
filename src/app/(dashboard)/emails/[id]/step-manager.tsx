@@ -215,14 +215,9 @@ export function StepManager({
                 : 'Genera los 3 correos de la secuencia con IA, o agrega los pasos uno por uno.'}
             </div>
             {!isTagSequence && (
-              <button
+              <button className="btn btn-primary"
                 onClick={() => setBootstrapOpen(true)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '14px',
-                  padding: '8px 18px', fontSize: '13px', fontWeight: 500,
-                  background: 'var(--gold-2)', color: 'var(--bg-base)',
-                  border: 'none', borderRadius: '8px', cursor: 'pointer',
-                }}
+                style={{ marginTop: '14px' }}
               >
                 <Sparkles size={13} />
                 Crear los 3 correos con IA
@@ -445,15 +440,10 @@ export function StepManager({
             {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={closeModal} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button
+              <button className="btn btn-ghost" onClick={closeModal} >Cancelar</button>
+              <button className="btn btn-primary"
                 onClick={mode === 'add' ? handleAdd : handleUpdate}
                 disabled={pending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
-                  cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
-                }}
               >
                 {pending ? 'Guardando...' : mode === 'add' ? 'Agregar paso' : 'Guardar cambios'}
               </button>
@@ -484,13 +474,8 @@ export function StepManager({
             </p>
             {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={closeModal} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleDelete} disabled={pending} style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'color-mix(in srgb, var(--alert) 15%, transparent)', color: 'var(--alert)',
-                border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
-                cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
-              }}>{pending ? 'Eliminando...' : 'Eliminar'}</button>
+              <button className="btn btn-ghost" onClick={closeModal} >Cancelar</button>
+              <button className="btn btn-danger" onClick={handleDelete} disabled={pending} >{pending ? 'Eliminando...' : 'Eliminar'}</button>
             </div>
           </div>
       </ModalShell>
