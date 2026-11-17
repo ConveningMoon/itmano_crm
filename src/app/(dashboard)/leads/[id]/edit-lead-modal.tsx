@@ -98,7 +98,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
   }
 
   return (
-    <ModalShell open={isOpen} onClose={onClose} maxWidth={480}>
+    <ModalShell open={isOpen} onClose={onClose} maxWidth={480} ariaLabel="Editar lead">
       <style>{`
         .edit-modal-input:focus { border-color: var(--border-accent) !important; outline: none; }
       `}</style>
@@ -194,8 +194,10 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
                 className="edit-modal-input"
                 style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}
               >
-                <option value="">— Seleccionar tipo —</option>
-                {CHANNEL_TYPE_ORDER.map(type => (
+                {/* Sin canal = el lead entró directo (manual, Instagram, WhatsApp…):
+                    antes se mostraba "Seleccionar tipo" y parecía un dato faltante. */}
+                <option value="">Registro directo (sin fuente)</option>
+                {CHANNEL_TYPE_ORDER.filter(type => type === form.channelType || channelsForType(type).length > 0).map(type => (
                   <option key={type} value={type}>
                     {CHANNEL_TYPE_LABELS[type]}
                   </option>
