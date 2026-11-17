@@ -13,6 +13,10 @@ export interface ActivityItem {
   tenantId:    string
   tenantName:  string | null   // populated only for super_admin (multi-tenant view)
   author:      string          // resolved actor display ("Sistema" / agent name / email)
+  // El lead del evento: sin esto el feed decía "Lead creado · Sistema" sin
+  // decir de quién ni permitir abrirlo.
+  leadId?:     string | null
+  leadName?:   string | null
 }
 
 // tenantId = null → super_admin (no tenant filter, sees all tenants)
@@ -33,8 +37,8 @@ async function fetchActivity(
 
   const supabase = createAdminClient()
   const selectCols = ownerAgentId
-    ? 'id, type, description, created_at, tenant_id, actor_user_id, leads!inner(agent_id)'
-    : 'id, type, description, created_at, tenant_id, actor_user_id'
+    ? 'id, type, description, created_at, tenant_id, actor_user_id, lead_id, leads!inner(agent_id, first_name, last_name)'
+    : 'id, type, description, created_at, tenant_id, actor_user_id, lead_id, leads(first_name, last_name)'
   let q = supabase
     .from('lead_events')
     .select(selectCols)
@@ -69,6 +73,10 @@ async function fetchActivity(
     tenantId:    r.tenant_id,
     tenantName:  tenantId === null ? (tenantNames[r.tenant_id] ?? r.tenant_id) : null,
     author:      authorOf(r.actor_user_id, names),
+    leadId:      (r.lead_id ?? null) as string | null,
+    leadName:    r.leads
+      ? ([r.leads.first_name, r.leads.last_name].filter(Boolean).join(' ').trim() || null)
+      : null,
   }))
 }
 
