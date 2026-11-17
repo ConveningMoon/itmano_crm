@@ -104,6 +104,9 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
 
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  // Qué acción está en curso: con un solo `pending`, previsualizar mostraba
+  // "Guardando…" en el botón de guardar.
+  const [busy, setBusy] = useState<'preview' | 'save' | null>(null)
 
   const isHouse = HOUSE_RECIPES.includes(recipe)
   const property = useMemo(() => properties.find(p => p.id === propertyId) ?? null, [properties, propertyId])
@@ -215,19 +218,23 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
   // saltar entre los tres hasta dar con el que quiere.
   function doPreview() {
     setError(null)
+    setBusy('preview')
     startTransition(async () => {
       const r = await previewStudioImage(formData())
       if (r.ok) setPreview(r.data.dataUri)
       else setError(r.error)
+      setBusy(null)
     })
   }
 
   function submit() {
     setError(null)
+    setBusy('save')
     startTransition(async () => {
       const r = await createStudioImage(formData())
       if (r.ok) { onCreated(r.data); setPreview(null) }
       else setError(r.error)
+      setBusy(null)
     })
   }
 
@@ -331,17 +338,17 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
       {/* Campos por receta */}
       {recipe === 'open_house' && (
         <>
-          <Field label="Dirección">
-            <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="123 Ocean View Ave, Norfolk, VA" />
+          <Field label="Dirección *">
+            <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="Ej. 123 Main St, Ciudad" />
           </Field>
-          <Field label="Fecha">
+          <Field label="Fecha *">
             <TextInput type="date" value={String(fields.date ?? '')} onChange={e => set('date', e.target.value)} />
           </Field>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <Field label="Hora de inicio">
+            <Field label="Hora de inicio *">
               <TextInput type="time" value={String(fields.time_start ?? '')} onChange={e => set('time_start', e.target.value)} />
             </Field>
-            <Field label="Hora de cierre">
+            <Field label="Hora de cierre *">
               <TextInput type="time" value={String(fields.time_end ?? '')} onChange={e => set('time_end', e.target.value)} />
             </Field>
           </div>
@@ -350,8 +357,8 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
 
       {recipe === 'new_listing' && (
         <>
-          <Field label="Dirección">
-            <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="9 Bay Street, Virginia Beach, VA" />
+          <Field label="Dirección *">
+            <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="Ej. 9 Bay Street, Ciudad" />
           </Field>
           <Field label="Precio">
             <TextInput inputMode="numeric" value={fields.price === undefined ? '' : String(fields.price)} onChange={e => set('price', num(e.target.value))} placeholder="450000" />
@@ -391,7 +398,7 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
       {recipe === 'sold' && (
         <>
           <Field label="Dirección o zona">
-            <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="Ghent, Norfolk" />
+            <TextInput value={String(fields.address ?? '')} onChange={e => set('address', e.target.value)} placeholder="Ej. barrio o ciudad" />
           </Field>
         </>
       )}
@@ -471,10 +478,6 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
 
       </Section>
 
-      {error && (
-        <p style={{ fontSize: '12px', color: 'var(--alert)', margin: '0 0 12px' }}>{error}</p>
-      )}
-
       {/* Previsualizar solo existe donde es gratis. Con escena generada, cada
           vista costaría lo mismo que la pieza final. */}
       {template && !usesAi && (
@@ -485,7 +488,9 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
           onClick={doPreview}
           style={{ width: '100%', marginBottom: '10px' }}
         >
-          <Eye size={14} /> Previsualizar
+          {busy === 'preview'
+            ? <><Loader2 size={14} className="animate-spin" /> Previsualizando…</>
+            : <><Eye size={14} /> Previsualizar</>}
         </button>
       )}
 
@@ -524,12 +529,16 @@ export function RecipeForm({ properties, agents, templates: templatesProp, tenan
         {/* El icono de IA solo aparece cuando de verdad se llama a la IA:
             ponerlo en una pieza compuesta con sharp anunciaba un costo que no
             existe. */}
-        {pending
+        {busy === 'save'
           ? <><Loader2 size={14} className="animate-spin" /> {usesAi ? 'Generando…' : 'Guardando…'}</>
           : usesAi
             ? <><Sparkles size={14} /> Generar imagen</>
             : <>Guardar en la biblioteca</>}
       </button>
+
+      {error && (
+        <p role="alert" style={{ fontSize: '12px', color: 'var(--alert)', margin: '12px 0 0' }}>{error}</p>
+      )}
 
       {preview && (
         <div style={{ marginTop: '16px' }}>
