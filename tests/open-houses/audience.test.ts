@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchesAudience, decideRecipient, summarizeAudience, chunk, type AudienceLead } from '@/lib/open-houses/audience'
+import { matchesAudience, decideRecipient, decideRecipients, summarizeAudience, chunk, type AudienceLead } from '@/lib/open-houses/audience'
 
 // Quién recibe el anuncio de un open house. Un error aquí es un correo real a
 // quien no debía (o ninguno a quien sí).
@@ -50,7 +50,7 @@ describe('decideRecipient', () => {
 describe('summarizeAudience', () => {
   it('cuenta envíos por idioma y omisiones por motivo', () => {
     const s = summarizeAudience([
-      lead({ id: '1' }), lead({ id: '2', language: 'en' }), lead({ id: '3', emailBlocked: true }), lead({ id: '4', email: null }),
+      lead({ id: '1' }), lead({ id: '2', email: 'lead2@example.com', language: 'en' }), lead({ id: '3', emailBlocked: true }), lead({ id: '4', email: null }),
     ], ['es', 'en'])
     expect(s).toEqual({ total: 4, toSend: 2, byLanguage: { es: 1, en: 1 }, skipped: { email_blocked: 1, no_email: 1 } })
   })
@@ -60,5 +60,34 @@ describe('chunk', () => {
   it('parte en lotes del tamaño pedido', () => {
     expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
     expect(chunk([], 100)).toEqual([])
+  })
+})
+
+
+describe('decideRecipients — un envío por email', () => {
+  it('salta como duplicate_email al segundo lead con el mismo email (sin distinguir mayúsculas)', () => {
+    const leads = [
+      lead({ id: 'a', email: 'ana@example.com' }),
+      lead({ id: 'b', email: ' ANA@example.com ' }),
+      lead({ id: 'c', email: 'otro@example.com' }),
+    ]
+    const out = decideRecipients(leads, ['es', 'en'])
+    expect(out.map(r => r.decision.send)).toEqual([true, false, true])
+    expect(out[1].decision).toMatchObject({ send: false, reason: 'duplicate_email' })
+  })
+
+  it('un duplicado bloqueado no le quita el envío al otro', () => {
+    const leads = [
+      lead({ id: 'a', email: 'ana@example.com', emailBlocked: true }),
+      lead({ id: 'b', email: 'ana@example.com' }),
+    ]
+    const out = decideRecipients(leads, ['es', 'en'])
+    expect(out.map(r => r.decision.send)).toEqual([false, true])
+  })
+
+  it('summarizeAudience cuenta los duplicados como saltados', () => {
+    const s = summarizeAudience([lead({ id: 'a', email: 'x@example.com' }), lead({ id: 'b', email: 'x@example.com' })], ['es', 'en'])
+    expect(s.toSend).toBe(1)
+    expect(s.skipped.duplicate_email).toBe(1)
   })
 })

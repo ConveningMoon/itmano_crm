@@ -1,7 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { applyLeadListFilters } from '@/lib/data/leads'
-import { chunk, summarizeAudience, decideRecipient, type AudienceSummary } from '@/lib/open-houses/audience'
+import { chunk, summarizeAudience, decideRecipients, type AudienceSummary } from '@/lib/open-houses/audience'
 import { loadAudienceLeads } from '@/lib/services/open-house-audience'
 import { columns } from '@/lib/supabase/columns'
 import { hasAudienceCriteria, type BroadcastAudience, type SegmentAudience } from '@/lib/broadcasts/audience'
@@ -144,8 +144,7 @@ export async function previewBroadcastRecipients(
     summary: summarizeAudience(leads, languages),
     overflow,
     imported,
-    rows: leads.slice(0, PREVIEW_ROWS).map(lead => {
-      const d = decideRecipient(lead, languages)
+    rows: decideRecipients(leads, languages).slice(0, PREVIEW_ROWS).map(({ lead, decision: d }) => {
       return { id: lead.id, name: lead.firstName, email: lead.email, send: d.send, reason: d.send ? null : d.reason }
     }),
   }

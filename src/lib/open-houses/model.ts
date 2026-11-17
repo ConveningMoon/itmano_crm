@@ -64,13 +64,16 @@ export const EMAIL_STATUS_LABEL: Record<OpenHouseEmailStatus, string> = {
 
 // Motivos por los que un lead de la audiencia NO recibe el correo. Se guardan
 // en open_house_email_recipients.skip_reason y se muestran en la vista previa.
-export const SKIP_REASONS = ['no_email', 'email_blocked', 'no_language'] as const
+// `duplicate_email`: otro lead de la misma audiencia tiene el mismo email y ya
+// lo recibe; sin esto la misma persona recibía el correo dos veces.
+export const SKIP_REASONS = ['no_email', 'email_blocked', 'no_language', 'duplicate_email'] as const
 export type SkipReason = (typeof SKIP_REASONS)[number]
 
 export const SKIP_REASON_LABEL: Record<SkipReason, string> = {
   no_email:      'Sin email',
   email_blocked: 'Email bloqueado (baja, rebote o spam)',
   no_language:   'Su idioma no tiene versión en este open house',
+  duplicate_email: 'Otro lead con el mismo email ya lo recibe',
 }
 
 /** Estado visible: el guardado más "terminado" si el evento ya pasó. */

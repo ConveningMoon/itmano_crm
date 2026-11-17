@@ -51,6 +51,29 @@ export function decideRecipient(lead: AudienceLead, languages: readonly string[]
   return { send: true, language }
 }
 
+/**
+ * Decide para toda la audiencia: la regla de `decideRecipient` por lead y,
+ * además, un solo envío por email. Si dos leads comparten email (el alta
+ * manual los permitía), el primero que sí recibe se queda con el envío y el
+ * resto se salta como `duplicate_email`. El orden de entrada se respeta.
+ */
+export function decideRecipients<T extends AudienceLead>(
+  leads:     readonly T[],
+  languages: readonly string[],
+): { lead: T; decision: RecipientDecision }[] {
+  const seen = new Set<string>()
+  return leads.map(lead => {
+    const decision = decideRecipient(lead, languages)
+    if (!decision.send) return { lead, decision }
+    const key = lead.email!.trim().toLowerCase()
+    if (seen.has(key)) {
+      return { lead, decision: { send: false, reason: 'duplicate_email', language: decision.language } as RecipientDecision }
+    }
+    seen.add(key)
+    return { lead, decision }
+  })
+}
+
 export interface AudienceSummary {
   total:      number
   toSend:     number
@@ -63,8 +86,7 @@ export function summarizeAudience(
   languages: readonly string[],
 ): AudienceSummary {
   const summary: AudienceSummary = { total: leads.length, toSend: 0, byLanguage: {}, skipped: {} }
-  for (const lead of leads) {
-    const d = decideRecipient(lead, languages)
+  for (const { decision: d } of decideRecipients(leads, languages)) {
     if (d.send) {
       summary.toSend++
       summary.byLanguage[d.language] = (summary.byLanguage[d.language] ?? 0) + 1

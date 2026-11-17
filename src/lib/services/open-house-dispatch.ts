@@ -11,7 +11,7 @@ import {
   announcementRecipientIds, audienceLeadIdsByTags, loadAudienceLeads, rsvpLeadIds,
   type AudienceLeadWithContact,
 } from '@/lib/services/open-house-audience'
-import { chunk, decideRecipient } from '@/lib/open-houses/audience'
+import { chunk, decideRecipients } from '@/lib/open-houses/audience'
 import { createRsvpToken } from '@/lib/open-houses/rsvp-token'
 import { loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
 import { senderFromForAgent } from '@/lib/services/sender-identity'
@@ -112,8 +112,7 @@ async function recipientLeadIds(db: SupabaseClient, oh: any, kind: OpenHouseEmai
 async function freezeRecipients(db: SupabaseClient, email: EmailRow, oh: any): Promise<void> {
   const ids   = await recipientLeadIds(db, oh, email.kind)
   const leads = await loadAudienceLeads(db, email.tenant_id, ids)
-  const rows  = leads.map(lead => {
-    const d = decideRecipient(lead, oh.languages as string[])
+  const rows  = decideRecipients(leads, oh.languages as string[]).map(({ lead, decision: d }) => {
     return {
       email_id:    email.id,
       lead_id:     lead.id,

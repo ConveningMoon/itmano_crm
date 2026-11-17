@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resendForAccount } from '@/lib/resend'
 import { BATCH_SIZE, PAUSE_BETWEEN_CALLS_MS, batchIdempotencyKey, sendPermissiveBatch, sleep } from '@/lib/email/batch-send'
 import { parseEmailContent, type EmailContent } from '@/lib/email-content'
-import { chunk, decideRecipient } from '@/lib/open-houses/audience'
+import { chunk, decideRecipients } from '@/lib/open-houses/audience'
 import { parseBroadcastAudience } from '@/lib/broadcasts/audience'
 import { broadcastGuardReason, broadcastQuotaError, MAX_BROADCAST_RECIPIENTS } from '@/lib/broadcasts/model'
 import { resolveBroadcastLeadIds } from '@/lib/services/broadcast-audience'
@@ -112,8 +112,7 @@ async function freezeRecipients(db: SupabaseClient, row: BroadcastRow): Promise<
   if (overflow) return `La audiencia creció y ahora pasa del tope de ${MAX_BROADCAST_RECIPIENTS} destinatarios por envío. Acótala y vuelve a intentarlo.`
 
   const leads = await loadAudienceLeads(db, row.tenant_id, ids)
-  const rows = leads.map(lead => {
-    const d = decideRecipient(lead, row.languages)
+  const rows = decideRecipients(leads, row.languages).map(({ lead, decision: d }) => {
     return {
       broadcast_id: row.id,
       lead_id:      lead.id,
