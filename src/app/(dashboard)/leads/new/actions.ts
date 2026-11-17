@@ -7,6 +7,12 @@ import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import type { Language } from '@/lib/types'
+import { columns } from '@/lib/supabase/columns'
+import {
+  normalizeEmail, normalizePhone, validateManualLead, type ManualLeadField,
+} from '@/lib/leads/manual-input'
+
+const DUPLICATE_COLUMNS = columns('leads', ['id', 'first_name', 'last_name', 'email'])
 
 function genId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -29,25 +35,74 @@ interface LeadInput {
   // Arrival source for direct-entry sources (Instagram/Facebook/WhatsApp set their
   // own; manual + channel-based use 'direct'). Whitelisted server-side.
   trafficSource?:      string
+  // El usuario ya vio el aviso de email repetido y decidió registrar igualmente.
+  allowDuplicate?:     boolean
+}
+
+export type CreateLeadResult =
+  | { ok: true; leadId: string; enrolledInSequence: boolean }
+  | {
+      ok: false
+      error: string
+      field?: ManualLeadField | 'agentId'
+      // Lead del mismo tenant con ese email (sin distinguir mayúsculas).
+      duplicate?: { leadId: string; name: string }
+    }
+
+// Escapa los comodines de ILIKE para comparar el email literal.
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, ch => `\\${ch}`)
 }
 
 // Direct-entry arrival sources accepted from the manual form (must match the
 // leads.traffic_source CHECK). Anything else falls back to 'direct'.
 const MANUAL_TRAFFIC_SOURCES = new Set(['direct', 'instagram', 'facebook', 'whatsapp'])
 
-export async function createLead(input: LeadInput): Promise<{ error?: string }> {
+export async function createLead(input: LeadInput): Promise<CreateLeadResult> {
+  const fieldErrors = validateManualLead(input)
+  const firstInvalid = (Object.keys(fieldErrors) as ManualLeadField[])[0]
+  if (firstInvalid) return { ok: false, error: fieldErrors[firstInvalid]!, field: firstInvalid }
+
+  const phone = normalizePhone(input.phone)
+  if (!phone.ok) return { ok: false, error: phone.error, field: 'phone' }
+  const email = normalizeEmail(input.email)
+
   const ctx           = await getCurrentTenantContext()
   const supabase      = createAdminClient()
   const leadId        = genId('lead')
   const trafficSource = MANUAL_TRAFFIC_SOURCES.has(input.trafficSource ?? '') ? input.trafficSource! : 'direct'
 
   const tenant = resolveTargetTenant(ctx, input.tenantId)
-  if (typeof tenant === 'object') return { error: tenant.error }
+  if (typeof tenant === 'object') return { ok: false, error: tenant.error }
   const tenantId = tenant
   // An agent is auto-attributed to their own leads (ignore any submitted agentId);
   // owner / super_admin pick the agent as before. ctx.agent_id is non-null for
   // role 'agent' (getCurrentTenantContext throws on an unlinked agent).
   const agentId = ctx.role === 'agent' ? ctx.agent_id! : input.agentId
+  if (!agentId) return { ok: false, error: 'Selecciona un agente', field: 'agentId' }
+
+  // Email repetido en el tenant: la importación ya lo descartaba, el alta manual
+  // no. Dos leads con el mismo email reciben dos veces cada correo grupal.
+  if (!input.allowDuplicate) {
+    const { data: existing } = await supabase
+      .from('leads')
+      .select(DUPLICATE_COLUMNS)
+      .eq('tenant_id', tenantId)
+      .ilike('email', escapeLike(email))
+      .limit(1)
+      .maybeSingle()
+    if (existing) {
+      // Cliente sin tipar: columns() ya validó la lista contra el esquema.
+      const e = existing as unknown as { id: string; first_name: string | null; last_name: string | null }
+      const name = [e.first_name, e.last_name].filter(Boolean).join(' ').trim() || email
+      return {
+        ok: false,
+        error: 'Ya existe un lead con este email en el equipo.',
+        field: 'email',
+        duplicate: { leadId: e.id, name },
+      }
+    }
+  }
 
   // Canonical scoring: the lead is born with score 0; recompute_lead_score (called
   // below) is the single source of truth. No baselines written directly.
@@ -57,10 +112,10 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
     agent_id:              agentId,
     acquisition_channel_id: input.acquisitionChannelId || null,
     traffic_source:        trafficSource,
-    first_name:            input.firstName,
-    last_name:             input.lastName,
-    email:                 input.email,
-    phone:                 input.phone,
+    first_name:            input.firstName.trim(),
+    last_name:             input.lastName.trim(),
+    email,
+    phone:                 phone.value,
     language:              input.language,
     stage:                 'nuevo',
     current_score:         0,
@@ -69,7 +124,11 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
     notes:                 input.notes,
   })
 
-  if (error) return { error: error.message }
+  if (error) {
+    // El detalle técnico va al log; la pantalla recibe un mensaje accionable.
+    console.error(JSON.stringify({ service: 'create-lead', tenant_id: tenantId, error: error.message }))
+    return { ok: false, error: 'No se pudo registrar el lead. Revisa los datos e inténtalo de nuevo.' }
+  }
 
   // Lifecycle log: who registered the lead and how (actor = the owner/super).
   await emitLeadCreated(supabase, { leadId, tenantId, via: 'manual', actorUserId: ctx.user_id })
@@ -80,7 +139,7 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
 
   // Enroll in email sequence if the channel has one.
   // Failure is logged but never rolls back the lead creation.
-  await enrollLeadInSequence({
+  const enrollment = await enrollLeadInSequence({
     db:                     supabase,
     lead_id:                leadId,
     tenant_id:              tenantId,
@@ -89,7 +148,7 @@ export async function createLead(input: LeadInput): Promise<{ error?: string }> 
 
   revalidatePath('/leads')
   revalidatePath('/dashboard')
-  return {}
+  return { ok: true, leadId, enrolledInSequence: enrollment.enrolled }
 }
 
 // ─── Bulk import (CSV/XLSX) ───────────────────────────────────────────────────

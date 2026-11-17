@@ -1,10 +1,12 @@
 'use client'
 
 import { useId, useState, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Agent, Language } from '@/lib/types'
 import type { ChannelOption, TenantOption } from './page'
 import { createLead, createLeadsBulk, getExistingLeadEmails } from './actions'
+import { validateManualLead } from '@/lib/leads/manual-input'
 import { parseLeadRows, type ParseLeadsResult, type NormalizedLead } from '@/lib/import/parse-leads'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { Tabs } from '@/components/ui/tabs'
@@ -32,7 +34,7 @@ interface FormData {
   lastName:             string
   email:                string
   phone:                string
-  language:             Language | ''
+  language:             Language
   agentId:              string
   channelType:          string
   acquisitionChannelId: string
@@ -43,6 +45,8 @@ interface FormData {
 interface FormErrors {
   firstName?:            string
   email?:                string
+  phone?:                string
+  language?:             string
   agentId?:             string
   acquisitionChannelId?: string
   tenantId?:             string
@@ -57,7 +61,9 @@ const INITIAL_FORM: FormData = {
   lastName:             '',
   email:                '',
   phone:                '',
-  language:             '',
+  // Sin idioma el INSERT choca con leads_language_check: el formulario parte de
+  // español y el usuario lo cambia si hace falta.
+  language:             'es',
   agentId:              '',
   channelType:          '',
   acquisitionChannelId: '',
@@ -125,10 +131,12 @@ function FieldError({ message }: { message?: string }) {
 interface SuccessScreenProps {
   form: FormData
   agents: Agent[]
+  leadId: string
+  enrolledInSequence: boolean
   onReset: () => void
 }
 
-function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
+function SuccessScreen({ form, agents, leadId, enrolledInSequence, onReset }: SuccessScreenProps) {
   const router = useRouter()
   const agentName = agents.find(a => a.id === form.agentId)?.name || 'el agente'
   const fullName = [form.firstName, form.lastName].filter(Boolean).join(' ')
@@ -138,7 +146,9 @@ function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
       <span className="empty-card-icon" aria-hidden="true"><CheckCircle2 size={24} strokeWidth={1.5} /></span>
       <h2 className="done-card-title">Lead registrado correctamente</h2>
       <p className="done-card-text">{fullName} ha sido añadido al sistema y asignado a {agentName}.</p>
-      <p className="settings-note">La secuencia de email se activará automáticamente.</p>
+      {enrolledInSequence && (
+        <p className="settings-note">El lead entró en la secuencia de email de su fuente.</p>
+      )}
       {form.lender && (
         <p className="settings-note">Prestamista: <strong>{form.lender}</strong></p>
       )}
@@ -146,6 +156,9 @@ function SuccessScreen({ form, agents, onReset }: SuccessScreenProps) {
         <button type="button" onClick={() => router.push('/leads')} className="btn btn-ghost">
           ← Ver todos los leads
         </button>
+        <Link href={`/leads/${leadId}`} className="btn btn-ghost">
+          Ver lead
+        </Link>
         <button type="button" onClick={onReset} className="btn btn-primary">
           + Registrar otro lead
         </button>
@@ -174,10 +187,15 @@ export function NewLeadClient({
   const router = useRouter()
   const fieldId = useId()
 
-  const initialForm: FormData = { ...INITIAL_FORM, agentId: lockedAgentId ?? '' }
+  // Con un solo agente en el equipo no hay nada que elegir: se preselecciona.
+  const singleAgentId = !isSuperAdmin && agents.length === 1 ? agents[0].id : ''
+  const initialForm: FormData = { ...INITIAL_FORM, agentId: lockedAgentId ?? singleAgentId }
   const [form, setForm] = useState<FormData>(initialForm)
   const [errors, setErrors] = useState<FormErrors>({})
-  const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [duplicate, setDuplicate] = useState<{ leadId: string; name: string } | null>(null)
+  const [created, setCreated] = useState<{ leadId: string; enrolledInSequence: boolean } | null>(null)
+  const submitSuccess = created !== null
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mode, setMode] = useState<'manual' | 'import'>('manual')
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
@@ -226,7 +244,7 @@ export function NewLeadClient({
   }
 
   function downloadTemplate() {
-    const example = ['María', 'González', 'maria@email.com', '(757) 555-0100', 'es', 'Nuevo', 'Navy Federal', 'Cliente interesada en Virginia Beach']
+    const example = ['María', 'González', 'maria@example.com', '+1 555 123 4567', 'es', 'Nuevo', 'Banco Ejemplo', 'Busca casa de 3 habitaciones']
     const notes = [
       '# INSTRUCCIONES:',
       '# idioma: es | en | pt (vacío → es)',
@@ -351,6 +369,8 @@ export function NewLeadClient({
     if (field in errors) {
       setErrors(prev => ({ ...prev, [field]: undefined }))
     }
+    if (field === 'email') setDuplicate(null)
+    setFormError(null)
   }
 
   // El ruteo automático por idioma se retiró: el owner elige el agente.
@@ -363,15 +383,24 @@ export function NewLeadClient({
     if (errors.agentId) setErrors(prev => ({ ...prev, agentId: undefined }))
   }
 
-  const validate = (): boolean => {
-    const newErrors: FormErrors = {}
-    if (isSuperAdmin && !selectedTenantId) newErrors.tenantId = 'Selecciona un tenant'
-    if (!form.firstName.trim()) newErrors.firstName = 'El nombre es obligatorio'
-    if (!form.email.trim()) {
-      newErrors.email = 'El email es obligatorio'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = 'Email no válido'
+  // Lleva el foco al primer campo con error: en pantallas bajas el botón queda
+  // lejos de los campos y, sin esto, el usuario no ve qué falló.
+  const focusFirstInvalid = (errs: FormErrors) => {
+    const order: (keyof FormErrors)[] = ['firstName', 'email', 'phone', 'language', 'tenantId', 'agentId', 'acquisitionChannelId']
+    const first = order.find(k => errs[k])
+    if (!first) return
+    const ids: Record<keyof FormErrors, string> = {
+      firstName: 'first', email: 'email', phone: 'phone', language: 'lang',
+      tenantId: 'tenant', agentId: 'agent', acquisitionChannelId: 'source',
     }
+    const el = document.getElementById(`${fieldId}-${ids[first]}`)
+    el?.scrollIntoView({ block: 'center' })
+    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement) el.focus()
+  }
+
+  const validate = (): boolean => {
+    const newErrors: FormErrors = { ...validateManualLead(form) }
+    if (isSuperAdmin && !selectedTenantId) newErrors.tenantId = 'Selecciona un tenant'
     if (!form.agentId) newErrors.agentId = 'Selecciona un agente'
     if (!form.channelType) {
       newErrors.acquisitionChannelId = 'Selecciona la fuente'
@@ -380,11 +409,13 @@ export function NewLeadClient({
       newErrors.acquisitionChannelId = 'Selecciona el origen'
     }
     setErrors(newErrors)
+    focusFirstInvalid(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  async function handleManualSubmit() {
+  async function handleManualSubmit(allowDuplicate = false) {
     if (!validate()) return
+    setFormError(null)
     setIsSubmitting(true)
     // Direct-entry sources: traffic_source = the source, channel forced to manual /
     // null. Channel-based sources keep traffic_source 'direct' and their channel.
@@ -403,24 +434,39 @@ export function NewLeadClient({
       lender:               form.lender || null,
       notes:                form.notes || null,
       tenantId:             isSuperAdmin ? selectedTenantId : undefined,
+      allowDuplicate,
     })
     setIsSubmitting(false)
-    if (result.error) {
-      setErrors({ firstName: result.error })
+    if (result.ok) {
+      setCreated({ leadId: result.leadId, enrolledInSequence: result.enrolledInSequence })
+      return
+    }
+    if (result.duplicate) {
+      setDuplicate(result.duplicate)
+      return
+    }
+    if (result.field) {
+      const fieldErrors = { [result.field]: result.error } as FormErrors
+      setErrors(fieldErrors)
+      focusFirstInvalid(fieldErrors)
     } else {
-      setSubmitSuccess(true)
+      setFormError(result.error)
     }
   }
 
   const handleReset = () => {
     setForm(initialForm)
     setErrors({})
-    setSubmitSuccess(false)
+    setFormError(null)
+    setDuplicate(null)
+    setCreated(null)
     resetImport()
   }
 
   const selectedAgent = agents.find(a => a.id === form.agentId)
-  const isSubmitDisabled = !form.firstName.trim() || !form.email.trim() || isSubmitting
+  // El botón sólo se bloquea mientras envía: si faltan datos, al pulsarlo se
+  // marcan los campos. Antes quedaba gris sin explicar qué faltaba.
+  const isSubmitDisabled = isSubmitting
 
   // Channels filtered by type for cascade picker (scoped to the visible tenant)
   const channelsForType = (type: string) => visibleChannels.filter(c => c.channelType === type)
@@ -451,7 +497,17 @@ export function NewLeadClient({
   const attributionAgentName = AGENT_DISPLAY_NAMES[attributionAgentId] || '—'
   const needsAgentSelector   = !myAgentId
 
-  if (submitSuccess) return <SuccessScreen form={form} agents={agents} onReset={handleReset} />
+  if (submitSuccess && created) {
+    return (
+      <SuccessScreen
+        form={form}
+        agents={agents}
+        leadId={created.leadId}
+        enrolledInSequence={created.enrolledInSequence}
+        onReset={handleReset}
+      />
+    )
+  }
 
   const id = (name: string) => `${fieldId}-${name}`
 
@@ -479,7 +535,7 @@ export function NewLeadClient({
           manual: (
         <form
           noValidate
-          onSubmit={e => { e.preventDefault(); handleManualSubmit() }}
+          onSubmit={e => { e.preventDefault(); void handleManualSubmit() }}
           className="settings-stack"
         >
           {/* Datos del lead */}
@@ -536,12 +592,16 @@ export function NewLeadClient({
                 <input
                   id={id('phone')}
                   type="tel"
-                  placeholder="(757) 555-0000"
+                  inputMode="tel"
+                  autoComplete="off"
+                  placeholder="Ej. +1 555 123 4567"
                   value={form.phone}
                   onChange={e => updateField('phone', e.target.value)}
-                  className="settings-input"
+                  aria-invalid={errors.phone ? true : undefined}
+                  className={inputClass(errors.phone)}
                 />
               </span>
+              <FieldError message={errors.phone} />
             </div>
 
             <div className="form-field">
@@ -549,17 +609,14 @@ export function NewLeadClient({
               <SelectField
                 id={id('lang')}
                 value={form.language}
-                onChange={e => {
-                  const val = e.target.value
-                  if (val === '') updateField('language', '')
-                  else handleLanguageChange(val as Language)
-                }}
+                onChange={e => handleLanguageChange(e.target.value as Language)}
+                invalid={errors.language}
               >
-                <option value="">-- Seleccionar --</option>
-                <option value="es">🇪🇸 Español</option>
-                <option value="en">🇺🇸 English</option>
-                <option value="pt">🇧🇷 Português</option>
+                {SUPPORTED_LANGUAGE_CODES.map(code => (
+                  <option key={code} value={code}>{LANGUAGE_CONFIG[code].label}</option>
+                ))}
               </SelectField>
+              <FieldError message={errors.language} />
             </div>
 
             <div className="form-field">
@@ -573,7 +630,7 @@ export function NewLeadClient({
                   type="text"
                   value={form.lender}
                   onChange={e => updateField('lender', e.target.value)}
-                  placeholder="Ej. Navy Federal, Wells Fargo, prestamista privado..."
+                  placeholder="Ej. banco o prestamista privado"
                   className="settings-input"
                 />
               </span>
@@ -702,6 +759,29 @@ export function NewLeadClient({
             />
             <div className="form-count">{form.notes.length}/500</div>
           </section>
+
+          {duplicate && (
+            <div role="alert" className="settings-card">
+              <p className="settings-note">
+                Ya existe un lead con este email en el equipo: <strong>{duplicate.name}</strong>.
+                Si es la misma persona, ábrelo en lugar de crear otro; dos leads con el mismo
+                email recibirían dos veces cada correo grupal.
+              </p>
+              <div className="settings-actions">
+                <Link href={`/leads/${duplicate.leadId}`} className="btn btn-primary">Abrir lead existente</Link>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={isSubmitting}
+                  onClick={() => void handleManualSubmit(true)}
+                >
+                  {isSubmitting ? 'Registrando…' : 'Registrar igualmente'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {formError && <p role="alert" className="form-error">{formError}</p>}
 
           <div className="form-footer">
             <button type="button" onClick={() => router.back()} className="btn btn-ghost">
