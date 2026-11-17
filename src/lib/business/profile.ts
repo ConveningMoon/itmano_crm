@@ -114,11 +114,28 @@ export function expectedCommission(
   return Math.round((amount * rate) / 100)
 }
 
+/**
+ * Separador de miles según la moneda: en USD el del mercado de EE. UU.
+ * ("$425,000"), igual que el resto del CRM y las páginas públicas; en EUR el
+ * europeo ("425.000"). Antes todo salía con 'es-ES' y la ficha del lead decía
+ * "$425.000" mientras Propiedades decía "$249,900".
+ */
+export function moneyLocale(currency: Currency | null): string {
+  return currency === 'EUR' ? 'es-ES' : 'en-US'
+}
+
 /** Monto en la moneda del perfil, sin decimales (aquí nadie mira los céntimos). */
 export function formatMoney(amount: number | null | undefined, currency: Currency | null): string {
   if (amount === null || amount === undefined || !Number.isFinite(amount)) return '—'
   const symbol = currency ? CURRENCY_SYMBOL[currency] : ''
-  return `${symbol}${Math.round(amount).toLocaleString('es-ES')}`
+  return `${symbol}${Math.round(amount).toLocaleString(moneyLocale(currency))}`
+}
+
+/** Nombre visible de cada tramo de presupuesto. */
+export const BUDGET_TIER_LABEL: Record<'entry' | 'mid' | 'premium', string> = {
+  entry:   'entrada',
+  mid:     'medio',
+  premium: 'premium',
 }
 
 /**

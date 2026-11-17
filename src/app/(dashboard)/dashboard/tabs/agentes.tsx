@@ -206,7 +206,7 @@ export async function AgentesTab({ ctx }: TabProps) {
         </ChartCard>
 
         <ChartCard
-          title="Calidad media"
+          title="Score de calidad promedio"
           scope="Toda la cartera"
           hint="Promedio de calidad de los leads de cada agente, de 0 a 100. A diferencia del score, no lo mueve el paso del tiempo."
         >

@@ -134,7 +134,7 @@ function CreateTenantCard() {
       <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
           <label className="settings-field-label">Nombre</label>
-          <input style={INPUT} value={name} onChange={e => setName(e.target.value)} placeholder="A&J Real Estate Group" />
+          <input style={INPUT} value={name} onChange={e => setName(e.target.value)} placeholder="Ej. Grupo Inmobiliario Norte" />
         </div>
         <div>
           <label className="settings-field-label">Slug</label>
@@ -142,7 +142,7 @@ function CreateTenantCard() {
             style={INPUT}
             value={effectiveSlug}
             onChange={e => { setSlug(e.target.value); setSlugTouched(true) }}
-            placeholder="aj-real-estate"
+            placeholder="ej. grupo-norte"
           />
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
             id del tenant: <code>tenant-{effectiveSlug || '…'}</code>

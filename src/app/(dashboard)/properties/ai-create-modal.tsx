@@ -132,7 +132,7 @@ export function AiCreateModal({
                     opacity: (!on && atMax) ? 0.4 : 1,
                   }}
                 >
-                  {LANGUAGE_CONFIG[l].flag} {LANGUAGE_CONFIG[l].label}
+                  {LANGUAGE_CONFIG[l].label}
                 </button>
               )
             })}

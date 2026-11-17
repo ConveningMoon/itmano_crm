@@ -89,7 +89,7 @@ async function ChannelDetailPage({
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
         >
           <ArrowLeft size={14} />
-          Fuentes de Adquisición
+          Fuentes
         </Link>
       </div>
 
@@ -125,9 +125,13 @@ async function ChannelDetailPage({
               {channel.active ? 'Activo' : 'Inactivo'}
             </span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '8px' }}>
-            {channel.publicId} · slug: {channel.slug}
-          </div>
+          {/* Identificadores técnicos: útiles para soporte de ITMANO, ruido para
+              el cliente (el enlace público ya está en la pestaña Página). */}
+          {ctx.role === 'super_admin' && (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace', marginBottom: '8px' }}>
+              {channel.publicId} · slug: {channel.slug}
+            </div>
+          )}
           <span style={{
             fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
             background: 'var(--bg-elevated)', color: 'var(--text-secondary)',

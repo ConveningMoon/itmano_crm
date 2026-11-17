@@ -21,7 +21,7 @@ interface TagSequencesPanelProps {
 
 function langLabel(code: string): string {
   const cfg = LANGUAGE_CONFIG[code as Language]
-  return cfg ? `${cfg.flag} ${cfg.label}` : code.toUpperCase()
+  return cfg ? cfg.label : code.toUpperCase()
 }
 
 const CELL_LINK: React.CSSProperties = {

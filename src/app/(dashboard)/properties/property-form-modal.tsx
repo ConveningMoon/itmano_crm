@@ -552,7 +552,7 @@ export function PropertyFormModal({
                   type="text"
                   value={form.city ?? ''}
                   onChange={e => setField('city', e.target.value || null)}
-                  placeholder="Virginia Beach"
+                  placeholder="Ej. Ciudad"
                   style={fieldStyle('city')}
                 />
               </label>
@@ -743,7 +743,7 @@ export function PropertyFormModal({
                   type="text"
                   value={form.neighborhood ?? ''}
                   onChange={e => setField('neighborhood', e.target.value || null)}
-                  placeholder="Norfolk, Ghent"
+                  placeholder="Ej. barrio o subdivisión"
                   style={fieldStyle('neighborhood')}
                 />
               </label>
@@ -784,7 +784,7 @@ export function PropertyFormModal({
                         opacity: (!on && atMax) ? 0.4 : 1,
                       }}
                     >
-                      {LANGUAGE_CONFIG[l].flag} {LANGUAGE_CONFIG[l].label}
+                      {LANGUAGE_CONFIG[l].label}
                     </button>
                   )
                 })}
@@ -794,7 +794,7 @@ export function PropertyFormModal({
             {(form.content_languages ?? []).map(l => (
               <div key={l} style={{ border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-elevated)' }}>
                 <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gold-2)', letterSpacing: '0.04em' }}>
-                  {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.flag} {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l}
+                  {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l}
                 </div>
                 <label style={labelStyle}>
                   <span style={labelTextStyle}>Descripción</span>

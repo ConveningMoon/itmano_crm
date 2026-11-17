@@ -89,9 +89,10 @@ describe('expectedCommission', () => {
 
 describe('formatMoney', () => {
   it('usa el símbolo del perfil y no muestra céntimos', () => {
-    expect(formatMoney(12_000, 'USD')).toBe('$12.000')
+    // USD con el separador de EE. UU., como el resto del CRM; EUR con el europeo.
+    expect(formatMoney(12_000, 'USD')).toBe('$12,000')
     expect(formatMoney(12_000, 'EUR')).toBe('€12.000')
-    expect(formatMoney(12_499.6, 'USD')).toBe('$12.500')
+    expect(formatMoney(12_499.6, 'USD')).toBe('$12,500')
   })
 
   it('sin dato, raya', () => {

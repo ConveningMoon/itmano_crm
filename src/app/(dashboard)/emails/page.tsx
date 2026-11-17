@@ -242,7 +242,9 @@ async function EmailsPage({
         </div>
       )}
       {isSuperAdmin
-        ? purchaseByTenant.map(({ tenant_id: tid, tenant_name, agents }) => (
+        // Dentro de un tenant, sólo ese tenant: ver los agentes de otro cliente
+        // "estando dentro" de éste confundía. Sin tenant elegido, todos.
+        ? (tenant_id ? purchaseByTenant.filter(t => t.tenant_id === tenant_id) : purchaseByTenant).map(({ tenant_id: tid, tenant_name, agents }) => (
             <section key={tid} aria-label={tenant_name} style={{ marginTop: '8px', marginBottom: '20px' }}>
               <h2 style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 8px' }}>
                 {tenant_name}
@@ -275,6 +277,7 @@ async function EmailsPage({
       {/* El id se conserva para los enlaces viejos a /emails#emails-de-cierre. */}
       <div id="emails-de-cierre" style={{ scrollMarginTop: '80px' }}>
         <Tabs
+          urlParam="tab"
           defaultKey={activeTab}
           items={[
             { key: 'secuencias', label: 'Secuencias',   badge: sequences.length },

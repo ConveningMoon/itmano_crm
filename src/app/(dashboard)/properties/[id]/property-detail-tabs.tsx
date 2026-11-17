@@ -18,6 +18,7 @@ export function PropertyDetailTabs({
   const [tab, setTab] = useState(initialTab ?? 'descripcion')
   return (
     <Tabs
+      urlParam="tab"
       items={[
         { key: 'descripcion', label: 'Descripción' },
         { key: 'pagina', label: 'Página' },

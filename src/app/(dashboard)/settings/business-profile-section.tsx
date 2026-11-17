@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, AlertTriangle, AlertCircle } from 'lucide-react'
 import {
-  CURRENCY_SYMBOL, budgetTierFor, expectedCommission, formatMoney, missingFields,
+  CURRENCY_SYMBOL, BUDGET_TIER_LABEL, moneyLocale, budgetTierFor, expectedCommission, formatMoney, missingFields,
   type BusinessProfile, type Currency, type CommissionModel,
 } from '@/lib/business/profile'
 import { saveBusinessProfile } from './actions'
@@ -177,7 +177,7 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
                   className="settings-tier"
                   style={{ '--tier': color } as React.CSSProperties}
                 >
-                  {simbolo}{monto.toLocaleString('es-ES')} → {tier ?? 'sin clasificar'}
+                  {simbolo}{monto.toLocaleString(moneyLocale(draft.currency || null))} → {tier ? BUDGET_TIER_LABEL[tier] : 'sin clasificar'}
                 </span>
               )
             })}
@@ -200,7 +200,7 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
               className="settings-input"
               value={draft.primaryAreas}
               onChange={e => set('primaryAreas', e.target.value)}
-              placeholder="Virginia Beach, Norfolk"
+              placeholder="Ej. las ciudades donde trabajas más"
             />
           </SettingsRow>
           <SettingsRow label="Zona secundaria" htmlFor="bp-secondary-areas" hint="Las atiendes, pero no son tu foco.">
@@ -209,7 +209,7 @@ export function BusinessProfileSection({ profile }: { profile: BusinessProfile }
               className="settings-input"
               value={draft.secondaryAreas}
               onChange={e => set('secondaryAreas', e.target.value)}
-              placeholder="Chesapeake, Suffolk"
+              placeholder="Ej. ciudades cercanas que también atiendes"
             />
           </SettingsRow>
           <SettingsRow label="Zona horaria de tu zona principal" htmlFor="bp-timezone" hint={<>La hora de tus open houses y de sus correos se escribe en esta zona. En &quot;Automática&quot; se

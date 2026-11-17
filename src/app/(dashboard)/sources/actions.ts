@@ -207,7 +207,7 @@ function buildPageCopyTool(channelType: string) {
 
   if (channelType === 'lead_magnet') {
     Object.assign(properties, {
-      badge:             { type: 'string', description: 'Eyebrow corto del hero (ej.: "Guía gratuita · Hampton Roads, Virginia")' },
+      badge:             { type: 'string', description: 'Eyebrow corto del hero (ej.: "Guía gratuita · <zona del agente>")' },
       microcopy:         { type: 'string', description: 'Microcopy bajo el botón (ej.: "100% gratis · Sin compromiso")' },
       benefits_title:    { type: 'string', description: 'Título de la sección "qué contiene"' },
       benefits_subtitle: { type: 'string', description: 'Subtítulo de 1–2 frases de esa sección' },

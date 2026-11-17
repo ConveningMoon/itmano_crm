@@ -76,6 +76,7 @@ async function AdminContent() {
       </div>
 
       <Tabs
+        urlParam="tab"
         items={[
           { key: 'tenants', label: 'Tenants', badge: kpis.tenants },
           { key: 'ia', label: 'Uso de IA' },

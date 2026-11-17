@@ -346,7 +346,7 @@ export function AgentRow({ agent, hasAccess, canManage, canLinkSelf, canEditSelf
                 onChange={e => { setDesc(e.target.value); setDescErr(null) }}
                 rows={4}
                 maxLength={3000}
-                placeholder="Ej.: Llevo 8 años en Hampton Roads, sobre todo con familias militares y compradores primerizos con VA Loan. Atiendo en inglés y español. Prefiero explicar el proceso completo antes de enseñar casas."
+                placeholder="Ej.: Llevo 8 años en la zona, sobre todo con compradores primerizos. Atiendo en inglés y español. Prefiero explicar el proceso completo antes de enseñar casas."
               />
               {descErr && <p className="settings-alert" role="alert"><AlertCircle size={13} aria-hidden="true" /> {descErr}</p>}
               <div className="settings-actions">

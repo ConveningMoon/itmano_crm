@@ -275,7 +275,7 @@ export function buildIntegrationPrompt(input: IntegrationPromptInput): string {
       '',
       '### Alternativa autenticada (solo si llamas desde TU backend, nunca desde JS de navegador)',
       `POST ${baseUrl}/api/contact/${publicId}/submit`,
-      `Header: x-contact-secret: ${contactSecret ?? '(pídelo desde "Ver Opciones de integración")'}`,
+      `Header: x-contact-secret: ${contactSecret ?? '(pídelo desde "Opciones de integración")'}`,
       'Sin CORS — un fetch directo desde el navegador fallará. Esta ruta no alimenta',
       'el scoring automático de fit (sección de abajo) — solo el análisis de IA en',
       'texto libre.',

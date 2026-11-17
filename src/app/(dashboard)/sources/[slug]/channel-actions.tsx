@@ -123,7 +123,7 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
               borderRadius: '8px', cursor: pending ? 'default' : 'pointer',
             }}
           >
-            <Puzzle size={12} /> Ver Opciones de integración
+            <Puzzle size={12} /> Opciones de integración
           </button>
         )}
         <button
@@ -265,7 +265,7 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
                 {sequences.length === 0 && (
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
                     No hay secuencias disponibles. Crea una en{' '}
-                    <Link href="/emails/new" style={{ color: 'var(--gold-2)', textDecoration: 'none' }}>Secuencias de Email →</Link>
+                    <Link href="/emails/new" style={{ color: 'var(--gold-2)', textDecoration: 'none' }}>Emails →</Link>
                   </div>
                 )}
               </div>

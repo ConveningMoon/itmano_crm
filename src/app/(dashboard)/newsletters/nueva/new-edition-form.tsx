@@ -109,7 +109,7 @@ export function NewEditionForm({ studioImages, sourceDomains }: Props) {
             id={`${fieldId}-title`}
             value={title}
             onChange={e => setTitle(e.target.value)}
-            placeholder="Qué pasó esta semana en Hampton Roads"
+            placeholder="Ej. Qué pasó esta semana en el mercado de tu zona"
             required
             autoFocus
             className="settings-input settings-input-wide"
