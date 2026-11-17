@@ -305,11 +305,21 @@ export function ScoringSection({ rules, canEdit, recommended }: {
       {/* Intro — el copy cambia según quién mira. Para el cliente esto no es una
           pantalla de configuración: es la explicación de cómo se califican sus
           leads, que es parte de lo que está comprando. */}
-      <p className="settings-note">
-        {canEdit
-          ? 'Estos son los valores globales del modelo. Aplican a todos los tenants.'
-          : 'Así calificamos tus leads. Cada señal suma o resta puntos, y el total determina la temperatura que ves en el pipeline.'}
-      </p>
+      {canEdit ? (
+        // Sólo super_admin edita y casi siempre lo hace "dentro" de un tenant:
+        // sin un aviso fuerte es fácil creer que el cambio afecta sólo a ése.
+        <div className="settings-alert settings-alert-block" role="note">
+          <TriangleAlert size={14} aria-hidden="true" />
+          <span>
+            <strong>Modelo global.</strong> Estos puntos aplican a <strong>todos los tenants</strong>,
+            no sólo al que tienes abierto. Para ajustar un solo tenant usa la calibración por mercado.
+          </span>
+        </div>
+      ) : (
+        <p className="settings-note">
+          Así calificamos tus leads. Cada señal suma o resta puntos, y el total determina la temperatura que ves en el pipeline.
+        </p>
+      )}
 
       {!canEdit && (
         <div className="settings-panel">
@@ -374,11 +384,11 @@ export function ScoringSection({ rules, canEdit, recommended }: {
             <div className="settings-panel settings-panel-gold">
               <p className="settings-confirm-text">
                 {confirmStep === 1 ? (
-                  <>Vas a cambiar <strong>{changedCount}</strong> {changedCount === 1 ? 'valor' : 'valores'} del scoring.
-                    Esto afecta cómo se priorizan tus leads y recalcula sus scores. ¿Continuar?</>
+                  <>Vas a cambiar <strong>{changedCount}</strong> {changedCount === 1 ? 'valor' : 'valores'} del
+                    modelo <strong>global</strong>: afecta la prioridad de los leads de <strong>todos los tenants</strong>. ¿Continuar?</>
                 ) : (
-                  <><strong>Confirmación final.</strong> Los cambios se aplican al
-                    instante y los scores de tus leads se recalcularán. ¿Aplicar los cambios?</>
+                  <><strong>Confirmación final.</strong> Los puntos nuevos rigen desde ya; los scores
+                    de cada lead se recalculan con su siguiente evento o en la pasada diaria. ¿Aplicar a todos los tenants?</>
                 )}
               </p>
               <div className="settings-actions settings-actions-end">
@@ -389,7 +399,7 @@ export function ScoringSection({ rules, canEdit, recommended }: {
                   <button type="button" className="btn btn-primary" onClick={() => setConfirmStep(2)}>Continuar →</button>
                 ) : (
                   <button type="button" className="btn btn-primary" onClick={handleSave} disabled={pending}>
-                    {pending ? 'Aplicando…' : 'Aplicar cambios'}
+                    {pending ? 'Aplicando…' : 'Aplicar a todos los tenants'}
                   </button>
                 )}
               </div>
