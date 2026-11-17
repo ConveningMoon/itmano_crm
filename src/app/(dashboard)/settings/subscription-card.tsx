@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import { openBillingPortal } from './billing-actions'
-import { PLAN_CONFIG, PLAN_ORDER, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
+import { PLAN_CONFIG, PLAN_ORDER, checkoutPlans, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, trialDaysLeft } from '@/lib/plans'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { FechaLocal } from '@/components/ui/local-date'
@@ -141,23 +141,16 @@ export function SubscriptionCard({ subscription, canManage }: {
           </div>
         )}
 
-        {/* Botón de inversión — checkout de Paddle. Esencial y Growth se pagan
-            directo; Partner solo si el super_admin ya fijó su inversión
-            negociada (paddlePriceId). Sin ese precio, Partner sigue el flujo
-            de solicitud de abajo.
-            El plan actual se oculta solo si ya está pagado y vigente: volver a
-            comprarlo crearía una SEGUNDA suscripción en Paddle y, como
-            guardamos una sola fila por tenant, la anterior seguiría cobrando
-            sin que nadie la vea. En trial o con la suscripción caída, pagar el
-            plan actual es precisamente la acción esperada.
+        {/* Botón de inversión — checkout NUEVO de Paddle. Qué planes se
+            ofrecen y por qué lo decide checkoutPlans(): con la suscripción
+            activa nunca se ofrece otro plan (crearía una segunda suscripción
+            que seguiría cobrando); para mejorar está "Cambiar de plan".
             Tampoco se muestra con una solicitud de cambio/cancelación
             pendiente — pagar por su cuenta mientras ITMANO ya está
             procesando esa solicitud sería incoherente. */}
         {canManage && !hasPendingRequest && (() => {
-          const canBuy = (p: SubscriptionPlan) =>
-            (p !== 'partner' || !!subscription.paddlePriceId) &&
-            !(subscription.status === 'active' && p === subscription.plan)
-          const buyablePlans = PLAN_ORDER.filter(canBuy)
+          // Regla y motivo en checkoutPlans (src/lib/subscriptions.ts).
+          const buyablePlans = checkoutPlans(subscription)
           if (buyablePlans.length === 0) return null
           return (
             <div className="settings-panel">

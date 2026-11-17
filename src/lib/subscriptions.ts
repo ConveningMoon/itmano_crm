@@ -71,6 +71,31 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
 
 export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
 
+/**
+ * Planes que se ofrecen con "Pagar ahora" (checkout NUEVO de Paddle).
+ *
+ * - Exento de facturación (piloto): ninguno.
+ * - Suscripción activa: nunca otro plan. Un checkout nuevo crea una SEGUNDA
+ *   suscripción en Paddle; como guardamos una sola fila por tenant, la anterior
+ *   seguiría cobrando sin que nadie la vea. Mejorar de plan va por "Cambiar de
+ *   plan". Sólo se ofrece el plan actual si todavía no tiene ciclo de Paddle
+ *   (activado por ITMANO y pendiente del primer pago).
+ * - Pago vencido (past_due): igual que activa; se arregla en el portal.
+ * - Prueba, pausada o cancelada: todos, porque no hay cobro en curso.
+ * - Partner sólo con precio negociado (`paddlePriceId`).
+ */
+export function checkoutPlans(sub: Pick<TenantSubscription,
+  'plan' | 'status' | 'billingCycle' | 'paddlePriceId' | 'billingExempt'>): SubscriptionPlan[] {
+  if (sub.billingExempt) return []
+  const purchasable = (p: SubscriptionPlan) => p !== 'partner' || !!sub.paddlePriceId
+  // past_due también tiene una suscripción viva en Paddle (pago fallido): se
+  // resuelve actualizando el método de pago en el portal, no comprando otra.
+  if (sub.status === 'active' || sub.status === 'past_due') {
+    return sub.billingCycle === null && purchasable(sub.plan) ? [sub.plan] : []
+  }
+  return PLAN_ORDER.filter(purchasable)
+}
+
 // Ciclo de facturación de Paddle: mensual o anual (10 meses cobrados, ver
 // ANNUAL_MONTHS_CHARGED en plans.ts).
 export type BillingCycle = 'month' | 'year'
