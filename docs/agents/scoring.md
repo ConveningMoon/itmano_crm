@@ -33,9 +33,11 @@ override por tenant se reserva para excepciones deliberadas.
 - `side_effect='force_perdido'` domina la suma y puede afectar eventos antiguos
   al activar una regla. Revísalo antes de recalcular en masa.
 - `(lead_id, dedup_key)` impide que reintentos inflen puntos.
-- El cron diario llama `decay_lead_scores`, que vuelve a ejecutar el cálculo
-  autoritativo. Los errores del cron deben observarse; un fallo silencioso deja
-  bandas antiguas.
+- El cron diario (Vercel Cron, `GET /api/cron/score-decay` con `CRON_SECRET`)
+  llama `decay_lead_scores` y después `refresh_quality_bands`. Entre agosto y
+  noviembre de 2026 la ruta sólo aceptaba `POST` y las bandas quedaron
+  congeladas sin que nadie lo notara; el Centro de control avisa ahora si
+  `tenant_quality_bands.computed_at` supera 36 h.
 
 ## Tres ejes independientes
 
@@ -48,6 +50,11 @@ override por tenant se reserva para excepciones deliberadas.
 Etapas: `nuevo`, `nutricion`, `en_proceso`, `cerrado`, `perdido`. La única
 transición automática de etapa admitida corresponde a hechos con
 `force_perdido`. Toda transición se registra en `lead_status_history`.
+
+La cartera activa (`ACTIVE_STAGES`: `nuevo` y `nutricion`) define bandas, cola
+de hoy y secuencias por etiqueta. Las acciones manuales del agente usan otro
+conjunto, `MANUAL_ACTION_STAGES`, que suma `en_proceso`: visitas, propuestas y
+citas ocurren justo en esa etapa. Cerrado y Perdido no admiten acciones.
 
 Las bandas de calidad son quintiles de la cartera activa del tenant. Con menos
 de 20 leads activos se usan cortes de fallback en

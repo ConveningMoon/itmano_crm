@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants";
 import { clavesPublicas } from "./src/lib/supabase/jwks";
 import { redirects } from "./src/lib/routing/redirects";
+import { securityHeaders } from "./src/lib/routing/security-headers";
 
 // Host de Supabase Storage, derivado del env en vez de hardcodear el project ref
 // — así un cambio de proyecto no deja las imágenes rotas en silencio.
@@ -39,6 +40,10 @@ const nextConfig: NextConfig = {
   // ("Cache Components").
   cacheComponents: true,
   redirects: async () => redirects,
+  // Anti-clickjacking en el CRM y nosniff/referrer en todo; las páginas
+  // alojadas siguen siendo incrustables. Detalle en security-headers.ts.
+  headers: async () => securityHeaders(),
+  poweredByHeader: false,
   cacheLife: {
     // Páginas públicas alojadas (/web, /nl, /hp). Mismo techo que el ISR de
     // 300 s que tenían: lo normal es que las invalide la acción que guarda el

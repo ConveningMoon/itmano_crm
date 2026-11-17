@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ACTIVE_STAGES, type Stage } from '@/lib/scoring/priority'
+import { acceptsManualActions, type Stage } from '@/lib/scoring/priority'
 import { applyManualAction } from './actions'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,9 +29,13 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
   const [confirming, setConfirming] = useState<string | null>(null) // dimension awaiting confirm
   const [isPending, startTransition] = useTransition()
 
-  // Registrar una visita o una propuesta sobre un lead que ya cerro o se perdio
-  // no describe nada: el panel se apaga fuera de la cartera viva.
-  const isOutOfFunnel = !(ACTIVE_STAGES as string[]).includes(currentStage)
+  // Registrar una visita o una propuesta sobre un lead que ya cerró o se perdió
+  // no describe nada: el panel se apaga en esas dos etapas. En proceso sí
+  // admite acciones (ver MANUAL_ACTION_STAGES).
+  const isOutOfFunnel = !acceptsManualActions(currentStage)
+  // `disabled` real y no sólo pointer-events: con el teclado los botones se
+  // seguían activando y el servidor respondía con un error.
+  const locked = isOutOfFunnel || isPending
 
   const positive = actions.filter(a => !a.isDisqualify)
   const disqualify = actions.find(a => a.isDisqualify)
@@ -76,18 +80,18 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
           fontSize:     '12px',
           color:        'var(--text-muted)',
         }}>
-          Este lead está fuera del funnel activo — las acciones manuales no aplican.
+          Este lead está {currentStage === 'perdido' ? 'perdido' : 'cerrado'}: las acciones de seguimiento ya no aplican.
         </div>
       )}
 
-      <div style={{ opacity: isOutOfFunnel ? 0.5 : 1, pointerEvents: isOutOfFunnel ? 'none' : 'auto' }}>
+      <div style={{ opacity: isOutOfFunnel ? 0.5 : 1 }} aria-disabled={isOutOfFunnel || undefined}>
         {/* Positive / neutral actions */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {positive.map(a => (
             <button
               key={a.dimension}
               onClick={() => run(a.dimension, a.label)}
-              disabled={isPending}
+              disabled={locked}
               style={{
                 display:      'inline-flex',
                 alignItems:   'center',
@@ -99,7 +103,7 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
                 border:       '1px solid var(--border-subtle)',
                 background:   'var(--bg-elevated)',
                 color:        'var(--text-primary)',
-                cursor:       isPending ? 'wait' : 'pointer',
+                cursor:       isOutOfFunnel ? 'not-allowed' : isPending ? 'wait' : 'pointer',
               }}
             >
               {a.label}
@@ -141,12 +145,12 @@ export function ManualActionsPanel({ leadId, currentStage, actions }: ManualActi
             ) : (
               <button
                 onClick={() => { setError(null); setFeedback(null); setConfirming(disqualify.dimension) }}
-                disabled={isPending}
+                disabled={locked}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '8px',
                   padding: '8px 14px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
                   border: '1px solid color-mix(in srgb, var(--alert) 35%, transparent)', background: 'transparent',
-                  color: 'var(--alert)', cursor: 'pointer',
+                  color: 'var(--alert)', cursor: isOutOfFunnel ? 'not-allowed' : 'pointer',
                 }}
               >
                 {disqualify.label}

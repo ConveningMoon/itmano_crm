@@ -37,6 +37,19 @@ export function isActiveStage(stage: Stage | null): boolean {
   return stage !== null && ACTIVE_STAGES.includes(stage)
 }
 
+/**
+ * Etapas en las que el agente puede registrar acciones de seguimiento (visita,
+ * propuesta, cita, no-show, descalificación). Incluye En proceso: es justo
+ * cuando ocurren las visitas y las propuestas. Antes se reutilizaba
+ * ACTIVE_STAGES y el panel quedaba bloqueado en esa etapa. Cerrado y Perdido
+ * siguen fuera: ahí una visita ya no describe nada.
+ */
+export const MANUAL_ACTION_STAGES: Stage[] = ['nuevo', 'nutricion', 'en_proceso']
+
+export function acceptsManualActions(stage: string | null): boolean {
+  return stage !== null && (MANUAL_ACTION_STAGES as string[]).includes(stage)
+}
+
 // ─── Calidad ──────────────────────────────────────────────────────────────────
 
 // Cinco bandas, de mejor a peor. El orden del array ES el orden de calidad: lo

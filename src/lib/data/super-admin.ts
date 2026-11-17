@@ -1,6 +1,25 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { columns } from '@/lib/supabase/columns'
 import { getTenantsWithOwners, type TenantWithOwner } from './tenants'
+
+const BAND_COLUMNS = columns('tenant_quality_bands', ['computed_at'])
+
+/**
+ * Las bandas de calidad se recalculan una vez al día desde el cron
+ * `/api/cron/score-decay`. Si el cron deja de correr (pasó entre agosto y
+ * noviembre de 2026: la ruta respondía 405 a Vercel Cron) nadie lo nota: los
+ * leads simplemente dejan de subir de banda. Con más de 36 h de antigüedad el
+ * Centro de control lo avisa.
+ */
+export const SCORING_STALE_HOURS = 36
+
+export function isScoringStale(oldestComputedAt: string | null, now = Date.now()): boolean {
+  if (!oldestComputedAt) return false
+  const t = Date.parse(oldestComputedAt)
+  if (Number.isNaN(t)) return false
+  return now - t > SCORING_STALE_HOURS * 3_600_000
+}
 
 // Agregados cross-tenant para el centro de control. Solo se consume desde la
 // página del hub (super_admin) — usa el admin client (service_role).
@@ -41,13 +60,27 @@ const VENTANA_DIAS = 30
  * "Calidad alta" = la banda del modelo, el mismo criterio que el dashboard y
  * /analytics. Antes contaba status 'hot', una banda que ya no existe.
  */
-export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: TenantOverview[] }> {
+export async function getHubData(): Promise<{
+  kpis: PlatformKpis
+  tenants: TenantOverview[]
+  /** computed_at de las bandas más antiguas, si superan SCORING_STALE_HOURS. */
+  scoringStaleSince: string | null
+}> {
   const supabase = createAdminClient()
 
-  const [tenantRows, { data: statsRaw }] = await Promise.all([
+  const [tenantRows, { data: statsRaw }, { data: oldestBand }] = await Promise.all([
     getTenantsWithOwners(),
     supabase.rpc('tenant_hub_stats', { p_days: VENTANA_DIAS }),
+    supabase
+      .from('tenant_quality_bands')
+      .select(BAND_COLUMNS)
+      .order('computed_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ])
+
+  const oldestComputedAt = (oldestBand as { computed_at: string } | null)?.computed_at ?? null
+  const scoringStaleSince = isScoringStale(oldestComputedAt) ? oldestComputedAt : null
 
   // La RPC solo devuelve tenants CON leads o CON actividad; los recién creados
   // no aparecen y caen al cero de abajo, igual que con el conteo en memoria.
@@ -71,5 +104,5 @@ export async function getHubData(): Promise<{ kpis: PlatformKpis; tenants: Tenan
     newLeads30d: tenants.reduce((s, t) => s + t.newLeads30d, 0),
   }
 
-  return { kpis, tenants }
+  return { kpis, tenants, scoringStaleSince }
 }

@@ -2522,6 +2522,27 @@ export type Database = {
           },
         ]
       }
+      public_rate_limits: {
+        Row: {
+          bucket: string
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          bucket: string
+          count?: number
+          key: string
+          window_start: string
+        }
+        Update: {
+          bucket?: string
+          count?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       purchase_email_templates: {
         Row: {
           agent_id: string
@@ -3195,6 +3216,19 @@ export type Database = {
       newsletter_growth: {
         Args: { p_months: number; p_tenant_id: string }
         Returns: Json
+      }
+      public_rate_limit: {
+        Args: {
+          p_bucket: string
+          p_key: string
+          p_limit: number
+          p_window_s?: number
+        }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reset_at: string
+        }[]
       }
       recalc_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
       recompute_lead_score: { Args: { p_lead_id: string }; Returns: undefined }

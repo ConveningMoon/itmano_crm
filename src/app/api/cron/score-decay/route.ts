@@ -1,7 +1,19 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Vercel Cron (vercel.json) llama con GET y `Authorization: Bearer CRON_SECRET`.
+// Hasta noviembre de 2026 la ruta sólo exportaba POST: la entrada diaria de
+// Vercel recibía 405 y las bandas de calidad quedaron congeladas desde el
+// 25 de agosto. POST se conserva para lanzamientos manuales o externos.
+export async function GET(request: NextRequest) {
+  return runScoreDecay(request)
+}
+
 export async function POST(request: NextRequest) {
+  return runScoreDecay(request)
+}
+
+async function runScoreDecay(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 

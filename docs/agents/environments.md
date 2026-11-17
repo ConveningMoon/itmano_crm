@@ -90,7 +90,11 @@ simula en vez de enviar. Para probar entregas y webhooks reales usa
 `delivered@resend.dev`, `bounced@resend.dev` y `complained@resend.dev`.
 
 Los enlaces de baja y de RSVP necesitan `UNSUBSCRIBE_SECRET`, y
-`/api/cron/*` necesita `CRON_SECRET`. En local pon valores propios (nunca los de
+`/api/cron/*` necesita `CRON_SECRET`. `score-decay` lo programa Vercel Cron
+(`vercel.json`, llamada `GET`) en ambos proyectos; `sequence-orchestrator` y
+`billing-lifecycle` los llama cron-job.org. Los endpoints públicos que crean
+leads desde el navegador (intake y RSVP) pasan por `public_rate_limit`
+(`src/lib/security/public-rate-limit.ts`), que falla abierto. En local pon valores propios (nunca los de
 producción) en `.env.development.local`.
 
 Antes de una prueba, comprueba el destino de cada proveedor. Para trabajo que no

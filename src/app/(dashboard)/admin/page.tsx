@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
-import { Building2, Users, Flame, TrendingUp } from 'lucide-react'
+import { Building2, Users, Flame, TrendingUp, AlertTriangle } from 'lucide-react'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { getHubData } from '@/lib/data/super-admin'
 import { getNotifications } from '@/lib/data/notifications'
@@ -19,6 +19,7 @@ import { HubFeed } from './hub-feed'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { AdminSkeleton } from './admin-skeleton'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Centro de control del super_admin: pulso de la plataforma, entrada al CRM de
 // cada tenant y gestión (crear tenant / provisionar owner). Guarded server-side.
@@ -28,7 +29,7 @@ async function AdminContent() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
-  const [{ kpis, tenants }, feed, aiUsage, aiDaily, leadFit, briefingOutcomes] = await Promise.all([
+  const [{ kpis, tenants, scoringStaleSince }, feed, aiUsage, aiDaily, leadFit, briefingOutcomes] = await Promise.all([
     getHubData(),
     getNotifications(null, { limit: 10 }),
     // Vista global: todos los tenants + uso ITMANO sin tenant.
@@ -47,6 +48,23 @@ async function AdminContent() {
 
   return (
     <>
+      {scoringStaleSince && (
+        <div role="alert" style={{
+          display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '16px',
+          padding: '10px 14px', borderRadius: '8px', fontSize: '13px', lineHeight: 1.5,
+          color: 'var(--text-primary)',
+          background: 'color-mix(in srgb, var(--alert) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)',
+        }}>
+          <AlertTriangle size={15} aria-hidden style={{ color: 'var(--alert)', flexShrink: 0, marginTop: '2px' }} />
+          <span>
+            Las bandas de calidad no se recalculan desde el{' '}
+            <strong><FechaLocal fecha={scoringStaleSince} locale="es" opciones={{ day: 'numeric', month: 'long', year: 'numeric' }} /></strong>.
+            {' '}Revisa el cron <code>/api/cron/score-decay</code>: sin él, los leads nuevos no suben de banda y el decay no se aplica.
+          </span>
+        </div>
+      )}
+
       {/* KPIs de plataforma — siempre visibles, encima de los tabs */}
       <div className="nl-kpis">
         {kpiCards.map(card => (
