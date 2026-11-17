@@ -24,6 +24,9 @@ import { InfoHint } from '@/components/ui/info-hint'
 import { countMissingClosing } from '@/lib/emails/purchase-state'
 import { AlertTriangle, BarChart3, Plus, Mail } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/emails')
 
 // /emails tiene cuatro clases de correo y antes iban apiladas en una sola página:
 //

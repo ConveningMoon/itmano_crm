@@ -6,6 +6,9 @@ import { RequestsClient } from './requests-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { ListCardSkeleton } from '@/components/ui/page-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/solicitudes')
 
 // Bandeja de solicitudes de plataforma — solo super_admin. Reúne el formulario
 // de contacto de la landing (kind='contact') y el soporte del CRM

@@ -4,6 +4,9 @@ import { SupportForm } from './support-form'
 import { SupportFormSkeleton } from './support-skeleton'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/soporte')
 
 // Soporte técnico dentro del CRM: cualquier usuario del tenant puede escribir a
 // ITMANO. La solicitud se registra en el CRM (platform_requests → /solicitudes

@@ -13,6 +13,9 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { EditionEditor } from './edition-editor'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { EditionSkeleton } from './edition-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/newsletters')
 
 // Editor de una edición. Server Component: hace todo el fetch (edición,
 // biblioteca del Estudio, slug del tenant) y se lo pasa como props a

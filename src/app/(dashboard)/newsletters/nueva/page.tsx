@@ -9,6 +9,9 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { NewEditionForm } from './new-edition-form'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { NewEditionSkeleton } from './new-edition-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/newsletters/nueva')
 
 // Creación de una edición nueva. Server Component: fetch de la biblioteca del
 // Estudio y las fuentes del tenant, luego el formulario (client) hace su

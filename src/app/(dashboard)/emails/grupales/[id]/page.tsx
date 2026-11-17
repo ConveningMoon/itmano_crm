@@ -11,6 +11,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { BroadcastEditor } from './broadcast-editor'
 import { BroadcastProgress } from './broadcast-progress'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/emails/grupales')
 
 // Un correo grupal. En borrador se edita; confirmado, se sigue su avance. Todo
 // depende de la sesión y de datos que cambian durante el envío, así que no hay

@@ -11,6 +11,9 @@ import { MarkReadOnMount } from './mark-read-on-mount'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { ListCardSkeleton } from '@/components/ui/page-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/notifications')
 
 // ─── Presentación por tipo ───────────────────────────────────────────────────
 // Rampa dorada para todo; coral sólo para el lead caliente, que es una alerta y
@@ -19,8 +22,8 @@ interface TypeMeta { label: string; icon: LucideIcon; color: string }
 
 const TYPE_CONFIG: Record<string, TypeMeta> = {
   hot_lead:              { label: 'Lead caliente',     icon: Flame,        color: 'var(--alert)' },
-  contact_us:            { label: 'Contact Us',        icon: Mail,         color: 'var(--gold-1)' },
-  contact_form_question: { label: 'Contacto',          icon: Mail,         color: 'var(--gold-1)' },
+  contact_us:            { label: 'Formulario de contacto', icon: Mail,    color: 'var(--gold-1)' },
+  contact_form_question: { label: 'Pregunta en formulario', icon: Mail,    color: 'var(--gold-1)' },
   lead_deleted:          { label: 'Lead eliminado',    icon: Trash2,       color: 'var(--text-muted)' },
   event_added:           { label: 'Evento',            icon: CalendarPlus, color: 'var(--gold-2)' },
   event_deleted:         { label: 'Evento archivado',  icon: Trash2,       color: 'var(--text-muted)' },
@@ -51,7 +54,17 @@ function relativeTime(iso: string): string {
   if (hours < 24)     return `hace ${hours} h`
   const days = Math.floor(hours / 24)
   if (days < 7)       return `hace ${days} d`
-  return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  // Mismo formato que el resto del CRM ("25 ago 2026"), no "25/08/2026".
+  return new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// A dónde lleva cada notificación. Antes sólo las que traían lead eran
+// clicables; las de fuentes nuevas o archivadas se quedaban en texto.
+const SOURCE_TYPES = new Set(['event_added', 'event_deleted', 'lm_added', 'lm_deleted'])
+function hrefFor(n: { type: string; leadId: string | null }): string | null {
+  if (n.leadId) return `/leads/${n.leadId}`
+  if (SOURCE_TYPES.has(n.type)) return '/sources'
+  return null
 }
 
 type SearchParams = Promise<{ type?: string }>
@@ -110,9 +123,10 @@ async function NotificationsContent({ searchParams }: { searchParams: SearchPara
               </>
             )
 
-            // Si la notificación trae un lead, la fila entera lleva a él.
-            return n.leadId ? (
-              <Link key={n.id} href={`/leads/${n.leadId}`} className="feed-row">{body}</Link>
+            // La fila entera lleva al lead o a Fuentes, según el tipo.
+            const href = hrefFor(n)
+            return href ? (
+              <Link key={n.id} href={href} className="feed-row">{body}</Link>
             ) : (
               <div key={n.id} className="feed-row">{body}</div>
             )

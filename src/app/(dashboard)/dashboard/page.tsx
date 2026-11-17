@@ -12,6 +12,9 @@ import { AgentesTab } from './tabs/agentes'
 import { EmailsTab } from './tabs/emails'
 import { FuentesTab } from './tabs/fuentes'
 import { NewsletterTab } from './tabs/newsletter'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/dashboard')
 
 // La pestaña y el periodo viven en la URL (?tab=…&periodo=…). Todo lo que lee la
 // sesión o la base cuelga del Suspense de loading.tsx, y cada pestaña tiene el

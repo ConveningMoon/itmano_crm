@@ -12,6 +12,10 @@ import {
   TopbarPillFallback, UnreadBadgeSlot,
 } from '@/components/layout/shell-slots'
 
+// Pestaña del navegador: "Leads · ITMANO CRM". Cada página exporta su título
+// con pageMetadata() (src/lib/routing/page-titles.ts).
+export const metadata = { title: { template: '%s · ITMANO CRM', default: 'ITMANO CRM' } }
+
 // El layout NO espera a nada. Con Cache Components su marco —sidebar, topbar y
 // el <main> con el loading.tsx de la página— se prerenderiza en el build y sale
 // del CDN en la primera respuesta, antes de que la función lea la cookie.
