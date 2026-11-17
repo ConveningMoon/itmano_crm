@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CORS_HEADERS, corsOptions } from '@/app/api/intake/cors'
+import { checkPublicRateLimit } from '@/lib/security/public-rate-limit'
 import { recordOpenHouseRsvp, RSVP_ERROR_MESSAGE, type RsvpError } from '@/lib/services/open-house-rsvp'
 
 // RSVP público de un open house: lo llaman la ficha alojada por ITMANO y la
@@ -39,6 +40,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params
   if (!UUID_RE.test(id)) {
     return NextResponse.json({ ok: false, error: RSVP_ERROR_MESSAGE.not_found }, { status: 404, headers: CORS_HEADERS })
+  }
+
+  // Un RSVP crea o actualiza un lead y avisa al equipo: mismo límite por IP que
+  // el intake (ver public-rate-limit.ts).
+  const limit = await checkPublicRateLimit(request, `rsvp:${id}`)
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'Demasiados envíos seguidos. Inténtalo de nuevo en un minuto.' },
+      { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': String(limit.retryAfter) } },
+    )
   }
 
   let body: z.infer<typeof RsvpSchema>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkPublicRateLimit } from '@/lib/security/public-rate-limit'
 import { after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -130,8 +131,16 @@ export async function POST(
 ) {
   const { publicId } = await params
 
-  // TODO: rate limiting — 10 req/IP/min — implement with Upstash Redis when added.
-  // Current first line of defense: non-guessable public_id + honeypot + Zod validation.
+  // Rate limit por IP antes de tocar nada más: cada envío válido crea un lead,
+  // notifica al equipo y puede disparar el análisis de fit con IA (pagado).
+  // Además: public_id no adivinable, honeypot y validación Zod.
+  const limit = await checkPublicRateLimit(request, `intake:${publicId}`)
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: 'Demasiados envíos seguidos. Inténtalo de nuevo en un minuto.' },
+      { status: 429, headers: { ...CORS_HEADERS, 'Retry-After': String(limit.retryAfter) } },
+    )
+  }
 
   // Parse and validate body
   let parsed: z.infer<typeof SubmitSchema>
