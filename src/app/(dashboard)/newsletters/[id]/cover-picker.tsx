@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import Image from 'next/image'
 import { Upload, Image as ImageIcon, Sparkles, Loader2 } from 'lucide-react'
 import type { StudioImage } from '@/lib/studio/types'
 import type { NewsletterCoverSource } from '@/lib/data/newsletters'
@@ -54,6 +55,13 @@ async function uploadCoverFile(file: File): Promise<UploadResult> {
   const fd = new FormData()
   fd.set('file', prepared.file)
   return postMedia('/api/newsletters/media', fd)
+}
+
+// Sólo el storage público del propio Supabase está en images.remotePatterns
+// (next.config.ts); cualquier otra URL se pinta con <img>.
+const STORAGE_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''}/storage/v1/object/public/`
+function isOptimizableStorageUrl(url: string): boolean {
+  return !!process.env.NEXT_PUBLIC_SUPABASE_URL && url.startsWith(STORAGE_PREFIX)
 }
 
 export function CoverPicker({
@@ -120,8 +128,12 @@ export function CoverPicker({
           border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
           flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {coverImageUrl ? (
-            /* eslint-disable-next-line @next/next/no-img-element -- reason: host variable (storage propio o del Estudio), preview interno del editor */
+          {coverImageUrl && isOptimizableStorageUrl(coverImageUrl) ? (
+            // Miniatura de 120 px: con <img> se descargaba la portada original
+            // (1920 px) y el recuadro quedaba vacío varios segundos.
+            <Image src={coverImageUrl} alt="Portada" width={120} height={90} sizes="120px" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : coverImageUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- reason: host fuera de images.remotePatterns (p. ej. data URI de una vista previa) */
             <img src={coverImageUrl} alt="Portada" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <ImageIcon size={20} color="var(--text-muted)" />

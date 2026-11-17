@@ -72,6 +72,43 @@ las tomadas están marcadas con *Decisión*.
 
 *Corrección:* UX-044 decía que "English" salía duplicado en Nueva propiedad; es la cabecera del bloque de descripción en inglés, no un duplicado.
 
+**Tanda 3 — rama `fix/ux-tanda-3`, apilada sobre `fix/ux-tanda-2`.**
+
+| Ítem | Estado |
+|---|---|
+| UX-030 | Hecho: placeholders genéricos en todo el CRM y test `tests/design/no-tenant-identity.test.ts` que impide volver a nombrar al piloto. |
+| UX-031 | Hecho. *Decisión:* el formato sigue a la moneda (`moneyLocale`): USD como en EE. UU. ("$425,000"), EUR europeo. Tramos de presupuesto en español. |
+| UX-032 | Hecho: sin "Runs", "Template Resend", "Tipo loan", "Ver Opciones…", "Fuentes de Adquisición". Tildes de 5 reglas globales de scoring (migración `20261117170000`, aplicada en sandbox y producción). Las etiquetas de cada tenant (p. ej. "Cash buyer") son datos del cliente y no se tocaron. |
+| UX-033 | Hecho: idiomas sin banderas; el filtro de Leads ofrece los 19 idiomas. |
+| UX-034/035 | Hecho: `Tabs urlParam` en Centro de control, ficha de propiedad y Emails; pestañas y filtros desbordados con degradado. |
+| UX-036 | Hecho: "—" en tasas sin envíos, "en cartera activa", "Score de calidad promedio", sin "no cambia con el periodo" donde no hay selector. |
+| UX-037 | Sin cambio: la serie ya rellenaba con ceros; lo visto en la auditoría era la animación de entrada. |
+| UX-038 | Sin cambio: el selector ya agrupa las zonas comunes y deja "Otras zonas" al final. |
+| UX-039 | Hecho: modelos y tokens sólo para super_admin; nota de tarifas corregida. |
+| UX-040 | Parcial: IDs técnicos de la fuente sólo para super_admin. Pendiente: JSON a "Avanzado" y archivos públicos con dominio propio. |
+| UX-041 | Hecho: halo claro sutil detrás del logo del tenant en el menú. |
+| UX-042 | Hecho en la portada de newsletters (`next/image` cuando la URL es del storage propio). |
+| UX-043 | Hecho: "De cierre" sólo muestra el tenant activo. |
+| UX-045 | Hecho: tras borrar se vuelve a la lista con los mismos filtros y un aviso. |
+| UX-046 | Hecho: secuencias activas sin pasos marcadas en la lista; enlace a Configuración → Email. |
+| UX-047 | *Decisión:* el email sigue obligatorio. `leads.email` es NOT NULL y secuencias, grupales y deduplicación dependen de él; permitir leads sólo con teléfono es un cambio de modelo, no de UX. Sí se preselecciona el agente único (tanda 1). |
+| UX-048 | Pendiente de decisión de diseño: el velo con el color de marca es intencional y las plantillas viven en base de datos. |
+| SEC-2 | Hecho para `recompute_lead_score` (migración `20261117171000`, sandbox y producción). *Decisión:* `get_my_tenant_id()` e `is_super_admin()` siguen ejecutables por `anon`: las usan políticas `to public` que también evalúa `anon`. |
+| SEC-3 | Hecho: sin longitud del secreto en logs. Datos de prueba de A&J sin tocar (Dylan pidió no editar ni borrar datos de A&J). |
+
+**Incidencias del 17 nov 2026**
+
+- *CI de la tanda 2 en rojo:* las migraciones de la tanda 3 se aplicaron al
+  sandbox compartido antes de que sus archivos llegaran a la rama, y la prueba de
+  paridad falla en cualquier rama sin ellos. Se corrigió añadiendo los archivos a
+  la tanda 2. Regla: una migración aplicada en sandbox tiene que viajar en la
+  próxima rama que se mergee.
+- *Deploy de producción de `main` fallido tras mergear la tanda 1:* el proyecto
+  Vercel de producción construye bien en preview con el mismo código, así que el
+  fallo es del entorno Production (variables) o transitorio. Sin el log no se
+  pudo cerrar; hasta que se resuelva, `app.itmano.com` sigue sin el arreglo del
+  cron y las bandas siguen congeladas.
+
 Nota sobre UX-039: los montos en dólares de "Uso de IA" ya se ocultan a los
 usuarios del tenant (`maskAiCosts`); lo visto en la auditoría era la vista de
 super_admin. El ítem se reduce a nombres de modelos y tokens.
