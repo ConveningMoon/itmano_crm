@@ -8,7 +8,7 @@ import { assertCanWriteLead } from '@/lib/auth/guards'
 import { loadGuardedLead } from '@/lib/auth/lead-write-guard'
 import { EmailContentSchema } from '@/lib/email-content'
 import { assessLeadFit, type LeadBriefing } from '@/lib/services/ai-lead-fit'
-import { ACTIVE_STAGES, type Stage } from '@/lib/scoring/priority'
+import { acceptsManualActions, type Stage } from '@/lib/scoring/priority'
 import { graduateSubscriber, hasSubscriberMark } from '@/lib/newsletters/subscriber'
 
 // FROZEN_STATUSES desapareció con la migración 082: el congelado existía sólo
@@ -192,8 +192,8 @@ export async function applyManualAction(
   const denied = assertCanWriteLead(ctx, { tenant_id: l.tenant_id, agent_id: l.agent_id })
   if (denied) return denied
 
-  if (!(ACTIVE_STAGES as string[]).includes(l.stage as string)) {
-    return { ok: false, error: 'Las acciones manuales no aplican a un lead fuera del funnel activo.' }
+  if (!acceptsManualActions(l.stage as string)) {
+    return { ok: false, error: 'Las acciones de seguimiento no aplican a un lead cerrado o perdido.' }
   }
 
   // Validate the dimension is an active manual rule (tenant override or global).
