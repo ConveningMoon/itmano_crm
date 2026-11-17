@@ -50,6 +50,28 @@ las tomadas están marcadas con *Decisión*.
 | SEC-1 | Hecho: `X-Frame-Options`/`frame-ancestors 'self'` en el CRM (no en subdominios alojados, que se incrustan a propósito), `nosniff`, `Referrer-Policy`, sin `x-powered-by`. |
 | UX-012 | Hecho de paso: el éxito sólo menciona la secuencia si el lead entró en una, y ofrece "Ver lead". |
 
+**Tanda 2 — rama `fix/ux-tanda-2`, apilada sobre `fix/ux-tanda-1`.**
+
+| Ítem | Estado |
+|---|---|
+| UX-010 | Hecho: títulos del topbar por prefijo de ruta y `<title>` por página ("Leads · ITMANO CRM"), desde `src/lib/routing/page-titles.ts`. Títulos estáticos: salen en el shell prerenderizado (Cache Components). |
+| UX-011 | Hecho: "Ver formulario/Ver correo" sólo aparece si la pestaña tiene contenido. |
+| UX-013 | Hecho: teléfono formateado, botones Llamar y WhatsApp en la ficha, "Llamar" en la lista móvil (`src/lib/leads/phone-display.ts`). El icono de editar ya es un lápiz. |
+| UX-014 | Hecho: el Kanban usa el orden elegido. |
+| UX-015 | Hecho: la última columna muestra Fecha, Score o Valor según el orden activo. |
+| UX-016 | Hecho en `ModalShell` (21 modales): el foco entra al diálogo, Tab queda atrapado y vuelve al cerrar; nombre accesible en los modales de Leads. *Corrección:* Escape ya cerraba; la auditoría lo comprobó dentro de la animación de salida. |
+| UX-017/018 | Hecho: avisos del diseño como insignia (sin saltos), estados separados de previsualizar y guardar, error debajo de los botones, campos obligatorios con asterisco y placeholders sin datos de A&J. |
+| UX-019 | Hecho sin IA: aviso no bloqueante si la ficha y el texto no coinciden en año, superficie, habitaciones, baños o garaje (`src/lib/properties/consistency.ts`). |
+| UX-021 | Hecho: enlace "Ábrelo en una pestaña nueva" bajo cada embed público. |
+| UX-022 | Hecho: notificaciones de fuentes llevan a Fuentes, tipos renombrados y fechas "25 ago 2026". El estado leído ya existía (se marca al abrir). |
+| UX-023 | Hecho: nombre del lead con enlace en Actividad y en el dashboard; fecha absoluta pasada una semana. |
+| UX-024 | Parcial: opción vacía rotulada "Registro directo" y sin tipos de fuente que el tenant no tiene. Editar los datos de fit queda pendiente (toca el scoring). |
+| UX-026 | Hecho: topbar fijo. |
+| UX-020, UX-025 | Pendientes: son features (formulario en la página pública de propiedad, fecha estructurada de eventos con migración). |
+| Auditoría por rol | Pendiente: crear owner/agent de prueba en producción manda un Magic Link real y no hay buzón donde recibirlo. Ver "Decisiones". |
+
+*Corrección:* UX-044 decía que "English" salía duplicado en Nueva propiedad; es la cabecera del bloque de descripción en inglés, no un duplicado.
+
 Nota sobre UX-039: los montos en dólares de "Uso de IA" ya se ocultan a los
 usuarios del tenant (`maskAiCosts`); lo visto en la auditoría era la vista de
 super_admin. El ítem se reduce a nombres de modelos y tokens.
