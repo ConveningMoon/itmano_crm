@@ -13,6 +13,9 @@ import { EditionsList } from './editions-list'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { NewslettersSkeleton } from './newsletters-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/newsletters')
 
 // Pantalla única de la newsletter del tenant — ya no hay series que elegir
 // antes: el canal implícito se prepara aquí, ANTES de leer nada, para que

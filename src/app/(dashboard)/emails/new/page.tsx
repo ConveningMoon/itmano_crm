@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/emails/new')
 
 async function NewSequencePage() {
   const { tenant_id, role } = await requireTenantContext()

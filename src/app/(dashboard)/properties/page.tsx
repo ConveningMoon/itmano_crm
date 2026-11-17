@@ -6,6 +6,9 @@ import { PropertiesClient } from './properties-client'
 import { PropertiesListSkeleton } from './properties-skeleton'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/properties')
 
 // Lo que lee la sesión o la base vive aquí, detrás del Suspense de
 // PropertiesPage: la cabecera sale del shell estático.

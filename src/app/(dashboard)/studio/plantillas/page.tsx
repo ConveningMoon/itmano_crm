@@ -8,6 +8,9 @@ import { StudioTeaser } from '../teaser'
 import { TemplateEditor } from './editor'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/studio/plantillas')
 
 // El editor pide pantalla ancha —código y lienzo de 1080×1350 lado a lado— y no
 // es una cuarta pestaña a propósito: la autoría no va al mismo nivel que el

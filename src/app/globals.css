@@ -195,6 +195,10 @@
 .app-shell-content { margin-left: 0; }
 .app-shell-main    { padding: 16px; }
 .app-shell-topbar  { padding-left: 16px; padding-right: 16px; }
+/* El topbar acompaña al scroll: "Registrar lead", la campana y el selector de
+   tenant desaparecían al bajar en fichas largas. Por debajo de modales y del
+   drawer móvil (z-index 40+). */
+.app-shell-topbar  { position: sticky; top: 0; z-index: 30; }
 @media (min-width: 768px) {
   .app-shell-content { margin-left: 220px; }
   .app-shell-main    { padding: 24px; }

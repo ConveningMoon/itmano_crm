@@ -35,6 +35,9 @@ import { expectedCommission } from '@/lib/business/profile'
 import type { ManualActionItem } from './manual-actions-panel'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { LeadDetailSkeleton } from './lead-detail-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/leads')
 
 type Params = Promise<{ id: string }>
 

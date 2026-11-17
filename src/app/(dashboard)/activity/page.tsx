@@ -8,6 +8,9 @@ import { ActivityRow } from './activity-ui'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { ListCardSkeleton } from '@/components/ui/page-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/activity')
 
 const PAGE = 30
 

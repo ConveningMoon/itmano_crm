@@ -8,7 +8,7 @@ import type { Lead, Agent, LeadEvent, PurchaseProcess } from '@/lib/types'
 import type { ChannelOption } from '../new/page'
 import { updateLeadStage, completePurchaseProcess, updateLeadNotes, startPurchaseProcess, deleteLead } from './actions'
 import {
-  ArrowLeft, ChevronDown, MoreHorizontal, X, Trash2,
+  ArrowLeft, ChevronDown, Pencil, Phone, MessageCircle, X, Trash2,
   Mail, XCircle,
   Copy, Check,
 } from 'lucide-react'
@@ -33,6 +33,7 @@ import { getLeadSource } from '@/lib/leads/source'
 import type { LeadTag } from '@/lib/leads/tags'
 import { LeadTagsCard } from './lead-tags-card'
 import { FechaLocal } from '@/components/ui/local-date'
+import { formatPhone, phoneLinks } from '@/lib/leads/phone-display'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -199,10 +200,18 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   // estado ya no se deduce de la etapa del lead: vive en purchase_processes.
   const isProcessActive = currentStage === 'en_proceso' || purchaseProcess?.completedAt != null
 
+  // Llamar y WhatsApp desde la ficha: en el teléfono del agente, tocar el
+  // número abre la llamada en vez de obligar a copiarlo.
+  const phone = phoneLinks(lead.phone)
+
   const infoRows: { label: string; value: React.ReactNode; copy?: string }[] = [
     { label: 'Nombre',      value: `${lead.firstName} ${lead.lastName}` },
     { label: 'Email',       value: lead.email, copy: lead.email },
-    { label: 'Teléfono',    value: lead.phone || '—', copy: lead.phone || undefined },
+    {
+      label: 'Teléfono',
+      value: phone ? <a href={phone.tel} className="settings-link-gold">{formatPhone(lead.phone)}</a> : (lead.phone || '—'),
+      copy: lead.phone || undefined,
+    },
     { label: 'Idioma',      value: `${langCfg.flag} ${langCfg.label}` },
     { label: 'Registrado',  value: formatFullDate(lead.createdAt) },
     { label: 'Prestamista', value: lead.lender || '—' },
@@ -239,7 +248,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             </div>
             <div className="lead-identity-meta">
               <span>{lead.email}</span>
-              {lead.phone && <><span aria-hidden="true">·</span><span>{lead.phone}</span></>}
+              {lead.phone && <><span aria-hidden="true">·</span><span>{formatPhone(lead.phone)}</span></>}
               <span aria-hidden="true">·</span>
               <span>{langCfg.flag} {langCfg.label}</span>
             </div>
@@ -255,6 +264,23 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
           >
             <Mail size={14} aria-hidden="true" /> Enviar correo
           </button>
+          {phone && (
+            <a href={phone.tel} className="btn btn-ghost btn-square" title="Llamar" aria-label={`Llamar a ${lead.firstName}`}>
+              <Phone size={15} aria-hidden="true" />
+            </a>
+          )}
+          {phone?.whatsapp && (
+            <a
+              href={phone.whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-ghost btn-square"
+              title="Escribir por WhatsApp"
+              aria-label={`Escribir a ${lead.firstName} por WhatsApp`}
+            >
+              <MessageCircle size={15} aria-hidden="true" />
+            </a>
+          )}
           <button
             type="button"
             onClick={() => setShowEditModal(true)}
@@ -262,7 +288,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             title="Editar lead"
             aria-label="Editar lead"
           >
-            <MoreHorizontal size={16} />
+            <Pencil size={15} />
           </button>
           <button
             type="button"
@@ -394,7 +420,10 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                     <span className="dt-sub">{agent.languages.map(l => LANGUAGE_CONFIG[l]?.label ?? l).join(', ')}</span>
                   </div>
                 </div>
-                <p className="settings-note">{agent.email}<br />{agent.phone ?? '—'}</p>
+                <p className="settings-note">
+                  {agent.email}
+                  {agent.phone && <><br />{formatPhone(agent.phone)}</>}
+                </p>
               </div>
             ) : (
               <p className="settings-note">Sin agente asignado</p>
@@ -500,7 +529,13 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
             { key: 'historial',   label: 'Historial',   badge: statusHistory.length },
           ]}
           content={{
-            actividad:   <ActivityTimeline events={events} onOpen={openHistoryTab} />,
+            actividad:   (
+              <ActivityTimeline
+                events={events}
+                onOpen={openHistoryTab}
+                available={{ formularios: submissions.length > 0, emails: emailReplies.length > 0 }}
+              />
+            ),
             formularios: <LeadSubmissionsList submissions={submissions} />,
             emails:      <LeadEmailRepliesList replies={emailReplies} />,
             historial:   <StatusHistoryTimeline changes={statusHistory} />,
@@ -528,7 +563,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       />
 
       {/* ── Modal: Iniciar proceso ── */}
-      <ModalShell open={showProcessModal} onClose={() => setShowProcessModal(false)} maxWidth={480}>
+      <ModalShell open={showProcessModal} onClose={() => setShowProcessModal(false)} maxWidth={480} ariaLabel="Proceso de compra">
         <div className="settings-modal">
           <div className="settings-inline settings-inline-between">
             <div>
@@ -648,15 +683,15 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       </ModalShell>
 
       {/* ── Modal: Eliminar lead — Paso 1: primera confirmación ── */}
-      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={440}>
+      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={440} ariaLabel="Eliminar lead">
         <div className="settings-modal">
           <div className="settings-inline settings-inline-between">
             <h2 className="settings-modal-title">Eliminar lead</h2>
             <button type="button" onClick={() => setDeleteStep(0)} aria-label="Cerrar" className="icon-btn"><X size={18} /></button>
           </div>
           <p className="settings-confirm-text">
-            ¿Estás seguro de eliminar a <strong>{lead.firstName} {lead.lastName}</strong>?
-            Esta acción eliminará todos sus eventos, runs de secuencia y notificaciones relacionadas.
+            ¿Estás seguro de eliminar a <strong>{[lead.firstName, lead.lastName].filter(Boolean).join(' ')}</strong>?
+            Se borrarán también su historial, sus secuencias de correo en curso y sus notificaciones.
           </p>
           <span className="settings-alert settings-alert-block">No se puede deshacer.</span>
           <div className="settings-modal-actions">
@@ -669,7 +704,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       </ModalShell>
 
       {/* ── Modal: Eliminar lead — Paso 2: confirmación por texto ── */}
-      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
+      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420} ariaLabel="Confirmar eliminación">
         <div className="settings-modal">
           <div className="settings-inline settings-inline-between">
             <h2 className="settings-modal-title">Confirmar eliminación</h2>

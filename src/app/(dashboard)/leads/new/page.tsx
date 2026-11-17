@@ -9,6 +9,9 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import { NewLeadFormSkeleton } from './new-lead-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/leads/new')
 
 export interface ChannelOption {
   id:          string

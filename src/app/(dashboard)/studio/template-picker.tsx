@@ -90,6 +90,19 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
                 >
                   <Maximize2 size={13} />
                 </span>
+                {showFit && fit.warnings.length > 0 && (
+                  <span
+                    title={fit.warnings.join(' · ')}
+                    aria-label={`Avisos: ${fit.warnings.join('. ')}`}
+                    style={{
+                      position: 'absolute', left: '6px', bottom: '6px', maxWidth: 'calc(100% - 12px)',
+                      padding: '3px 7px', borderRadius: '6px', fontSize: '10.5px', lineHeight: 1.3,
+                      background: 'color-mix(in srgb, var(--bg-base) 80%, transparent)', color: 'var(--gold-2)',
+                    }}
+                  >
+                    {fit.warnings[0]}{fit.warnings.length > 1 ? ` (+${fit.warnings.length - 1})` : ''}
+                  </span>
+                )}
               </span>
               <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-primary)', marginTop: '8px' }}>
                 {t.label}
@@ -97,11 +110,6 @@ export function TemplatePicker({ templates, value, onChange, photoCount, hasAgen
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.35 }}>
                 {t.hint}
               </div>
-              {showFit && fit.warnings.map((w, i) => (
-                <div key={i} style={{ fontSize: '11px', color: 'var(--gold-2)', marginTop: '6px', lineHeight: 1.3 }}>
-                  {w}
-                </div>
-              ))}
             </button>
           )
         })}

@@ -11,6 +11,9 @@ import type { ChannelOption } from './new/page'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { LeadsListSkeleton } from './leads-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/leads')
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>
 

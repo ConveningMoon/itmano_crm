@@ -14,6 +14,9 @@ import { EmailMetricsCard } from './email-metrics-card'
 import { getStepMetrics } from '@/lib/services/email-metrics'
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, UserPlus, Send } from 'lucide-react'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/emails')
 
 const LANG_LABEL: Record<string, string> = { es: 'Español', en: 'English', pt: 'Português' }
 const LANG_COLOR: Record<string, string> = {

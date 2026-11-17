@@ -13,6 +13,9 @@ import { hostedPropertiesUrl } from '@/lib/hosted-page'
 import { OpenHouseManager } from './open-house-manager'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { OpenHouseDetailSkeleton } from './open-house-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/properties')
 
 // Detalle de un open house: datos, correos (por idioma), audiencia y
 // confirmación, RSVPs y cómo se ve en la web. El servidor arma todo y el

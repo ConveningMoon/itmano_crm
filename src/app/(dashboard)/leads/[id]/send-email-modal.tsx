@@ -106,11 +106,11 @@ export function SendEmailModal({
   ]
 
   return (
-    <ModalShell open={open} onClose={handleClose} maxWidth={680}>
+    <ModalShell open={open} onClose={handleClose} maxWidth={680} ariaLabel="Enviar correo">
       <div style={{ padding: '24px', maxHeight: '85vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>Enviar correo</span>
-          <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
+          <button type="button" onClick={handleClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} aria-hidden="true" /></button>
         </div>
 
         {done ? (

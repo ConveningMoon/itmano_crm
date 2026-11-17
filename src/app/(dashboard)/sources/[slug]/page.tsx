@@ -15,6 +15,9 @@ import { PageOptions } from './page-options'
 import { parseHostedPage } from '@/lib/hosted-page'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { formatConversion } from '@/lib/sources/conversion'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/sources')
 
 const CHANNEL_TYPE_LABELS: Record<string, string> = {
   lead_magnet:   'Lead Magnet',

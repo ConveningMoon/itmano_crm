@@ -20,6 +20,9 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { AdminSkeleton } from './admin-skeleton'
 import { FechaLocal } from '@/components/ui/local-date'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/admin')
 
 // Centro de control del super_admin: pulso de la plataforma, entrada al CRM de
 // cada tenant y gestión (crear tenant / provisionar owner). Guarded server-side.

@@ -3,25 +3,14 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { Suspense, useEffect, type ReactNode } from 'react'
 import { Bell } from 'lucide-react'
-
-const PAGE_TITLES: Record<string, string> = {
-  '/dashboard':     'Dashboard',
-  '/leads':         'Leads',
-  '/activity':      'Actividad',
-  '/notifications': 'Notificaciones',
-  '/settings':      'Configuración',
-  '/admin':         'Centro de control',
-}
-
-const DEFAULT_TITLE = 'ITMANO CRM'
+import { pageTitleFor, DEFAULT_PAGE_TITLE as DEFAULT_TITLE } from '@/lib/routing/page-titles'
 
 // Título de la página activa. Va aparte y en su propio <Suspense> porque lee
 // la ruta: en el prerender de una ruta con parámetros (/leads/[id]) la ruta aún
-// no se conoce y usePathname suspende. Esas rutas no tienen título propio, así
-// que el fallback es ya el texto definitivo y no hay salto.
+// no se conoce y usePathname suspende; el título llega al hidratar.
 function TopbarTitle() {
   const pathname = usePathname()
-  return <>{PAGE_TITLES[pathname] ?? DEFAULT_TITLE}</>
+  return <>{pageTitleFor(pathname)}</>
 }
 
 // Marco de la barra superior. Sale en el shell prerenderizado del dashboard; lo

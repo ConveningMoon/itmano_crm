@@ -24,6 +24,7 @@ import type { KanbanColumn, LeadListFilters, LeadListItem } from '@/lib/leads/li
 import { leadListFiltersToQuery, hasActiveLeadFilters, KANBAN_COLUMN_LIMIT } from '@/lib/leads/list-filters'
 import type { ChannelOption } from './new/page'
 import type { LeadTag } from '@/lib/leads/tags'
+import { phoneLinks } from '@/lib/leads/phone-display'
 import { getLeadSource, LEAD_SOURCE_FILTER_OPTIONS } from '@/lib/leads/source'
 import { deleteLeads } from './[id]/actions'
 import { createBroadcastFromLeadFilters, createBroadcastFromLeads } from '../emails/broadcast-actions'
@@ -59,6 +60,19 @@ const tone = (color: string) => ({ '--tone': color }) as React.CSSProperties
 function formatDate(dateStr: string) {
   return <FechaLocal fecha={dateStr} opciones={{ month: 'short', day: 'numeric' }} />
 }
+
+// Monto compacto para la columna de valor: "$425k". Es un orden de magnitud
+// para comparar filas; el detalle exacto vive en la ficha.
+function formatBudget(amount: number | null): string {
+  if (amount === null || !Number.isFinite(amount)) return '—'
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (amount >= 1_000) return `$${Math.round(amount / 1_000)}k`
+  return `$${Math.round(amount)}`
+}
+
+// La última columna muestra el dato por el que se ordena: antes "Valor" y
+// "Prioridad" reordenaban la tabla sin enseñar ni el monto ni el score.
+const SORT_COLUMN_LABEL: Record<string, string> = { recientes: 'Fecha', prioridad: 'Score', valor: 'Valor' }
 
 function getInitials(firstName: string, lastName: string): string {
   const f = firstName.charAt(0)
@@ -552,7 +566,7 @@ export function LeadsClient({
       {/* ── Panel de filtros ── Fuente/Canal/Idioma viven aquí; Etapa y Agente se
           duplican solo en móvil (mismo estado — cero desincronización). Los filtros
           aplican en vivo; "Aplicar" solo cierra. */}
-      <ModalShell open={showFilters} onClose={() => setShowFilters(false)} maxWidth={400}>
+      <ModalShell open={showFilters} onClose={() => setShowFilters(false)} maxWidth={400} ariaLabel="Filtros">
         <div className="settings-modal">
           <div className="settings-inline settings-inline-between">
             <h2 className="settings-modal-title">Filtros</h2>
@@ -688,7 +702,7 @@ export function LeadsClient({
               <span className="dt-hide-md">Fuente</span>
               <span className="dt-hide-sm">Calidad</span>
               <span className="dt-hide-md">Idioma</span>
-              <span className="dt-hide-sm">Fecha</span>
+              <span className="dt-hide-sm">{SORT_COLUMN_LABEL[filters.sort] ?? 'Fecha'}</span>
               <span className="dt-show-sm">Etapa</span>
             </div>
 
@@ -741,6 +755,18 @@ export function LeadsClient({
                           <span>{channel?.name ?? leadSource.label}</span>
                           <span className="dt-show-sm">{formatDate(lead.createdAt)}</span>
                           <span className="dt-show-sm"><QualityCell band={lead.qualityBand} urgency={null} /></span>
+                          {/* En el teléfono, llamar sin abrir la ficha. */}
+                          {lead.phone && phoneLinks(lead.phone) && (
+                            <a
+                              className="dt-show-sm settings-link-gold"
+                              href={phoneLinks(lead.phone)!.tel}
+                              onClick={e => e.stopPropagation()}
+                              onKeyDown={e => e.stopPropagation()}
+                              aria-label={`Llamar a ${lead.firstName}`}
+                            >
+                              Llamar
+                            </a>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -768,8 +794,14 @@ export function LeadsClient({
                     {/* Idioma */}
                     <span className="cell-muted dt-hide-md">{langCfg.flag} {lead.language.toUpperCase()}</span>
 
-                    {/* Fecha */}
-                    <span className="cell-muted dt-hide-sm">{formatDate(lead.createdAt)}</span>
+                    {/* Fecha, o el dato del orden activo */}
+                    <span className="cell-muted dt-hide-sm">
+                      {filters.sort === 'valor'
+                        ? formatBudget(lead.budgetAmount)
+                        : filters.sort === 'prioridad'
+                          ? (lead.qualityScore ?? '—')
+                          : formatDate(lead.createdAt)}
+                    </span>
 
                     {/* Etapa en pantallas estrechas */}
                     <span className="dt-show-sm"><StageBadge stage={lead.stage} /></span>
@@ -881,7 +913,7 @@ export function LeadsClient({
       </div>
 
       {/* ── Eliminar en lote — Paso 1: primera confirmación ── */}
-      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={460}>
+      <ModalShell open={deleteStep === 1} onClose={() => setDeleteStep(0)} maxWidth={460} ariaLabel="Eliminar leads">
         <div className="settings-modal">
           <div className="settings-inline settings-inline-between">
             <h2 className="settings-modal-title">Eliminar {selected.size} {selected.size === 1 ? 'lead' : 'leads'}</h2>
@@ -902,7 +934,7 @@ export function LeadsClient({
       </ModalShell>
 
       {/* ── Eliminar en lote — Paso 2: confirmación por texto ── */}
-      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420}>
+      <ModalShell open={deleteStep === 2} onClose={() => setDeleteStep(0)} maxWidth={420} ariaLabel="Confirmar eliminación">
         <div className="settings-modal">
           <div className="settings-inline settings-inline-between">
             <h2 className="settings-modal-title">Confirmar eliminación</h2>

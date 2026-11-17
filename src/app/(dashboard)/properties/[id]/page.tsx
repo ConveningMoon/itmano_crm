@@ -20,6 +20,9 @@ import { businessTimeZone } from '@/lib/time-zones'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { STATUS_CONFIG, TYPE_LABELS } from '../property-labels'
 import { PropertyDetailSkeleton } from './property-detail-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/properties')
 
 // Detalle de una propiedad (como en fuentes): botón Editar en la cabecera, que
 // abre el formulario completo COMO MODAL en esta misma página; tab Descripción

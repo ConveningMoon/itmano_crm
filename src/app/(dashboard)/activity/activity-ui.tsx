@@ -1,7 +1,9 @@
 import {
   ArrowRightCircle, Mail, FileDown, Calendar, UserPlus, CheckCircle2,
 } from 'lucide-react'
+import Link from 'next/link'
 import type { ActivityItem } from '@/lib/data/activity'
+import { FechaLocal } from '@/components/ui/local-date'
 
 // Shared activity render — used by both the dashboard block and /activity so
 // the two stay visually identical. Server-safe (no hooks, no client state).
@@ -25,6 +27,17 @@ export function timeAgo(dateStr: string): string {
   const days = Math.floor(hours / 24)
   if (days === 1) return 'Ayer'
   return `Hace ${days} días`
+}
+
+// Hasta una semana, relativo ("Hace 3 días"); después, la fecha: "Hace 85
+// días" obligaba a hacer la cuenta.
+function olderThanAWeek(dateStr: string): boolean {
+  return Date.now() - new Date(dateStr).getTime() > 7 * 86_400_000
+}
+
+function ActivityWhen({ date }: { date: string }) {
+  if (!olderThanAWeek(date)) return <>{timeAgo(date)}</>
+  return <FechaLocal fecha={date} locale="es" opciones={{ day: 'numeric', month: 'short', year: 'numeric' }} />
 }
 
 function ActivityIcon({ name }: { name: string }) {
@@ -58,10 +71,15 @@ export function ActivityRow({ item, showTenant = false, compact = false }: {
       </span>
       <div className="feed-body">
         <div className="feed-head">
-          <span className="feed-text" style={{ margin: 0 }}>{item.description}</span>
+          <span className="feed-text" style={{ margin: 0 }}>
+            {item.leadId && item.leadName && (
+              <><Link href={`/leads/${item.leadId}`} className="settings-link-gold">{item.leadName}</Link>{' · '}</>
+            )}
+            {item.description}
+          </span>
           {showTenant && item.tenantName && <span className="feed-tag">{item.tenantName}</span>}
         </div>
-        <div className="feed-meta">{item.author} · {timeAgo(item.createdAt)}</div>
+        <div className="feed-meta">{item.author} · <ActivityWhen date={item.createdAt} /></div>
       </div>
     </div>
   )

@@ -253,14 +253,15 @@ async function fetchKanbanColumns(
       return { key: stage, total: 0, items: [] }
     }
 
-    const { data, count } = await applyLeadListFilters(
-      supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
-      scope, filters, channels, tags,
-    )
-      .eq('stage', stage)
-      .order('created_at', { ascending: false })
-      .order('id',         { ascending: false })
-      .limit(KANBAN_COLUMN_LIMIT)
+    // Mismo orden que la tabla (Recientes / Prioridad / Valor). Antes cada
+    // columna ordenaba siempre por fecha aunque el selector marcara otro orden.
+    const { data, count } = await applySort(
+      applyLeadListFilters(
+        supabase.from('leads_list').select(LIST_COLUMNS, { count: 'exact' }),
+        scope, filters, channels, tags,
+      ).eq('stage', stage),
+      filters.sort,
+    ).limit(KANBAN_COLUMN_LIMIT)
 
     return {
       key: stage,

@@ -15,6 +15,9 @@ import { getBusinessProfile } from '@/lib/data/business-profile'
 import { getChannelLeadsTrend } from '@/lib/data/channels'
 import { businessTimeZone } from '@/lib/time-zones'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/sources')
 
 // Leads y conversión de la lista van fijos a 4 semanas, como el valor por defecto
 // del Dashboard. El selector de días se fue: elegir otra ventana es de la

@@ -14,6 +14,7 @@ import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { MAX_FILE_BYTES_PER_REQUEST } from '@/lib/uploads/limits'
 import { mensajeArchivoGrande, postMedia, type UploadResult } from '@/lib/uploads/media-upload'
 import { prepareImageForUpload } from '@/lib/uploads/prepare-image'
+import { checkPropertyConsistency } from '@/lib/properties/consistency'
 import {
   parseEmbedInput, commitEmbedDraft, replaceEmbedDraft, EMBED_PLACEMENTS, MAX_EMBEDS, EMPTY_EMBED_DRAFT,
   PLACEMENT_LABEL, PLACEMENT_HINT, PROVIDER_LABEL,
@@ -968,6 +969,36 @@ export function PropertyFormModal({
               />
             </label>
             </FormSection>
+
+            {/* Coherencia ficha ↔ texto. Aviso, no bloqueo: la persona decide
+                cuál de los dos está bien (ver lib/properties/consistency.ts). */}
+            {(() => {
+              const warnings = checkPropertyConsistency(
+                {
+                  year_built: form.year_built, sqft: form.sqft, bedrooms: form.bedrooms,
+                  bathrooms_full: form.bathrooms_full, garage_spaces: form.garage_spaces,
+                },
+                [...Object.values(form.descriptions ?? {}), ...Object.values(featuresText)],
+              )
+              if (warnings.length === 0) return null
+              return (
+                <div role="status" style={{
+                  fontSize: '12px', lineHeight: 1.5, color: 'var(--text-primary)',
+                  background: 'color-mix(in srgb, var(--gold-2) 10%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--gold-2) 30%, transparent)',
+                  borderRadius: '6px', padding: '8px 12px',
+                }}>
+                  <strong>Revisa antes de guardar:</strong> la ficha y el texto no coinciden.
+                  <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
+                    {warnings.map(w => (
+                      <li key={w.field}>
+                        {w.label}: la ficha dice <strong>{w.value ?? 0}</strong>, el texto dice “{w.snippet}”.
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })()}
 
             {/* Error */}
             {formError && (

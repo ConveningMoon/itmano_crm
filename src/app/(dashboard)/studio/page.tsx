@@ -11,6 +11,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { LinkPendingSpinner } from '@/components/ui/loading-indicator'
 import { DEFAULT_PALETTE } from '@/lib/studio/palettes'
 import { StudioSkeleton } from './studio-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/studio')
 
 // La generación encadena Claude (dirección de escena) + Nano Banana (la escena)
 // + sharp (la composición) en una sola invocación. Los fetch a Gemini tienen su

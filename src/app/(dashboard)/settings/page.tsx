@@ -24,6 +24,9 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { DEFAULT_TENANT_COLOR } from '@/lib/config'
 import { SettingsBodySkeleton } from './settings-skeleton'
+import { pageMetadata } from '@/lib/routing/page-titles'
+
+export const metadata = pageMetadata('/settings')
 
 // Todo lo que lee la sesión o la base vive aquí, detrás del Suspense de
 // SettingsPage: la cabecera y el esqueleto salen del shell estático.

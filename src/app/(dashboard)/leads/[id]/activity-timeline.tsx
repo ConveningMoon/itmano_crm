@@ -57,7 +57,14 @@ function formatDateTime(dateStr: string) {
 
 // Historial de actividad del lead — extraído de lead-detail-client para vivir
 // como contenido del tab "Actividad".
-export function ActivityTimeline({ events, onOpen }: { events: LeadEvent[]; onOpen?: (tab: 'formularios' | 'emails') => void }) {
+// `available` dice qué pestañas tienen contenido: un evento "Formulario
+// enviado" sin submission guardada (leads importados, eventos sembrados) abría
+// la pestaña Formularios vacía. Sin contenido, el enlace no se muestra.
+export function ActivityTimeline({ events, onOpen, available }: {
+  events: LeadEvent[]
+  onOpen?: (tab: 'formularios' | 'emails') => void
+  available?: Partial<Record<'formularios' | 'emails', boolean>>
+}) {
   return (
     <section className="feed">
       <div className="feed-caption">
@@ -76,7 +83,7 @@ export function ActivityTimeline({ events, onOpen }: { events: LeadEvent[]; onOp
               <div className="feed-body">
                 {action && <span className="feed-title">{action}</span>}
                 <p className={action ? 'feed-meta' : 'feed-text'}>{event.description}</p>
-                {link && onOpen && (
+                {link && onOpen && (available?.[link] ?? true) && (
                   <button type="button" onClick={() => onOpen(link)} className="feed-link">
                     {LINK_LABEL[link]} <ArrowUpRight size={11} aria-hidden="true" />
                   </button>

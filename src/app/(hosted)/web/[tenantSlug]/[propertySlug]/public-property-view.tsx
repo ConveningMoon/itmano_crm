@@ -424,9 +424,15 @@ function EmbedSection({ P, placement, embeds }: { P: Pal; placement: EmbedPlacem
                 style={{ display: 'block', width: '100%', aspectRatio: embedAspectRatio(embed.provider), border: 0 }}
               />
             </div>
-            {embed.title && (
-              <figcaption style={{ fontSize: '13px', color: P.textFaint, marginTop: '9px' }}>{embed.title}</figcaption>
-            )}
+            {/* Algunos visores (Zillow 3D, sobre todo) se quedan en blanco dentro
+                de un iframe según el navegador o sus bloqueos anti-bot. El enlace
+                directo garantiza que el visitante siempre pueda verlo. */}
+            <figcaption style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', fontSize: '13px', color: P.textFaint, marginTop: '9px' }}>
+              <span>{embed.title ?? ''}</span>
+              <a href={embed.url} target="_blank" rel="noopener noreferrer" style={{ color: P.accent, fontWeight: 600, textDecoration: 'none' }}>
+                ¿No carga? Ábrelo en una pestaña nueva ↗
+              </a>
+            </figcaption>
           </figure>
         ))}
       </div>
