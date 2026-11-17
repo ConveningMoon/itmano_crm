@@ -8,7 +8,7 @@ import { CHART_TEXT } from '@/lib/charts/palette'
 // cliente que ya viven detrás de lazy.tsx.
 
 export const AXIS_TICK = { fill: CHART_TEXT.muted, fontSize: 11 } as const
-export const GRID_STROKE = 'rgba(255,255,255,0.06)'
+export const GRID_STROKE = 'color-mix(in srgb, var(--text-primary) 6%, transparent)'
 
 export const fmt = (n: number) => n.toLocaleString('en-US')
 

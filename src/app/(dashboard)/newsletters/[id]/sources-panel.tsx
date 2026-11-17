@@ -232,8 +232,8 @@ export function SourcesPanel({ sources, content, canEdit, onChange }: Props) {
             {error && <p style={{ fontSize: '12px', color: 'var(--alert)', margin: 0 }}>{error}</p>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
-              <button onClick={closeModal} style={CANCEL_BUTTON}>Cancelar</button>
-              <button onClick={handleSave} style={SAVE_BUTTON}>
+              <button className="btn btn-ghost" onClick={closeModal} >Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSave} >
                 {mode === 'add' ? 'Añadir' : 'Guardar cambios'}
               </button>
             </div>
@@ -272,8 +272,8 @@ export function SourcesPanel({ sources, content, canEdit, onChange }: Props) {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-            <button onClick={() => setConfirmDelete(null)} style={CANCEL_BUTTON}>Cancelar</button>
-            <button onClick={confirmDeleteNow} style={DELETE_BUTTON}>Eliminar</button>
+            <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)} >Cancelar</button>
+            <button className="btn btn-danger" onClick={confirmDeleteNow} >Eliminar</button>
           </div>
         </div>
       </ModalShell>
@@ -304,18 +304,4 @@ const INPUT_STYLE: React.CSSProperties = {
   width: '100%', background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)',
   borderRadius: '8px', padding: '8px 12px', color: 'var(--text-primary)',
   fontSize: '13px', outline: 'none', boxSizing: 'border-box',
-}
-const CANCEL_BUTTON: React.CSSProperties = {
-  padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
-  background: 'transparent', border: '1px solid var(--border-subtle)',
-  color: 'var(--text-muted)', cursor: 'pointer',
-}
-const SAVE_BUTTON: React.CSSProperties = {
-  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer',
-}
-const DELETE_BUTTON: React.CSSProperties = {
-  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-  background: 'color-mix(in srgb, var(--alert) 15%, transparent)', color: 'var(--alert)',
-  border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)', cursor: 'pointer',
 }

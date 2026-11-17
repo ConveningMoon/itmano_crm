@@ -6,7 +6,7 @@ import { Send, Users } from 'lucide-react'
 import type { AudienceSummary } from '@/lib/open-houses/audience'
 import { SKIP_REASON_LABEL, type SkipReason } from '@/lib/open-houses/model'
 import { confirmOpenHouse, previewOpenHouseAudience } from '../../../open-house-actions'
-import { BTN_GHOST, BTN_PRIMARY, CARD, ERROR, HINT, LANG_LABEL } from '../ui'
+import { CARD, ERROR, HINT, LANG_LABEL } from '../ui'
 
 // Confirmar es el paso irreversible: publica la cuenta regresiva y programa el
 // anuncio. Por eso se hace en dos tiempos: primero se CALCULA la audiencia y
@@ -69,7 +69,7 @@ export function ConfirmPanel({
       ) : (
         <>
           {!summary ? (
-            <button onClick={calculate} disabled={pending} style={{ ...BTN_GHOST, alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <button className="btn btn-ghost" onClick={calculate} disabled={pending} style={{ alignSelf: 'flex-start' }}>
               <Users size={13} /> {pending ? 'Calculando…' : 'Calcular audiencia'}
             </button>
           ) : (
@@ -89,9 +89,9 @@ export function ConfirmPanel({
                 </ul>
               )}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                <button onClick={calculate} disabled={pending} style={BTN_GHOST}>Recalcular</button>
+                <button className="btn btn-ghost" onClick={calculate} disabled={pending} >Recalcular</button>
                 {!asking ? (
-                  <button onClick={() => setAsking(true)} disabled={pending || summary.toSend === 0} style={{ ...BTN_PRIMARY, opacity: summary.toSend === 0 ? 0.5 : 1 }}>
+                  <button className="btn btn-primary" onClick={() => setAsking(true)} disabled={pending || summary.toSend === 0} >
                     Confirmar open house
                   </button>
                 ) : (
@@ -101,8 +101,8 @@ export function ConfirmPanel({
                         ? `Se enviarán ${summary.toSend} correos ahora. ¿Confirmas?`
                         : `Se programarán ${summary.toSend} correos. ¿Confirmas?`}
                     </span>
-                    <button onClick={() => setAsking(false)} style={BTN_GHOST}>No</button>
-                    <button onClick={confirm} disabled={pending} style={{ ...BTN_PRIMARY, display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: pending ? 0.6 : 1 }}>
+                    <button className="btn btn-ghost" onClick={() => setAsking(false)} >No</button>
+                    <button className="btn btn-primary" onClick={confirm} disabled={pending} >
                       <Send size={13} /> {pending ? 'Confirmando…' : `Sí, confirmar (${summary.toSend})`}
                     </button>
                   </div>

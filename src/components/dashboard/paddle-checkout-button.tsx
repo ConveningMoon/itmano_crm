@@ -49,19 +49,16 @@ export function PaddleCheckoutButton({ plan, cycle, label }: Props) {
   return (
     <div>
       <button
+        type="button"
         onClick={onClick}
         disabled={pending}
-        style={{
-          background: 'var(--accent-gold)', color: 'var(--bg-base)',
-          border: 'none', borderRadius: '8px', padding: '8px 18px',
-          fontSize: '13px', fontWeight: 500, cursor: pending ? 'default' : 'pointer',
-          opacity: pending ? 0.6 : 1, whiteSpace: 'nowrap',
-        }}
+        className="btn btn-primary"
       >
+        {pending && <span className="loading-spinner" aria-hidden="true" />}
         {pending ? 'Preparando…' : label}
       </button>
       {error && (
-        <p style={{ color: 'var(--accent-coral)', fontSize: '12px', marginTop: '6px', maxWidth: '260px' }}>{error}</p>
+        <p role="alert" className="form-error admin-msg">{error}</p>
       )}
     </div>
   )

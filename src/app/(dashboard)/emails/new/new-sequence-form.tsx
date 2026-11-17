@@ -91,7 +91,7 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
         )}
 
         <div>
-          <label style={LABEL}>Nombre <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+          <label style={LABEL}>Nombre <span className="form-required">*</span></label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
@@ -105,7 +105,7 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
         </div>
 
         <div>
-          <label style={LABEL}>Idioma <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+          <label style={LABEL}>Idioma <span className="form-required">*</span></label>
           <div style={{ display: 'flex', gap: '8px' }}>
             {([
               { v: 'es', label: 'Español' },
@@ -119,9 +119,9 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
                 style={{
                   padding: '7px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '8px', cursor: 'pointer',
                   transition: 'all 0.15s',
-                  background: language === opt.v ? 'rgba(201,169,110,0.15)' : 'var(--bg-elevated)',
-                  color: language === opt.v ? 'var(--accent-gold)' : 'var(--text-muted)',
-                  border: language === opt.v ? '1px solid rgba(201,169,110,0.3)' : '1px solid var(--border-subtle)',
+                  background: language === opt.v ? 'color-mix(in srgb, var(--gold-2) 15%, transparent)' : 'var(--bg-elevated)',
+                  color: language === opt.v ? 'var(--gold-2)' : 'var(--text-muted)',
+                  border: language === opt.v ? '1px solid color-mix(in srgb, var(--gold-2) 30%, transparent)' : '1px solid var(--border-subtle)',
                 }}
               >
                 {opt.label}
@@ -131,7 +131,7 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
         </div>
 
         <div>
-          <label style={LABEL}>Tipo de activación <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+          <label style={LABEL}>Tipo de activación <span className="form-required">*</span></label>
           <div style={{ display: 'flex', gap: '8px' }}>
             {([
               { v: 'form',   label: 'Formulario',  desc: 'Auto-enrola al registrarse en un canal' },
@@ -145,9 +145,9 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
                 style={{
                   flex: 1, padding: '8px 12px', fontSize: '12px', fontWeight: 500,
                   borderRadius: '8px', cursor: 'pointer', textAlign: 'left',
-                  background: activationType === opt.v ? 'rgba(201,169,110,0.15)' : 'var(--bg-elevated)',
-                  color: activationType === opt.v ? 'var(--accent-gold)' : 'var(--text-muted)',
-                  border: activationType === opt.v ? '1px solid rgba(201,169,110,0.3)' : '1px solid var(--border-subtle)',
+                  background: activationType === opt.v ? 'color-mix(in srgb, var(--gold-2) 15%, transparent)' : 'var(--bg-elevated)',
+                  color: activationType === opt.v ? 'var(--gold-2)' : 'var(--text-muted)',
+                  border: activationType === opt.v ? '1px solid color-mix(in srgb, var(--gold-2) 30%, transparent)' : '1px solid var(--border-subtle)',
                 }}
               >
                 <div>{opt.label}</div>
@@ -190,29 +190,21 @@ export function NewSequenceForm({ isSuperAdmin, tenants, agents, fixedTenantId }
       </div>
 
       {error && (
-        <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '16px', padding: '8px 12px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '16px', padding: '8px 12px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
           {error}
         </div>
       )}
 
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button
+        <button className="btn btn-ghost"
           type="button"
           onClick={() => window.history.back()}
-          style={{ padding: '9px 18px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}
         >
           Cancelar
         </button>
-        <button
+        <button className="btn btn-primary"
           type="submit"
           disabled={!name.trim() || pending || (isSuperAdmin && !tenantId)}
-          style={{
-            padding: '9px 24px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-            background: 'var(--accent-gold)', color: 'var(--bg-base)',
-            border: 'none',
-            cursor: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 'not-allowed' : 'pointer',
-            opacity: (!name.trim() || pending || (isSuperAdmin && !tenantId)) ? 0.7 : 1,
-          }}
         >
           {pending ? 'Creando...' : 'Crear secuencia'}
         </button>

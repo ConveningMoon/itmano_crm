@@ -22,9 +22,9 @@ type ActionResult = { ok: true } | { ok: false; error: string }
 
 const ERROR_BOX: React.CSSProperties = {
   fontSize: '12px',
-  color: 'var(--accent-coral)',
+  color: 'var(--alert)',
   padding: '8px 10px',
-  background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
+  background: 'color-mix(in srgb, var(--alert) 10%, transparent)',
   borderRadius: '8px',
 }
 
@@ -199,7 +199,7 @@ export function FolderGroup({ folder, count, children }: {
           className="folder-toggle"
         >
           <ChevronRight size={15} className="folder-chevron" />
-          <FolderIcon size={16} style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />
+          <FolderIcon size={16} style={{ color: 'var(--gold-2)', flexShrink: 0 }} />
           <span style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {folder.name}
           </span>

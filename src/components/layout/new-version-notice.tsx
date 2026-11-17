@@ -100,7 +100,7 @@ export function NewVersionNotice({ version }: { version: string }) {
         boxShadow: 'var(--shadow-md)',
       }}
     >
-      <RefreshCw size={14} strokeWidth={1.8} aria-hidden style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />
+      <RefreshCw size={14} strokeWidth={1.8} aria-hidden style={{ color: 'var(--gold-2)', flexShrink: 0 }} />
       <span style={{ fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.4 }}>
         Hay una versión nueva del CRM
       </span>
@@ -111,13 +111,7 @@ export function NewVersionNotice({ version }: { version: string }) {
           setActualizando(true)
           window.location.reload()
         }}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0,
-          padding: '5px 12px', borderRadius: '999px', border: 'none',
-          background: 'var(--accent-gold)', color: 'var(--bg-base)',
-          fontSize: '12px', fontWeight: 600, cursor: actualizando ? 'default' : 'pointer',
-          opacity: actualizando ? 0.7 : 1,
-        }}
+        className="btn btn-primary btn-pill"
       >
         {actualizando && <span aria-hidden className="loading-spinner" />}
         {actualizando ? 'Actualizando…' : 'Actualizar'}

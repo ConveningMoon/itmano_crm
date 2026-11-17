@@ -14,14 +14,6 @@ import { HostedPageEditor } from './hosted-page-editor'
 // las opciones de construcción: sus páginas las conecta el equipo. La marca es
 // del tenant, así que las fuentes nuevas nacen ya gestionadas.
 
-const BTN_GHOST: React.CSSProperties = {
-  padding: '7px 14px', fontSize: '12px', color: 'var(--text-muted)',
-  background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
-}
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--accent-gold)', border: 'none', borderRadius: '8px', cursor: 'pointer',
-}
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px',
 }
@@ -37,11 +29,10 @@ const MODES: { key: Mode; icon: React.ReactNode; title: string; desc: string }[]
 function CopyBtn({ text, label = 'Copiar' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (
-    <button
+    <button className="btn btn-ghost btn-sm"
       onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) }).catch(() => {})}
-      style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
     >
-      {copied ? <Check size={12} color="var(--accent-green)" /> : <Copy size={12} />}
+      {copied ? <Check size={12} color="var(--gold-1)" /> : <Copy size={12} />}
       {copied ? 'Copiado' : label}
     </button>
   )
@@ -74,7 +65,7 @@ export function PageOptions({
   if (managedByItmano) {
     return (
       <div style={{ ...CARD, padding: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-        <ShieldCheck size={18} color="var(--accent-green)" />
+        <ShieldCheck size={18} color="var(--gold-1)" />
         <div style={{ flex: 1, minWidth: '220px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>Página administrada por ITMANO</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
@@ -98,11 +89,11 @@ export function PageOptions({
               style={{
                 textAlign: 'left', cursor: 'pointer', padding: '16px',
                 background: active ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                border: `1px solid ${active ? 'var(--accent-gold)' : 'var(--border-subtle)'}`,
+                border: `1px solid ${active ? 'var(--gold-2)' : 'var(--border-subtle)'}`,
                 borderRadius: '12px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: active ? 'var(--accent-gold)' : 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: active ? 'var(--gold-2)' : 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
                 {m.icon} {m.title}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '8px' }}>{m.desc}</div>
@@ -171,7 +162,7 @@ export function PageOptions({
       {mode === 'request' && (
         <div style={{ ...CARD, padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {reqDone ? (
-            <div style={{ fontSize: '13px', color: 'var(--accent-green)' }}>
+            <div style={{ fontSize: '13px', color: 'var(--gold-1)' }}>
               Solicitud enviada. Nuestro equipo te contactará para diseñar y conectar la página.
             </div>
           ) : (
@@ -187,8 +178,8 @@ export function PageOptions({
                 placeholder="Ej.: Quiero una landing para mi guía de compradores; tengo la portada y el PDF listos…"
                 style={{ width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
               />
-              {reqErr && <div style={{ fontSize: '12px', color: '#E04040' }}>{reqErr}</div>}
-              <button
+              {reqErr && <div style={{ fontSize: '12px', color: 'var(--alert)' }}>{reqErr}</div>}
+              <button className="btn btn-primary"
                 onClick={() => {
                   setReqErr(null)
                   start(async () => {
@@ -198,7 +189,7 @@ export function PageOptions({
                   })
                 }}
                 disabled={pending}
-                style={{ ...BTN_PRIMARY, alignSelf: 'flex-start', opacity: pending ? 0.6 : 1 }}
+                style={{ alignSelf: 'flex-start' }}
               >
                 {pending ? 'Enviando…' : 'Enviar solicitud'}
               </button>

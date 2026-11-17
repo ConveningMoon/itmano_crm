@@ -52,7 +52,7 @@ export function AiCapacityRequest() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: EASE_OUT_PREMIUM }}
           >
-            <CheckCircle2 size={30} strokeWidth={1.6} style={{ color: 'var(--accent-green)' }} />
+            <CheckCircle2 size={30} strokeWidth={1.6} style={{ color: 'var(--gold-1)' }} />
             <h3 className="settings-modal-title">Solicitud enviada</h3>
             <p className="settings-confirm-text">
               El equipo de ITMANO revisará tu uso y te contactará para ampliar la capacidad de IA de tu equipo.

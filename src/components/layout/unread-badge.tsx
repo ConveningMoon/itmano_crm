@@ -13,21 +13,8 @@ export function UnreadBadge({ count }: { count: number }) {
       initial={{ scale: 0 }}
       animate={{ scale: 1 }}
       transition={{ type: 'spring', stiffness: 500, damping: 26 }}
-      style={{
-        position: 'absolute',
-        top: '-5px',
-        right: '-5px',
-        minWidth: '17px',
-        height: '17px',
-        padding: '0 4px',
-        borderRadius: '9px',
-        backgroundColor: 'var(--accent-coral)',
-        color: 'var(--bg-base)',
-        fontSize: '10px',
-        fontWeight: 700,
-        lineHeight: '17px',
-        textAlign: 'center',
-      }}
+      className="unread-badge"
+      aria-label={`${count} sin leer`}
     >
       {count > 9 ? '9+' : count}
     </m.span>

@@ -121,9 +121,8 @@ export function SendEmailModal({
             <span style={{ fontSize: '14px', color: 'var(--text-primary)', textAlign: 'center' }}>
               {done === 'corporate' ? 'Correo enviado.' : 'Abrimos tu cliente de correo con el mensaje listo.'}
             </span>
-            <button
+            <button className="btn btn-primary"
               onClick={handleClose}
-              style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: 'pointer' }}
             >
               Cerrar
             </button>
@@ -185,11 +184,10 @@ export function SendEmailModal({
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '20px' }}>
-              <button onClick={handleClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button
+              <button className="btn btn-ghost" onClick={handleClose} >Cancelar</button>
+              <button className="btn btn-primary"
                 onClick={handleSend}
                 disabled={pending}
-                style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px', background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none', cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1 }}
               >
                 {pending ? 'Enviando…' : mode === 'corporate' ? 'Enviar correo' : 'Abrir en mi correo'}
               </button>

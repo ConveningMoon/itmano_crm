@@ -40,10 +40,6 @@ const INPUT: React.CSSProperties = {
   borderRadius: '8px', padding: '9px 12px', fontSize: '13px', color: 'var(--text-primary)',
   outline: 'none', boxSizing: 'border-box',
 }
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
-}
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
   borderRadius: '12px', overflow: 'hidden',
@@ -202,7 +198,7 @@ function CreateTenantCard() {
           </div>
         </div>
         <div>
-          <button style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }} disabled={pending} onClick={handleCreate}>
+          <button className="btn btn-primary"  disabled={pending} onClick={handleCreate}>
             {pending ? 'Creando…' : 'Crear tenant'}
           </button>
           {error && <p role="alert" className="form-error admin-msg">{error}</p>}
@@ -242,7 +238,7 @@ function ProvisionOwnerForm({ tenantId }: { tenantId: string }) {
           onChange={e => setEmail(e.target.value)} placeholder="owner@email.com" />
         <input style={{ ...INPUT, flex: '1 1 160px' }} value={telegram}
           onChange={e => setTelegram(e.target.value)} placeholder="Telegram chat id (opcional)" />
-        <button style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }} disabled={pending} onClick={handleProvision}>
+        <button className="btn btn-primary"  disabled={pending} onClick={handleProvision}>
           {pending ? 'Provisionando…' : 'Provisionar owner'}
         </button>
       </div>
@@ -253,11 +249,6 @@ function ProvisionOwnerForm({ tenantId }: { tenantId: string }) {
 
 // ─── Tenant row (read / edit / delete) ────────────────────────────────────────
 
-const BTN_GHOST: React.CSSProperties = {
-  padding: '6px 12px', fontSize: '12px', color: 'var(--text-muted)',
-  background: 'transparent', border: '1px solid var(--border-subtle)',
-  borderRadius: '8px', cursor: 'pointer',
-}
 
 function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: boolean }) {
   const router = useRouter()
@@ -465,8 +456,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
             >
               Editar
             </button>
-            <button
-              style={{ ...BTN_GHOST, color: 'var(--alert)', borderColor: 'color-mix(in srgb, var(--alert) 35%, transparent)' }}
+            <button className="btn btn-danger"
               onClick={() => { setMode('confirmDelete'); setConfirmSlug('') }}
             >
               Eliminar
@@ -631,7 +621,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
           </div>
           {error && <p role="alert" className="form-error admin-msg">{error}</p>}
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }} disabled={pending} onClick={handleSave}>
+            <button className="btn btn-primary"  disabled={pending} onClick={handleSave}>
               {pending ? 'Guardando…' : 'Guardar cambios'}
             </button>
             <button className="btn btn-ghost" onClick={resetToView}>Cancelar</button>
@@ -654,8 +644,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               onChange={e => setConfirmSlug(e.target.value)}
               placeholder={tenant.slug}
             />
-            <button
-              style={{ ...BTN_PRIMARY, background: 'var(--alert)', opacity: pending || confirmSlug.trim() !== tenant.slug ? 0.6 : 1 }}
+            <button className="btn btn-danger-solid"
               disabled={pending || confirmSlug.trim() !== tenant.slug}
               onClick={handleDelete}
             >

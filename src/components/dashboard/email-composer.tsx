@@ -206,23 +206,19 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
             <button
               type="button"
               onClick={() => { setAiOpen(true); setAiError(null) }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-                background: 'rgba(201,169,110,0.1)', color: 'var(--accent-gold)',
-                border: '1px solid rgba(201,169,110,0.25)', borderRadius: '8px', cursor: 'pointer',
-              }}
+              className="btn"
+              data-tone="gold"
             >
-              <Sparkles size={13} />
+              <Sparkles size={13} aria-hidden="true" />
               Generar con IA
             </button>
           ) : (
             <div style={{
-              background: 'rgba(201,169,110,0.05)', border: '1px solid rgba(201,169,110,0.2)',
+              background: 'color-mix(in srgb, var(--gold-2) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 20%, transparent)',
               borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--gold-2)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Sparkles size={13} /> Generar contenido con IA
                 </span>
                 <button type="button" onClick={() => setAiOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
@@ -231,7 +227,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
               </div>
 
               <div>
-                <label style={LABEL}>Objetivo del correo <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                <label style={LABEL}>Objetivo del correo <span className="form-required">*</span></label>
                 <input
                   value={aiObjective}
                   onChange={e => setAiObjective(e.target.value)}
@@ -258,7 +254,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
               </div>
 
               <div>
-                <label style={LABEL}>Idea general / qué quieres decir <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+                <label style={LABEL}>Idea general / qué quieres decir <span className="form-required">*</span></label>
                 <textarea
                   value={aiIdea}
                   onChange={e => setAiIdea(e.target.value)}
@@ -286,13 +282,9 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
                   type="button"
                   onClick={handleGenerate}
                   disabled={aiBusy || !aiObjective.trim() || !aiIdea.trim()}
-                  style={{
-                    padding: '7px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
-                    background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
-                    cursor: aiBusy || !aiObjective.trim() || !aiIdea.trim() ? 'not-allowed' : 'pointer',
-                    opacity: aiBusy || !aiObjective.trim() || !aiIdea.trim() ? 0.6 : 1,
-                  }}
+                  className="btn btn-primary"
                 >
+                  {aiBusy && <span className="loading-spinner" aria-hidden="true" />}
                   {aiBusy ? 'Generando…' : 'Generar borrador'}
                 </button>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -307,7 +299,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
 
       {/* Asunto */}
       <div>
-        <label style={LABEL}>Asunto <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+        <label style={LABEL}>Asunto <span className="form-required">*</span></label>
         <input
           value={value.subject}
           onChange={e => set('subject', e.target.value)}
@@ -340,7 +332,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
 
       {/* Cuerpo */}
       <div>
-        <label style={LABEL}>Mensaje <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+        <label style={LABEL}>Mensaje <span className="form-required">*</span></label>
         <textarea
           ref={bodyRef}
           value={value.body}
@@ -377,7 +369,7 @@ export function EmailComposer({ value, onChange, locale = 'es', ai, previewConte
         </button>
         {previewError && <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '8px' }}>{previewError}</div>}
         {previewHtml && (
-          <div style={{ marginTop: '10px', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+          <div style={{ marginTop: '10px', border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: 'white' /* el papel del correo, no interfaz */ }}>
             <iframe
               sandbox=""
               srcDoc={previewHtml}

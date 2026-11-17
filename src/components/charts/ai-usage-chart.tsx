@@ -44,7 +44,7 @@ function CustomTooltip({ active, payload, label }: {
           <span style={{ color: p.color }}>●</span> {p.name}: {fmtCost(p.value)}
         </div>
       ))}
-      <div style={{ marginTop: '4px', color: 'var(--accent-gold)', fontWeight: 500 }}>Total: {fmtCost(total)}</div>
+      <div style={{ marginTop: '4px', color: 'var(--gold-2)', fontWeight: 500 }}>Total: {fmtCost(total)}</div>
     </div>
   )
 }
@@ -104,7 +104,7 @@ export function AiUsageDailyChart({ series }: { series: AiDailySeries }) {
                 tickLine={false}
                 width={44}
               />
-              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }} />
               <Legend
                 wrapperStyle={{ fontSize: '11px', color: CHART_TEXT.secondary }}
                 iconType="circle"

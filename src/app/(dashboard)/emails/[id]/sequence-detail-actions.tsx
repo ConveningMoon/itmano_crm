@@ -104,9 +104,9 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-            color: active ? 'var(--accent-green)' : 'var(--text-muted)',
-            background: active ? 'rgba(107,163,104,0.08)' : 'var(--bg-elevated)',
-            border: active ? '1px solid rgba(107,163,104,0.25)' : '1px solid var(--border-subtle)',
+            color: active ? 'var(--gold-1)' : 'var(--text-muted)',
+            background: active ? 'color-mix(in srgb, var(--gold-1) 8%, transparent)' : 'var(--bg-elevated)',
+            border: active ? '1px solid color-mix(in srgb, var(--gold-1) 25%, transparent)' : '1px solid var(--border-subtle)',
             borderRadius: '8px', cursor: pending ? 'not-allowed' : 'pointer',
             opacity: pending ? 0.7 : 1,
           }}
@@ -116,14 +116,8 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
         </button>
 
         {!isTagSequence && (
-          <button
+          <button className="btn btn-danger"
             onClick={() => setMode('confirm_delete')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-              color: 'var(--accent-coral)', background: 'rgba(201,123,107,0.08)',
-              border: '1px solid rgba(201,123,107,0.25)', borderRadius: '8px', cursor: 'pointer',
-            }}
           >
             <Trash2 size={12} /> Eliminar
           </button>
@@ -133,7 +127,7 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
       {/* Edit modal */}
       {mode === 'edit' && (
         <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setMode('idle')} />
+          <div style={{ position: 'fixed', inset: 0, background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setMode('idle')} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
             background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
@@ -157,9 +151,9 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
                   {([{ v: 'es', label: 'Español' }, { v: 'en', label: 'English' }, { v: 'pt', label: 'Português' }] as const).map(opt => (
                     <button key={opt.v} type="button" onClick={() => setLang(opt.v)} style={{
                       padding: '6px 14px', fontSize: '12px', fontWeight: 500, borderRadius: '8px', cursor: 'pointer',
-                      background: lang === opt.v ? 'rgba(201,169,110,0.15)' : 'var(--bg-elevated)',
-                      color: lang === opt.v ? 'var(--accent-gold)' : 'var(--text-muted)',
-                      border: lang === opt.v ? '1px solid rgba(201,169,110,0.3)' : '1px solid var(--border-subtle)',
+                      background: lang === opt.v ? 'color-mix(in srgb, var(--gold-2) 15%, transparent)' : 'var(--bg-elevated)',
+                      color: lang === opt.v ? 'var(--gold-2)' : 'var(--text-muted)',
+                      border: lang === opt.v ? '1px solid color-mix(in srgb, var(--gold-2) 30%, transparent)' : '1px solid var(--border-subtle)',
                     }}>{opt.label}</button>
                   ))}
                 </div>
@@ -178,15 +172,11 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
               </div>
             </div>
 
-            {error && <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleSave} disabled={!name.trim() || pending} style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
-                cursor: (!name.trim() || pending) ? 'not-allowed' : 'pointer', opacity: (!name.trim() || pending) ? 0.7 : 1,
-              }}>{pending ? 'Guardando...' : 'Guardar cambios'}</button>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')} >Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={!name.trim() || pending} >{pending ? 'Guardando...' : 'Guardar cambios'}</button>
             </div>
           </div>
         </>
@@ -195,7 +185,7 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
       {/* Delete confirmation */}
       {mode === 'confirm_delete' && (
         <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setMode('idle')} />
+          <div style={{ position: 'fixed', inset: 0, background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)', backdropFilter: 'blur(4px)', zIndex: 50 }} onClick={() => setMode('idle')} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
             background: 'var(--bg-surface)', border: '1px solid var(--border-accent)',
@@ -209,20 +199,15 @@ export function SequenceDetailActions({ sequenceId, sequenceName, language, desc
               ¿Eliminar <strong style={{ color: 'var(--text-primary)' }}>{sequenceName}</strong>? Se eliminarán también todos sus pasos.
             </p>
             {activeRunCount > 0 && (
-              <div style={{ background: 'rgba(201,123,107,0.08)', border: '1px solid rgba(201,123,107,0.2)', borderRadius: '8px', padding: '10px 12px', marginBottom: '20px', fontSize: '12px', color: 'var(--accent-coral)', lineHeight: 1.5 }}>
+              <div style={{ background: 'color-mix(in srgb, var(--alert) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--alert) 20%, transparent)', borderRadius: '8px', padding: '10px 12px', marginBottom: '20px', fontSize: '12px', color: 'var(--alert)', lineHeight: 1.5 }}>
                 Esta secuencia tiene <strong>{activeRunCount}</strong> run{activeRunCount !== 1 ? 's' : ''} activo{activeRunCount !== 1 ? 's' : ''}.
                 Si la eliminas, esos leads dejarán de recibir emails de esta secuencia.
               </div>
             )}
-            {error && <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={handleDelete} disabled={pending} style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'rgba(201,123,107,0.15)', color: 'var(--accent-coral)',
-                border: '1px solid rgba(201,123,107,0.3)',
-                cursor: pending ? 'not-allowed' : 'pointer', opacity: pending ? 0.7 : 1,
-              }}>{pending ? 'Eliminando...' : 'Eliminar'}</button>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')} >Cancelar</button>
+              <button className="btn btn-danger" onClick={handleDelete} disabled={pending} >{pending ? 'Eliminando...' : 'Eliminar'}</button>
             </div>
           </div>
         </>

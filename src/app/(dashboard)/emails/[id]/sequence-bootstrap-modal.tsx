@@ -94,7 +94,7 @@ export function SequenceBootstrapModal({
       <div style={{ padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <span style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={15} color="var(--accent-gold)" />
+            <Sparkles size={15} color="var(--gold-2)" />
             Crear los 3 correos con IA
           </span>
           <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}><X size={18} /></button>
@@ -130,7 +130,7 @@ export function SequenceBootstrapModal({
 
           {kind === 'event' && (
             <div>
-              <label style={LABEL}>Fecha del evento <span style={{ color: 'var(--accent-coral)' }}>*</span></label>
+              <label style={LABEL}>Fecha del evento <span className="form-required">*</span></label>
               <input
                 type="date"
                 value={eventDate}
@@ -146,7 +146,7 @@ export function SequenceBootstrapModal({
           <div>
             <label style={LABEL}>
               {kind === 'lead_magnet' ? 'Describe el contenido del lead magnet' : 'Descripción general'}{' '}
-              {kind !== 'lead_magnet' && <span style={{ color: 'var(--accent-coral)' }}>*</span>}
+              {kind !== 'lead_magnet' && <span className="form-required">*</span>}
             </label>
             <textarea
               value={description}
@@ -173,19 +173,12 @@ export function SequenceBootstrapModal({
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          <button onClick={handleClose} style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <button className="btn btn-ghost" onClick={handleClose} >
             Cancelar
           </button>
-          <button
+          <button className="btn btn-primary"
             onClick={handleGenerate}
             disabled={pending || !canSubmit}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-              background: 'var(--accent-gold)', color: 'var(--bg-base)', border: 'none',
-              cursor: pending || !canSubmit ? 'not-allowed' : 'pointer',
-              opacity: pending || !canSubmit ? 0.6 : 1,
-            }}
           >
             <Sparkles size={13} />
             {pending ? 'Generando los 3 correos…' : 'Generar los 3 correos'}

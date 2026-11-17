@@ -154,16 +154,9 @@ export function AiCreateModal({
           >
             Cancelar
           </button>
-          <button
+          <button className="btn btn-primary"
             onClick={generate}
             disabled={busy || !file}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 20px', fontSize: '13px', fontWeight: 500,
-              background: 'var(--gold-2)', color: 'var(--bg-base)',
-              borderRadius: '8px', border: 'none',
-              cursor: (busy || !file) ? 'default' : 'pointer', opacity: (busy || !file) ? 0.6 : 1,
-            }}
           >
             <Sparkles size={13} /> {busy ? 'Procesando PDF…' : 'Generar'}
           </button>

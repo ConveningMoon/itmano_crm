@@ -64,7 +64,7 @@ export function TagSequencesImportTools({ coverage }: { coverage: TagSequenceCov
   return <>
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
       <button type="button" onClick={() => setModal('prompt')} style={BUTTON}><Bot size={13} />Prompt para IA</button>
-      <button type="button" onClick={() => setModal('import')} style={{ ...BUTTON, color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.1)', borderColor: 'rgba(201,169,110,0.2)' }}><Upload size={13} />Importar JSON completo</button>
+      <button type="button" onClick={() => setModal('import')} style={{ ...BUTTON, color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--gold-2) 20%, transparent)' }}><Upload size={13} />Importar JSON completo</button>
     </div>
 
     <ModalShell open={modal === 'prompt'} onClose={close} maxWidth={760}>
@@ -72,7 +72,7 @@ export function TagSequencesImportTools({ coverage }: { coverage: TagSequenceCov
         <Header title="Prompt para todos los emails por etiqueta" onClose={close} />
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.55 }}>El prompt incluye los slugs, idiomas y descripciones actuales. La IA debe devolver un único JSON para todo el catálogo.</p>
         <textarea readOnly value={prompt} rows={20} onFocus={event => event.currentTarget.select()} style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'var(--bg-overlay)', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.55 }} />
-        {error && <p style={{ color: 'var(--accent-coral)', fontSize: '12px' }}>{error}</p>}
+        {error && <p style={{ color: 'var(--alert)', fontSize: '12px' }}>{error}</p>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
           <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(prompt); setCopied(true) } catch { setError('No se pudo copiar automáticamente.') } }} style={BUTTON}>
             {copied ? <Check size={13} /> : <Clipboard size={13} />}{copied ? 'Prompt copiado' : 'Copiar prompt'}
@@ -86,17 +86,17 @@ export function TagSequencesImportTools({ coverage }: { coverage: TagSequenceCov
         <Header title="Importar todos los emails por etiqueta" onClose={close} />
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.55 }}>La operación es transaccional. Cada combinación etiqueta + idioma se ordena por separado; se conservan correos y horas ya ocupadas.</p>
         <input ref={inputRef} type="file" accept="application/json,.json" onChange={event => void chooseFile(event.target.files?.[0])} style={{ display: 'none' }} />
-        <button type="button" onClick={() => inputRef.current?.click()} style={{ width: '100%', minHeight: '92px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '7px', borderRadius: '10px', border: '1px dashed var(--border-accent)', background: 'rgba(201,169,110,0.04)', color: 'var(--text-muted)', cursor: 'pointer' }}>
-          <FileJson size={20} color="var(--accent-gold)" /><span>{fileName ?? 'Seleccionar archivo JSON'}</span><small>Máximo 5 MB</small>
+        <button type="button" onClick={() => inputRef.current?.click()} style={{ width: '100%', minHeight: '92px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '7px', borderRadius: '10px', border: '1px dashed var(--border-accent)', background: 'color-mix(in srgb, var(--gold-2) 4%, transparent)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+          <FileJson size={20} color="var(--gold-2)" /><span>{fileName ?? 'Seleccionar archivo JSON'}</span><small>Máximo 5 MB</small>
         </button>
-        {error && <p style={{ color: 'var(--accent-coral)', fontSize: '12px' }}>{error}</p>}
+        {error && <p style={{ color: 'var(--alert)', fontSize: '12px' }}>{error}</p>}
         {result && <div style={{ marginTop: '12px', padding: '11px', border: '1px solid var(--border-subtle)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
           <strong>{result.imported} emails importados en {result.sequences} secuencias.</strong>
           {result.skipped.length > 0 && <ul style={{ paddingLeft: '18px' }}>{result.skipped.map((item, index) => <li key={`${item.tagSlug}-${item.language}-${item.sendAtHours}-${index}`}>{item.tagSlug} ({item.language}), hora {item.sendAtHours}: {item.reason}</li>)}</ul>}
         </div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
           <button type="button" onClick={close} style={BUTTON}>{result ? 'Cerrar' : 'Cancelar'}</button>
-          {!result && <button type="button" onClick={runImport} disabled={pending || !rawJson} style={{ ...BUTTON, background: 'var(--accent-gold)', color: 'var(--bg-base)', opacity: pending || !rawJson ? .55 : 1 }}>{pending ? 'Importando…' : 'Importar todo'}</button>}
+          {!result && <button className="btn btn-primary" type="button" onClick={runImport} disabled={pending || !rawJson} >{pending ? 'Importando…' : 'Importar todo'}</button>}
         </div>
       </div>
     </ModalShell>

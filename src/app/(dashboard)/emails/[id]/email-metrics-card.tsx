@@ -15,35 +15,35 @@ export async function EmailMetricsCard({ sequenceId, tenantId }: Props) {
       value: m.totalSends > 0 ? String(m.totalSends) : '0',
       sub:   m.uniqueLeads > 0 ? `${m.uniqueLeads} leads únicos` : undefined,
       icon:  <Send size={14} />,
-      color: 'var(--accent-gold)',
+      color: 'var(--gold-2)',
       isRate: false,
     },
     {
       label: 'Click rate',
       value: `${m.clickRate}%`,
       icon:  <MousePointer2 size={14} />,
-      color: 'var(--accent-blue)',
+      color: 'var(--gold-1)',
       isRate: true,
     },
     {
       label: 'Reply rate',
       value: `${m.replyRate}%`,
       icon:  <MessageCircle size={14} />,
-      color: 'var(--accent-green)',
+      color: 'var(--gold-1)',
       isRate: true,
     },
     {
       label: 'Bounce rate',
       value: `${m.bounceRate}%`,
       icon:  <AlertCircle size={14} />,
-      color: m.bounceRate > 5 ? 'var(--accent-coral)' : 'var(--text-muted)',
+      color: m.bounceRate > 5 ? 'var(--alert)' : 'var(--text-muted)',
       isRate: true,
     },
     {
       label: 'Unsub rate',
       value: `${m.unsubscribeRate}%`,
       icon:  <UserMinus size={14} />,
-      color: m.unsubscribeRate > 3 ? 'var(--accent-coral)' : 'var(--text-muted)',
+      color: m.unsubscribeRate > 3 ? 'var(--alert)' : 'var(--text-muted)',
       isRate: true,
     },
   ]
@@ -54,7 +54,7 @@ export async function EmailMetricsCard({ sequenceId, tenantId }: Props) {
       borderRadius: '12px', overflow: 'hidden', marginBottom: '20px',
     }}>
       <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Send size={14} color="var(--accent-gold)" />
+        <Send size={14} color="var(--gold-2)" />
         <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           Métricas de envío
         </span>

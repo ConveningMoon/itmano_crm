@@ -11,7 +11,7 @@ import { CHART_TEXT, GOLD_RAMP, STAGE_HEX } from '@/lib/charts/palette'
 const css = readFileSync(path.resolve(__dirname, '../../src/app/globals.css'), 'utf8').replace(/\r\n/g, '\n')
 
 const REMAP: Record<string, string> = {
-  '--accent-blue': '#E6CF9A', '--accent-teal': '#B8A37A', '--accent-pink': '#A89878',
+  '--accent-gold': '#DDB968', '--accent-blue': '#E6CF9A', '--accent-teal': '#B8A37A', '--accent-pink': '#A89878',
   '--accent-green': '#F8E7BC', '--accent-coral': '#D98A78',
   '--status-new': '#F8E7BC', '--status-nurturing': '#DDB968', '--status-warm': '#DDB968',
   '--status-hot': '#F8E7BC', '--status-process-started': '#B08D45',
@@ -20,7 +20,7 @@ const REMAP: Record<string, string> = {
 }
 
 const ORIGINAL: Record<string, string> = {
-  '--accent-blue': '#5B8EC9', '--accent-teal': '#5AAFA0', '--accent-pink': '#B87BA3',
+  '--accent-gold': '#C9A96E', '--accent-blue': '#5B8EC9', '--accent-teal': '#5AAFA0', '--accent-pink': '#B87BA3',
   '--accent-green': '#6BA368', '--accent-coral': '#C97B6B',
   '--status-new': '#5B8EC9', '--status-nurturing': '#C9A96E', '--status-warm': '#E07B3A',
   '--status-hot': '#E04040', '--status-process-started': '#9B72CF',

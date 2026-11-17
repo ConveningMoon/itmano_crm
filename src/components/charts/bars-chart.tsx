@@ -39,7 +39,7 @@ export function BarsChart({ data, unit, height }: {
         <XAxis
           dataKey="label"
           tick={AXIS_TICK}
-          axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+          axisLine={{ stroke: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}
           tickLine={false}
           interval="preserveStartEnd"
           minTickGap={14}
@@ -47,7 +47,7 @@ export function BarsChart({ data, unit, height }: {
         <YAxis hide domain={[0, 'dataMax']} />
         <Tooltip
           content={p => <SeriesTooltip {...p} unit={unit} />}
-          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+          cursor={{ fill: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}
         />
         <Bar
           dataKey="value"
@@ -64,7 +64,7 @@ export function BarsChart({ data, unit, height }: {
             <Cell
               key={`${d.label}-${i}`}
               fill={i === topIndex ? `url(#${id}-top)` : (d.color ?? GOLD_RAMP[3])}
-              style={i === topIndex ? { filter: 'drop-shadow(0 0 8px rgba(221,185,104,0.5))' } : undefined}
+              style={i === topIndex ? { filter: 'drop-shadow(0 0 8px color-mix(in srgb, var(--gold-2) 50%, transparent))' } : undefined}
             />
           ))}
           <LabelList

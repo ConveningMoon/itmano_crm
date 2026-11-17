@@ -15,6 +15,7 @@ import { DonutChart } from '@/components/charts/lazy'
 import { StaggerGroup, StaggerItem } from '@/components/motion/primitives'
 import { SourcePlane } from '../source-plane'
 import type { TabProps } from '../types'
+import { formatConversion } from '@/lib/sources/conversion'
 
 const fmt = (n: number) => n.toLocaleString('en-US')
 
@@ -79,7 +80,7 @@ export async function FuentesTab({ ctx, period }: TabProps) {
   const convRows = channels
     .filter(c => c.metrics.conversionRate !== null && c.metrics.pageViewsInWindow > 0)
     .sort((a, b) => (b.metrics.conversionRate ?? 0) - (a.metrics.conversionRate ?? 0) || a.name.localeCompare(b.name))
-    .map(c => ({ key: c.id, label: c.name, value: c.metrics.conversionRate ?? 0, display: `${c.metrics.conversionRate}%` }))
+    .map(c => ({ key: c.id, label: c.name, value: c.metrics.conversionRate ?? 0, display: formatConversion(c.metrics.conversionRate) }))
 
   // ── Tabla: todas las fuentes ──
   const tableRows = [...channels].sort((a, b) =>
@@ -194,7 +195,7 @@ export async function FuentesTab({ ctx, period }: TabProps) {
                     </span>
                     <span className="src-num src-hide-sm">{m.pageViewsInWindow > 0 ? fmt(m.pageViewsInWindow) : '—'}</span>
                     <span className="src-num" style={{ color: 'var(--text-primary)' }}>{fmt(m.leadsInWindow)}</span>
-                    <span className="src-num">{m.conversionRate === null ? '—' : `${m.conversionRate}%`}</span>
+                    <span className="src-num">{formatConversion(m.conversionRate)}</span>
                     <span className="src-num">{m.avgTempScore === null ? '—' : Math.round(m.avgTempScore)}</span>
                   </Link>
                 )

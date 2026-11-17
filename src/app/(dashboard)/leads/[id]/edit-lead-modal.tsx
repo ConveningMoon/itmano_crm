@@ -259,24 +259,13 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
 
           {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-            <button
+            <button className="btn btn-ghost"
               type="button" onClick={onClose}
-              style={{
-                padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
-                background: 'transparent', border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)', cursor: 'pointer',
-              }}
             >
               Cancelar
             </button>
-            <button
+            <button className="btn btn-primary"
               type="submit" disabled={isPending}
-              style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--gold-2)', color: 'var(--bg-base)',
-                border: 'none', cursor: isPending ? 'not-allowed' : 'pointer',
-                opacity: isPending ? 0.7 : 1,
-              }}
             >
               {isPending ? 'Guardando...' : 'Guardar cambios'}
             </button>

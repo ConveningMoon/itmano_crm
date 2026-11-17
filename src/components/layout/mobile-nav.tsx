@@ -87,7 +87,7 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
           position: 'fixed',
           inset: 0,
           zIndex: 60,
-          background: 'rgba(0,0,0,0.55)',
+          background: 'color-mix(in srgb, var(--bg-base) 55%, transparent)',
           backdropFilter: 'blur(4px)',
         }}
       >
@@ -156,9 +156,9 @@ export function MobileNav({ role, userEmail, hubMode = false, brand = null, plan
               <div
                 style={{
                   width: '32px', height: '32px', borderRadius: '50%',
-                  backgroundColor: 'rgba(91,142,201,0.15)', border: '1px solid rgba(91,142,201,0.25)',
+                  backgroundColor: 'color-mix(in srgb, var(--gold-1) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-1) 25%, transparent)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '11px', fontWeight: 600, color: 'var(--accent-blue)', flexShrink: 0,
+                  fontSize: '11px', fontWeight: 600, color: 'var(--gold-1)', flexShrink: 0,
                 }}
               >
                 {initialsFromEmail(userEmail)}

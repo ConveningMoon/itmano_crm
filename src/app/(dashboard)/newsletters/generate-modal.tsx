@@ -218,29 +218,16 @@ export function GenerateModal({ open, onClose, sourceDomains }: Props) {
 
           {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
-            <button
+            <button className="btn btn-ghost"
               type="button"
               onClick={handleClose}
               disabled={busy}
-              style={{
-                padding: '8px 16px', fontSize: '13px', borderRadius: '8px',
-                background: 'transparent', border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)', cursor: busy ? 'not-allowed' : 'pointer',
-                opacity: busy ? 0.6 : 1,
-              }}
             >
               Cancelar
             </button>
-            <button
+            <button className="btn btn-primary"
               type="submit"
               disabled={busy || isPending}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
-                cursor: busy ? 'not-allowed' : 'pointer',
-                opacity: busy ? 0.6 : 1,
-              }}
             >
               {busy
                 ? <><Loader2 size={13} className="animate-spin" /> Generando…</>

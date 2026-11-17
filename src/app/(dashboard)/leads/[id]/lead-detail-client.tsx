@@ -258,7 +258,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
           <button
             type="button"
             onClick={() => setShowEditModal(true)}
-            className="btn btn-ghost btn-icon"
+            className="btn btn-ghost btn-square"
             title="Editar lead"
             aria-label="Editar lead"
           >
@@ -267,7 +267,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
           <button
             type="button"
             onClick={() => { setDeleteStep(1); setDeleteInput(''); setDeleteError(null) }}
-            className="btn btn-danger btn-icon"
+            className="btn btn-danger btn-square"
             title="Eliminar lead"
             aria-label="Eliminar lead"
           >
@@ -433,7 +433,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   >
                     ¿Confirmar cierre?
                   </button>
-                  <button type="button" onClick={() => setConfirmClose(false)} className="btn btn-ghost btn-icon" aria-label="Cancelar cierre">
+                  <button type="button" onClick={() => setConfirmClose(false)} className="btn btn-ghost btn-square" aria-label="Cancelar cierre">
                     <X size={14} />
                   </button>
                 </div>
@@ -458,7 +458,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   >
                     ¿Confirmar pérdida?
                   </button>
-                  <button type="button" onClick={() => setConfirmLost(false)} className="btn btn-ghost btn-icon" aria-label="Cancelar pérdida">
+                  <button type="button" onClick={() => setConfirmLost(false)} className="btn btn-ghost btn-square" aria-label="Cancelar pérdida">
                     <X size={14} />
                   </button>
                 </div>

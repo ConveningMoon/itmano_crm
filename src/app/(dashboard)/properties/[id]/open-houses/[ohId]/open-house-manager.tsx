@@ -10,11 +10,9 @@ import { defaultOpenHouseCopy } from '@/lib/open-houses/default-copy'
 import { utcToZonedWallTime } from '@/lib/open-houses/schedule'
 import { timeZoneLabel } from '@/lib/time-zones'
 import type { OpenHouseLanguage } from '@/lib/open-houses/model'
-import {
-  cancelOpenHouse, deleteOpenHouseDraft, rescheduleOpenHouse, updateOpenHouseDetails, updateOpenHouseDraft,
-} from '../../../open-house-actions'
+import { cancelOpenHouse, deleteOpenHouseDraft, rescheduleOpenHouse, updateOpenHouseDetails, updateOpenHouseDraft } from '../../../open-house-actions'
 import { OpenHouseForm, SenderSelect, toActionInput, type AgentOption, type OpenHouseFormValue } from '../open-house-form'
-import { BTN_DANGER, BTN_GHOST, BTN_PRIMARY, CARD, ERROR, HINT, INPUT, LABEL, LANG_LABEL, StateChip } from '../ui'
+import { BTN_GHOST, CARD, ERROR, HINT, INPUT, LABEL, LANG_LABEL, StateChip } from '../ui'
 import { EmailSection } from './email-section'
 import { ConfirmPanel } from './confirm-panel'
 import { RsvpSection } from './rsvp-section'
@@ -168,19 +166,18 @@ export function OpenHouseManager({
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {isDraft && (
               <>
-                <button onClick={() => setModal('edit')} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Pencil size={13} /> Editar</button>
-                <button
+                <button className="btn btn-ghost" onClick={() => setModal('edit')} ><Pencil size={13} /> Editar</button>
+                <button className="btn btn-danger"
                   disabled={pending}
                   onClick={() => { if (window.confirm('¿Eliminar este borrador? No se envió nada.')) run(() => deleteOpenHouseDraft(oh.id), () => router.push(`/properties/${oh.propertyId}?tab=openhouse`)) }}
-                  style={{ ...BTN_DANGER, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 ><Trash2 size={13} /> Eliminar</button>
               </>
             )}
             {isLive && (
               <>
-                <button onClick={() => setModal('details')} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Pencil size={13} /> Detalles</button>
-                <button onClick={() => setModal('reschedule')} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '6px' }}><CalendarClock size={13} /> Reprogramar</button>
-                <button onClick={() => setModal('cancel')} style={{ ...BTN_DANGER, display: 'inline-flex', alignItems: 'center', gap: '6px' }}><XCircle size={13} /> Cancelar</button>
+                <button className="btn btn-ghost" onClick={() => setModal('details')} ><Pencil size={13} /> Detalles</button>
+                <button className="btn btn-ghost" onClick={() => setModal('reschedule')} ><CalendarClock size={13} /> Reprogramar</button>
+                <button className="btn btn-danger" onClick={() => setModal('cancel')} ><XCircle size={13} /> Cancelar</button>
               </>
             )}
           </div>
@@ -240,8 +237,8 @@ export function OpenHouseManager({
           </div>
           {error && <div style={ERROR}>{error}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button onClick={() => setModal(null)} style={BTN_GHOST}>Cancelar</button>
-            <button disabled={pending} onClick={() => run(() => updateOpenHouseDetails(oh.id, { publicNotes: notes, rsvpEnabled: rsvpOn, senderAgentId: senderId || null }))} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>Guardar</button>
+            <button className="btn btn-ghost" onClick={() => setModal(null)} >Cancelar</button>
+            <button className="btn btn-primary" disabled={pending} onClick={() => run(() => updateOpenHouseDetails(oh.id, { publicNotes: notes, rsvpEnabled: rsvpOn, senderAgentId: senderId || null }))} >Guardar</button>
           </div>
         </div>
       </ModalShell>
@@ -267,11 +264,10 @@ export function OpenHouseManager({
           )}
           {error && <div style={ERROR}>{error}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button onClick={() => setModal(null)} style={BTN_GHOST}>Volver</button>
-            <button
+            <button className="btn btn-ghost" onClick={() => setModal(null)} >Volver</button>
+            <button className="btn btn-primary"
               disabled={pending}
               onClick={() => run(() => rescheduleOpenHouse(oh.id, { ...rs, notice: announcementSent ? noticePayload(notice) : undefined }))}
-              style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}
             >
               {pending ? 'Guardando…' : announcementSent ? 'Reprogramar y avisar' : 'Reprogramar'}
             </button>
@@ -299,11 +295,10 @@ export function OpenHouseManager({
           <div style={HINT}>La web mostrará “Este open house fue cancelado” hasta la fecha original.</div>
           {error && <div style={ERROR}>{error}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button onClick={() => setModal(null)} style={BTN_GHOST}>Volver</button>
-            <button
+            <button className="btn btn-ghost" onClick={() => setModal(null)} >Volver</button>
+            <button className="btn btn-danger-solid"
               disabled={pending}
               onClick={() => run(() => cancelOpenHouse(oh.id, { reason, notice: announcementSent ? noticePayload(cancelNotice) : undefined }))}
-              style={{ ...BTN_PRIMARY, background: 'var(--alert)', opacity: pending ? 0.6 : 1 }}
             >
               {pending ? 'Cancelando…' : announcementSent ? 'Cancelar y avisar' : 'Cancelar open house'}
             </button>

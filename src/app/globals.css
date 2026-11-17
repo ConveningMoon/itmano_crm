@@ -25,8 +25,11 @@
   --text-muted: #8A877F;
 
   /* Accents */
-  --accent-gold: #C9A96E;
-  --accent-gold-dim: #A08445;
+  /* El dorado de acento del CRM es el tono 2 de la rampa: lo que aún use
+     --accent-gold pinta igual que lo rediseñado. Marketing y login restauran
+     el original abajo (.mk-root, .brand-original). */
+  --accent-gold: #DDB968;
+  --accent-gold-dim: #8A6E38;
   --accent-blue: #E6CF9A;
   --accent-teal: #B8A37A;
   --accent-coral: #D98A78;
@@ -48,7 +51,7 @@
 
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-accent: rgba(201, 169, 110, 0.15);
+  --border-accent: rgba(221, 185, 104, 0.15);
 
   /* Status colors */
   --status-new: #F8E7BC;
@@ -98,7 +101,7 @@
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.35);
   --highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --border-hover: rgba(255, 255, 255, 0.12);
-  --border-gold-hover: rgba(201, 169, 110, 0.3);
+  --border-gold-hover: rgba(221, 185, 104, 0.3);
 }
 
 /* La paleta dorada es del CRM. Marketing y login conservan la identidad original.
@@ -106,6 +109,10 @@
    y tooltips del CRM se renderizan en portales fuera del shell del dashboard. */
 .mk-root,
 .brand-original {
+  --accent-gold: #C9A96E;
+  --accent-gold-dim: #A08445;
+  --border-accent: rgba(201, 169, 110, 0.15);
+  --border-gold-hover: rgba(201, 169, 110, 0.3);
   --accent-blue: #5B8EC9;
   --accent-teal: #5AAFA0;
   --accent-coral: #C97B6B;

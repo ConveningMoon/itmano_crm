@@ -13,7 +13,7 @@ import type { OpenHouseEmail, OpenHouseEmailContent, OpenHouseRow } from '@/lib/
 import type { EmailAiPurpose } from '@/app/(dashboard)/emails/ai-actions'
 import type { Language } from '@/lib/types'
 import { saveOpenHouseEmailContent, setOpenHouseEmailSchedule, setOpenHouseReminder } from '../../../open-house-actions'
-import { BTN_GHOST, BTN_PRIMARY, CARD, EmailStatusChip, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN } from '../ui'
+import { CARD, EmailStatusChip, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN } from '../ui'
 
 const AI_PURPOSE: Record<OpenHouseEmailKind, EmailAiPurpose> = {
   announcement: 'open_house_announcement',
@@ -109,8 +109,8 @@ function ContentModal({
             {advanced ? '← Crear contenido en el CRM' : 'Usar template de Resend (avanzado)'}
           </button>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={onClose} style={BTN_GHOST}>Cancelar</button>
-            <button onClick={save} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>{pending ? 'Guardando…' : 'Guardar'}</button>
+            <button className="btn btn-ghost" onClick={onClose} >Cancelar</button>
+            <button className="btn btn-primary" onClick={save} disabled={pending} >{pending ? 'Guardando…' : 'Guardar'}</button>
           </div>
         </div>
       </div>
@@ -165,8 +165,8 @@ function ScheduleEditor({ email, openHouse, onDone }: { email: OpenHouseEmail; o
       {error && <div style={ERROR}>{error}</div>}
       {warnings.map(w => <div key={w} style={WARN}>{w}</div>)}
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={onDone} style={BTN_GHOST}>Cerrar</button>
-        <button onClick={save} disabled={pending} style={{ ...BTN_PRIMARY, padding: '6px 14px', fontSize: '12px', opacity: pending ? 0.6 : 1 }}>{pending ? 'Guardando…' : 'Guardar horario'}</button>
+        <button className="btn btn-ghost" onClick={onDone} >Cerrar</button>
+        <button className="btn btn-primary" onClick={save} disabled={pending} >{pending ? 'Guardando…' : 'Guardar horario'}</button>
       </div>
     </div>
   )
@@ -202,7 +202,7 @@ function EmailCard({
             : onConfirm ? 'Sale al confirmar el open house' : `Programado para ${formatWhen(email.scheduledAt, openHouse.timezone)}`}
         </span>
         {editable && (email.kind === 'announcement' || email.kind === 'reminder') && !editingSchedule && (
-          <button onClick={() => setEditingSchedule(true)} style={{ ...BTN_GHOST, padding: '3px 10px', fontSize: '11px' }}>Cambiar horario</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEditingSchedule(true)} >Cambiar horario</button>
         )}
       </div>
       {editingSchedule && <ScheduleEditor email={email} openHouse={openHouse} onDone={() => setEditingSchedule(false)} />}
@@ -265,13 +265,12 @@ export function EmailSection({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <h2 style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>Correos</h2>
         {canToggleReminder && (
-          <button
+          <button className="btn btn-ghost"
             disabled={pending}
             onClick={() => { setError(null); start(async () => {
               const res = await setOpenHouseReminder(openHouse.id, !reminderActive)
               if (!res.ok) setError(res.error); else router.refresh()
             }) }}
-            style={BTN_GHOST}
           >
             {reminderActive ? 'Quitar recordatorio' : 'Agregar recordatorio'}
           </button>

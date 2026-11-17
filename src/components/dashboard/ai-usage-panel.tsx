@@ -83,7 +83,7 @@ function totalsRow(t: AiUsageTotals, showCosts: boolean) {
       <td style={NUM}>{fmtInt(t.requests)}</td>
       <td style={NUM}>{fmtInt(t.inputTokens)}</td>
       <td style={NUM}>{fmtInt(t.outputTokens)}</td>
-      {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(t.costUsd)}</td>}
+      {showCosts && <td style={{ ...NUM, color: 'var(--gold-2)', fontWeight: 500 }}>{fmtCost(t.costUsd)}</td>}
     </>
   )
 }
@@ -133,7 +133,7 @@ export function AiByAgentCard({ byAgent, showCosts }: { byAgent: AgentAiBreakdow
             {byAgent.agents.map(a => {
               const ratio = byAgent.splitApplies ? (a.shareRatio ?? 0) : a.ofTeamRatio
               const pct = Math.round(ratio * 100)
-              const barColor = byAgent.splitApplies && ratio >= 0.8 ? 'var(--accent-coral)' : a.agentColor
+              const barColor = byAgent.splitApplies && ratio >= 0.8 ? 'var(--alert)' : a.agentColor
               return (
                 <tr key={a.agentId}>
                   <td style={{ ...TD, color: 'var(--text-primary)', fontWeight: 500, whiteSpace: 'nowrap' }}>
@@ -151,7 +151,7 @@ export function AiByAgentCard({ byAgent, showCosts }: { byAgent: AgentAiBreakdow
                   <td style={NUM}>{fmtInt(a.requests)}</td>
                   <td style={NUM}>{fmtInt(a.inputTokens)}</td>
                   <td style={NUM}>{fmtInt(a.outputTokens)}</td>
-                  {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)', fontWeight: 500 }}>{fmtCost(a.costUsd)}</td>}
+                  {showCosts && <td style={{ ...NUM, color: 'var(--gold-2)', fontWeight: 500 }}>{fmtCost(a.costUsd)}</td>}
                   <td style={TD}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
@@ -240,7 +240,7 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
                 <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px' }}>{r.model}</td>
                 <td style={NUM}>{fmtInt(r.inputTokens)}</td>
                 <td style={NUM}>{fmtInt(r.outputTokens)}</td>
-                {showCosts && <td style={{ ...NUM, color: 'var(--accent-gold)' }}>{fmtCost(r.costUsd)}</td>}
+                {showCosts && <td style={{ ...NUM, color: 'var(--gold-2)' }}>{fmtCost(r.costUsd)}</td>}
               </tr>
             ))}
           </tbody>
@@ -283,28 +283,28 @@ export function AiUsagePanel({ summary }: { summary: AiUsageSummary }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           icon={<Sparkles size={14} />}
-          color="var(--accent-gold)"
+          color="var(--gold-2)"
           label="Requests · 30 días"
           value={fmtInt(last30d.requests)}
           sub={`${fmtInt(allTime.requests)} en total`}
         />
         <KpiCard
           icon={<ArrowDownToLine size={14} />}
-          color="var(--accent-blue)"
+          color="var(--gold-1)"
           label="Tokens entrada · 30 días"
           value={fmtInt(last30d.inputTokens)}
           sub={`${fmtInt(allTime.inputTokens)} en total`}
         />
         <KpiCard
           icon={<ArrowUpFromLine size={14} />}
-          color="var(--accent-teal)"
+          color="var(--gold-2)"
           label="Tokens salida · 30 días"
           value={fmtInt(last30d.outputTokens)}
           sub={`${fmtInt(allTime.outputTokens)} en total`}
         />
         <KpiCard
           icon={<DollarSign size={14} />}
-          color="var(--accent-green)"
+          color="var(--gold-1)"
           label="Costo · 30 días"
           value={fmtCost(last30d.costUsd)}
           sub={`${fmtCost(allTime.costUsd)} en total`}

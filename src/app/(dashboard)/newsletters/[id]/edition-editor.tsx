@@ -317,15 +317,10 @@ export function EditionEditor({ edition, canEdit, studioImages, publicUrl, agent
                   {publishing ? 'Despublicando…' : 'Despublicar'}
                 </button>
               ) : (
-                <button
+                <button className="btn btn-primary"
                   onClick={handlePublish}
                   disabled={publishing || saving || blockers.length > 0}
                   title={blockers[0]?.detail}
-                  style={{
-                    ...PRIMARY_BUTTON,
-                    opacity: (publishing || saving || blockers.length > 0) ? 0.5 : 1,
-                    cursor: (publishing || saving || blockers.length > 0) ? 'not-allowed' : 'pointer',
-                  }}
                 >
                   {publishing ? 'Publicando…' : 'Publicar'}
                 </button>
@@ -387,8 +382,4 @@ const SECONDARY_BUTTON: React.CSSProperties = {
   padding: '8px 16px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
   border: '1px solid var(--border-subtle)',
-}
-const PRIMARY_BUTTON: React.CSSProperties = {
-  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-  background: 'var(--gold-2)', color: 'var(--bg-base)', border: 'none',
 }

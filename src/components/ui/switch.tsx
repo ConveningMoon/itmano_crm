@@ -31,7 +31,7 @@ export function Switch({
         flexShrink: 0,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        background: checked ? 'var(--accent-gold)' : 'var(--bg-overlay)',
+        background: checked ? 'var(--gold-2)' : 'var(--bg-overlay)',
         transition: 'background 0.18s ease',
         padding: 0,
       }}

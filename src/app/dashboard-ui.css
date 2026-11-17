@@ -77,7 +77,13 @@
 }
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn-primary { background: var(--accent-gold); color: var(--bg-base); }
+.btn-primary { background: var(--gold-2); color: var(--bg-base); }
+/* La acción principal de la pantalla: degradado de marca, brillo sutil. */
+.btn-primary.btn-cta { background: var(--gold-gradient); }
+/* Botón compacto para filas densas (añadir, copiar, quitar). */
+.btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn-pill { height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; }
+.btn-primary.btn-cta:hover:not(:disabled) { box-shadow: var(--gold-glow); }
 .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 .btn-ghost {
   background: transparent;
@@ -90,13 +96,16 @@
   color: var(--text-primary);
 }
 .btn-danger {
-  background: color-mix(in srgb, var(--accent-coral) 14%, transparent);
-  color: var(--accent-coral);
-  border-color: color-mix(in srgb, var(--accent-coral) 30%, transparent);
+  background: color-mix(in srgb, var(--alert) 14%, transparent);
+  color: var(--alert);
+  border-color: color-mix(in srgb, var(--alert) 30%, transparent);
 }
 .btn-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-coral) 22%, transparent);
+  background: color-mix(in srgb, var(--alert) 22%, transparent);
 }
+/* Confirmación final de algo irreversible (borrar, descalificar): coral lleno. */
+.btn-danger-solid { background: var(--alert); color: var(--bg-base); }
+.btn-danger-solid:hover:not(:disabled) { filter: brightness(1.08); }
 
 .icon-btn {
   display: inline-flex;
@@ -1977,6 +1986,7 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 .agent-preview { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); }
 .agent-preview-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 .text-gold { color: var(--gold-2); }
+.text-muted-icon { flex-shrink: 0; color: var(--text-muted); }
 
 /* Resultado de un alta o una importación. */
 .done-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 24px; text-align: center; }
@@ -2052,12 +2062,12 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 .lead-identity-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
 .avatar-lg { width: 48px; height: 48px; font-size: 16px; font-weight: 500; }
 .avatar-md { width: 40px; height: 40px; font-size: 14px; }
-.btn-icon { width: 34px; padding: 0; }
+.btn-square { width: 34px; padding: 0; }
 .btn-block { width: 100%; }
 .btn-start { justify-content: flex-start; }
 .btn[data-tone='gold'] { color: var(--gold-2); border-color: color-mix(in srgb, var(--gold-2) 40%, transparent); background: color-mix(in srgb, var(--gold-2) 8%, transparent); }
 .btn-ghost[data-tone='gold']:hover:not(:disabled) { color: var(--gold-1); border-color: var(--gold-2); background: color-mix(in srgb, var(--gold-2) 14%, transparent); }
-@media (pointer: coarse) { .btn-icon { width: 44px; } }
+@media (pointer: coarse) { .btn-square { width: 44px; } }
 
 /* Dos columnas en escritorio; una sola por debajo de 1100px. */
 .lead-detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
@@ -2078,7 +2088,8 @@ a.feed-row:focus-visible .feed-title { color: var(--gold-1); }
 .action-list { display: flex; flex-direction: column; gap: 6px; }
 .action-confirm { display: flex; gap: 6px; }
 .action-confirm > .btn:first-child { flex: 1; }
-.form-required { color: var(--alert); }
+/* Campo obligatorio: no es una alerta, va en dorado. */
+.form-required { color: var(--gold-2); }
 .input-date { color-scheme: dark; }
 
 /* Cabecera dentro de un .feed y enlace de acción de una fila. */
@@ -2206,3 +2217,56 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
 .admin-tenant-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
 @media (min-width: 768px) { .admin-tenant-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .admin-msg { margin-top: 8px; }
+
+/* ── Barra superior ────────────────────────────────────────────────────────
+   Botones del topbar (uso de IA, switcher de tenant, campana). Clase propia:
+   .btn-icon es la global de hover y .btn-square la del detalle del lead. */
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.topbar-btn {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast);
+}
+.topbar-btn:hover { background: var(--bg-elevated); border-color: var(--border-hover); color: var(--text-primary); }
+.topbar-btn:focus-visible { outline: 2px solid var(--gold-2); outline-offset: 2px; }
+.topbar-btn-square { justify-content: center; width: 34px; padding: 0; }
+.topbar-btn[data-state='blocked'] { border-color: color-mix(in srgb, var(--alert) 40%, transparent); }
+.topbar-switcher { max-width: 220px; }
+.topbar-switcher-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.topbar-switcher-name[data-empty] { color: var(--text-muted); }
+.topbar-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--tone, var(--text-muted)); }
+
+/* Uso mensual de IA: barra + porcentaje. Dorado normal; coral desde el 80 %
+   y al bloquearse (con texto "Límite alcanzado"). */
+.ai-meter { --tone: var(--gold-2); display: inline-block; width: 44px; height: 4px; overflow: hidden; border-radius: 2px; background: var(--bg-overlay); }
+.ai-meter > i { display: block; height: 100%; border-radius: 2px; background: var(--tone); }
+.ai-meter-pct { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+[data-state='warn'] > .ai-meter, [data-state='blocked'] > .ai-meter { --tone: var(--alert); }
+[data-state='blocked'] > .ai-meter-pct { color: var(--alert); }
+.unread-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--gold-2);
+  color: var(--bg-base);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}

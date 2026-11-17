@@ -6,7 +6,7 @@ import { CalendarPlus } from 'lucide-react'
 import { ModalShell } from '@/components/motion/modal-shell'
 import { createOpenHouse } from '../../open-house-actions'
 import { OpenHouseForm, toActionInput, type AgentOption, type OpenHouseFormValue, type TagOption } from './open-house-form'
-import { BTN_PRIMARY, HINT } from './ui'
+import { HINT } from './ui'
 import type { OpenHouseLanguage } from '@/lib/open-houses/model'
 
 function nextSaturday(): string {
@@ -52,7 +52,7 @@ export function NewOpenHouseButton({
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} style={{ ...BTN_PRIMARY, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+      <button className="btn btn-primary" type="button" onClick={() => setOpen(true)} >
         <CalendarPlus size={14} /> Nuevo open house
       </button>
       <ModalShell open={open} onClose={() => setOpen(false)} maxWidth={620}>

@@ -41,7 +41,7 @@ export function ModalShell({ open, onClose, children, maxWidth = 480 }: ModalShe
             alignItems: 'center',
             justifyContent: 'center',
             padding: '16px',
-            background: 'rgba(0, 0, 0, 0.55)',
+            background: 'color-mix(in srgb, var(--bg-base) 55%, transparent)',
             backdropFilter: 'blur(4px)',
           }}
         >

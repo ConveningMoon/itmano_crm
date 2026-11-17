@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import type { OpenHouseInput } from '../../open-house-actions'
 import { OPEN_HOUSE_LANGUAGES, MAX_OPEN_HOUSE_LANGUAGES, type AudienceMatch, type OpenHouseLanguage } from '@/lib/open-houses/model'
 import { TimeZoneSelect } from '@/components/dashboard/time-zone-select'
-import { BTN_GHOST, BTN_PRIMARY, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN } from './ui'
+import { BTN_GHOST, ERROR, HINT, INPUT, LABEL, LANG_LABEL, WARN } from './ui'
 
 // Formulario de un open house: fecha y franja, idiomas de los correos,
 // audiencia por etiquetas, cuándo sale el anuncio y el recordatorio. Sirve
@@ -248,8 +248,8 @@ export function OpenHouseForm({
       {warnings.map(w => <div key={w} style={WARN}>{w}</div>)}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-        <button type="button" onClick={onCancel} style={BTN_GHOST}>Cancelar</button>
-        <button type="button" onClick={submit} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
+        <button className="btn btn-ghost" type="button" onClick={onCancel} >Cancelar</button>
+        <button className="btn btn-primary" type="button" onClick={submit} disabled={pending} >
           {pending ? 'Guardando…' : submitLabel}
         </button>
       </div>

@@ -59,8 +59,8 @@ function SubmissionItem({
             display: 'inline-flex', alignItems: 'center', gap: '4px',
             fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
             letterSpacing: '0.04em', textTransform: 'uppercase',
-            color:      sub.responded ? 'var(--accent-green)' : 'var(--accent-gold)',
-            background:  sub.responded ? 'rgba(107,163,104,0.12)' : 'rgba(201,169,110,0.12)',
+            color:      sub.responded ? 'var(--gold-1)' : 'var(--gold-2)',
+            background:  sub.responded ? 'color-mix(in srgb, var(--gold-1) 12%, transparent)' : 'color-mix(in srgb, var(--gold-2) 12%, transparent)',
           }}>
             {sub.responded ? <Check size={10} /> : <Clock size={10} />}
             {sub.responded ? 'Respondida' : 'Pendiente'}
@@ -101,12 +101,12 @@ function SubmissionItem({
             <div>
               <div style={SECTION_LABEL}>Contacto</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <Link href={`/leads/${sub.leadId}`} style={{ fontSize: '13px', color: 'var(--accent-gold)', textDecoration: 'none', fontWeight: 500, width: 'fit-content' }}>
+                <Link href={`/leads/${sub.leadId}`} style={{ fontSize: '13px', color: 'var(--gold-2)', textDecoration: 'none', fontWeight: 500, width: 'fit-content' }}>
                   {`${lead.firstName} ${lead.lastName}`.trim() || 'Ver lead'} →
                 </Link>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{lead.email}</div>
                 {lead.phone && (
-                  <a href={`tel:${lead.phone}`} style={{ fontSize: '13px', color: 'var(--accent-blue)', textDecoration: 'none', width: 'fit-content' }}>
+                  <a href={`tel:${lead.phone}`} style={{ fontSize: '13px', color: 'var(--gold-1)', textDecoration: 'none', width: 'fit-content' }}>
                     {lead.phone}
                   </a>
                 )}
@@ -118,7 +118,7 @@ function SubmissionItem({
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                     fontSize: '12px', fontWeight: 500, color: 'var(--bg-base)',
-                    background: 'var(--accent-gold)', borderRadius: '8px',
+                    background: 'var(--gold-2)', borderRadius: '8px',
                     padding: '7px 14px', textDecoration: 'none',
                   }}
                 >
@@ -147,9 +147,9 @@ function SubmissionItem({
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: '6px',
                       fontSize: '12px', fontWeight: 500,
-                      color: sub.responded ? 'var(--text-secondary)' : 'var(--accent-green)',
+                      color: sub.responded ? 'var(--text-secondary)' : 'var(--gold-1)',
                       background: 'transparent',
-                      border: `1px solid ${sub.responded ? 'var(--border-subtle)' : 'rgba(107,163,104,0.4)'}`,
+                      border: `1px solid ${sub.responded ? 'var(--border-subtle)' : 'color-mix(in srgb, var(--gold-1) 40%, transparent)'}`,
                       borderRadius: '8px', padding: '7px 14px',
                       cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.6 : 1,
                     }}
@@ -160,7 +160,7 @@ function SubmissionItem({
                 )}
               </div>
               {error && (
-                <div style={{ fontSize: '11px', color: '#E04040', marginTop: '8px' }}>{error}</div>
+                <div style={{ fontSize: '11px', color: 'var(--alert)', marginTop: '8px' }}>{error}</div>
               )}
             </div>
           )}

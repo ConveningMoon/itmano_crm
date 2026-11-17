@@ -56,16 +56,16 @@ function WriteButton({ tagId, language }: { tagId: string; language: string }) {
         aria-busy={pending}
         style={{
           ...CELL_LINK, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1,
-          color: 'var(--accent-coral)',
-          background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--accent-coral) 30%, transparent)',
+          color: 'var(--alert)',
+          background: 'color-mix(in srgb, var(--alert) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
         }}
       >
         {pending ? <span aria-hidden className="loading-spinner" /> : <Pencil size={12} aria-hidden />}
         {pending ? 'Creando…' : 'Escribir'}
       </button>
       {error && (
-        <span role="alert" style={{ fontSize: '11px', color: 'var(--accent-coral)', textAlign: 'center', lineHeight: 1.3 }}>
+        <span role="alert" style={{ fontSize: '11px', color: 'var(--alert)', textAlign: 'center', lineHeight: 1.3 }}>
           {error}
         </span>
       )}
@@ -75,9 +75,9 @@ function WriteButton({ tagId, language }: { tagId: string; language: string }) {
 
 const WRITE_STYLE: React.CSSProperties = {
   ...CELL_LINK,
-  color: 'var(--accent-coral)',
-  background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
-  border: '1px solid color-mix(in srgb, var(--accent-coral) 30%, transparent)',
+  color: 'var(--alert)',
+  background: 'color-mix(in srgb, var(--alert) 10%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--alert) 30%, transparent)',
 }
 
 const STATUS_TEXT: React.CSSProperties = { lineHeight: 1.25, textAlign: 'center' }
@@ -101,7 +101,7 @@ function Cell({
     return canManage
       ? <WriteButton tagId={tagId} language={language} />
       : (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--accent-coral)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--alert)' }}>
           <AlertTriangle size={12} aria-hidden /> Falta
         </span>
       )
@@ -117,7 +117,7 @@ function Cell({
       )
       : (
         <span role="img" aria-label={label} title="Sin pasos: no envía nada todavía"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--accent-coral)' }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--alert)' }}>
           <AlertTriangle size={12} aria-hidden /> Falta
         </span>
       )
@@ -126,7 +126,7 @@ function Cell({
   const running = runs && runs > 0 ? ` · ${runs} en curso` : ''
   const count = `${steps ?? 0} ${steps === 1 ? 'correo' : 'correos'}`
   const meta = {
-    lista:       { Icon: Check, color: 'var(--accent-green)', text: 'Lista',    visible: `${count}${running}`, title: `${count}${running}` },
+    lista:       { Icon: Check, color: 'var(--gold-1)', text: 'Lista',    visible: `${count}${running}`, title: `${count}${running}` },
     desactivada: { Icon: Pause, color: 'var(--text-muted)',   text: 'Pausada',  visible: `Pausada${running}`,  title: `Desactivada: tiene ${count} pero no envía${running}` },
   }[state]
 
@@ -193,9 +193,9 @@ export function TagSequencesPanel({ coverage, canManage }: TagSequencesPanelProp
             <div role="status" style={{
               display: 'inline-flex', alignItems: 'center', gap: '7px',
               padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
-              color: 'var(--accent-coral)',
-              background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+              color: 'var(--alert)',
+              background: 'color-mix(in srgb, var(--alert) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)',
             }}>
               <AlertTriangle size={13} aria-hidden />
               {missing === 1

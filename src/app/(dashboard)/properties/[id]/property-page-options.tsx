@@ -17,10 +17,6 @@ const BTN_GHOST: React.CSSProperties = {
   padding: '7px 14px', fontSize: '12px', color: 'var(--text-muted)',
   background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
 }
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--gold-2)', border: 'none', borderRadius: '8px', cursor: 'pointer',
-}
 const CARD: React.CSSProperties = {
   background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px',
 }
@@ -30,9 +26,8 @@ type Mode = 'hosted' | 'embed' | 'request'
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
-    <button
+    <button className="btn btn-ghost btn-sm"
       onClick={() => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800) }).catch(() => {})}
-      style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
     >
       {copied ? <Check size={12} color="var(--gold-1)" /> : <Copy size={12} />}
       {copied ? 'Copiado' : 'Copiar'}
@@ -166,7 +161,7 @@ export function PropertyPageOptions({
                 style={{ width: '100%', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
               />
               {reqErr && <div style={{ fontSize: '12px', color: 'var(--alert)' }}>{reqErr}</div>}
-              <button
+              <button className="btn btn-primary"
                 onClick={() => {
                   setReqErr(null)
                   start(async () => {
@@ -176,7 +171,7 @@ export function PropertyPageOptions({
                   })
                 }}
                 disabled={pending}
-                style={{ ...BTN_PRIMARY, alignSelf: 'flex-start', opacity: pending ? 0.6 : 1 }}
+                style={{ alignSelf: 'flex-start' }}
               >
                 {pending ? 'Enviando…' : 'Enviar solicitud'}
               </button>

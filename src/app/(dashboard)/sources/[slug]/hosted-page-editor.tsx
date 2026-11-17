@@ -25,10 +25,6 @@ const LABEL: React.CSSProperties = {
   fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)',
   textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', display: 'block',
 }
-const BTN_PRIMARY: React.CSSProperties = {
-  padding: '8px 18px', fontSize: '13px', fontWeight: 500, color: 'var(--bg-base)',
-  background: 'var(--accent-gold)', border: 'none', borderRadius: '8px', cursor: 'pointer',
-}
 const BTN_GHOST: React.CSSProperties = {
   padding: '7px 14px', fontSize: '12px', color: 'var(--text-muted)',
   background: 'transparent', border: '1px solid var(--border-subtle)', borderRadius: '8px', cursor: 'pointer',
@@ -163,7 +159,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <div>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</div>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gold-2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</div>
         {hint && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px', lineHeight: 1.5 }}>{hint}</div>}
       </div>
       {children}
@@ -439,15 +435,15 @@ export function HostedPageEditor({
     }}>
       {/* Header */}
       <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <Globe size={16} color="var(--accent-gold)" />
+        <Globe size={16} color="var(--gold-2)" />
         <div style={{ flex: 1, minWidth: '200px' }}>
           <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
             Página alojada
             <span style={{
               marginLeft: '10px', fontSize: '10px', fontWeight: 500, padding: '2px 8px', borderRadius: '10px',
               letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: active ? 'var(--accent-green)' : 'var(--text-muted)',
-              background: active ? 'rgba(107,163,104,0.12)' : 'var(--bg-elevated)',
+              color: active ? 'var(--gold-1)' : 'var(--text-muted)',
+              background: active ? 'color-mix(in srgb, var(--gold-1) 12%, transparent)' : 'var(--bg-elevated)',
             }}>
               {active ? 'Activa' : initial ? 'Desactivada' : 'Sin configurar'}
             </span>
@@ -457,7 +453,7 @@ export function HostedPageEditor({
           </div>
         </div>
         {canEdit && (
-          <button onClick={() => { setOpen(v => !v); openEditor() }} style={BTN_GHOST}>
+          <button className="btn btn-ghost" onClick={() => { setOpen(v => !v); openEditor() }} >
             {open ? 'Cerrar' : initial ? 'Editar página' : 'Configurar página'}
           </button>
         )}
@@ -469,9 +465,9 @@ export function HostedPageEditor({
           padding: '10px 20px', borderTop: '1px solid var(--border-subtle)',
           display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         }}>
-          <code style={{ fontSize: '12px', color: 'var(--accent-gold)', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{url}</code>
-          <button onClick={copyUrl} title="Copiar URL" style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}>
-            {copied ? <Check size={12} color="var(--accent-green)" /> : <Copy size={12} />}
+          <code style={{ fontSize: '12px', color: 'var(--gold-2)', fontFamily: 'monospace', overflowWrap: 'anywhere' }}>{url}</code>
+          <button className="btn btn-ghost btn-sm" onClick={copyUrl} title="Copiar URL" >
+            {copied ? <Check size={12} color="var(--gold-1)" /> : <Copy size={12} />}
             {copied ? 'Copiada' : 'Copiar'}
           </button>
           <a
@@ -502,7 +498,7 @@ export function HostedPageEditor({
           {/* IA + JSON */}
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-              <Sparkles size={14} color="var(--accent-gold)" /> Generar los textos con IA
+              <Sparkles size={14} color="var(--gold-2)" /> Generar los textos con IA
             </div>
             <textarea
               rows={3}
@@ -514,20 +510,20 @@ export function HostedPageEditor({
               style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
             />
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button onClick={handleAiFill} disabled={aiBusy} style={{ ...BTN_PRIMARY, opacity: aiBusy ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <button className="btn btn-primary" onClick={handleAiFill} disabled={aiBusy} >
                 <Sparkles size={13} /> {aiBusy ? 'Generando…' : 'Rellenar con IA'}
               </button>
-              <button onClick={handleDownloadJson} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <button className="btn btn-ghost" onClick={handleDownloadJson} >
                 <Download size={12} /> Descargar JSON
               </button>
-              <button onClick={() => jsonInputRef.current?.click()} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <button className="btn btn-ghost" onClick={() => jsonInputRef.current?.click()} >
                 <Upload size={12} /> Subir JSON
               </button>
               <input ref={jsonInputRef} type="file" accept="application/json,.json" hidden onChange={e => { handleUploadJson(e.target.files?.[0] ?? null); e.target.value = '' }} />
             </div>
             {/* Documento opcional para la IA (PDF) */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <button onClick={() => aiDocInputRef.current?.click()} style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <button className="btn btn-ghost" onClick={() => aiDocInputRef.current?.click()} >
                 <Upload size={12} /> {aiDoc ? 'Cambiar archivo' : 'Adjuntar archivo (PDF, imagen o texto)'}
               </button>
               {aiDoc && (
@@ -581,11 +577,11 @@ export function HostedPageEditor({
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img src={cfg.cover_image_url} alt="" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
                   )}
-                  <button onClick={() => coverInputRef.current?.click()} disabled={imgBusy === 'cover'} style={BTN_GHOST}>
+                  <button className="btn btn-ghost" onClick={() => coverInputRef.current?.click()} disabled={imgBusy === 'cover'} >
                     {imgBusy === 'cover' ? 'Subiendo…' : cfg.cover_image_url ? 'Cambiar' : 'Subir portada'}
                   </button>
                   {cfg.cover_image_url && (
-                    <button onClick={() => set('cover_image_url', '')} style={BTN_GHOST}>Quitar</button>
+                    <button className="btn btn-ghost" onClick={() => set('cover_image_url', '')} >Quitar</button>
                   )}
                   <input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { handleImageUpload('cover', e.target.files?.[0] ?? null); e.target.value = '' }} />
                 </div>
@@ -603,11 +599,11 @@ export function HostedPageEditor({
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img src={cfg.background_image_url} alt="" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
                 )}
-                <button onClick={() => bgInputRef.current?.click()} disabled={imgBusy === 'background'} style={BTN_GHOST}>
+                <button className="btn btn-ghost" onClick={() => bgInputRef.current?.click()} disabled={imgBusy === 'background'} >
                   {imgBusy === 'background' ? 'Subiendo…' : cfg.background_image_url ? 'Cambiar' : 'Subir fondo'}
                 </button>
                 {cfg.background_image_url && (
-                  <button onClick={() => set('background_image_url', '')} style={BTN_GHOST}>Quitar</button>
+                  <button className="btn btn-ghost" onClick={() => set('background_image_url', '')} >Quitar</button>
                 )}
                 <input ref={bgInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { handleImageUpload('background', e.target.files?.[0] ?? null); e.target.value = '' }} />
               </div>
@@ -668,9 +664,8 @@ export function HostedPageEditor({
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <label style={{ ...LABEL, marginBottom: 0 }}>Tarjetas (máx. 6)</label>
-                  <button
+                  <button className="btn btn-ghost btn-sm"
                     onClick={() => set('benefits', [...cfg.benefits, { title: '', desc: '' }])}
-                    style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
                     disabled={cfg.benefits.length >= 6}
                   >
                     <Plus size={12} /> Agregar
@@ -681,7 +676,7 @@ export function HostedPageEditor({
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '10px', alignItems: 'center' }}>
                       <input style={INPUT} value={b.title} placeholder="Título" onChange={e => set('benefits', cfg.benefits.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x))} />
                       <input style={INPUT} value={b.desc} placeholder="Descripción corta" onChange={e => set('benefits', cfg.benefits.map((x, idx) => idx === i ? { ...x, desc: e.target.value } : x))} />
-                      <button onClick={() => set('benefits', cfg.benefits.filter((_, idx) => idx !== i))} title="Quitar" style={{ ...BTN_GHOST, padding: '6px 8px' }}>
+                      <button className="btn btn-ghost" onClick={() => set('benefits', cfg.benefits.filter((_, idx) => idx !== i))} title="Quitar" >
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -723,7 +718,7 @@ export function HostedPageEditor({
             )}
             {!isContact && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={cfg.ask_phone} onChange={e => set('ask_phone', e.target.checked)} style={{ accentColor: 'var(--accent-gold)' }} />
+                <input type="checkbox" checked={cfg.ask_phone} onChange={e => set('ask_phone', e.target.checked)} style={{ accentColor: 'var(--gold-2)' }} />
                 Pedir teléfono
               </label>
             )}
@@ -753,9 +748,8 @@ export function HostedPageEditor({
                       .filter(d => !cfg.questions.some(q => q.dimension === d))
                       .map(d => <option key={d} value={d}>{DIMENSION_PICKER_LABEL[d]}</option>)}
                   </select>
-                  <button
+                  <button className="btn btn-ghost btn-sm"
                     onClick={() => set('questions', [...cfg.questions, { key: '', label: '', type: 'text', required: false }])}
-                    style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
                     disabled={cfg.questions.length >= 10}
                   >
                     <Plus size={12} /> Pregunta libre
@@ -766,11 +760,11 @@ export function HostedPageEditor({
                 <div style={{
                   display: 'flex', alignItems: 'flex-start', gap: '9px', marginBottom: '10px',
                   padding: '10px 12px', borderRadius: '8px',
-                  background: 'rgba(201,169,110,0.07)', border: '1px solid rgba(201,169,110,0.25)',
+                  background: 'color-mix(in srgb, var(--gold-2) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--gold-2) 25%, transparent)',
                 }}>
-                  <Sparkles size={14} color="var(--accent-gold)" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <Sparkles size={14} color="var(--gold-2)" style={{ flexShrink: 0, marginTop: '1px' }} />
                   <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Las preguntas marcadas como <strong style={{ color: 'var(--accent-gold)' }}>por defecto</strong> vienen
+                    Las preguntas marcadas como <strong style={{ color: 'var(--gold-2)' }}>por defecto</strong> vienen
                     cargadas porque son las que <strong style={{ color: 'var(--text-primary)' }}>califican al lead</strong>:
                     horizonte de compra, financiamiento, presupuesto, si ya trabaja con otro agente y zonas de interés.
                     De ahí sale su <strong style={{ color: 'var(--text-primary)' }}>score de fit</strong> (qué tan buen
@@ -793,7 +787,7 @@ export function HostedPageEditor({
                       <span style={{
                         alignSelf: 'flex-start', fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.06em',
                         textTransform: 'uppercase', padding: '2px 7px', borderRadius: '8px',
-                        color: 'var(--accent-gold)', background: 'rgba(201,169,110,0.14)',
+                        color: 'var(--gold-2)', background: 'color-mix(in srgb, var(--gold-2) 14%, transparent)',
                       }}>
                         {q.dimension ? 'Califica · opciones de tu perfil' : 'Por defecto · scoring'}
                       </span>
@@ -821,7 +815,7 @@ export function HostedPageEditor({
                           <option value="select">Opciones</option>
                         </select>
                       )}
-                      <button onClick={() => set('questions', cfg.questions.filter((_, idx) => idx !== i))} title="Quitar" style={{ ...BTN_GHOST, padding: '6px 8px' }}>
+                      <button className="btn btn-ghost" onClick={() => set('questions', cfg.questions.filter((_, idx) => idx !== i))} title="Quitar" >
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -850,17 +844,17 @@ export function HostedPageEditor({
                             </button>
                           </div>
                         ))}
-                        <button
+                        <button className="btn btn-ghost btn-sm"
                           onClick={() => setQuestion(i, { options: [...(q.options ?? []), ''] })}
                           disabled={(q.options ?? []).length >= 12}
-                          style={{ ...BTN_GHOST, alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
+                          style={{ alignSelf: 'flex-start' }}
                         >
                           <Plus size={11} /> Agregar opción
                         </button>
                       </div>
                     )}
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={q.required} onChange={e => setQuestion(i, { required: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
+                      <input type="checkbox" checked={q.required} onChange={e => setQuestion(i, { required: e.target.checked })} style={{ accentColor: 'var(--gold-2)' }} />
                       Obligatoria
                     </label>
                   </div>
@@ -904,7 +898,7 @@ export function HostedPageEditor({
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cfg.agent_intro.photo_url} alt="" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '50%', border: '1px solid var(--border-subtle)' }} />
               )}
-              <button onClick={() => photoInputRef.current?.click()} disabled={imgBusy === 'photo'} style={BTN_GHOST}>
+              <button className="btn btn-ghost" onClick={() => photoInputRef.current?.click()} disabled={imgBusy === 'photo'} >
                 {imgBusy === 'photo' ? 'Subiendo…' : cfg.agent_intro?.photo_url ? 'Cambiar foto' : 'Subir foto del agente'}
               </button>
               <input ref={photoInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={e => { handleImageUpload('photo', e.target.files?.[0] ?? null); e.target.value = '' }} />
@@ -921,9 +915,8 @@ export function HostedPageEditor({
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <label style={{ ...LABEL, marginBottom: 0 }}>Testimonios</label>
-                  <button
+                  <button className="btn btn-ghost btn-sm"
                     onClick={() => set('testimonials', [...cfg.testimonials, { name: '', location: '', quote: '', photo_url: '' }])}
-                    style={{ ...BTN_GHOST, display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px' }}
                     disabled={cfg.testimonials.length >= 6}
                   >
                     <Plus size={12} /> Agregar
@@ -935,7 +928,7 @@ export function HostedPageEditor({
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'center' }}>
                         <input style={INPUT} value={t.name} placeholder="Familia Flores" onChange={e => setTestimonial(i, { name: e.target.value })} />
                         <input style={INPUT} value={t.location} placeholder="Virginia Beach · Townhouse" onChange={e => setTestimonial(i, { location: e.target.value })} />
-                        <button onClick={() => set('testimonials', cfg.testimonials.filter((_, idx) => idx !== i))} title="Quitar" style={{ ...BTN_GHOST, padding: '6px 8px' }}>
+                        <button className="btn btn-ghost" onClick={() => set('testimonials', cfg.testimonials.filter((_, idx) => idx !== i))} title="Quitar" >
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -951,15 +944,14 @@ export function HostedPageEditor({
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img src={t.photo_url} alt="" style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-subtle)' }} />
                         )}
-                        <button
+                        <button className="btn btn-ghost btn-sm"
                           onClick={() => { setTestiUploadIdx(i); testiInputRef.current?.click() }}
                           disabled={imgBusy === 'testimonial'}
-                          style={{ ...BTN_GHOST, padding: '4px 10px' }}
                         >
                           {imgBusy === 'testimonial' && testiUploadIdx === i ? 'Subiendo…' : t.photo_url ? 'Cambiar foto' : 'Foto (opcional)'}
                         </button>
                         {t.photo_url && (
-                          <button onClick={() => setTestimonial(i, { photo_url: '' })} style={{ ...BTN_GHOST, padding: '4px 10px' }}>Quitar foto</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setTestimonial(i, { photo_url: '' })} >Quitar foto</button>
                         )}
                       </div>
                     </div>
@@ -982,16 +974,16 @@ export function HostedPageEditor({
             </>
           )}
 
-          {error && <div style={{ fontSize: '12px', color: '#E04040' }}>{error}</div>}
+          {error && <div style={{ fontSize: '12px', color: 'var(--alert)' }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={() => handleSave(true)} disabled={pending} style={{ ...BTN_PRIMARY, opacity: pending ? 0.6 : 1 }}>
+            <button className="btn btn-primary" onClick={() => handleSave(true)} disabled={pending} >
               {pending ? 'Guardando…' : 'Guardar y publicar'}
             </button>
-            <button onClick={() => handleSave(false)} disabled={pending} style={BTN_GHOST}>
+            <button className="btn btn-ghost" onClick={() => handleSave(false)} disabled={pending} >
               {active ? 'Guardar despublicada' : 'Guardar borrador'}
             </button>
-            <button onClick={handleCancel} style={BTN_GHOST}>Cancelar</button>
+            <button className="btn btn-ghost" onClick={handleCancel} >Cancelar</button>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
               El borrador se previsualiza con &quot;Ver borrador&quot; antes de publicar.
             </span>

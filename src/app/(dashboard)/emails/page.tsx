@@ -149,10 +149,10 @@ async function EmailsPage({
         }}>
           <div style={{
             width: '44px', height: '44px', borderRadius: '12px',
-            background: 'color-mix(in srgb, var(--accent-gold) 12%, transparent)', margin: '0 auto 16px',
+            background: 'color-mix(in srgb, var(--gold-2) 12%, transparent)', margin: '0 auto 16px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Mail size={20} color="var(--accent-gold)" />
+            <Mail size={20} color="var(--gold-2)" />
           </div>
           <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '6px' }}>
             Crea tu primera secuencia
@@ -228,9 +228,9 @@ async function EmailsPage({
         <div role="status" style={{
           display: 'inline-flex', alignItems: 'center', gap: '7px', marginBottom: '14px',
           padding: '7px 12px', borderRadius: '8px', fontSize: '12px',
-          color: 'var(--accent-coral)',
-          background: 'color-mix(in srgb, var(--accent-coral) 8%, transparent)',
-          border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+          color: 'var(--alert)',
+          background: 'color-mix(in srgb, var(--alert) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)',
         }}>
           <AlertTriangle size={13} aria-hidden />
           {missingClosing === 1

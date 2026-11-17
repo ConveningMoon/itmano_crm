@@ -56,41 +56,13 @@ export function TenantSwitcher({
         onClick={() => setOpen(o => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="btn-icon"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          height: '34px',
-          padding: '0 12px',
-          borderRadius: '8px',
-          border: '1px solid var(--border-subtle)',
-          fontSize: '13px',
-          cursor: 'pointer',
-          maxWidth: '220px',
-        }}
+        className="topbar-btn topbar-switcher"
       >
-        <span
-          style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            flexShrink: 0,
-            background: active ? active.color : 'var(--text-muted)',
-          }}
-        />
-        <span
-          className="hidden sm:inline"
-          style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-          }}
-        >
+        <span className="topbar-dot" style={active ? { '--tone': active.color } as React.CSSProperties : undefined} aria-hidden="true" />
+        <span className="topbar-switcher-name hidden sm:inline" data-empty={active ? undefined : ''}>
           {active ? active.name : 'Elegir tenant'}
         </span>
-        <ChevronsUpDown size={14} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
+        <ChevronsUpDown size={14} className="text-muted-icon" aria-hidden="true" />
       </button>
 
       <AnimatePresence>
@@ -139,7 +111,7 @@ export function TenantSwitcher({
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {t.name}
                 </span>
-                {t.id === activeTenantId && <Check size={14} style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />}
+                {t.id === activeTenantId && <Check size={14} style={{ color: 'var(--gold-2)', flexShrink: 0 }} />}
               </button>
             ))}
 
@@ -164,7 +136,7 @@ export function TenantSwitcher({
                 textAlign: 'left',
               }}
             >
-              <ShieldCheck size={14} style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />
+              <ShieldCheck size={14} style={{ color: 'var(--gold-2)', flexShrink: 0 }} />
               Centro de control
             </button>
           </m.div>

@@ -150,19 +150,11 @@ export function CoverPicker({
                 </button>
               ))}
               {editionId && onBeforeGenerate && (
-                <button
+                <button className="btn btn-ghost"
                   type="button"
                   onClick={handleGenerate}
                   disabled={generating || uploading}
                   title="Genera una portada con IA a partir del titular y la bajada guardados"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                    padding: '6px 12px', fontSize: '12px', fontWeight: 500, borderRadius: '8px',
-                    background: 'transparent', color: 'var(--text-muted)',
-                    border: '1px solid var(--border-subtle)',
-                    cursor: (generating || uploading) ? 'default' : 'pointer',
-                    opacity: (generating || uploading) ? 0.6 : 1,
-                  }}
                 >
                   {generating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                   {generating ? 'Generando…' : 'Generar con IA'}

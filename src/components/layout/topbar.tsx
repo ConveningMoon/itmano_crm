@@ -83,7 +83,7 @@ export function Topbar({
         </h1>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="topbar-actions">
         {/* Uso de IA del mes — visible dentro del CRM de un tenant */}
         {aiLimitSlot}
 
@@ -92,22 +92,12 @@ export function Topbar({
 
         {/* Notification bell */}
         <button
+          type="button"
           aria-label="Notificaciones"
           onClick={() => router.push('/notifications')}
-          className="btn-icon"
-          style={{
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '34px',
-            height: '34px',
-            borderRadius: '8px',
-            border: '1px solid var(--border-subtle)',
-            cursor: 'pointer',
-          }}
+          className="topbar-btn topbar-btn-square"
         >
-          <Bell size={16} strokeWidth={2} />
+          <Bell size={16} strokeWidth={2} aria-hidden="true" />
           {unreadBadgeSlot}
         </button>
 

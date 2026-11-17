@@ -139,23 +139,15 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
         >
           <Pencil size={12} /> Editar
         </button>
-        <button
+        <button className="btn btn-danger"
           onClick={() => setMode('confirm_archive')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '7px 14px', fontSize: '12px', fontWeight: 500,
-            color: 'var(--accent-coral)',
-            background: 'rgba(201,123,107,0.08)',
-            border: '1px solid rgba(201,123,107,0.25)',
-            borderRadius: '8px', cursor: 'pointer',
-          }}
         >
           <Trash2 size={12} /> Archivar
         </button>
       </div>
 
       {integrationError && (
-        <div style={{ fontSize: '12px', color: '#E04040', marginTop: '8px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--alert)', marginTop: '8px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
           {integrationError}
         </div>
       )}
@@ -163,7 +155,7 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
       {/* Edit modal */}
       {mode === 'edit' && (
         <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }}
+          <div style={{ position: 'fixed', inset: 0, background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)', backdropFilter: 'blur(4px)', zIndex: 50 }}
             onClick={() => setMode('idle')} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
@@ -222,13 +214,13 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
                         padding: '6px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '6px',
                         cursor: 'pointer', transition: 'all 0.15s',
                         background: active === opt.v
-                          ? (opt.v ? 'rgba(107,163,104,0.15)' : 'rgba(201,123,107,0.12)')
+                          ? (opt.v ? 'color-mix(in srgb, var(--gold-1) 15%, transparent)' : 'var(--bg-overlay)')
                           : 'var(--bg-elevated)',
                         color: active === opt.v
-                          ? (opt.v ? 'var(--accent-green)' : 'var(--accent-coral)')
+                          ? (opt.v ? 'var(--gold-1)' : 'var(--text-primary)')
                           : 'var(--text-muted)',
                         border: active === opt.v
-                          ? (opt.v ? '1px solid rgba(107,163,104,0.3)' : '1px solid rgba(201,123,107,0.3)')
+                          ? (opt.v ? '1px solid color-mix(in srgb, var(--gold-1) 30%, transparent)' : '1px solid var(--border-hover)')
                           : '1px solid var(--border-subtle)',
                       }}
                     >
@@ -273,32 +265,26 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
                 {sequences.length === 0 && (
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
                     No hay secuencias disponibles. Crea una en{' '}
-                    <Link href="/emails/new" style={{ color: 'var(--accent-gold)', textDecoration: 'none' }}>Secuencias de Email →</Link>
+                    <Link href="/emails/new" style={{ color: 'var(--gold-2)', textDecoration: 'none' }}>Secuencias de Email →</Link>
                   </div>
                 )}
               </div>
             </div>
 
             {error && (
-              <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
                 {error}
               </div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')}
-                style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')}
+                >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-primary"
                 onClick={handleSave}
                 disabled={!name.trim() || pending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'var(--accent-gold)', color: 'var(--bg-base)',
-                  border: 'none', cursor: (!name.trim() || pending) ? 'not-allowed' : 'pointer',
-                  opacity: (!name.trim() || pending) ? 0.7 : 1,
-                }}
               >
                 {pending ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -310,7 +296,7 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
       {/* Archive confirmation */}
       {mode === 'confirm_archive' && (
         <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 50 }}
+          <div style={{ position: 'fixed', inset: 0, background: 'color-mix(in srgb, var(--bg-base) 70%, transparent)', backdropFilter: 'blur(4px)', zIndex: 50 }}
             onClick={() => setMode('idle')} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
@@ -329,26 +315,19 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
             </p>
 
             {error && (
-              <div style={{ fontSize: '12px', color: '#E04040', marginBottom: '12px', padding: '6px 10px', background: 'rgba(224,64,64,0.08)', borderRadius: '6px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--alert)', marginBottom: '12px', padding: '6px 10px', background: 'color-mix(in srgb, var(--alert) 8%, transparent)', borderRadius: '6px' }}>
                 {error}
               </div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button onClick={() => setMode('idle')}
-                style={{ padding: '8px 16px', fontSize: '13px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button className="btn btn-ghost" onClick={() => setMode('idle')}
+                >
                 Cancelar
               </button>
-              <button
+              <button className="btn btn-danger"
                 onClick={handleArchive}
                 disabled={pending}
-                style={{
-                  padding: '8px 20px', fontSize: '13px', fontWeight: 500, borderRadius: '8px',
-                  background: 'rgba(201,123,107,0.12)', color: 'var(--accent-coral)',
-                  border: '1px solid rgba(201,123,107,0.3)',
-                  cursor: pending ? 'not-allowed' : 'pointer',
-                  opacity: pending ? 0.7 : 1,
-                }}
               >
                 {pending ? 'Archivando...' : 'Confirmar archivo'}
               </button>

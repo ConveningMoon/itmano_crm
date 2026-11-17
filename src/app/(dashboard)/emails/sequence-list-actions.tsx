@@ -75,10 +75,10 @@ export function SequenceListActions({ sequenceId, sequenceName, active, activeRu
 
           {activeRunCount > 0 && (
             <div style={{
-              background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--accent-coral) 25%, transparent)',
+              background: 'color-mix(in srgb, var(--alert) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--alert) 25%, transparent)',
               borderRadius: '8px', padding: '10px 12px',
-              fontSize: '12px', color: 'var(--accent-coral)', lineHeight: 1.5,
+              fontSize: '12px', color: 'var(--alert)', lineHeight: 1.5,
             }}>
               Tiene <strong style={{ fontWeight: 500 }}>{activeRunCount}</strong> run{activeRunCount !== 1 ? 's' : ''} activo{activeRunCount !== 1 ? 's' : ''}.
               Si la eliminas, se cancelan y esos leads dejan de recibir emails de esta secuencia.
@@ -86,7 +86,7 @@ export function SequenceListActions({ sequenceId, sequenceName, active, activeRu
           )}
 
           {error && (
-            <div role="alert" style={{ fontSize: '12px', color: 'var(--accent-coral)', padding: '8px 10px', background: 'color-mix(in srgb, var(--accent-coral) 10%, transparent)', borderRadius: '8px' }}>
+            <div role="alert" style={{ fontSize: '12px', color: 'var(--alert)', padding: '8px 10px', background: 'color-mix(in srgb, var(--alert) 10%, transparent)', borderRadius: '8px' }}>
               {error}
             </div>
           )}
