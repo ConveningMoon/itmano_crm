@@ -17,12 +17,13 @@ Rama: `feat/saas-fase-01-seguridad` (2026-11-18).
       Telegram o un JWT de Supabase.
       **Pendiente de Dylan:** si CONDUIT sigue en uso, emitir tokens nuevos con
       `npm run agent:token -- --issue …` y entregarlos por un canal privado.
-- [ ] **Variables sobrantes en Vercel producción.** Confirmado con `rg`:
-      `CONTACT_FORM_FROM` y `SUPPORT_FORM_TO` no las lee nada, y
-      `SUPABASE_JWT_SECRET` sólo la usan `tests/rls/setup.ts` y el workflow
-      `rls-tests.yml` de GitHub (no la app). Quitarlas de `itmano-crm` es
-      irreversible (son *Sensitive*: Vercel no devuelve el valor), así que
-      espera la confirmación de Dylan.
+- [x] **Variables sobrantes en Vercel producción.** `CONTACT_FORM_FROM` y
+      `SUPPORT_FORM_TO` no las leía nada, y `SUPABASE_JWT_SECRET` sólo la usan
+      `tests/rls/setup.ts` y el workflow `rls-tests.yml` de GitHub. Dylan las
+      borró del panel el 2026-11-18, y la CLI confirmó que ya no están en
+      `itmano-crm`. La CLI de Vercel quedó en la v66.2.0 vía Volta (había una
+      v37 de npm que la tapaba en el `PATH`); el uso correcto está en
+      `docs/agents/environments.md` → "CLI de Vercel".
 - [ ] **Llaves de lectura inbound de Resend** (acción de Dylan). Crear en cada
       cuenta (ITMANO y A&J) una llave de solo lectura y cargarla como
       `RESEND_INBOUND_API_KEY_ITMANO` y `RESEND_INBOUND_API_KEY` en Vercel
@@ -54,7 +55,8 @@ Rama: `feat/saas-fase-01-seguridad` (2026-11-18).
 - [x] Ningún token de agente en archivos versionados (lo vigila un test).
 - [x] Un tenant `itmano` envía sin la variable de A&J (test).
 - [x] Lint sin errores, `tsc`, `test:unit` y build en verde.
-- [ ] Variables de Vercel limpias y llaves inbound cargadas (acciones de Dylan).
+- [x] Variables de Vercel limpias (2026-11-18).
+- [ ] Llaves inbound cargadas (acción de Dylan).
 
 ## Fuera de alcance
 

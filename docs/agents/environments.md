@@ -61,6 +61,21 @@ con `openssl rand -hex 32` y las llaves de proveedores se crean nuevas en cada
 proveedor sin revocar las que usa producción. El paso a paso está en
 `docs/performance/ACCIONES-DYLAN.md`.
 
+### CLI de Vercel
+
+El equipo es `james-dylans-projects` y hay dos proyectos del mismo
+repositorio: `itmano-crm` (producción) e `itmano-crm-sandbox`. No vincules el
+clon con `vercel link`: un `.vercel/project.json` fijaría uno solo, y cada
+comando apuntaría a él sin decirlo. Nombra siempre el proyecto y el equipo:
+
+```bash
+vercel env ls --environment production --project itmano-crm --scope james-dylans-projects --non-interactive
+```
+
+Antes de escribir o borrar una variable de producción, confirma el proyecto en
+la salida (`Environment Variables found for james-dylans-projects/itmano-crm`).
+Borrar una variable *Sensitive* es irreversible: confírmalo con Dylan.
+
 El login de producción es Magic Link. En sandbox, el acceso local pasa por
 `/api/dev/login?secret=<DEV_LOGIN_SECRET>&email=<correo>` y termina en el mismo
 callback real. La ruta falla cerrada si la aplicación no apunta al sandbox;
