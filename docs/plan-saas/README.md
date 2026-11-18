@@ -26,7 +26,7 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 | # | Fase | Archivo | Depende de | Estado |
 |---|---|---|---|---|
 | 0 | Línea base medida el 2026-11-18 | [00-linea-base.md](00-linea-base.md) | — | ✅ referencia |
-| 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | ⬜ pendiente |
+| 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | 🟨 código hecho en `feat/saas-fase-01-seguridad` (2026-11-18); faltan 2 acciones de panel de Dylan |
 | 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | ⬜ pendiente |
 | 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | ⬜ pendiente |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
@@ -90,3 +90,9 @@ Anota aquí, con fecha, lo que una fase descubrió y cambia a otra.
 
 - 2026-11-18 — Plan creado a partir del análisis del sistema (PDF local
   `out/ITMANO-mapa-del-sistema.pdf`, no versionado).
+- 2026-11-18 — Fase 1: el SDK de Resend lee `process.env.RESEND_API_KEY` (la
+  cuenta de A&J) cuando recibe una llave vacía. Cualquier cliente nuevo de
+  Resend (fase 3: hook de Auth, wrapper de cuotas) debe crearse con
+  `resendForAccount`, nunca con `new Resend()` directo.
+- 2026-11-18 — Fase 1: los tokens de CONDUIT vencieron el 2026-11-15. Si
+  CONDUIT sigue activo, hay que emitir tokens nuevos.

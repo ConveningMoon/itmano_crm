@@ -26,8 +26,12 @@ El token **determina el tenant**. Ninguna ruta acepta `tenant_id` como parámetr
 
 | Token | Scopes | Uso |
 |---|---|---|
-| `itmano_agent_sbx_BaYhhfMKUOUahF_9n9-CKHyAiE7NyI5F` | `read` | Operación normal del agente |
-| `itmano_agent_sbx_9150gCohLiNtfDp69ZbgiSLL0j9jSnOX` | `read,write` | Sólo cuando necesite crear o modificar |
+| Token de lectura | `read` | Operación normal del agente |
+| Token de escritura | `read,write` | Sólo cuando necesite crear o modificar |
+
+Los tokens **nunca** se escriben en este repositorio (lo vigila
+`tests/security/no-committed-tokens.test.ts`). Se emiten con el script de abajo,
+que los imprime una sola vez, y se entregan a CONDUIT por un canal privado.
 
 Vencen a los 90 días. Para emitir, listar o revocar:
 
@@ -51,8 +55,8 @@ Exporta primero:
 
 ```bash
 export BASE="https://itmano-crm-sandbox.vercel.app"
-export TOKEN="itmano_agent_sbx_BaYhhfMKUOUahF_9n9-CKHyAiE7NyI5F"
-export TOKEN_RW="itmano_agent_sbx_9150gCohLiNtfDp69ZbgiSLL0j9jSnOX"
+export TOKEN="<token de lectura>"
+export TOKEN_RW="<token de escritura>"
 ```
 
 **Identidad y vocabulario**
