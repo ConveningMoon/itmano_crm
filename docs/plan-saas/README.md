@@ -26,7 +26,7 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 | # | Fase | Archivo | Depende de | Estado |
 |---|---|---|---|---|
 | 0 | Línea base medida el 2026-11-18 | [00-linea-base.md](00-linea-base.md) | — | ✅ referencia |
-| 1 | Seguridad y limpieza rápida || — | ✅ `feat/saas-fase-01-seguridad` (2026-11-18), pendiente de PR |
+| 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | ✅ `feat/saas-fase-01-seguridad` (2026-11-18), pendiente de PR |
 | 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | ⬜ pendiente |
 | 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | ⬜ pendiente |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
