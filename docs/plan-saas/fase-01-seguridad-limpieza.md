@@ -24,11 +24,12 @@ Rama: `feat/saas-fase-01-seguridad` (2026-11-18).
       `itmano-crm`. La CLI de Vercel quedó en la v66.2.0 vía Volta (había una
       v37 de npm que la tapaba en el `PATH`); el uso correcto está en
       `docs/agents/environments.md` → "CLI de Vercel".
-- [ ] **Llaves de lectura inbound de Resend** (acción de Dylan). Crear en cada
-      cuenta (ITMANO y A&J) una llave de solo lectura y cargarla como
-      `RESEND_INBOUND_API_KEY_ITMANO` y `RESEND_INBOUND_API_KEY` en Vercel
-      producción. Después, comprobar que una respuesta real de un lead aparece
-      en el CRM.
+- [x] **Llaves de lectura inbound de Resend → movida a la fase 3.** Comprobado
+      en producción el 2026-11-18: `lead_email_replies` está vacía y los 2
+      eventos `email_replied` son datos sembrados de junio. Las respuestas de los
+      leads nunca han entrado, porque falta configurar Resend Inbound (MX del
+      dominio de respuesta), no las llaves. Las llaves sólo sirven después de
+      eso, así que van juntas en la fase 3.
 - [x] **Webflow.** El webhook nativo (`/api/webhooks/webflow/[publicId]`) ya
       admite un secreto por fuente (`acquisition_channels.metadata.webflow_secret`)
       además de la variable global, así que no es un límite para varios
@@ -56,7 +57,7 @@ Rama: `feat/saas-fase-01-seguridad` (2026-11-18).
 - [x] Un tenant `itmano` envía sin la variable de A&J (test).
 - [x] Lint sin errores, `tsc`, `test:unit` y build en verde.
 - [x] Variables de Vercel limpias (2026-11-18).
-- [ ] Llaves inbound cargadas (acción de Dylan).
+- [x] Llaves inbound: movidas a la fase 3 con Resend Inbound.
 
 ## Fuera de alcance
 

@@ -49,6 +49,24 @@ silencio por un tope.
 - [ ] Un 429 de cuota diaria deja el lote `pending` con el motivo visible (ya
       ocurre en open houses y grupales; extenderlo a secuencias y one-off).
 
+### Respuestas de leads (Resend Inbound)
+
+Hoy no entra ninguna respuesta: `lead_email_replies` está vacía en producción
+(2026-11-18). Sin esto, la métrica de respuesta del CRM siempre marca cero.
+
+- [ ] Decidir la dirección de respuesta de cada identidad: dominio compartido
+      (`<slug>@mail.itmano.com`), dominios propios de Growth/Partner y el de A&J
+      (su propia cuenta). `matchInboundTenant` ya resuelve los tres casos.
+- [ ] Configurar Resend Inbound y sus registros MX en `mail.itmano.com`
+      (cuenta de ITMANO) y, con A&J, en su dominio (cuenta de A&J). En la fase
+      8C los MX se añaden a las instrucciones de DNS del dominio propio.
+- [ ] Dylan crea una llave de solo lectura en cada cuenta y la carga él mismo,
+      sin pasar el valor por un agente:
+      `vercel env add RESEND_INBOUND_API_KEY_ITMANO production --project itmano-crm --scope james-dylans-projects --sensitive`
+      (y `RESEND_INBOUND_API_KEY` para A&J). Luego, redesplegar.
+- [ ] Prueba real: responder a un correo de una secuencia de sandbox o a
+      `delivered@resend.dev`, y verlo en la ficha del lead.
+
 ### Crons en un solo lugar
 
 - [ ] Mover `sequence-orchestrator` (cada hora) y `billing-lifecycle` (diario)
