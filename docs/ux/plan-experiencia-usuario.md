@@ -103,11 +103,15 @@ las tomadas están marcadas con *Decisión*.
   paridad falla en cualquier rama sin ellos. Se corrigió añadiendo los archivos a
   la tanda 2. Regla: una migración aplicada en sandbox tiene que viajar en la
   próxima rama que se mergee.
-- *Deploy de producción de `main` fallido tras mergear la tanda 1:* el proyecto
-  Vercel de producción construye bien en preview con el mismo código, así que el
-  fallo es del entorno Production (variables) o transitorio. Sin el log no se
-  pudo cerrar; hasta que se resuelva, `app.itmano.com` sigue sin el arreglo del
-  cron y las bandas siguen congeladas.
+- *Deploy de producción de `main` fallido tras mergear la tanda 1:* el build
+  de Vercel falló a los 14 s al descargar Inter de Google Fonts
+  (`next/font/google`, "Can't resolve '@vercel/turbopack-next/internal/font/google/font'").
+  Es intermitente: el merge de la tanda 2 desplegó bien en producción y falló en
+  sandbox con el mismo código. Desde ese deploy `app.itmano.com` tiene el arreglo
+  del cron (GET sin secreto responde 401) y las bandas de calidad se
+  recalcularon el 18 nov a las 00:00 UTC. Causa eliminada en la rama
+  `fix/build-fuentes-locales`: Inter y Archivo van versionadas en `src/app/fonts/`
+  con `next/font/local`, así que el build ya no descarga nada de Google.
 
 Nota sobre UX-039: los montos en dólares de "Uso de IA" ya se ocultan a los
 usuarios del tenant (`maskAiCosts`); lo visto en la auditoría era la vista de
