@@ -121,7 +121,8 @@ export async function POST(request: NextRequest) {
   const received = request.headers.get('authorization')?.trim()
   const expected = `Bearer ${secret}`
   if (received !== expected) {
-    console.warn(JSON.stringify({ service: 'notifications-dispatch', path: 'secret_mismatch', received_length: received?.length ?? 0, expected_length: expected.length }))
+    // Sin longitudes en el log: la del secreto esperado ayuda a adivinarlo.
+    console.warn(JSON.stringify({ service: 'notifications-dispatch', path: 'secret_mismatch' }))
     return new Response(null, { status: 200 })
   }
 

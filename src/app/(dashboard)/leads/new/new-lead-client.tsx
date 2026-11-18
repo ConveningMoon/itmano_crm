@@ -101,9 +101,6 @@ const TRAFFIC_SOURCE_BY_SOURCE: Record<string, string> = {
   whatsapp:  'whatsapp',
 }
 
-const LANG_FLAG: Record<string, string> = Object.fromEntries(
-  SUPPORTED_LANGUAGE_CODES.map(c => [c, LANGUAGE_CONFIG[c].flag])
-)
 const LANG_LABEL: Record<string, string> = Object.fromEntries(
   SUPPORTED_LANGUAGE_CODES.map(c => [c, c.toUpperCase()])
 )
@@ -672,7 +669,7 @@ export function NewLeadClient({
                   <option value="">{isSuperAdmin && !selectedTenantId ? '-- Selecciona un tenant primero --' : '-- Seleccionar agente --'}</option>
                   {visibleAgents.map(agent => (
                     <option key={agent.id} value={agent.id}>
-                      {agent.avatarInitials} · {agent.name} · {LANG_FLAG[agent.language]}{LANG_LABEL[agent.language]}
+                      {agent.avatarInitials} · {agent.name} · {LANG_LABEL[agent.language]}
                     </option>
                   ))}
                 </SelectField>
@@ -687,7 +684,7 @@ export function NewLeadClient({
                 </span>
                 <div>
                   <div className="agent-preview-name">{selectedAgent.name}</div>
-                  <div className="settings-note">{LANG_FLAG[selectedAgent.language]} {selectedAgent.language.toUpperCase()}</div>
+                  <div className="settings-note">{LANGUAGE_CONFIG[selectedAgent.language]?.label ?? selectedAgent.language.toUpperCase()}</div>
                 </div>
               </div>
             )}

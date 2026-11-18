@@ -149,7 +149,7 @@ export function PageOptions({
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.6 }}>
                 Tu desarrollador puede construir el formulario como quiera y conectarlo directo al CRM.
-                El botón <strong>&quot;Ver Opciones de integración&quot;</strong>, junto a Editar/Archivar en el
+                El botón <strong>&quot;Opciones de integración&quot;</strong>, junto a Editar/Archivar en el
                 header de esta fuente, tiene el contrato completo — endpoint, campos y cómo el CRM
                 reconoce cada respuesta — listo para copiar y pegarle a tu asistente de IA de confianza.
               </div>

@@ -152,7 +152,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
   const [savedNotes, setSavedNotes]       = useState(lead.notes ?? '')
   const [showProcessModal, setShowProcessModal] = useState(false)
   const [modalAddress, setModalAddress]     = useState('')
-  const [modalLoanType, setModalLoanType]   = useState('VA Loan')
+  const [modalLoanType, setModalLoanType]   = useState('Convencional')
   const [modalClosingDate, setModalClosingDate] = useState('')
   const [modalNotes, setModalNotes]         = useState('')
   const [showEditModal, setShowEditModal]   = useState(false)
@@ -184,7 +184,12 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
     startDelete(async () => {
       const res = await deleteLead(lead.id)
       if (!res.ok) { setDeleteError(res.error); return }
-      router.push('/leads')
+      // Vuelve a la lista como estaba (filtros y página) y avisa de lo hecho.
+      let back = '/leads'
+      try { back = sessionStorage.getItem('leads:lastList') || '/leads' } catch { /* sin storage */ }
+      const url = new URL(back, window.location.origin)
+      url.searchParams.set('deleted', [lead.firstName, lead.lastName].filter(Boolean).join(' '))
+      router.push(url.pathname + url.search)
     })
   }
 
@@ -212,7 +217,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
       value: phone ? <a href={phone.tel} className="settings-link-gold">{formatPhone(lead.phone)}</a> : (lead.phone || '—'),
       copy: lead.phone || undefined,
     },
-    { label: 'Idioma',      value: `${langCfg.flag} ${langCfg.label}` },
+    { label: 'Idioma',      value: langCfg.label },
     { label: 'Registrado',  value: formatFullDate(lead.createdAt) },
     { label: 'Prestamista', value: lead.lender || '—' },
     { label: 'Última act.', value: formatFullDate(lead.updatedAt) },
@@ -250,7 +255,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
               <span>{lead.email}</span>
               {lead.phone && <><span aria-hidden="true">·</span><span>{formatPhone(lead.phone)}</span></>}
               <span aria-hidden="true">·</span>
-              <span>{langCfg.flag} {langCfg.label}</span>
+              <span>{langCfg.label}</span>
             </div>
           </div>
         </div>
@@ -370,7 +375,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 <div className="settings-stack settings-stack-tight">
                   <InfoList rows={[
                     { label: 'Propiedad',   value: purchaseProcess?.address    ?? '—' },
-                    { label: 'Tipo loan',   value: purchaseProcess?.loanType   ?? '—' },
+                    { label: 'Préstamo',   value: purchaseProcess?.loanType   ?? '—' },
                     { label: 'Inicio',      value: purchaseProcess?.createdAt  ? formatFullDate(purchaseProcess.createdAt) : '—' },
                     { label: 'Cierre est.', value: purchaseProcess?.closingDate ? formatFullDate(purchaseProcess.closingDate) : '—' },
                   ]} />
@@ -583,7 +588,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                 type="text"
                 value={modalAddress}
                 onChange={e => setModalAddress(e.target.value)}
-                placeholder="123 Ocean View Dr, Norfolk, VA"
+                placeholder="Ej. 123 Main St, Ciudad"
                 className="settings-input settings-input-wide"
               />
             </div>
@@ -663,7 +668,7 @@ export function LeadDetailClient({ lead, agent, agents, channels, events, submis
                   if (res.ok) {
                     setShowProcessModal(false)
                     setModalAddress('')
-                    setModalLoanType('VA Loan')
+                    setModalLoanType('Convencional')
                     setModalClosingDate('')
                     setModalNotes('')
                   } else {

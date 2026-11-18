@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { AnimatePresence, m } from 'motion/react'
 import { AlertTriangle } from 'lucide-react'
 import { EASE_OUT_PREMIUM } from '@/components/motion/primitives'
@@ -23,12 +23,27 @@ interface TabsProps {
   // Modo controlado (settings, leads/new): value + onChange.
   value?: string
   onChange?: (key: string) => void
+  // No controlado + compartible: la pestaña viaja en ?<urlParam>=. Se lee al
+  // montar y se escribe con replaceState (sin navegar: el contenido de todas
+  // las pestañas ya llegó del servidor). Antes, recargar o compartir el enlace
+  // volvía siempre a la primera pestaña.
+  urlParam?: string
 }
 
 // Tabs con underline dorado deslizante y crossfade de contenido. Sucesor del
 // patrón lm-tabs, unificado para toda la app.
-export function Tabs({ items, content, defaultKey, value, onChange }: TabsProps) {
+export function Tabs({ items, content, defaultKey, value, onChange, urlParam }: TabsProps) {
   const [internal, setInternal] = useState(defaultKey ?? items[0]?.key)
+
+  useEffect(() => {
+    if (!urlParam || value !== undefined) return
+    const fromUrl = new URLSearchParams(window.location.search).get(urlParam)
+    // reason: la URL sólo existe en el navegador; se lee una vez al montar
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (fromUrl && items.some(i => i.key === fromUrl)) setInternal(fromUrl)
+    // Sólo al montar: después manda el estado local.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const active = value ?? internal
   // layoutId es global en motion: sin el uid, dos instancias de Tabs montadas a
   // la vez animarían el underline entre sí.
@@ -37,13 +52,19 @@ export function Tabs({ items, content, defaultKey, value, onChange }: TabsProps)
   function select(key: string) {
     onChange?.(key)
     if (value === undefined) setInternal(key)
+    if (urlParam && value === undefined) {
+      const url = new URL(window.location.href)
+      if (key === items[0]?.key) url.searchParams.delete(urlParam)
+      else url.searchParams.set(urlParam, key)
+      window.history.replaceState(window.history.state, '', url)
+    }
   }
 
   return (
     <div>
       <div
         role="tablist"
-        className="max-md:overflow-x-auto"
+        className="tabs-scroll"
         style={{
           display: 'flex',
           gap: '4px',

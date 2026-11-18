@@ -110,28 +110,28 @@ export async function EmailsTab({ ctx, period }: TabProps) {
         </StaggerItem>
         <StaggerItem>
           <KpiCard
-            label="Clics" value={stats.clickRate} suffix="%"
+            label="Clics" value={stats.clickRate} suffix={sends > 0 ? '%' : undefined} display={sends > 0 ? undefined : '—'}
             note={healthNote('click', stats.clickRate, sends)}
             hint="Porcentaje de leads que hicieron clic en un correo del periodo. Es la señal fiable: las aperturas no se miden."
           />
         </StaggerItem>
         <StaggerItem>
           <KpiCard
-            label="Respuestas" value={stats.replyRate} suffix="%"
+            label="Respuestas" value={stats.replyRate} suffix={sends > 0 ? '%' : undefined} display={sends > 0 ? undefined : '—'}
             note={healthNote('reply', stats.replyRate, sends)}
             hint="Porcentaje de leads que contestaron un correo del periodo."
           />
         </StaggerItem>
         <StaggerItem>
           <KpiCard
-            label="Rebotes" value={stats.bounceRate} suffix="%"
+            label="Rebotes" value={stats.bounceRate} suffix={sends > 0 ? '%' : undefined} display={sends > 0 ? undefined : '—'}
             note={healthNote('bounce', stats.bounceRate, sends)}
             hint={`Porcentaje de leads cuyo correo no se entregó. Conviene mantenerlo en ${BOUNCE_ALERT_OVER}% o menos.`}
           />
         </StaggerItem>
         <StaggerItem>
           <KpiCard
-            label="Bajas" value={stats.unsubscribeRate} suffix="%"
+            label="Bajas" value={stats.unsubscribeRate} suffix={sends > 0 ? '%' : undefined} display={sends > 0 ? undefined : '—'}
             note={healthNote('unsub', stats.unsubscribeRate, sends)}
             hint={`Porcentaje de leads que se dieron de baja. Conviene mantenerlo en ${UNSUB_ALERT_OVER}% o menos.`}
           />

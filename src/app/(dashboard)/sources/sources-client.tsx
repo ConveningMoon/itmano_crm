@@ -608,7 +608,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
           )}
           <div>
             <label style={LABEL}>Nombre del evento *</label>
-            <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Open House Virginia Beach Jun 2026" autoFocus />
+            <input value={name} onChange={e => setName(e.target.value)} style={INPUT} placeholder="Ej. Open House junio" autoFocus />
           </div>
           <div>
             <label style={LABEL}>Slug <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opcional)</span></label>
@@ -625,7 +625,7 @@ function EventModal({ onClose, isSuperAdmin, tenants, agents, myAgentId }: {
             </div>
             <div>
               <label style={LABEL}>Ubicación <span style={{ color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>(opc.)</span></label>
-              <input value={location} onChange={e => setLocation(e.target.value)} style={INPUT} placeholder="Virginia Beach, VA" />
+              <input value={location} onChange={e => setLocation(e.target.value)} style={INPUT} placeholder="Ej. ciudad o dirección" />
             </div>
           </div>
           </FormSection>

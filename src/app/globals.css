@@ -391,3 +391,13 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Pestañas: scroll horizontal en cualquier ancho (antes sólo en móvil y a
+   968 px se cortaban "Uso de IA", "Archivados"…). El degradado del borde
+   derecho indica que hay más. */
+.tabs-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.tabs-scroll::-webkit-scrollbar { height: 4px; }

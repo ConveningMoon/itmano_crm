@@ -505,8 +505,8 @@ export function HostedPageEditor({
               value={aiDesc}
               onChange={e => setAiDesc(e.target.value)}
               placeholder={isEvent
-                ? 'Describe el evento: qué es, para quién, fecha, hora y lugar (ej.: seminario gratuito para compradores primerizos, sábado 12 de octubre 10 AM, oficina de Virginia Beach)…'
-                : 'Describe el material o el objetivo (ej.: guía en español para familias hispanas que compran su primera casa en Hampton Roads; incluye préstamos ITIN y programas de ayuda de Virginia)…'}
+                ? 'Describe el evento: qué es, para quién, fecha, hora y lugar (ej.: seminario gratuito para compradores primerizos, sábado 12 de octubre 10 AM, en nuestra oficina)…'
+                : 'Describe el material o el objetivo (ej.: guía en español para quienes compran su primera casa en tu zona; incluye opciones de financiamiento y programas de ayuda locales)…'}
               style={{ ...INPUT, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
             />
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -547,7 +547,7 @@ export function HostedPageEditor({
             {isLm && (
               <div>
                 <label style={LABEL}>Etiqueta superior (badge)</label>
-                <input style={INPUT} value={cfg.badge} onChange={e => set('badge', e.target.value)} placeholder="Guía gratuita · Hampton Roads, Virginia" />
+                <input style={INPUT} value={cfg.badge} onChange={e => set('badge', e.target.value)} placeholder="Guía gratuita · tu zona" />
               </div>
             )}
             <div>
@@ -565,7 +565,7 @@ export function HostedPageEditor({
                 rows={4}
                 value={bulletsText}
                 onChange={e => setBulletsText(e.target.value)}
-                placeholder={'Cómo comprar aunque no tengas número de seguro social\nProgramas de ayuda para el enganche\nLas mejores zonas para tu familia'}
+                placeholder={'Cuánto necesitas para el enganche\nProgramas de ayuda disponibles\nLas mejores zonas para tu familia'}
               />
             </div>
             {/* Portada del material (solo lead magnet) — la imagen de la guía/PDF */}
@@ -627,7 +627,7 @@ export function HostedPageEditor({
                 </div>
                 <div>
                   <label style={LABEL}>Lugar</label>
-                  <input style={INPUT} value={cfg.event?.location ?? ''} onChange={e => setEvent({ location: e.target.value })} placeholder="Oficina A&J · Virginia Beach" />
+                  <input style={INPUT} value={cfg.event?.location ?? ''} onChange={e => setEvent({ location: e.target.value })} placeholder="Ej. Nuestra oficina · dirección" />
                 </div>
               </div>
               <div>
@@ -868,7 +868,7 @@ export function HostedPageEditor({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <input style={INPUT} value={cfg.agent_intro?.name ?? ''} placeholder="Nombre del agente"
                 onChange={e => setIntro({ name: e.target.value })} />
-              <input style={INPUT} value={cfg.agent_intro?.title ?? ''} placeholder="Título (ej.: Asesora bilingüe · A&J)"
+              <input style={INPUT} value={cfg.agent_intro?.title ?? ''} placeholder="Título (ej.: Asesora bilingüe)"
                 onChange={e => setIntro({ title: e.target.value })} />
             </div>
             <textarea
@@ -927,7 +927,7 @@ export function HostedPageEditor({
                     <div key={i} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'center' }}>
                         <input style={INPUT} value={t.name} placeholder="Familia Flores" onChange={e => setTestimonial(i, { name: e.target.value })} />
-                        <input style={INPUT} value={t.location} placeholder="Virginia Beach · Townhouse" onChange={e => setTestimonial(i, { location: e.target.value })} />
+                        <input style={INPUT} value={t.location} placeholder="Ej. Ciudad · Townhouse" onChange={e => setTestimonial(i, { location: e.target.value })} />
                         <button className="btn btn-ghost" onClick={() => set('testimonials', cfg.testimonials.filter((_, idx) => idx !== i))} title="Quitar" >
                           <Trash2 size={13} />
                         </button>

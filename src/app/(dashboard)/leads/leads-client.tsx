@@ -13,7 +13,7 @@ import { NavLoadingOverlay, useCardNavigation } from '@/components/ui/nav-loadin
 import { RefreshingPill } from '@/components/ui/loading-indicator'
 import { DataScope } from '@/components/ui/data-table'
 import { TABLE_COLS, TABLE_COLS_MD, TABLE_COLS_SM } from './leads-table-cols'
-import { LANGUAGE_CONFIG } from '@/lib/config'
+import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import {
   QUALITY_BANDS, QUALITY_CONFIG, URGENCY_CONFIG,
   STAGES, STAGE_CONFIG, STAGE_FILTER_OPTIONS,
@@ -278,6 +278,26 @@ export function LeadsClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput, filters.q])
 
+  // Última vista de la lista (con filtros), para volver a ella tras borrar un
+  // lead desde su ficha. Y el aviso de "eliminado" que deja ese regreso.
+  const [deletedName, setDeletedName] = useState<string | null>(null)
+  // Cambia con filtros y página: la URL guardada es la vista exacta.
+  const returnKey = leadListFiltersToQuery(filters)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      const deleted = url.searchParams.get('deleted')
+      if (deleted) {
+        // reason: aviso de una sola vez que llega por la URL
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDeletedName(deleted)
+        url.searchParams.delete('deleted')
+        window.history.replaceState(window.history.state, '', url)
+      }
+      sessionStorage.setItem('leads:lastList', url.pathname + url.search)
+    } catch { /* sin storage: el regreso cae en /leads */ }
+  }, [returnKey])
+
   // La selección se limpia al cambiar de filtro, no al cambiar de página.
   const filterKey = leadListFiltersToQuery({ ...filters, page: 1 })
   useEffect(() => {
@@ -420,9 +440,9 @@ export function LeadsClient({
   ]
   const languageOptions = [
     { value: 'all', label: 'Todos los idiomas' },
-    { value: 'es',  label: '🇪🇸 Español' },
-    { value: 'en',  label: '🇺🇸 English' },
-    { value: 'pt',  label: '🇧🇷 Português' },
+    // Los 19 idiomas que admite un lead, no sólo tres: un lead en francés no
+    // se podía filtrar.
+    ...SUPPORTED_LANGUAGE_CODES.map(code => ({ value: code, label: LANGUAGE_CONFIG[code].label })),
   ]
 
   // Active chips
@@ -465,6 +485,15 @@ export function LeadsClient({
   return (
     <div>
       <NavLoadingOverlay show={navPending} />
+
+      {deletedName && (
+        <div role="status" className="settings-alert settings-alert-block" style={{ marginBottom: '12px', justifyContent: 'space-between' }}>
+          <span>Se eliminó a <strong>{deletedName}</strong>.</span>
+          <button type="button" className="icon-btn" aria-label="Cerrar aviso" onClick={() => setDeletedName(null)}>
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* ── Búsqueda, filtros, orden y vista ── */}
       <div className="toolbar">
@@ -792,7 +821,7 @@ export function LeadsClient({
                     <span className="dt-hide-sm"><QualityCell band={lead.qualityBand} urgency={lead.urgency} /></span>
 
                     {/* Idioma */}
-                    <span className="cell-muted dt-hide-md">{langCfg.flag} {lead.language.toUpperCase()}</span>
+                    <span className="cell-muted dt-hide-md" title={langCfg.label}>{lead.language.toUpperCase()}</span>
 
                     {/* Fecha, o el dato del orden activo */}
                     <span className="cell-muted dt-hide-sm">
@@ -889,7 +918,7 @@ export function LeadsClient({
                         <TagChips tagIds={lead.tagIds} catalog={tags} />
                         <QualityCell band={lead.qualityBand} urgency={lead.urgency} />
                         <span className="kanban-card-meta">
-                          <span aria-hidden="true">{langCfg.flag}</span>
+                          <span title={langCfg.label}>{lead.language.toUpperCase()}</span>
                           {channel && <span>{CHANNEL_TYPE_LABELS[channel.channelType] ?? channel.channelType}</span>}
                         </span>
                         {/* Sin badge de etapa: cada columna ES una etapa. */}

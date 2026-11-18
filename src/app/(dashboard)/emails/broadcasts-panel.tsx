@@ -105,6 +105,10 @@ export function BroadcastsPanel({ broadcasts, senderError, metrics }: {
           padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '16px',
         }}>
           {senderError}
+          {/* El mensaje manda a Configuración → Email: que sea un enlace. */}
+          <div style={{ marginTop: '8px' }}>
+            <Link href="/settings?tab=email" className="settings-link-gold">Ir a Configuración → Email →</Link>
+          </div>
         </div>
       )}
 

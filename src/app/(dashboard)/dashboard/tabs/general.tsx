@@ -130,6 +130,7 @@ export async function GeneralTab({ ctx }: TabProps) {
         <StaggerItem>
           <KpiCard
             label="Calidad alta" value={leadStats.highQuality}
+            note="en cartera activa"
             hint="Leads en la banda más alta de calidad de tu cartera activa."
           />
         </StaggerItem>
@@ -152,7 +153,7 @@ export async function GeneralTab({ ctx }: TabProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ marginBottom: '16px' }}>
         <ChartCard
           title="Evolución de leads"
-          scope="Últimos 7 meses · no cambia con el periodo"
+          scope="Últimos 7 meses"
           hint="Leads creados cada mes y, de esos, cuántos están cerrados hoy. Cada mes es un grupo de altas: no indica cuándo se cerraron. La serie incluye importados de otro CRM y suscriptores."
         >
           <ChartFrame
@@ -174,7 +175,7 @@ export async function GeneralTab({ ctx }: TabProps) {
 
         <ChartCard
           title="Embudo"
-          scope="Estado actual · no cambia con el periodo"
+          scope="Estado actual"
           action={<Link href="/leads">Ver leads →</Link>}
           hint={
             <>

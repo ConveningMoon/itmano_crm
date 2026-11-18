@@ -211,11 +211,11 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
   return (
   <div style={CARD}>
     <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-      Requests recientes
+      {showCosts ? 'Requests recientes' : 'Usos recientes'}
     </div>
     {recent.length === 0 ? (
       <div style={{ padding: '28px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
-        Aún no hay requests. Cuando se genere contenido con IA (propiedades, correos, secuencias) aparecerá aquí{showCosts ? ' con su costo' : ''}.
+        Aún no hay usos de IA. Cuando se genere contenido con IA (propiedades, correos, secuencias) aparecerá aquí{showCosts ? ' con su costo' : ''}.
       </div>
     ) : (
       <div style={{ overflowX: 'auto' }}>
@@ -225,9 +225,11 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
               <th style={TH}>Fecha</th>
               <th style={TH}>Función</th>
               {recent.some(r => r.tenantName) && <th style={TH}>Tenant</th>}
-              <th style={TH}>Modelo</th>
-              <th style={{ ...TH, textAlign: 'right' }}>Entrada</th>
-              <th style={{ ...TH, textAlign: 'right' }}>Salida</th>
+              {/* Modelo y tokens son detalle técnico de ITMANO: el equipo del
+                  cliente sólo necesita qué se usó y cuándo. */}
+              {showCosts && <th style={TH}>Modelo</th>}
+              {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Entrada</th>}
+              {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Salida</th>}
               {showCosts && <th style={{ ...TH, textAlign: 'right' }}>Costo</th>}
             </tr>
           </thead>
@@ -237,9 +239,9 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
                 <td style={{ ...TD, whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
                 <td style={{ ...TD, color: 'var(--text-primary)' }}>{featureLabel(r.feature)}</td>
                 {recent.some(x => x.tenantName) && <td style={TD}>{r.tenantName ?? '—'}</td>}
-                <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px' }}>{r.model}</td>
-                <td style={NUM}>{fmtInt(r.inputTokens)}</td>
-                <td style={NUM}>{fmtInt(r.outputTokens)}</td>
+                {showCosts && <td style={{ ...TD, fontFamily: 'monospace', fontSize: '11px' }}>{r.model}</td>}
+                {showCosts && <td style={NUM}>{fmtInt(r.inputTokens)}</td>}
+                {showCosts && <td style={NUM}>{fmtInt(r.outputTokens)}</td>}
                 {showCosts && <td style={{ ...NUM, color: 'var(--gold-2)' }}>{fmtCost(r.costUsd)}</td>}
               </tr>
             ))}
@@ -257,8 +259,9 @@ export function AiRecentCard({ recent, showCosts }: { recent: AiUsageRequestRow[
 export function AiCostExplanation({ showCosts }: { showCosts: boolean }) {
   return showCosts ? (
     <>
-      El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo
-      (claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón de salida). Los adjuntos
+      El costo se calcula con los tokens reales de cada request y la tarifa vigente del modelo que
+      la atendió (por ejemplo, claude-sonnet-5: $3 por millón de tokens de entrada · $15 por millón
+      de salida; el análisis de fit usa un modelo más barato). Los adjuntos
       (p. ej. el PDF de un lead magnet) aumentan los tokens de entrada, por eso esas generaciones
       cuestan más.
     </>

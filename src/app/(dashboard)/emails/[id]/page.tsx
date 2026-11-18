@@ -146,7 +146,7 @@ async function EmailSequenceDetailPage({
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
         >
           <ArrowLeft size={13} />
-          {sequence.activationType === 'tag' ? 'Correos por etiqueta' : 'Secuencias de Email'}
+          {sequence.activationType === 'tag' ? 'Correos por etiqueta' : 'Emails'}
         </Link>
       </div>
 
@@ -219,7 +219,7 @@ async function EmailSequenceDetailPage({
       {/* Run stats */}
       <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '24px' }}>
         {[
-          { label: 'Runs activos',    value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--gold-2)" />,  color: 'var(--gold-2)' },
+          { label: 'Leads en curso',    value: sequence.activeRunCount,    icon: <Clock size={14} color="var(--gold-2)" />,  color: 'var(--gold-2)' },
           { label: 'Completados',      value: sequence.completedRunCount, icon: <CheckCircle size={14} color="var(--gold-1)" />, color: 'var(--gold-1)' },
           { label: 'Cancelados',       value: sequence.cancelledRunCount, icon: <XCircle size={14} color="var(--text-secondary)" />,   color: 'var(--text-secondary)' },
         ].map(stat => (
@@ -323,7 +323,7 @@ async function EmailSequenceDetailPage({
       <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: '12px', overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            Runs
+            Leads en la secuencia
           </span>
           {totalRuns > 50 && (
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Mostrando 50 más recientes</span>
@@ -338,8 +338,8 @@ async function EmailSequenceDetailPage({
               {sequence.activationType === 'manual'
                 ? 'Agrega leads desde la sección de arriba.'
                 : sequence.activationType === 'tag'
-                  ? 'Los runs se crean cuando alguien le pone la etiqueta a un lead, desde su ficha.'
-                  : 'Los runs se crean automáticamente cuando un lead se registra desde un canal vinculado.'}
+                  ? 'Un lead entra cuando alguien le pone la etiqueta desde su ficha.'
+                  : 'Un lead entra solo cuando se registra desde una fuente vinculada.'}
             </div>
           </div>
         ) : (

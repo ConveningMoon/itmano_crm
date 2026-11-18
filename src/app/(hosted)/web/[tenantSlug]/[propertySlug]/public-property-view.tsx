@@ -293,7 +293,7 @@ export function PublicPropertyView({
                     color: on ? '#12212F' : P.textSoft,
                   }}
                 >
-                  {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.flag} {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l.toUpperCase()}
+                  {LANGUAGE_CONFIG[l as keyof typeof LANGUAGE_CONFIG]?.label ?? l.toUpperCase()}
                 </button>
               )
             })}

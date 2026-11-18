@@ -96,7 +96,15 @@ export function SequencesTable({ sequences, metrics, isSuperAdmin, folders }: Pr
           <div className="dt-meta">
             <span className="dt-show-md pill" data-tone={langTone}>{langLabel}</span>
             <span title="Agente responsable"><UserRound size={12} />{seq.agentName ?? 'Toda la agencia'}</span>
-            <span title="Pasos de la secuencia"><ListOrdered size={12} />{plural(seq.stepCount, 'paso', 'pasos')}</span>
+            {/* Activa y sin pasos: quien entra no recibe nada. Se marca aquí
+                y no sólo en Newsletters, donde ya había un aviso. */}
+            {seq.active && seq.stepCount === 0 ? (
+              <span title="Activa pero sin correos: quien entra no recibe nada" style={{ color: 'var(--alert)' }}>
+                <AlertTriangle size={12} />Sin pasos
+              </span>
+            ) : (
+              <span title="Pasos de la secuencia"><ListOrdered size={12} />{plural(seq.stepCount, 'paso', 'pasos')}</span>
+            )}
             <span title={seq.channels.length > 0 ? seq.channels.map(ch => ch.name).join(', ') : 'Sin fuentes asociadas'}>
               <Radio size={12} />{plural(seq.channels.length, 'fuente', 'fuentes')}
             </span>

@@ -53,6 +53,9 @@ export function BrandLogo({ logoUrl, tenantName, hubMode = false }: {
           objectPosition: 'left center',
           display: 'block',
           marginBottom: '8px',
+          // Halo claro sutil: los logos oscuros (firma azul marino, negro)
+          // desaparecían sobre el fondo del menú. En logos claros no se nota.
+          filter: 'drop-shadow(0 0 1px color-mix(in srgb, var(--text-primary) 55%, transparent)) drop-shadow(0 0 6px color-mix(in srgb, var(--text-primary) 18%, transparent))',
         }}
       />
     )

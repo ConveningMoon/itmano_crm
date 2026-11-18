@@ -42,7 +42,7 @@ async function NewSequencePage() {
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', textDecoration: 'none' }}
         >
           <ArrowLeft size={13} />
-          Secuencias de Email
+          Emails
         </Link>
       </div>
 

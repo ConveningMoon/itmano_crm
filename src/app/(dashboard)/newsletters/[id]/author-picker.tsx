@@ -149,7 +149,7 @@ export function AuthorPicker({
       }}>
         Quién firma esta edición en la web. Aparece en la página pública y es lo que
         asocia el contenido a esa persona en los buscadores. La foto sale de la que
-        el agente tenga en Ajustes → Agentes.
+        el agente tenga en Configuración → Agentes.
       </span>
     </div>
   )

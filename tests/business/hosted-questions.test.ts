@@ -18,7 +18,7 @@ describe('optionsFor — las opciones salen del perfil, no del código', () => {
   it('el presupuesto usa los cortes de ESA agencia', () => {
     const o = optionsFor('budget_amount', AJ, 'es')!
     expect(o.map(x => x.label)).toEqual([
-      'Hasta $300.000', '$300.000 – $500.000', 'Más de $500.000', 'Aún no lo sé',
+      'Hasta $300,000', '$300,000 – $500,000', 'Más de $500,000', 'Aún no lo sé',
     ])
     expect(o.map(x => x.value)).toEqual(['300000', '300000-500000', '500000', 'no_definido'])
   })
@@ -46,7 +46,7 @@ describe('optionsFor — las opciones salen del perfil, no del código', () => {
   it('traduce a los tres idiomas de la página', () => {
     expect(optionsFor('timeline', AJ, 'en')![0].label).toBe('In the next 3 months')
     expect(optionsFor('timeline', AJ, 'pt')![0].label).toBe('Nos próximos 3 meses')
-    expect(optionsFor('budget_amount', AJ, 'en')![0].label).toBe('Up to $300.000')
+    expect(optionsFor('budget_amount', AJ, 'en')![0].label).toBe('Up to $300,000')
   })
 })
 
@@ -59,7 +59,7 @@ describe('resolveQuestions', () => {
     expect(q.key).toBe('budget_amount')
     expect(q.label).toBe('¿Presupuesto?')
     expect(q.options).toEqual(['300000', '300000-500000', '500000', 'no_definido'])
-    expect(q.optionLabels?.[0]).toBe('Hasta $300.000')
+    expect(q.optionLabels?.[0]).toBe('Hasta $300,000')
   })
 
   it('omite la pregunta si el perfil dejó de permitirla', () => {

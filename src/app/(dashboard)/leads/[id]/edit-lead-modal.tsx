@@ -166,7 +166,7 @@ export function EditLeadModal({ lead, agents, channels, isOpen, onClose }: EditL
                 className="edit-modal-input" style={{ ...INPUT_STYLE, appearance: 'none', cursor: 'pointer' }}>
                 {Object.entries(LANGUAGE_CONFIG).map(([key, cfg]) => (
                   <option key={key} value={key}>
-                    {cfg.flag} {cfg.label}
+                    {cfg.label}
                   </option>
                 ))}
               </select>

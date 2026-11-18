@@ -161,7 +161,7 @@ function EditModal({
 
 const STATE_META: Record<PurchaseCellState, { label: string; color: string; Icon: LucideIcon }> = {
   crm:      { label: 'Contenido CRM',   color: 'var(--gold-2)',  Icon: Check },
-  template: { label: 'Template Resend', color: 'var(--gold-1)',  Icon: LayoutTemplate },
+  template: { label: 'Plantilla de envío', color: 'var(--gold-1)',  Icon: LayoutTemplate },
   empty:    { label: 'Sin configurar',  color: 'var(--alert)', Icon: AlertTriangle },
 }
 
