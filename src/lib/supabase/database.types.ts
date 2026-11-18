@@ -2661,6 +2661,50 @@ export type Database = {
           },
         ]
       }
+      scoring_calibrations: {
+        Row: {
+          actor_user_id: string | null
+          changes: Json
+          closes_with_fit: number
+          created_at: string
+          id: string
+          order_after: string[]
+          order_before: string[]
+          source: string
+          tenant_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          changes?: Json
+          closes_with_fit?: number
+          created_at?: string
+          id?: string
+          order_after: string[]
+          order_before: string[]
+          source: string
+          tenant_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          changes?: Json
+          closes_with_fit?: number
+          created_at?: string
+          id?: string
+          order_after?: string[]
+          order_before?: string[]
+          source?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scoring_calibrations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       studio_images: {
         Row: {
           agent_id: string | null
@@ -2887,6 +2931,7 @@ export type Database = {
         Row: {
           active_leads: number
           computed_at: string
+          degenerate: boolean
           p20: number
           p40: number
           p60: number
@@ -2896,6 +2941,7 @@ export type Database = {
         Insert: {
           active_leads: number
           computed_at?: string
+          degenerate?: boolean
           p20: number
           p40: number
           p60: number
@@ -2905,6 +2951,7 @@ export type Database = {
         Update: {
           active_leads?: number
           computed_at?: string
+          degenerate?: boolean
           p20?: number
           p40?: number
           p60?: number
@@ -3231,7 +3278,22 @@ export type Database = {
         }[]
       }
       recalc_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
+      preview_score_rule_changes: {
+        Args: { p_changes: Json }
+        Returns: {
+          active_leads: number
+          alta_after: number
+          alta_before: number
+          band_changed: number
+          degenerate_after: boolean
+          degenerate_before: boolean
+          score_changed: number
+          tenant_id: string
+          tenant_name: string
+        }[]
+      }
       recompute_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
+      recompute_scores_bulk: { Args: { p_tenant_id?: string }; Returns: number }
       refresh_quality_bands: { Args: never; Returns: number }
       rls_jwt_base64url_encode: { Args: { data: string }; Returns: string }
       rls_jwt_sign: { Args: { payload: Json; secret: string }; Returns: string }
@@ -3245,6 +3307,25 @@ export type Database = {
         | { Args: { p_email: string }; Returns: string }
         | { Args: { p_email: string; p_secret: string }; Returns: string }
       schema_snapshot: { Args: never; Returns: Json }
+      scoring_health: { Args: { p_tenant_id: string }; Returns: Json }
+      scoring_quality_preview: {
+        Args: { p_changes: Json }
+        Returns: {
+          lead_id: string
+          q: number
+          tenant_id: string
+        }[]
+      }
+      scoring_rule_usage: {
+        Args: { p_days?: number; p_tenant_id?: string }
+        Returns: {
+          category: string
+          dimension: string
+          hits: number
+          leads: number
+          match_value: string
+        }[]
+      }
       seed_default_lead_tags: {
         Args: { p_tenant_id: string }
         Returns: undefined

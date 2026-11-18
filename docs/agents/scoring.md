@@ -61,6 +61,30 @@ de 20 leads activos se usan cortes de fallback en
 `src/lib/scoring/score-bands.ts`. Para contar leads “altos”, usa la banda, no un
 literal de score repartido por la UI.
 
+Si los quintiles no distinguen (dos cortes iguales o `p80 - p20 < 10`),
+`refresh_quality_bands` marca `tenant_quality_bands.degenerate` y `leads_list`
+usa también los cortes fijos. Pasa cuando los leads no declaran perfil y casi
+todos suman lo mismo; el Centro de control lo avisa. Los cortes fijos viven en
+tres sitios: `score-bands.ts`, `leads_list` y `preview_score_rule_changes`.
+
+## Modelo automático (migración 20261118120000)
+
+- Cambiar puntos globales (Centro de control → Scoring) muestra antes el
+  impacto por tenant (`preview_score_rule_changes`) y al aplicar recalcula todos
+  los leads (`recompute_scores_bulk`, sin avisos de lead caliente) y las bandas.
+  `decay_lead_scores` sólo recalcula leads sin eventos en 14 días: no sirve para
+  propagar un cambio de modelo.
+- Las protecciones (reglas con `side_effect`) no se editan desde la UI.
+- Calibración por tenant: el cron diario (`runAutoCalibrations`) reordena los
+  factores de perfil cuando hay 50 cierres con perfil, como mucho cada 7 días y
+  sólo si un factor separa al menos 5 pp más. Reparte los mismos máximos
+  globales. Cada calibración (auto, manual o vuelta al global) queda en
+  `scoring_calibrations`. La lógica pura está en `planAutoCalibration`.
+- `scoring_health(tenant)` y `scoring_rule_usage(tenant, días)` alimentan la
+  salud por tenant (`src/lib/scoring/health.ts`) y el uso de cada regla.
+- `open_house_attended` (+25, decae) puntúa la asistencia marcada en la lista de
+  un open house: la señal automática más cercana a una visita.
+
 `refresh_quality_bands()` depende del vocabulario de etapas. Tras cambiarlo,
 verifica ejecución y `tenant_quality_bands.computed_at`.
 

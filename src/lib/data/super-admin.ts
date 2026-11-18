@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
 import { getTenantsWithOwners, type TenantWithOwner } from './tenants'
 
-const BAND_COLUMNS = columns('tenant_quality_bands', ['computed_at'])
+const BAND_COLUMNS = columns('tenant_quality_bands', ['tenant_id', 'computed_at', 'degenerate'])
 
 /**
  * Las bandas de calidad se recalculan una vez al día desde el cron
@@ -65,22 +65,29 @@ export async function getHubData(): Promise<{
   tenants: TenantOverview[]
   /** computed_at de las bandas más antiguas, si superan SCORING_STALE_HOURS. */
   scoringStaleSince: string | null
+  /** Tenants cuyas bandas no distinguen entre leads (tenant_quality_bands.degenerate). */
+  scoringBlindTenants: { id: string; name: string }[]
 }> {
   const supabase = createAdminClient()
 
-  const [tenantRows, { data: statsRaw }, { data: oldestBand }] = await Promise.all([
+  // Una fila por tenant: con pocas decenas de clientes traerlas todas cuesta lo
+  // mismo que pedir la más antigua, y además dice cuáles no distinguen.
+  const [tenantRows, { data: statsRaw }, { data: bandRows }] = await Promise.all([
     getTenantsWithOwners(),
     supabase.rpc('tenant_hub_stats', { p_days: VENTANA_DIAS }),
     supabase
       .from('tenant_quality_bands')
       .select(BAND_COLUMNS)
-      .order('computed_at', { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+      .order('computed_at', { ascending: true }),
   ])
 
-  const oldestComputedAt = (oldestBand as { computed_at: string } | null)?.computed_at ?? null
+  const bands = (bandRows ?? []) as unknown as { tenant_id: string; computed_at: string; degenerate: boolean }[]
+  const oldestComputedAt = bands[0]?.computed_at ?? null
   const scoringStaleSince = isScoringStale(oldestComputedAt) ? oldestComputedAt : null
+  const nombre = new Map(tenantRows.map(t => [t.id, t.name]))
+  const scoringBlindTenants = bands
+    .filter(b => b.degenerate && nombre.has(b.tenant_id))
+    .map(b => ({ id: b.tenant_id, name: nombre.get(b.tenant_id)! }))
 
   // La RPC solo devuelve tenants CON leads o CON actividad; los recién creados
   // no aparecen y caen al cero de abajo, igual que con el conteo en memoria.
@@ -104,5 +111,5 @@ export async function getHubData(): Promise<{
     newLeads30d: tenants.reduce((s, t) => s + t.newLeads30d, 0),
   }
 
-  return { kpis, tenants, scoringStaleSince }
+  return { kpis, tenants, scoringStaleSince, scoringBlindTenants }
 }

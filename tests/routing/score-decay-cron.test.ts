@@ -7,11 +7,14 @@ import { NextRequest } from 'next/server'
 // que GET y POST corren el mismo trabajo y que ambos exigen CRON_SECRET.
 
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
+vi.mock('@/lib/scoring/auto-calibration', () => ({ runAutoCalibrations: vi.fn(async () => []) }))
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { runAutoCalibrations } from '@/lib/scoring/auto-calibration'
 import { GET, POST } from '@/app/api/cron/score-decay/route'
 
 const mockCreateAdminClient = createAdminClient as unknown as ReturnType<typeof vi.fn>
+const mockRunAutoCalibrations = runAutoCalibrations as unknown as ReturnType<typeof vi.fn>
 
 function fakeSupabase() {
   const rpc = vi.fn(async (fn: string) => {
@@ -35,6 +38,7 @@ describe('cron score-decay', () => {
   beforeEach(() => {
     process.env.CRON_SECRET = 'test-secret'
     mockCreateAdminClient.mockReset()
+    mockRunAutoCalibrations.mockClear()
   })
 
   afterEach(() => {
@@ -71,6 +75,32 @@ describe('cron score-decay', () => {
     expect(body.dry_run).toBe(true)
     expect(body.quality_bands_refreshed).toBeNull()
     expect(db.rpc).not.toHaveBeenCalledWith('refresh_quality_bands')
+    expect(mockRunAutoCalibrations).not.toHaveBeenCalled()
+  })
+
+  it('calibra los tenants antes de recalcular las bandas', async () => {
+    const db = fakeSupabase()
+    mockCreateAdminClient.mockReturnValue(db)
+    mockRunAutoCalibrations.mockResolvedValueOnce([{ tenantId: 't1', applied: true }, { tenantId: 't2', applied: false, reason: 'sin_evidencia' }])
+
+    const res = await GET(request('GET', 'Bearer test-secret'))
+    const body = await res.json()
+
+    expect(body.calibrations_applied).toBe(1)
+    expect(body.quality_bands_refreshed).toBe(2)
+  })
+
+  it('si la calibración automática falla, las bandas se recalculan igual', async () => {
+    const db = fakeSupabase()
+    mockCreateAdminClient.mockReturnValue(db)
+    mockRunAutoCalibrations.mockRejectedValueOnce(new Error('sin red'))
+
+    const res = await GET(request('GET', 'Bearer test-secret'))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.calibrations_applied).toBeNull()
+    expect(db.rpc).toHaveBeenCalledWith('refresh_quality_bands')
   })
 })
 
