@@ -7,6 +7,10 @@
     {
       "path": "/api/warm",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/platform-ops",
+      "schedule": "0 12 * * *"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 import { sendPurchaseEmail } from '@/lib/services/send-purchase-email'
@@ -20,7 +21,7 @@ interface DryRunDetail {
   details?:      string
 }
 
-export async function POST(request: NextRequest) {
+async function runOrchestrator(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
@@ -167,3 +168,5 @@ export async function POST(request: NextRequest) {
     ...(dryRun && { runs: dryRunDetails }),
   })
 }
+
+export const POST = withHeartbeat('cron:sequence-orchestrator', runOrchestrator)

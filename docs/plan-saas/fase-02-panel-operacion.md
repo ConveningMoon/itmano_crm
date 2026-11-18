@@ -58,17 +58,31 @@ alertas por Telegram antes de que algo se agote.
 
 ## Tareas
 
-- [ ] Spec y plan de tareas de la fase (superpowers).
-- [ ] Migración con las tres tablas, RLS, grants y test en `test:schema`.
-- [ ] Helper `recordHeartbeat(job, fn)` y latidos en los 4 crons y 2 webhooks.
-- [ ] Cron `platform-metrics-snapshot` (diario) con métricas de la base:
-      tamaño de base, Storage por bucket y por tenant, uso por tenant contra el
-      plan.
-- [ ] Página `/admin/operacion` con `loading.tsx` en forma de página y cada
-      bloque en su `<Suspense>`. Lecturas en `src/lib/data/platform-ops.ts`,
-      en una ola (`Promise.all`).
-- [ ] Formulario de `provider_settings` (Server Action con `useTransition`).
-- [ ] Cron `platform-alerts` y su tabla de deduplicación.
+Rama `feat/saas-fase-02-panel`. Plan de tareas:
+`docs/superpowers/plans/2026-11-18-saas-fase-02-panel-operacion.md`.
+
+- [x] Plan de tareas de la fase.
+- [x] Migración `platform_ops`: 4 tablas (`cron_heartbeats`,
+      `provider_settings`, `platform_metrics`, `platform_alerts`), RLS de
+      lectura sólo `super_admin`, grants y RPC `record_heartbeat`,
+      `platform_usage`, `platform_totals` y `ai_spend_since` (sólo
+      `service_role`). Probada en sandbox con `test:schema`, `test:rls`
+      (`tests/rls/platform_ops.test.ts`) y advisors.
+- [x] `withHeartbeat` en `score-decay`, `sequence-orchestrator`,
+      `billing-lifecycle`, `warm` (sólo la llamada del cron), `platform-ops` y
+      los webhooks de Resend y Paddle. Un 401/403 no cuenta como ejecución.
+- [x] Un solo cron diario `/api/cron/platform-ops` (12:00 UTC en
+      `vercel.json`): foto en `platform_metrics`, alertas por Telegram
+      deduplicadas y purga a 400 días.
+- [x] Página `/admin/operacion` con `loading.tsx` y una sola carga en
+      `<Suspense>`: todos los bloques salen del mismo modelo
+      (`src/lib/ops/model.ts`), así que partirlos en varios Suspense no adelanta
+      nada. Ítem "Operación" en la navegación del `super_admin`.
+- [x] Editor de `provider_settings` (Server Action con `useTransition`). Al
+      cambiar el saldo de IA se anota la fecha, y desde ahí el panel resta el
+      gasto registrado (saldo estimado).
+- [ ] Aplicar la migración en producción (tras el gate de sandbox) y anotar en
+      el panel los datos de cada proveedor.
 - [ ] 2B (después de las fases 3 y 9): conectar las fuentes reales de Resend,
       Anthropic, Google y Vercel.
 

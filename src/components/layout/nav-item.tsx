@@ -21,6 +21,7 @@ import {
   Images,
   Sparkles,
   Newspaper,
+  Activity,
 } from 'lucide-react'
 
 // Un ítem está activo si su href es el prefijo MÁS específico que coincide con la
@@ -54,6 +55,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number; strokeWidth?: n
   Images,
   Sparkles,
   Newspaper,
+  Activity,
 }
 
 interface NavItemProps {

@@ -17,10 +17,11 @@ describe('navItemsForRole', () => {
     expect(studio).toEqual({ label: 'Estudio', href: '/studio', icon: 'Sparkles' })
   })
 
-  it('super_admin con tenant seleccionado suma centro de control + solicitudes', () => {
+  it('super_admin con tenant seleccionado suma centro de control, operación y solicitudes', () => {
     const items = navItemsForRole('super_admin')
-    expect(items.slice(-2)).toEqual([
+    expect(items.slice(-3)).toEqual([
       { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+      { label: 'Operación', href: '/admin/operacion', icon: 'Activity' },
       { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
     ])
   })
@@ -29,6 +30,7 @@ describe('navItemsForRole', () => {
     const items = navItemsForRole('super_admin', { hubMode: true })
     expect(items.map(i => i.href)).toEqual([
       '/admin',
+      '/admin/operacion',
       '/studio',
       '/solicitudes',
       '/notifications',
