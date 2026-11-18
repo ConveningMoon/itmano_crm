@@ -196,6 +196,7 @@ Si cambias el matcher de `src/proxy.ts`, actualiza
 | Scoring, etapas, calidad, urgencia o decay | `docs/agents/scoring.md` |
 | Email, formularios, propiedades o newsletters | `docs/agents/domains.md` |
 | Git, worktrees, Mac/Windows, setup o handoff | `docs/agents/workflow.md` |
+| Plan SaaS (autoservicio, panel de operación, límites, storage) | `docs/plan-saas/README.md` |
 
 Cuando un documento contradiga el código o la base actual, gana la fuente de
 verdad señalada por ese documento. Actualiza la documentación en el mismo cambio
