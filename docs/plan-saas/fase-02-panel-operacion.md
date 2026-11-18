@@ -81,8 +81,17 @@ Rama `feat/saas-fase-02-panel`. Plan de tareas:
 - [x] Editor de `provider_settings` (Server Action con `useTransition`). Al
       cambiar el saldo de IA se anota la fecha, y desde ahí el panel resta el
       gasto registrado (saldo estimado).
-- [ ] Aplicar la migración en producción (tras el gate de sandbox) y anotar en
-      el panel los datos de cada proveedor.
+- [x] Migración aplicada en producción el 2026-11-18, tras el gate de
+      sandbox. Verificada con `service_role` (8 proveedores sembrados, uso y
+      totales correctos) y advisors sin hallazgos nuevos. Hay un `super_admin`
+      con Telegram para recibir las alertas.
+- [ ] Dylan: anotar en `/admin/operacion` los datos de cada proveedor (plan y
+      cuotas de Resend, saldo y presupuesto de IA, fecha del último backup,
+      renovaciones y vencimientos de llaves). Sin eso, esos indicadores quedan
+      "sin límite" y el backup marca urgente.
+- [ ] Ver la página en producción con sesión de `super_admin` después del merge.
+      En local no se pudo: el login de desarrollo necesita un secreto que el
+      agente no tiene permiso de leer.
 - [ ] 2B (después de las fases 3 y 9): conectar las fuentes reales de Resend,
       Anthropic, Google y Vercel.
 

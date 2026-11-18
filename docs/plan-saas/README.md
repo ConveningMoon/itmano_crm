@@ -27,7 +27,7 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 |---|---|---|---|---|
 | 0 | Línea base medida el 2026-11-18 | [00-linea-base.md](00-linea-base.md) | — | ✅ referencia |
 | 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | ✅ `feat/saas-fase-01-seguridad` (2026-11-18), pendiente de PR |
-| 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | ⬜ pendiente |
+| 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | 🟨 2A hecha en `feat/saas-fase-02-panel` (2026-11-18), migración ya en producción; falta anotar los datos de proveedores y la 2B |
 | 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | ⬜ pendiente |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
 | 5 | Cobros con Paddle Live | [fase-05-cobros-paddle.md](fase-05-cobros-paddle.md) | 1 | ⬜ pendiente |
@@ -96,5 +96,8 @@ Anota aquí, con fecha, lo que una fase descubrió y cambia a otra.
   `resendForAccount`, nunca con `new Resend()` directo.
 - 2026-11-18 — Fase 1: nunca ha entrado una respuesta de lead (Resend Inbound
   sin configurar). La tarea de llaves inbound pasó a la fase 3.
+- 2026-11-18 — Fase 2: el build local falla a ratos al bajar fuentes de Google
+  (`curl` a fonts.googleapis.com da error SSL 35, red local). No es del código;
+  reintentar o verificar en Vercel.
 - 2026-11-18 — Fase 1: los tokens de CONDUIT vencieron el 2026-11-15. Si
   CONDUIT sigue activo, hay que emitir tokens nuevos.
