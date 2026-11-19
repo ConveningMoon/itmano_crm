@@ -28,7 +28,7 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 | 0 | Línea base medida el 2026-11-18 | [00-linea-base.md](00-linea-base.md) | — | ✅ referencia |
 | 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | ✅ `feat/saas-fase-01-seguridad` (2026-11-18), pendiente de PR |
 | 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | 🟨 2A hecha en `feat/saas-fase-02-panel` (2026-11-18), migración ya en producción; falta anotar los datos de proveedores y la 2B |
-| 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | ⬜ pendiente |
+| 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | 🟨 código hecho en `feat/saas-fase-03-correo` (2026-11-19), migración en sandbox y producción; faltan los pasos de Dylan (hook, cron-job.org, Inbound y D8) |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
 | 5 | Cobros con Paddle Live | [fase-05-cobros-paddle.md](fase-05-cobros-paddle.md) | 1 | ⬜ pendiente |
 | 6 | Límites del plan en código | [fase-06-limites-plan.md](fase-06-limites-plan.md) | 5 | ⬜ pendiente |
@@ -83,6 +83,7 @@ Cada fase las repite donde aplican. Respóndelas antes de empezar esa fase.
 | D5 | ¿Qué pasa al vencer la prueba sin pago? | Modo degradado automático al día 15 (ya existe la regla de acceso) | 6, 8 |
 | D6 | Envíos masivos de A&J con Resend Free (100/día) | Repartir el envío en días o que A&J suba de plan; decidir con A&J | 3 |
 | D7 | ¿Crédito prepagado o auto-recarga en Anthropic y Google? | Auto-recarga con tope mensual, y el panel vigila el gasto | 9 |
+| D8 | ¿A dónde van las respuestas de un equipo con dominio propio? (el MX del dominio es su buzón real) | Subdominio de respuestas (`reply.dominio.com`) con reenvío al agente | 3, 8 |
 
 ## Registro
 
@@ -101,3 +102,14 @@ Anota aquí, con fecha, lo que una fase descubrió y cambia a otra.
   reintentar o verificar en Vercel.
 - 2026-11-18 — Fase 1: los tokens de CONDUIT vencieron el 2026-11-15. Si
   CONDUIT sigue activo, hay que emitir tokens nuevos.
+- 2026-11-19 — Fase 3: el código de D6 ya está: un envío masivo que no cabe en
+  la cuota del día sale en partes y sigue solo al día siguiente. Lo que queda
+  de D6 es comercial (si A&J sube de plan). Para que la guardia actúe hay que
+  anotar la cuota de cada cuenta en `/admin/operacion`.
+- 2026-11-19 — Fase 3: con Vercel Cron, los crons también corren en el
+  proyecto sandbox. Sus correos se simulan por el guard. Un cron nuevo con
+  efectos externos que no pasen por Resend (Telegram, IA) debe comprobar el
+  entorno antes de actuar.
+- 2026-11-19 — Fase 3: Inbound en un dominio propio choca con el buzón real
+  del equipo (MX). Decisión D8 nueva; afecta a las instrucciones de DNS de la
+  fase 8C.

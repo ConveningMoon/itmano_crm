@@ -1,6 +1,8 @@
 import 'server-only'
 import { Resend } from 'resend'
 import { emailAllowed, sendGuardFromEnv, simulatedId, type SendGuard } from '@/lib/email/send-guard'
+import { installQuotaTracking } from '@/lib/email/quota-tracking'
+import { recordQuotaObservation } from '@/lib/email/quota-server'
 
 // ── Router de cuentas Resend por tenant (migración 065) ───────────────────────
 // tenants.resend_account: 'aj' → cuenta propia de A&J (RESEND_API_KEY);
@@ -51,6 +53,8 @@ export function resendForAccount(account: string | null | undefined): Resend {
   const client = new Resend(key ?? MISSING_KEY)
   if (key) {
     installSendGuard(client, sendGuardFromEnv(process.env))
+    // Por fuera del guard: sólo cuenta lo que llegó a Resend (fase 3, cuotas).
+    installQuotaTracking(client, acc, recordQuotaObservation)
   } else {
     console.error(JSON.stringify({ service: 'resend', error: 'account_key_missing', account: acc, env: ACCOUNT_ENV[acc].send }))
     missingKeyGuard(client, acc)

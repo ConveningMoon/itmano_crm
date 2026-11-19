@@ -2,6 +2,8 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { resendForAccount } from '@/lib/resend'
 import { BATCH_SIZE, PAUSE_BETWEEN_CALLS_MS, batchIdempotencyKey, sendPermissiveBatch, sleep } from '@/lib/email/batch-send'
+import { quotaBudget, quotaWaitMessage, type QuotaKind } from '@/lib/email/quota'
+import { readQuotaRemaining } from '@/lib/email/quota-server'
 import { parseEmailContent, type EmailContent } from '@/lib/email-content'
 import { chunk, decideRecipients } from '@/lib/open-houses/audience'
 import { parseBroadcastAudience } from '@/lib/broadcasts/audience'
@@ -213,9 +215,11 @@ export async function dispatchBroadcast(
   const client = resendForAccount(identity.account)
   let sentNow = 0
   let rateLimited = false
+  let quotaHit: QuotaKind | null = null
 
   // 4. Lotes.
   try {
+    const budget = quotaBudget(await readQuotaRemaining(db, identity.account))
     while (Date.now() < opts.deadline) {
       const { data: current } = await db.from('email_broadcasts').select('status').eq('id', row.id).maybeSingle()
       if ((current as any)?.status !== 'sending') return { outcome: 'stopped', sent: sentNow }
@@ -232,13 +236,19 @@ export async function dispatchBroadcast(
         }
       }
 
+      // Cuota de la cuenta de envío: el lote nunca pasa de lo que queda hoy y
+      // en el mes. Con la cuota agotada, el envío queda en espera y el
+      // orquestador lo retoma en el siguiente periodo (fase 3 del plan SaaS).
+      const allowed = budget.allowed(BATCH_SIZE)
+      if (allowed === 0) { quotaHit = budget.binding; break }
+
       const { data: pendingRows, error: pendingErr } = await db
         .from('email_broadcast_recipients')
         .select('lead_id, language, attempts')
         .eq('broadcast_id', row.id)
         .eq('status', 'pending')
         .order('lead_id')
-        .limit(BATCH_SIZE)
+        .limit(allowed)
       if (pendingErr) throw new Error(pendingErr.message)
       const pending = (pendingRows ?? []) as { lead_id: string; language: string; attempts: number }[]
       if (pending.length === 0) break
@@ -297,6 +307,8 @@ export async function dispatchBroadcast(
       if (items.length > 0) {
         const res = await sendPermissiveBatch(client, items, batchIdempotencyKey(`broadcast/${row.id}`, items.map(i => i.leadId)))
         rateLimited = res.rateLimited
+        if (res.quota) quotaHit = res.quota
+        budget.spend(res.sent.length)
         sentInBatch = res.sent.length
 
         const sentAt = new Date().toISOString()
@@ -369,7 +381,9 @@ export async function dispatchBroadcast(
     skipped_count: counts.skipped,
     failed_count:  counts.failed,
     finished_at:   done ? new Date().toISOString() : null,
-    last_error:    done ? null : rateLimited
+    last_error:    done ? null : quotaHit
+      ? quotaWaitMessage(quotaHit, { sentNow, pending: counts.pending })
+      : rateLimited
       ? 'Resend limitó la velocidad de envío; se reanuda en la próxima ejecución.'
       : 'Se reanuda en la próxima ejecución.',
   })

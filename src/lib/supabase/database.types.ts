@@ -467,6 +467,36 @@ export type Database = {
           },
         ]
       }
+      auth_email_sends: {
+        Row: {
+          action_type: string
+          created_at: string
+          error: string | null
+          id: number
+          ok: boolean
+          resend_email_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          error?: string | null
+          id?: never
+          ok: boolean
+          resend_email_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          error?: string | null
+          id?: never
+          ok?: boolean
+          resend_email_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       channel_page_views: {
         Row: {
           channel_id: string
@@ -2825,6 +2855,54 @@ export type Database = {
           },
         ]
       }
+      resend_quota_state: {
+        Row: {
+          account: string
+          daily_used: number | null
+          exhausted: string | null
+          exhausted_at: string | null
+          headers_at: string | null
+          monthly_used: number | null
+          updated_at: string
+        }
+        Insert: {
+          account: string
+          daily_used?: number | null
+          exhausted?: string | null
+          exhausted_at?: string | null
+          headers_at?: string | null
+          monthly_used?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account?: string
+          daily_used?: number | null
+          exhausted?: string | null
+          exhausted_at?: string | null
+          headers_at?: string | null
+          monthly_used?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      resend_usage_daily: {
+        Row: {
+          account: string
+          day: string
+          sent: number
+        }
+        Insert: {
+          account: string
+          day: string
+          sent?: number
+        }
+        Update: {
+          account?: string
+          day?: string
+          sent?: number
+        }
+        Relationships: []
+      }
       scoring_calibrations: {
         Row: {
           actor_user_id: string | null
@@ -3487,7 +3565,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      record_resend_send: {
+        Args: {
+          p_account: string
+          p_daily_used?: number
+          p_exhausted?: string
+          p_monthly_used?: number
+          p_sent: number
+        }
+        Returns: undefined
+      }
       refresh_quality_bands: { Args: never; Returns: number }
+      resend_quota_status: { Args: { p_account: string }; Returns: Json }
       rls_jwt_base64url_encode: { Args: { data: string }; Returns: string }
       rls_jwt_sign: { Args: { payload: Json; secret: string }; Returns: string }
       rls_test_create_user: {

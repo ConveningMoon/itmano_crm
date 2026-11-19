@@ -104,11 +104,25 @@ destinatarios sean `@resend.dev` o estén en `EMAIL_TEST_ALLOWLIST` (emails o
 simula en vez de enviar. Para probar entregas y webhooks reales usa
 `delivered@resend.dev`, `bounced@resend.dev` y `complained@resend.dev`.
 
+Por fuera del guard, `resendForAccount` instala también el registro de cuota
+(`src/lib/email/quota-tracking.ts`): cada envío real suma a
+`resend_usage_daily` y guarda las cabeceras de cuota de Resend en
+`resend_quota_state`. Los envíos masivos leen la cuota restante antes de salir
+(`readQuotaRemaining`) y dejan en espera lo que no cabe. Un camino de envío
+nuevo debe usar `resendForAccount`, nunca `new Resend()`, o su cuota no se mide.
+
+Los Magic Links salen por el Send Email Hook de Supabase Auth hacia
+`/api/auth/send-email` cuando el hook está activo en el proyecto (fase 3 del
+plan SaaS; la ruta necesita `SEND_EMAIL_HOOK_SECRET`). En sandbox también pasan
+por el guard: sin tu correo en `EMAIL_TEST_ALLOWLIST`, el enlace se simula y no
+llega. Volver a SMTP es desactivar el hook en Authentication → Hooks.
+
 Los enlaces de baja y de RSVP necesitan `UNSUBSCRIBE_SECRET`, y
-`/api/cron/*` necesita `CRON_SECRET`. `score-decay` y `platform-ops` los
-programa Vercel Cron (`vercel.json`, llamada `GET`) en ambos proyectos;
-`sequence-orchestrator` y `billing-lifecycle` los llama cron-job.org. Cada cron
-y los webhooks de Resend y Paddle dejan su latido en `cron_heartbeats`
+`/api/cron/*` necesita `CRON_SECRET`. Todos los crons (`score-decay`,
+`sequence-orchestrator`, `billing-lifecycle`, `platform-ops` y `warm`) los
+programa Vercel Cron (`vercel.json`, llamada `GET`) en ambos proyectos; en
+sandbox sus correos se simulan por el guard. Cada cron
+y los webhooks de Resend, Paddle y del hook de Auth dejan su latido en `cron_heartbeats`
 (`withHeartbeat`, `src/lib/ops/heartbeat.ts`): un cron nuevo se envuelve igual y
 se registra en `src/lib/ops/jobs.ts`, o el panel de operación
 (`/admin/operacion`) no lo vigila. Los endpoints públicos que crean

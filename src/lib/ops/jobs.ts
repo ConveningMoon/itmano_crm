@@ -3,7 +3,7 @@
 //
 // `everyMinutes` es la cadencia esperada. Un latido se considera viejo cuando
 // pasaron más de STALE_FACTOR × esa cadencia, para no alarmar por un minuto de
-// retraso de Vercel Cron o de cron-job.org. Los webhooks no tienen cadencia
+// retraso de Vercel Cron. Los webhooks no tienen cadencia
 // (dependen de que haya correos o pagos): sólo informan cuándo llegó el último.
 
 export type OpsJobId =
@@ -14,6 +14,7 @@ export type OpsJobId =
   | 'cron:warm'
   | 'webhook:resend'
   | 'webhook:paddle'
+  | 'webhook:auth-email'
 
 export interface OpsJobDef {
   label:        string
@@ -24,12 +25,13 @@ export interface OpsJobDef {
 
 export const OPS_JOBS: Record<OpsJobId, OpsJobDef> = {
   'cron:score-decay':           { label: 'Decay del score y bandas de calidad', trigger: 'Vercel Cron (diario)', everyMinutes: 24 * 60 },
-  'cron:sequence-orchestrator': { label: 'Orquestador de secuencias y envíos programados', trigger: 'cron-job.org (cada hora)', everyMinutes: 60 },
-  'cron:billing-lifecycle':     { label: 'Ciclo de facturación (gracias y retención)', trigger: 'cron-job.org (diario)', everyMinutes: 24 * 60 },
+  'cron:sequence-orchestrator': { label: 'Orquestador de secuencias y envíos programados', trigger: 'Vercel Cron (cada hora)', everyMinutes: 60 },
+  'cron:billing-lifecycle':     { label: 'Ciclo de facturación (gracias y retención)', trigger: 'Vercel Cron (diario)', everyMinutes: 24 * 60 },
   'cron:platform-ops':          { label: 'Métricas y alertas de plataforma', trigger: 'Vercel Cron (diario)', everyMinutes: 24 * 60 },
   'cron:warm':                  { label: 'Calentar la base', trigger: 'Vercel Cron (cada minuto)', everyMinutes: 1 },
   'webhook:resend':             { label: 'Eventos de Resend (entregas, rebotes, respuestas)', trigger: 'Webhook de Resend', everyMinutes: null },
   'webhook:paddle':             { label: 'Eventos de Paddle (pagos)', trigger: 'Webhook de Paddle', everyMinutes: null },
+  'webhook:auth-email':         { label: 'Correos de acceso (Magic Links)', trigger: 'Send Email Hook de Supabase Auth', everyMinutes: null },
 }
 
 export const OPS_JOB_IDS = Object.keys(OPS_JOBS) as OpsJobId[]

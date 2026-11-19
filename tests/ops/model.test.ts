@@ -145,3 +145,33 @@ describe('heartbeatOutcome', () => {
     expect(heartbeatOutcome(400)).toBe('ok')
   })
 })
+
+describe('correos de Resend en el panel (fase 3)', () => {
+  const resendCard = (m: ReturnType<typeof buildOpsModel>) => m.providers.find(p => p.key === 'resend_itmano')!
+
+  it('suma los Magic Links y gana la fuente más alta', () => {
+    const m = buildOpsModel(input({
+      settings: [setting('resend_itmano', { daily_quota: 100 })],
+      totals: {
+        db_bytes: 0, storage: {}, domains: {}, ai_month: {},
+        emails: { itmano: { today: 10, month: 200 } },
+        auth_emails: { today: 5, month: 40, failed_today: 1 },
+        resend: { itmano: { counted_today: 12, counted_month: 100, header_daily: null, header_monthly: 260, exhausted: null, daily_quota: 100, monthly_quota: null } },
+      },
+    }), NOW)
+    const card = resendCard(m)
+    expect(card.gauges.find(g => g.id === 'emails_today')!.value).toBe(15)
+    expect(card.gauges.find(g => g.id === 'emails_month')!.value).toBe(260)
+    expect(card.facts.map(f => f.label)).toEqual(['Magic Links', 'Magic Links fallidos hoy'])
+  })
+
+  it('un 429 de cuota de hoy pone la tarjeta en rojo aunque no haya cuota anotada', () => {
+    const m = buildOpsModel(input({
+      totals: {
+        db_bytes: 0, storage: {}, emails: {}, domains: {}, ai_month: {},
+        resend: { itmano: { counted_today: 3, counted_month: 3, header_daily: null, header_monthly: null, exhausted: 'daily', daily_quota: null, monthly_quota: null } },
+      },
+    }), NOW)
+    expect(resendCard(m).gauges.find(g => g.id === 'emails_today')!.status).toBe('critical')
+  })
+})

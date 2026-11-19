@@ -81,7 +81,7 @@ async function runOrchestrator(request: NextRequest) {
   }
 
   // ── Stage 2: process each run independently ────────────────────────────────
-  let sent = 0, completed = 0, paused = 0
+  let sent = 0, completed = 0, paused = 0, postponed = 0
   const dryRunDetails: DryRunDetail[] = []
 
   for (const row of runs) {
@@ -93,6 +93,7 @@ async function runOrchestrator(request: NextRequest) {
       if (result.action === 'sent')           sent++
       else if (result.action === 'completed') { sent++; completed++ }
       else if (result.action === 'paused')    paused++
+      else if (result.action === 'postponed') postponed++
       // 'skipped' counts in processed but not in sent/paused/completed
 
       if (dryRun) {
@@ -162,6 +163,7 @@ async function runOrchestrator(request: NextRequest) {
     sent,
     completed,
     paused,
+    postponed,
     pre_close_sent: preCloseSent,
     open_houses:    openHouses,
     ts:             new Date().toISOString(),
@@ -170,3 +172,6 @@ async function runOrchestrator(request: NextRequest) {
 }
 
 export const POST = withHeartbeat('cron:sequence-orchestrator', runOrchestrator)
+// Vercel Cron llama con GET (vercel.json); cron-job.org llamaba con POST. Se
+// aceptan los dos mientras dura el cambio: el mismo handler, el mismo latido.
+export const GET = withHeartbeat('cron:sequence-orchestrator', runOrchestrator)

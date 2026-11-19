@@ -9,6 +9,7 @@
 import { PLANS, PARTNER_SEAT } from '@/lib/plans'
 import type { BillingCycle, SubscriptionPlan, SubscriptionStatus } from '@/lib/subscriptions'
 import { OPS_JOBS, OPS_JOB_IDS, staleAfterMs, type OpsJobId } from '@/lib/ops/jobs'
+import { parseQuotaStatus, quotaRemaining, type QuotaKind } from '@/lib/email/quota'
 
 // ─── Entradas ────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,10 @@ export interface PlatformTotals {
   emails:   Partial<Record<ResendAccountKey, { today: number; month: number }>>
   domains:  Partial<Record<ResendAccountKey, number>>
   ai_month: Partial<Record<AiProviderKey, number>>
+  /** Cuota medida en cada envío (resend_quota_status). Desde la fase 3. */
+  resend?:  Partial<Record<ResendAccountKey, unknown>>
+  /** Correos del Send Email Hook de Auth (salen de la cuenta de ITMANO). */
+  auth_emails?: { today: number; month: number; failed_today: number } | null
 }
 
 export type ResendAccountKey = 'itmano' | 'aj'
@@ -164,19 +169,44 @@ function settingFor(settings: ProviderSettingRow[], key: string): ProviderSettin
 function resendCard(input: OpsInput, account: ResendAccountKey): ProviderCard {
   const key = account === 'itmano' ? 'resend_itmano' : 'resend_aj'
   const s = settingFor(input.settings, key)
-  const emails = input.totals.emails[account] ?? { today: 0, month: 0 }
+  const emails = resendUsage(input.totals, account)
   const domains = input.totals.domains[account] ?? 0
-  const authNote = account === 'itmano'
-    ? 'No incluye los Magic Links de Supabase: se cuentan a partir de la fase 3.'
+  const note = account === 'itmano'
+    ? 'Incluye los Magic Links de Supabase y todo envío real de la cuenta.'
     : 'Cuenta propia de A&J: la paga A&J, pero un tope agotado corta sus envíos.'
+  const exhausted = emails.exhausted
   const gauges = [
-    gauge({ id: 'emails_today', label: 'Correos hoy', value: emails.today, limit: s?.daily_quota ?? null, unit: 'emails', period: 'day', provider: 'resend', account, alertable: true, hint: authNote }),
-    gauge({ id: 'emails_month', label: 'Correos del mes', value: emails.month, limit: s?.monthly_quota ?? null, unit: 'emails', period: 'month', provider: 'resend', account, alertable: true }),
+    gauge({ id: 'emails_today', label: 'Correos hoy', value: emails.today, limit: s?.daily_quota ?? null, unit: 'emails', period: 'day', provider: 'resend', account, alertable: true, hint: note, ...(exhausted === 'daily' && { forceStatus: 'critical' as const }) }),
+    gauge({ id: 'emails_month', label: 'Correos del mes', value: emails.month, limit: s?.monthly_quota ?? null, unit: 'emails', period: 'month', provider: 'resend', account, alertable: true, ...(exhausted === 'monthly' && { forceStatus: 'critical' as const }) }),
     gauge({ id: 'domains', label: 'Dominios propios', value: domains, limit: s?.domain_slots ?? null, unit: 'domains', period: 'none', provider: 'resend', account, alertable: true }),
   ]
+  const facts: { label: string; value: string }[] = []
+  if (exhausted) facts.push({ label: 'Resend', value: exhausted === 'daily' ? 'Rechazó envíos hoy por el tope diario' : 'Rechazó envíos este mes por el tope mensual' })
+  const auth = input.totals.auth_emails
+  if (account === 'itmano' && auth) {
+    facts.push({ label: 'Magic Links', value: `${formatValue('emails', auth.today)} hoy · ${formatValue('emails', auth.month)} en el mes` })
+    if (auth.failed_today > 0) facts.push({ label: 'Magic Links fallidos hoy', value: String(auth.failed_today) })
+  }
   return {
     key, label: s?.label ?? key, plan: s?.plan ?? null, monthlyCostUsd: s?.monthly_cost_usd ?? null,
-    gauges, facts: [], status: worst(gauges.map(g => g.status)), notes: s?.notes ?? null,
+    gauges, facts, status: worst(gauges.map(g => g.status)), notes: s?.notes ?? null,
+  }
+}
+
+/**
+ * Correos de una cuenta hoy y en el mes. Gana la fuente más alta: el contador
+ * de envíos reales (resend_usage_daily), la cabecera de cuota de Resend o, para
+ * los días anteriores a la fase 3, email_sends más los correos de Auth.
+ */
+export function resendUsage(totals: PlatformTotals, account: ResendAccountKey): { today: number; month: number; exhausted: QuotaKind | null } {
+  const legacy = totals.emails[account] ?? { today: 0, month: 0 }
+  const auth = account === 'itmano' && totals.auth_emails ? totals.auth_emails : { today: 0, month: 0 }
+  const raw = totals.resend?.[account]
+  const q = raw ? quotaRemaining(parseQuotaStatus(raw)) : null
+  return {
+    today: Math.max(legacy.today + auth.today, q?.usedToday ?? 0),
+    month: Math.max(legacy.month + auth.month, q?.usedMonth ?? 0),
+    exhausted: raw ? parseQuotaStatus(raw).exhausted : null,
   }
 }
 

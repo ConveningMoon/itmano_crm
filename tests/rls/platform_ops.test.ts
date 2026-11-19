@@ -11,7 +11,11 @@ import {
 // PLATAFORMA: sólo el super_admin las lee, nadie las escribe con su sesión (lo
 // hace el servidor con service_role) y sus RPC no las puede llamar un usuario.
 
-const TABLES = ['provider_settings', 'cron_heartbeats', 'platform_metrics', 'platform_alerts'] as const
+const TABLES = [
+  'provider_settings', 'cron_heartbeats', 'platform_metrics', 'platform_alerts',
+  // Fase 3: cuotas de Resend y correos de Auth.
+  'resend_usage_daily', 'resend_quota_state', 'auth_email_sends',
+] as const
 
 describe('RLS: panel de operación', () => {
   beforeAll(async () => { await createFixtures() })
@@ -49,5 +53,17 @@ describe('RLS: panel de operación', () => {
     }
     const { error } = await client.rpc('record_heartbeat', { p_job: 'x', p_ok: true })
     expect(error).not.toBeNull()
+    const { error: quotaWrite } = await client.rpc('record_resend_send', { p_account: 'itmano', p_sent: 1000 })
+    expect(quotaWrite).not.toBeNull()
+    const { error: quotaRead } = await client.rpc('resend_quota_status', { p_account: 'itmano' })
+    expect(quotaRead).not.toBeNull()
+  })
+
+  it('nadie inserta correos de Auth ni cuota con su sesión', async () => {
+    const client = await asUser(SUPER_ADMIN_EMAIL)
+    const { error: a } = await client.from('auth_email_sends').insert({ action_type: 'magiclink', ok: true })
+    expect(a?.code).toBe('42501')
+    const { error: u } = await client.from('resend_usage_daily').insert({ account: 'itmano', day: '2026-01-01', sent: 1 })
+    expect(u?.code).toBe('42501')
   })
 })

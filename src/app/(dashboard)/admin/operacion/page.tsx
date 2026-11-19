@@ -28,6 +28,7 @@ function integrationGroups(): IntegrationGroup[] {
     { label: 'Resend', vars: [
       v('RESEND_API_KEY_ITMANO'), v('RESEND_API_KEY', true), v('RESEND_WEBHOOK_SECRET'),
       v('RESEND_INBOUND_API_KEY_ITMANO', true), v('RESEND_INBOUND_API_KEY', true), v('UNSUBSCRIBE_SECRET'),
+      v('SEND_EMAIL_HOOK_SECRET', true), v('AUTH_EMAIL_FROM', true),
     ] },
     { label: 'IA', vars: [v('ANTHROPIC_API_KEY'), v('GOOGLE_AI_API_KEY')] },
     { label: 'Paddle', vars: [

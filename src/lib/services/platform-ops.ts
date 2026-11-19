@@ -110,12 +110,13 @@ export async function runPlatformOps(now: Date = new Date()): Promise<PlatformOp
   // 3. Purga.
   try {
     const cutoff = new Date(now.getTime() - RETENTION_DAYS * 86_400_000).toISOString()
-    const [m, a] = await Promise.all([
+    const [m, a, u, e] = await Promise.all([
       db.from('platform_metrics').delete().lt('captured_at', cutoff),
       db.from('platform_alerts').delete().lt('sent_at', cutoff),
+      db.from('resend_usage_daily').delete().lt('day', cutoff.slice(0, 10)),
+      db.from('auth_email_sends').delete().lt('created_at', cutoff),
     ])
-    if (m.error) throw m.error
-    if (a.error) throw a.error
+    for (const r of [m, a, u, e]) if (r.error) throw r.error
     report.purged = true
   } catch (err) {
     report.errors.push(`purge: ${err instanceof Error ? err.message : String(err)}`)
