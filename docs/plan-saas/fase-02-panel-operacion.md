@@ -59,7 +59,7 @@ alertas por Telegram antes de que algo se agote.
 ## Tareas
 
 Rama `feat/saas-fase-02-panel`. Plan de tareas:
-`docs/superpowers/plans/2026-11-18-saas-fase-02-panel-operacion.md`.
+`docs/superpowers/plans/2026-11-18-saas-fase-02-panel-operacion.md` (local: `docs/superpowers/` no se versiona; las decisiones que importan están en este archivo).
 
 - [x] Plan de tareas de la fase.
 - [x] Migración `platform_ops`: 4 tablas (`cron_heartbeats`,

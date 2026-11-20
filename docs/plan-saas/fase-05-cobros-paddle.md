@@ -5,7 +5,7 @@ tarjeta y cancelar solo, en producción.
 
 Diseño existente: `docs/superpowers/specs/2026-07-27-paddle-billing-design.md`
 y su plan. Plan de tareas de esta fase:
-`docs/superpowers/plans/2026-11-20-saas-fase-05-paddle.md`.
+`docs/superpowers/plans/2026-11-20-saas-fase-05-paddle.md` (local: `docs/superpowers/` no se versiona; las decisiones que importan están en este archivo).
 
 ## Decisiones
 

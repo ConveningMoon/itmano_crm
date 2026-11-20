@@ -54,6 +54,8 @@ necesita casi todo lo anterior.
 4. Antes de escribir código, convierte la fase en spec y plan de tareas con
    el flujo habitual (`docs/superpowers/specs` y `docs/superpowers/plans`).
    Este archivo dice **qué** y **por qué**; el plan de la fase dice **cómo**.
+   `docs/superpowers/` está en `.gitignore`: el plan es local. Las decisiones
+   de diseño que otra sesión necesita se copian al archivo de la fase.
 5. Marca la fase 🟨 en la tabla de estado en el primer commit de la rama.
 6. Al terminar: verificación de `AGENTS.md`, commit, push, marca ✅ con el
    número de PR (Dylan abre el PR) y anota en "Registro" lo aprendido que

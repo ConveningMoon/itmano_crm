@@ -17,7 +17,7 @@ silencio por un tope.
 ## Tareas
 
 Rama `feat/saas-fase-03-correo` (sale de `feat/saas-fase-02-panel`). Plan de
-tareas: `docs/superpowers/plans/2026-11-19-saas-fase-03-correo.md`.
+tareas: `docs/superpowers/plans/2026-11-19-saas-fase-03-correo.md` (local: `docs/superpowers/` no se versiona; las decisiones que importan están en este archivo).
 
 ### Magic Links medibles (Send Email Hook)
 
