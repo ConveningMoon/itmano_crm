@@ -17,7 +17,7 @@ import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/em
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
-// same way as updateScoreRules. The admin client (service_role) is the correct
+// same way as the scoring actions (scoring-actions.ts). The admin client (service_role) is the correct
 // path: tenants/user_profiles have SELECT-only RLS, and auth.users is only
 // reachable via the admin API.
 

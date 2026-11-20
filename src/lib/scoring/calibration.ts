@@ -145,3 +145,79 @@ export function recalibrate(rules: CalibrationRule[], order: string[]): Calibrat
   })
   return salida
 }
+
+// ── Calibración automática ────────────────────────────────────────────────────
+//
+// El orden de los factores deja de depender de que alguien mueva flechas: el
+// cron diario lo ajusta solo cuando hay evidencia. Con barandas, porque una
+// agencia cierra pocas operaciones y el ruido de una semana no debe reordenar
+// el modelo:
+//
+//   - Sin MIN_CLOSES_FOR_EVIDENCE cierres con perfil no se toca nada.
+//   - Como mucho una vez cada AUTO_CALIBRATION_COOLDOWN_DAYS días (cuenta
+//     también una calibración manual o un restablecimiento).
+//   - Un factor adelanta a otro sólo si separa al menos
+//     AUTO_CALIBRATION_MIN_GAP_PP puntos porcentuales más. Las diferencias
+//     menores son ruido y conservan el orden vigente (ordenamiento estable).
+//
+// Un factor sin muestra suficiente (spread null) no sube, pero sí puede ser
+// adelantado por uno que demuestre separar. No se limita a "un puesto por
+// pasada": varios factores valen lo mismo (5), y un factor atascado detrás de
+// sus iguales nunca llegaría a moverse.
+
+export const AUTO_CALIBRATION_MIN_GAP_PP = 5
+export const AUTO_CALIBRATION_COOLDOWN_DAYS = 7
+
+export type AutoCalibrationPlan =
+  | { apply: true; before: string[]; after: string[]; changes: CalibratedPoint[] }
+  | { apply: false; reason: 'sin_evidencia' | 'reciente' | 'sin_cambios' }
+
+export function planAutoCalibration(args: {
+  /** Reglas EFECTIVAS del tenant (globales con sus overrides): el estado actual. */
+  effective:   CalibrationRule[]
+  /** Reglas GLOBALES: la base sobre la que se reparten los máximos. */
+  global:      CalibrationRule[]
+  evidence:    FitEvidence
+  lastCalibrationAt: Date | null
+  now:         Date
+}): AutoCalibrationPlan {
+  const { effective, global, evidence, lastCalibrationAt, now } = args
+  if (!evidence.enough) return { apply: false, reason: 'sin_evidencia' }
+
+  if (lastCalibrationAt) {
+    const dias = (now.getTime() - lastCalibrationAt.getTime()) / 86_400_000
+    if (dias < AUTO_CALIBRATION_COOLDOWN_DAYS) return { apply: false, reason: 'reciente' }
+  }
+
+  const before = currentOrder(effective)
+  const spread = new Map(evidence.dimensions.map(d => [d.dimension, d.spread]))
+
+  // Inserción con umbral: cada factor sube mientras separe claramente más que
+  // el que tiene encima.
+  const after: string[] = []
+  for (const d of before) {
+    const propio = spread.get(d) ?? null
+    let i = after.length
+    while (i > 0 && propio !== null && propio - (spread.get(after[i - 1]) ?? 0) >= AUTO_CALIBRATION_MIN_GAP_PP) i--
+    after.splice(i, 0, d)
+  }
+
+  if (after.join() === before.join()) return { apply: false, reason: 'sin_cambios' }
+
+  // Dos factores con el mismo máximo (varios valen 5) pueden intercambiarse sin
+  // que cambie un solo punto. Si el resultado es idéntico a lo vigente no hay
+  // nada que aplicar: si no, el cron registraría la misma "calibración" vacía
+  // cada semana.
+  const changes = recalibrate(global, after)
+  const objetivo = new Map(
+    global.filter(r => r.category === 'fit' && r.matchValue !== null)
+      .map(r => [`${r.dimension}|${r.matchValue}`, r.points]),
+  )
+  for (const c of changes) objetivo.set(`${c.dimension}|${c.matchValue}`, c.to)
+  const igual = effective
+    .filter(r => r.category === 'fit' && r.matchValue !== null)
+    .every(r => objetivo.get(`${r.dimension}|${r.matchValue}`) === r.points)
+  if (igual) return { apply: false, reason: 'sin_cambios' }
+
+  return { apply: true, before, after, changes }
+}

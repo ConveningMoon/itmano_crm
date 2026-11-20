@@ -19,6 +19,7 @@ import { HubFeed } from './hub-feed'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { AdminSkeleton } from './admin-skeleton'
+import { ScoringTab, ScoringTabSkeleton } from './scoring-tab'
 import { FechaLocal } from '@/components/ui/local-date'
 import { pageMetadata } from '@/lib/routing/page-titles'
 
@@ -32,7 +33,7 @@ async function AdminContent() {
   const ctx = await getCurrentTenantContext()
   if (ctx.role !== 'super_admin') redirect('/dashboard')
 
-  const [{ kpis, tenants, scoringStaleSince }, feed, aiUsage, aiDaily, leadFit, briefingOutcomes] = await Promise.all([
+  const [{ kpis, tenants, scoringStaleSince, scoringBlindTenants }, feed, aiUsage, aiDaily, leadFit, briefingOutcomes] = await Promise.all([
     getHubData(),
     getNotifications(null, { limit: 10 }),
     // Vista global: todos los tenants + uso ITMANO sin tenant.
@@ -68,6 +69,21 @@ async function AdminContent() {
         </div>
       )}
 
+      {scoringBlindTenants.length > 0 && (
+        <div role="alert" className="settings-alert settings-alert-block settings-alert-wide" style={{ marginBottom: '16px' }}>
+          <AlertTriangle size={14} aria-hidden />
+          <span>
+            {scoringBlindTenants.length === 1
+              ? <>En <strong>{scoringBlindTenants[0].name}</strong> la calidad no distingue entre leads: casi todos tienen el mismo puntaje.</>
+              : <>En <strong>{scoringBlindTenants.map(t => t.name).join(', ')}</strong> la calidad no distingue entre leads.</>}
+            {' '}
+            {/* <a> y no <Link>: Tabs lee la pestaña de la URL al montarse, y una
+                navegación suave a esta misma página no lo vuelve a montar. */}
+            <a href="/admin?tab=scoring" style={{ color: 'inherit', textDecoration: 'underline' }}>Ver por qué</a>
+          </span>
+        </div>
+      )}
+
       {/* KPIs de plataforma — siempre visibles, encima de los tabs */}
       <div className="nl-kpis">
         {kpiCards.map(card => (
@@ -81,6 +97,7 @@ async function AdminContent() {
           { key: 'tenants', label: 'Tenants', badge: kpis.tenants },
           { key: 'ia', label: 'Uso de IA' },
           { key: 'fit', label: 'Fit IA', badge: leadFit.count || undefined },
+          { key: 'scoring', label: 'Scoring', badge: scoringBlindTenants.length || undefined },
           { key: 'gestion', label: 'Gestión' },
         ]}
         content={{
@@ -110,6 +127,11 @@ async function AdminContent() {
               <BriefingOutcomesPanel outcomes={briefingOutcomes} />
               <LeadFitPanel summary={leadFit} />
             </div>
+          ),
+          scoring: (
+            <Suspense fallback={<ScoringTabSkeleton />}>
+              <ScoringTab />
+            </Suspense>
           ),
           gestion: <AdminClient tenants={tenants} />,
         }}

@@ -46,7 +46,7 @@ las tomadas están marcadas con *Decisión*.
 | UX-004 | Hecho: aviso de duplicado con "Abrir lead existente" o "Registrar igualmente", y correos grupales y de open house deduplicados por email (`duplicate_email`). |
 | UX-005 | Hecho: `checkoutPlans()`. *Decisión:* con suscripción activa o pago vencido nunca se ofrece checkout de otro plan; mejorar va por "Cambiar de plan". |
 | UX-006 | Hecho. *Decisión:* acciones del agente permitidas en En proceso (`MANUAL_ACTION_STAGES`), con `disabled` real en Cerrado y Perdido. |
-| UX-007 | Hecho (alcance reducido): aviso "Modelo global" y doble confirmación que nombra a todos los tenants. Mover la edición al Centro de control queda para otra tanda. |
+| UX-007 | Hecho: aviso "Modelo global" (tanda 1). La edición se movió al Centro de control → Scoring en la rama `feat/scoring-automatico`, con vista previa del impacto por tenant. |
 | SEC-1 | Hecho: `X-Frame-Options`/`frame-ancestors 'self'` en el CRM (no en subdominios alojados, que se incrustan a propósito), `nosniff`, `Referrer-Policy`, sin `x-powered-by`. |
 | UX-012 | Hecho de paso: el éxito sólo menciona la secuencia si el lead entró en una, y ofrece "Ver lead". |
 

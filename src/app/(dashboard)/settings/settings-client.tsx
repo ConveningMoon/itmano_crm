@@ -4,15 +4,11 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Agent } from '@/lib/types'
 import type { TenantRole } from '@/lib/auth/tenant-context'
-import type { ScoreRule } from '@/lib/data/score-rules'
 import type { AiUsageSummary } from '@/lib/data/ai-usage'
 import type { AiUsageLimitView } from '@/lib/ai-usage/view'
 import type { AgentAiBreakdown } from '@/lib/data/ai-usage'
 import { AiUsageSection } from './ai-usage-section'
 import type { TenantSubscription } from '@/lib/subscriptions'
-import { ScoringSection } from './scoring-section'
-import { CalibrationPanel } from './calibration-panel'
-import type { FitEvidence } from '@/lib/scoring/calibration'
 import { BusinessProfileSection } from './business-profile-section'
 import { TagsSection } from './tags-section'
 import type { LeadTag } from '@/lib/leads/tags'
@@ -35,15 +31,9 @@ interface Props {
   agentAccess: Record<string, boolean>
   accessCount: number
   businessProfile: BusinessProfile
-  // Sólo super_admin edita la allowlist de newsletters — el resto del equipo
-  // la ve en solo lectura. Mismo criterio que canEditScoring.
-  scoringRules: ScoreRule[]
-  // Valores recomendados por ITMANO (reglas globales) por id de regla — para el
-  // botón "Restablecer a recomendados" del scoring.
-  recommendedRules: Record<string, { points: number; isActive: boolean }>
-  canEditScoring: boolean
-  // Sólo llega para super_admin — el panel de calibración es de ITMANO.
-  fitEvidence: FitEvidence | null
+  // Configuración → Scoring, ya renderizado en el servidor. Sólo llega para
+  // super_admin (la pestaña no existe para el resto); null en otro caso.
+  scoringPanel: React.ReactNode
   canManageAgents: boolean
   multiAgent: boolean
   canLinkSelf: boolean
@@ -66,8 +56,8 @@ interface Props {
 }
 
 export function SettingsClient({
-  tenant, agents, agentAccess, accessCount, businessProfile, scoringRules, recommendedRules,
-  canEditScoring, fitEvidence, canManageAgents, multiAgent, canLinkSelf, myAgentId, senderDomain, ownerAgentId, canDeleteAgents, userEmail, userRole,
+  tenant, agents, agentAccess, accessCount, businessProfile, scoringPanel,
+  canManageAgents, multiAgent, canLinkSelf, myAgentId, senderDomain, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
   leadTags, leadTagCounts,
 }: Props) {
@@ -129,18 +119,8 @@ export function SettingsClient({
       ),
       scoring: (
         <div className="settings-stack">
-          <SettingsSectionHead title="Scoring" description="Cómo se puntúa a cada lead." />
-          {fitEvidence && (
-            <CalibrationPanel
-              rules={scoringRules.map(r => ({
-                category: r.category, dimension: r.dimension,
-                matchValue: r.matchValue, points: r.points, isActive: r.isActive,
-              }))}
-              evidence={fitEvidence}
-              tenantId={tenant.id}
-            />
-          )}
-          <ScoringSection rules={scoringRules} recommended={recommendedRules} canEdit={canEditScoring} />
+          <SettingsSectionHead title="Scoring" description="Si el score distingue a los leads de este equipo y cómo se calibra." />
+          {scoringPanel}
         </div>
       ),
       ia: (

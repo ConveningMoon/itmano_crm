@@ -2,7 +2,6 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mapAgent, type AgentRow } from '@/lib/db'
-import { getScoreRulesBundle } from '@/lib/data/score-rules'
 import { getAiUsageSummary, getAgentAiBreakdown } from '@/lib/data/ai-usage'
 import { maskAiCosts } from '@/lib/ai-usage/view'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
@@ -12,9 +11,7 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
 import { getBusinessProfile } from '@/lib/data/business-profile'
 import { EMPTY_PROFILE } from '@/lib/business/profile'
-import { getFitEvidence } from '@/lib/data/fit-evidence'
 import { countLeadsByTag, listLeadTags } from '@/lib/data/lead-tags'
-import type { FitEvidence } from '@/lib/scoring/calibration'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { resolveSenderIdentity, usesSharedDomain } from '@/lib/services/sender-identity'
 import { domainOf } from '@/lib/email/sender-address'
@@ -24,6 +21,7 @@ import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { DEFAULT_TENANT_COLOR } from '@/lib/config'
 import { SettingsBodySkeleton } from './settings-skeleton'
+import { TenantScoringPanel, TenantScoringSkeleton } from './tenant-scoring-panel'
 import { pageMetadata } from '@/lib/routing/page-titles'
 
 export const metadata = pageMetadata('/settings')
@@ -47,9 +45,6 @@ async function SettingsContent() {
 
   // Identidad (id + email) sale del contexto: ya validó el JWT, así que pedirle
   // el usuario otra vez al servidor de auth solo sumaba una ida y vuelta.
-  // La evidencia del fit sólo la mira el panel de calibración, que es de
-  // super_admin: para el resto no se paga la consulta.
-  const wantsCalibration = ctx.role === 'super_admin'
 
   // "Tu negocio" es del equipo, no del agente: sólo owner/super la ven. Para el
   // rol 'agent' ni se consulta — así no viaja en el payload RSC de una pestaña
@@ -61,15 +56,14 @@ async function SettingsContent() {
   // payload RSC (mismo criterio que canSeeBusiness).
   const canManageTags = ctx.role !== 'agent'
 
-  // Una sola ola. Las reglas globales y las efectivas salen de la misma
-  // consulta (getScoreRulesBundle) y la lista de owners va aquí y no en un
-  // await suelto más abajo, que era una ola entera más por su cuenta.
-  const [tenantRow, { data: rawAgents }, businessProfile, scoreRules, { data: ownerProfiles }, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, fitEvidence, leadTags, leadTagCounts, tenantAccess] = await Promise.all([
+  // Una sola ola. La lista de owners va aquí y no en un await suelto más abajo,
+  // que era una ola entera más por su cuenta. El scoring (sólo super_admin) va
+  // aparte, en su propio <Suspense>: no retrasa el resto de Configuración.
+  const [tenantRow, { data: rawAgents }, businessProfile, { data: ownerProfiles }, accessCountRes, aiUsageRaw, aiLimit, subscription, aiByAgentRaw, leadTags, leadTagCounts, tenantAccess] = await Promise.all([
     // Misma fila (y mismo round-trip) que el shell: ver getTenantRow.
     getTenantRow(tenantId),
     supabase.from('agents').select('*').eq('tenant_id', tenantId).eq('active', true).order('name'),
     canSeeBusiness ? getBusinessProfile(tenantId) : Promise.resolve(EMPTY_PROFILE),
-    getScoreRulesBundle(tenantId),
     // Qué agente es el owner del tenant (agents.user_id ↔ user_profiles agent_owner).
     supabase.from('user_profiles').select('id').eq('tenant_id', tenantId).eq('role', 'agent_owner'),
     // Honest "active accesses" = every login profile in this tenant (owner + any
@@ -79,13 +73,10 @@ async function SettingsContent() {
     getAiLimitIndicatorFor(ctx),
     getSubscription(tenantId),
     isAgentViewer ? Promise.resolve(null) : getAgentAiBreakdown(tenantId),
-    wantsCalibration ? getFitEvidence(tenantId) : Promise.resolve(null as FitEvidence | null),
     canManageTags ? listLeadTags(tenantId)    : Promise.resolve([]),
     canManageTags ? countLeadsByTag(tenantId) : Promise.resolve({}),
     getTenantAccessFor(tenantId),
   ])
-  const scoringRules = scoreRules.effective
-  const globalRules  = scoreRules.global
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cliente sin tipar; columns() ya validó la lista contra el esquema
   const tenantRowAny = tenantRow as any
@@ -109,11 +100,6 @@ async function SettingsContent() {
     : null
   const senderDomain = senderIdentity && !usesSharedDomain(senderIdentity) ? domainOf(senderIdentity.from) : null
 
-  // Valores recomendados por ITMANO (reglas globales) por id — los efectivos del
-  // tenant conservan el id global, así el botón "Restablecer a recomendados"
-  // matchea por id. Para super_admin, efectivo == global (reset es no-op).
-  const recommendedRules: Record<string, { points: number; isActive: boolean }> =
-    Object.fromEntries(globalRules.map(r => [r.id, { points: r.points, isActive: r.isActive }]))
 
   // Access status per agent (user_id present) — kept off the global Agent type.
   const agentAccess: Record<string, boolean> = {}
@@ -155,11 +141,13 @@ async function SettingsContent() {
         agentAccess={agentAccess}
         accessCount={accessCountRes.count ?? 0}
         businessProfile={businessProfile}
-        scoringRules={scoringRules}
-        recommendedRules={recommendedRules}
-        // El modelo de scoring lo administra ITMANO — ver updateScoreRules.
-        canEditScoring={ctx.role === 'super_admin'}
-        fitEvidence={fitEvidence}
+        // Scoring: sólo ITMANO (super_admin). Se pasa ya renderizado, con su
+        // propio Suspense, para que sus lecturas no frenen el resto.
+        scoringPanel={ctx.role === 'super_admin' ? (
+          <Suspense fallback={<TenantScoringSkeleton />}>
+            <TenantScoringPanel tenantId={tenantId} />
+          </Suspense>
+        ) : null}
         canManageAgents={ctx.role !== 'agent'}
         multiAgent={multiAgent}
         canLinkSelf={canLinkSelf}

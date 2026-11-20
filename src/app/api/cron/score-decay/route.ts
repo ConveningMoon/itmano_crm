@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
+import { runAutoCalibrations, type AutoCalibrationOutcome } from '@/lib/scoring/auto-calibration'
 import { NextRequest, NextResponse } from 'next/server'
 import { withHeartbeat } from '@/lib/ops/heartbeat'
 
@@ -38,6 +39,21 @@ async function runScoreDecay(request: NextRequest) {
     // que la etiqueta de un lead no cambie a media jornada porque entraron otros.
     // Si falla, no se aborta el decay —que ya se aplicó— y las bandas siguen
     // usando los cortes del día anterior.
+    // Calibración automática por tenant (ver auto-calibration.ts). Va antes de
+    // las bandas para que los cortes de hoy ya reflejen el orden nuevo. Un fallo
+    // aquí se registra y no frena las bandas.
+    let calibrations: AutoCalibrationOutcome[] | null = null
+    if (!dryRun) {
+      try {
+        calibrations = await runAutoCalibrations()
+        for (const c of calibrations.filter(x => x.error)) {
+          console.error(JSON.stringify({ service: 'score-decay', step: 'auto_calibration', tenant_id: c.tenantId, error: c.error }))
+        }
+      } catch (err) {
+        console.error(JSON.stringify({ service: 'score-decay', step: 'auto_calibration', error: err instanceof Error ? err.message : 'unknown' }))
+      }
+    }
+
     let bandsRefreshed: number | null = null
     if (!dryRun) {
       const { data: bands, error: bandsError } = await supabase.rpc('refresh_quality_bands')
@@ -54,6 +70,7 @@ async function runScoreDecay(request: NextRequest) {
       affected: rows.length,
       stage_changes: changed.length,
       quality_bands_refreshed: bandsRefreshed,
+      calibrations_applied: calibrations ? calibrations.filter(c => c.applied).length : null,
       ts: new Date().toISOString(),
     })
   } catch (err) {
