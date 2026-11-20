@@ -120,7 +120,12 @@ describe('batch-send', () => {
 
   it('un 429 no marca a nadie como fallido', async () => {
     const res = await sendPermissiveBatch(clientWith({ data: null, error: { statusCode: 429, message: 'Too many' } }), items, 'k')
-    expect(res).toEqual({ rateLimited: true, sent: [], failed: [] })
+    expect(res).toEqual({ rateLimited: true, quota: null, sent: [], failed: [] })
+  })
+
+  it('un 429 de cuota diaria se distingue del de velocidad y no marca fallos', async () => {
+    const res = await sendPermissiveBatch(clientWith({ data: null, error: { statusCode: 429, name: 'daily_quota_exceeded', message: 'You have reached your daily email sending quota.' } }), items, 'k')
+    expect(res).toEqual({ rateLimited: true, quota: 'daily', sent: [], failed: [] })
   })
 
   it('otro error marca al lote entero para reintento', async () => {

@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { parseEmailContent } from '@/lib/email-content'
 import { renderEmail, type EmailLocale } from '@/lib/services/email-render'
+import { isRateLimit } from '@/lib/email/batch-send'
+import { nextQuotaWindow, quotaErrorKind } from '@/lib/email/quota'
 
 export type PendingRun = {
   run_id:             string
@@ -50,7 +52,7 @@ export type PendingRun = {
 
 export type SendResult =
   | { ok: true;  outcome: 'sent' | 'completed'; resendEmailId: string }
-  | { ok: false; reason: string;                action: 'paused' }
+  | { ok: false; reason: string;                action: 'paused' | 'postponed' }
 
 export async function sendSequenceEmail(
   db: ReturnType<typeof createAdminClient>,
@@ -183,6 +185,14 @@ export async function sendSequenceEmail(
 
     if (error || !data?.id) {
       const msg = error?.message ?? 'Resend returned no id'
+      // Un tope de cuota o de velocidad no es un problema de la secuencia:
+      // pausarla obligaría a reactivarla a mano. El paso se pospone (cuota:
+      // al siguiente día o mes en UTC; velocidad: a la próxima ejecución).
+      const quota = quotaErrorKind(error)
+      if (quota || isRateLimit(error)) {
+        await postponeRun(db, run_id, quota ? nextQuotaWindow(quota, new Date()) : null, msg)
+        return { ok: false, reason: quota ? `quota_${quota}` : 'rate_limited', action: 'postponed' }
+      }
       await pauseRun(db, run_id, 'resend_error', msg)
       return { ok: false, reason: msg, action: 'paused' }
     }
@@ -258,6 +268,24 @@ export async function sendSequenceEmail(
 // Razones permitidas por el CHECK de lead_sequence_runs.cancelled_reason (050).
 // El detalle libre (p. ej. el mensaje de error de Resend) va al log, nunca a la
 // columna — escribir texto libre violaba el CHECK y la pausa fallaba en silencio.
+async function postponeRun(
+  db: ReturnType<typeof createAdminClient>,
+  runId: string,
+  until: Date | null,
+  detail: string,
+) {
+  console.warn(JSON.stringify({ service: 'send-sequence-email', run_id: runId, action: 'postponed', until: until?.toISOString() ?? 'next_run', detail }))
+  if (!until) return
+  const { error } = await db
+    .from('lead_sequence_runs')
+    .update({ next_send_at: until.toISOString() })
+    .eq('id', runId)
+    .eq('status', 'active')
+  if (error) {
+    console.error(JSON.stringify({ service: 'send-sequence-email', run_id: runId, reason: 'postpone_failed', detail: error.message }))
+  }
+}
+
 type PauseReason = 'no_step' | 'no_template' | 'no_content' | 'no_from_address' | 'resend_error'
 
 async function pauseRun(

@@ -1,4 +1,5 @@
 import { Webhook } from 'svix'
+import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { NextRequest, NextResponse, after } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -442,7 +443,7 @@ async function handleInboundEvent(
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
-export async function POST(request: NextRequest) {
+async function handleResendWebhook(request: NextRequest) {
   const secret = process.env.RESEND_WEBHOOK_SECRET
   if (!secret) {
     console.error('[resend-webhook] RESEND_WEBHOOK_SECRET is not configured')
@@ -506,3 +507,5 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ received: true })
 }
+
+export const POST = withHeartbeat('webhook:resend', handleResendWebhook)

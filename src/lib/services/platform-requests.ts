@@ -24,7 +24,7 @@ export interface NewPlatformRequest {
   metadata?:       Record<string, unknown>
 }
 
-async function superAdminChatIds(db: ReturnType<typeof createAdminClient>): Promise<string[]> {
+export async function superAdminChatIds(db: ReturnType<typeof createAdminClient>): Promise<string[]> {
   const { data } = await db
     .from('user_profiles')
     .select('telegram_chat_id')

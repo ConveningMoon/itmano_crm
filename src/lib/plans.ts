@@ -250,7 +250,7 @@ export const PARTNER_SEAT = { includedLogins: 3, extraLoginUsd: 49 }
 
 // ─── Período de prueba ────────────────────────────────────────────────────────
 // Gancho de adquisición sales-led: 14 días con la experiencia Growth completa,
-// sin tarjeta (no hay procesador de pagos — es literalmente cierto). Growth y
+// sin tarjeta (la prueba no pasa por Paddle: se cobra al convertir). Growth y
 // no Partner: el trial no debe requerir registrar/verificar un dominio de
 // envío propio (tiempo + slot de Resend desperdiciados si no convierte) — en
 // prueba se envía desde el dominio compartido de ITMANO con la marca del

@@ -22,15 +22,20 @@ const fake = vi.hoisted(() => {
   type Payload = { to: string; subject?: string; html?: string; from?: string; replyTo?: string }
   const state = {
     batches: [] as Payload[][],
-    mode: 'ok' as 'ok' | 'rate_limited',
+    mode: 'ok' as 'ok' | 'rate_limited' | 'daily_quota',
     counter: 0,
     allowance: { limit: 100000, used: 0 },
+    // Cuota restante de la cuenta de Resend (fase 3). null = sin cuota anotada.
+    quotaLeft: null as number | null,
   }
   const client = {
     batch: {
       send: async (payload: Payload[]) => {
         if (state.mode === 'rate_limited') {
           return { data: null, error: { name: 'rate_limit_exceeded', message: 'Too many requests', statusCode: 429 }, headers: null }
+        }
+        if (state.mode === 'daily_quota') {
+          return { data: null, error: { name: 'daily_quota_exceeded', message: 'You have reached your daily email sending quota.', statusCode: 429 }, headers: null }
         }
         state.batches.push(payload)
         return { data: { data: payload.map(() => ({ id: `fake_bc_${Date.now()}_${++state.counter}` })) }, error: null, headers: null }
@@ -53,6 +58,12 @@ vi.mock('@/lib/services/open-house-sender', () => ({
 }))
 vi.mock('@/lib/subscriptions/quota', () => ({
   monthlyEmailAllowance: async () => fake.state.allowance,
+}))
+vi.mock('@/lib/email/quota-server', () => ({
+  readQuotaRemaining: async () => ({
+    usedToday: 0, usedMonth: 0, daily: fake.state.quotaLeft, monthly: null,
+    remaining: fake.state.quotaLeft, binding: fake.state.quotaLeft === null ? null : 'daily',
+  }),
 }))
 
 const { dispatchBroadcast, POSTAL_ADDRESS_REQUIRED_MESSAGE } = await import('@/lib/services/broadcast-dispatch')
@@ -162,6 +173,7 @@ beforeEach(async () => {
   fake.state.batches = []
   fake.state.mode = 'ok'
   fake.state.allowance = { limit: 100000, used: 0 }
+  fake.state.quotaLeft = null
   await admin.from('email_broadcasts').delete().eq('tenant_id', TENANT)
   await admin.from('email_sends').delete().eq('tenant_id', TENANT)
   await admin.from('tenants').update({ postal_address: POSTAL }).eq('id', TENANT)
@@ -300,6 +312,43 @@ describe('repetición y fallos', () => {
     const id = await createBroadcast({ audience: { mode: 'manual', leadIds: ['bc-es'] } })
     await admin.from('email_broadcasts').update({ scheduled_at: new Date(Date.now() + 3_600_000).toISOString() }).eq('id', id)
     expect((await dispatch(id)).outcome).toBe('not_due')
+  })
+})
+
+describe('cuota de la cuenta de Resend (fase 3)', () => {
+  const THREE = { mode: 'manual', leadIds: ['bc-es', 'bc-en', 'bc-pt'] }
+
+  it('con menos cuota que destinatarios, sale lo que cabe y el resto espera con un mensaje claro', async () => {
+    fake.state.quotaLeft = 2
+    const id = await createBroadcast({ audience: THREE })
+    expect((await dispatch(id)).outcome).toBe('partial')
+    expect(sentTo()).toHaveLength(2)
+    const b = await readBroadcast(id)
+    expect(b.status).toBe('pending')
+    expect(b.last_error).toMatch(/tope diario/)
+    expect(b.last_error).toMatch(/Salieron 2; quedan 1 en espera/)
+
+    // Al día siguiente (cuota renovada) termina sin repetir a nadie.
+    fake.state.quotaLeft = null
+    expect((await dispatch(id)).outcome).toBe('sent')
+    expect(sentTo()).toEqual(['bc-en@example.com', 'bc-es@example.com', 'bc-pt@example.com'])
+  })
+
+  it('con la cuota agotada no llama a Resend', async () => {
+    fake.state.quotaLeft = 0
+    const id = await createBroadcast({ audience: THREE })
+    expect((await dispatch(id)).outcome).toBe('partial')
+    expect(fake.state.batches).toHaveLength(0)
+    expect((await readBroadcast(id)).last_error).toMatch(/tope diario/)
+  })
+
+  it('un 429 de cuota de Resend deja el envío en espera, no como fallo de velocidad', async () => {
+    fake.state.mode = 'daily_quota'
+    const id = await createBroadcast({ audience: THREE })
+    expect((await dispatch(id)).outcome).toBe('partial')
+    const b = await readBroadcast(id)
+    expect(b.status).toBe('pending')
+    expect(b.last_error).toMatch(/tope diario/)
   })
 })
 

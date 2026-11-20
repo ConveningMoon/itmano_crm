@@ -1,21 +1,31 @@
 import 'server-only'
 import { Resend } from 'resend'
 import { emailAllowed, sendGuardFromEnv, simulatedId, type SendGuard } from '@/lib/email/send-guard'
-
-if (!process.env.RESEND_API_KEY) {
-  throw new Error('RESEND_API_KEY is not set')
-}
-
-// Cuenta legacy (Adriana / A&J). Sigue siendo el cliente por defecto exportado
-// para compatibilidad con el código que aún no rutea por tenant.
-export const resend = new Resend(process.env.RESEND_API_KEY)
+import { installQuotaTracking } from '@/lib/email/quota-tracking'
+import { recordQuotaObservation } from '@/lib/email/quota-server'
 
 // ── Router de cuentas Resend por tenant (migración 065) ───────────────────────
-// tenants.resend_account: 'aj' → cuenta de Adriana (RESEND_API_KEY, legacy);
-// 'itmano' → cuenta de ITMANO (RESEND_API_KEY_ITMANO) para Test y futuros. Si la
-// clave de ITMANO no está configurada, cae a la legacy para no romper el envío
-// (con aviso en logs). El envío de A&J nunca cambia de cuenta.
-type ResendAccount = 'aj' | 'itmano'
+// tenants.resend_account: 'aj' → cuenta propia de A&J (RESEND_API_KEY);
+// 'itmano' → cuenta de ITMANO (RESEND_API_KEY_ITMANO) para todos los demás.
+//
+// Cada cuenta usa SOLO su llave. Antes la app no arrancaba sin la llave de A&J y
+// ITMANO caía a ella si faltaba la suya; ese respaldo nunca funcionó (un from de
+// mail.itmano.com no está verificado en la cuenta de A&J) y hacía depender a
+// toda la plataforma de la llave de un cliente. Ahora, si falta la llave de una
+// cuenta, sus envíos devuelven un error claro sin llamar a Resend y el resto de
+// tenants sigue enviando.
+export type ResendAccount = 'aj' | 'itmano'
+
+const ACCOUNT_ENV: Record<ResendAccount, { send: string; inbound: string }> = {
+  aj:     { send: 'RESEND_API_KEY',        inbound: 'RESEND_INBOUND_API_KEY' },
+  itmano: { send: 'RESEND_API_KEY_ITMANO', inbound: 'RESEND_INBOUND_API_KEY_ITMANO' },
+}
+
+// El SDK de Resend lee process.env.RESEND_API_KEY cuando el constructor recibe
+// una llave vacía: con eso, un tenant de ITMANO enviaría por la cuenta de A&J.
+// Por eso nunca se le pasa `undefined`, sino este marcador, y los envíos de un
+// cliente sin llave se cortan antes de salir (missingKeyGuard).
+const MISSING_KEY = 'missing-api-key'
 
 const clients = new Map<ResendAccount, Resend>()
 const inboundClients = new Map<ResendAccount, Resend>()
@@ -24,9 +34,14 @@ export function resolveResendAccount(account: string | null | undefined): Resend
   return account === 'aj' ? 'aj' : 'itmano'
 }
 
-/** true si la cuenta de ITMANO tiene su propia clave configurada (no fallback). */
-export function itmanoResendConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY_ITMANO
+function envValue(name: string): string | null {
+  const v = process.env[name]?.trim()
+  return v ? v : null
+}
+
+/** true si la cuenta tiene su llave de envío configurada. */
+export function resendAccountConfigured(account: string | null | undefined): boolean {
+  return envValue(ACCOUNT_ENV[resolveResendAccount(account)].send) !== null
 }
 
 export function resendForAccount(account: string | null | undefined): Resend {
@@ -34,18 +49,31 @@ export function resendForAccount(account: string | null | undefined): Resend {
   const cached = clients.get(acc)
   if (cached) return cached
 
-  let key = process.env.RESEND_API_KEY! // legacy (aj)
-  if (acc === 'itmano') {
-    if (process.env.RESEND_API_KEY_ITMANO) {
-      key = process.env.RESEND_API_KEY_ITMANO
-    } else {
-      console.warn(JSON.stringify({ service: 'resend', warning: 'itmano_key_missing_fallback_legacy' }))
-    }
+  const key = envValue(ACCOUNT_ENV[acc].send)
+  const client = new Resend(key ?? MISSING_KEY)
+  if (key) {
+    installSendGuard(client, sendGuardFromEnv(process.env))
+    // Por fuera del guard: sólo cuenta lo que llegó a Resend (fase 3, cuotas).
+    installQuotaTracking(client, acc, recordQuotaObservation)
+  } else {
+    console.error(JSON.stringify({ service: 'resend', error: 'account_key_missing', account: acc, env: ACCOUNT_ENV[acc].send }))
+    missingKeyGuard(client, acc)
   }
-  const client = new Resend(key)
-  installSendGuard(client, sendGuardFromEnv(process.env))
   clients.set(acc, client)
   return client
+}
+
+// Sin llave, enviar no sale a la red: devuelve el mismo `{ data, error }` que un
+// rechazo de Resend, que todos los llamadores ya manejan, con un mensaje que
+// dice qué variable falta.
+function missingKeyGuard(client: Resend, account: ResendAccount): void {
+  const error = {
+    name:       'missing_api_key' as const,
+    statusCode: 401,
+    message:    `Falta ${ACCOUNT_ENV[account].send}: la cuenta de Resend '${account}' no puede enviar.`,
+  }
+  client.emails.send = (async () => ({ data: null, error, headers: null })) as unknown as typeof client.emails.send
+  client.batch.send  = (async () => ({ data: null, error, headers: null })) as unknown as typeof client.batch.send
 }
 
 // Fuera de producción, los envíos a destinatarios no permitidos se simulan
@@ -92,22 +120,22 @@ export function resendInboundForAccount(account: string | null | undefined): Res
   const cached = inboundClients.get(acc)
   if (cached) return cached
 
-  const accountSendKey = acc === 'itmano'
-    ? (process.env.RESEND_API_KEY_ITMANO ?? process.env.RESEND_API_KEY!)
-    : process.env.RESEND_API_KEY!
-  const inboundKey = acc === 'itmano'
-    ? process.env.RESEND_INBOUND_API_KEY_ITMANO
-    : process.env.RESEND_INBOUND_API_KEY
+  // Respaldo sólo DENTRO de la misma cuenta: la llave de lectura, si no la de
+  // envío de esa cuenta. Nunca la de otra cuenta, que no puede leer estos correos.
+  const inboundKey = envValue(ACCOUNT_ENV[acc].inbound)
+  const accountSendKey = envValue(ACCOUNT_ENV[acc].send)
 
   if (!inboundKey) {
     console.warn(JSON.stringify({
       service: 'resend',
-      warning: 'inbound_read_key_missing_fallback_send_key',
+      warning: accountSendKey ? 'inbound_read_key_missing_fallback_send_key' : 'inbound_no_key_for_account',
       account: acc,
     }))
   }
 
-  const client = new Resend(inboundKey ?? accountSendKey)
+  // Sin ninguna llave, la lectura llega a Resend con el marcador y vuelve como
+  // error 401, que el webhook ya registra sin romper el procesamiento.
+  const client = new Resend(inboundKey ?? accountSendKey ?? MISSING_KEY)
   inboundClients.set(acc, client)
   return client
 }

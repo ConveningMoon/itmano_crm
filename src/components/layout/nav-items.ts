@@ -61,6 +61,7 @@ export function navGroupsForRole(role: TenantRole, opts?: { hubMode?: boolean })
       label: null,
       items: [
         { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+        { label: 'Operación', href: '/admin/operacion', icon: 'Activity' },
         STUDIO_OPEN,
         { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
         { label: 'Notificaciones', href: '/notifications', icon: 'Bell' },
@@ -73,6 +74,7 @@ export function navGroupsForRole(role: TenantRole, opts?: { hubMode?: boolean })
       label: 'Administración',
       items: [
         { label: 'Centro de control', href: '/admin', icon: 'ShieldCheck' },
+        { label: 'Operación', href: '/admin/operacion', icon: 'Activity' },
         { label: 'Solicitudes', href: '/solicitudes', icon: 'Inbox' },
       ],
     },

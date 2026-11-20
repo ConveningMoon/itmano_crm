@@ -467,6 +467,36 @@ export type Database = {
           },
         ]
       }
+      auth_email_sends: {
+        Row: {
+          action_type: string
+          created_at: string
+          error: string | null
+          id: number
+          ok: boolean
+          resend_email_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          error?: string | null
+          id?: never
+          ok: boolean
+          resend_email_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          error?: string | null
+          id?: never
+          ok?: boolean
+          resend_email_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       channel_page_views: {
         Row: {
           channel_id: string
@@ -521,6 +551,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cron_heartbeats: {
+        Row: {
+          consecutive_failures: number
+          job: string
+          last_detail: Json | null
+          last_duration_ms: number | null
+          last_error: string | null
+          last_ok: boolean
+          last_ok_at: string | null
+          last_run_at: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          job: string
+          last_detail?: Json | null
+          last_duration_ms?: number | null
+          last_error?: string | null
+          last_ok: boolean
+          last_ok_at?: string | null
+          last_run_at: string
+        }
+        Update: {
+          consecutive_failures?: number
+          job?: string
+          last_detail?: Json | null
+          last_duration_ms?: number | null
+          last_error?: string | null
+          last_ok?: boolean
+          last_ok_at?: string | null
+          last_run_at?: string
+        }
+        Relationships: []
       }
       email_broadcast_contents: {
         Row: {
@@ -2316,6 +2379,80 @@ export type Database = {
           },
         ]
       }
+      platform_alerts: {
+        Row: {
+          alert_key: string
+          delivered: boolean
+          id: number
+          message: string
+          period: string
+          sent_at: string
+          severity: string
+        }
+        Insert: {
+          alert_key: string
+          delivered?: boolean
+          id?: never
+          message: string
+          period: string
+          sent_at?: string
+          severity: string
+        }
+        Update: {
+          alert_key?: string
+          delivered?: boolean
+          id?: never
+          message?: string
+          period?: string
+          sent_at?: string
+          severity?: string
+        }
+        Relationships: []
+      }
+      platform_metrics: {
+        Row: {
+          account: string | null
+          captured_at: string
+          id: number
+          limit_value: number | null
+          metric: string
+          provider: string
+          tenant_id: string | null
+          unit: string
+          value: number
+        }
+        Insert: {
+          account?: string | null
+          captured_at?: string
+          id?: never
+          limit_value?: number | null
+          metric: string
+          provider: string
+          tenant_id?: string | null
+          unit: string
+          value: number
+        }
+        Update: {
+          account?: string | null
+          captured_at?: string
+          id?: never
+          limit_value?: number | null
+          metric?: string
+          provider?: string
+          tenant_id?: string | null
+          unit?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_metrics_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_requests: {
         Row: {
           category: string | null
@@ -2522,6 +2659,63 @@ export type Database = {
           },
         ]
       }
+      provider_settings: {
+        Row: {
+          balance_recorded_at: string | null
+          balance_usd: number | null
+          daily_quota: number | null
+          domain_slots: number | null
+          key: string
+          key_expires_on: string | null
+          label: string
+          last_backup_at: string | null
+          monthly_budget_usd: number | null
+          monthly_cost_usd: number | null
+          monthly_quota: number | null
+          notes: string | null
+          plan: string | null
+          renews_on: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          balance_recorded_at?: string | null
+          balance_usd?: number | null
+          daily_quota?: number | null
+          domain_slots?: number | null
+          key: string
+          key_expires_on?: string | null
+          label: string
+          last_backup_at?: string | null
+          monthly_budget_usd?: number | null
+          monthly_cost_usd?: number | null
+          monthly_quota?: number | null
+          notes?: string | null
+          plan?: string | null
+          renews_on?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          balance_recorded_at?: string | null
+          balance_usd?: number | null
+          daily_quota?: number | null
+          domain_slots?: number | null
+          key?: string
+          key_expires_on?: string | null
+          label?: string
+          last_backup_at?: string | null
+          monthly_budget_usd?: number | null
+          monthly_cost_usd?: number | null
+          monthly_quota?: number | null
+          notes?: string | null
+          plan?: string | null
+          renews_on?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       public_rate_limits: {
         Row: {
           bucket: string
@@ -2654,6 +2848,98 @@ export type Database = {
           },
           {
             foreignKeyName: "purchase_processes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      resend_quota_state: {
+        Row: {
+          account: string
+          daily_used: number | null
+          exhausted: string | null
+          exhausted_at: string | null
+          headers_at: string | null
+          monthly_used: number | null
+          updated_at: string
+        }
+        Insert: {
+          account: string
+          daily_used?: number | null
+          exhausted?: string | null
+          exhausted_at?: string | null
+          headers_at?: string | null
+          monthly_used?: number | null
+          updated_at?: string
+        }
+        Update: {
+          account?: string
+          daily_used?: number | null
+          exhausted?: string | null
+          exhausted_at?: string | null
+          headers_at?: string | null
+          monthly_used?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      resend_usage_daily: {
+        Row: {
+          account: string
+          day: string
+          sent: number
+        }
+        Insert: {
+          account: string
+          day: string
+          sent?: number
+        }
+        Update: {
+          account?: string
+          day?: string
+          sent?: number
+        }
+        Relationships: []
+      }
+      scoring_calibrations: {
+        Row: {
+          actor_user_id: string | null
+          changes: Json
+          closes_with_fit: number
+          created_at: string
+          id: string
+          order_after: string[]
+          order_before: string[]
+          source: string
+          tenant_id: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          changes?: Json
+          closes_with_fit?: number
+          created_at?: string
+          id?: string
+          order_after: string[]
+          order_before: string[]
+          source: string
+          tenant_id: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          changes?: Json
+          closes_with_fit?: number
+          created_at?: string
+          id?: string
+          order_after?: string[]
+          order_before?: string[]
+          source?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scoring_calibrations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -2887,6 +3173,7 @@ export type Database = {
         Row: {
           active_leads: number
           computed_at: string
+          degenerate: boolean
           p20: number
           p40: number
           p60: number
@@ -2896,6 +3183,7 @@ export type Database = {
         Insert: {
           active_leads: number
           computed_at?: string
+          degenerate?: boolean
           p20: number
           p40: number
           p60: number
@@ -2905,6 +3193,7 @@ export type Database = {
         Update: {
           active_leads?: number
           computed_at?: string
+          degenerate?: boolean
           p20?: number
           p40?: number
           p60?: number
@@ -3140,6 +3429,10 @@ export type Database = {
           reset_at: string
         }[]
       }
+      ai_spend_since: {
+        Args: { p_provider: string; p_since: string }
+        Returns: number
+      }
       ai_usage_summary: {
         Args: { p_agent_id: string; p_months?: number; p_tenant_id: string }
         Returns: Json
@@ -3217,6 +3510,35 @@ export type Database = {
         Args: { p_months: number; p_tenant_id: string }
         Returns: Json
       }
+      platform_totals: { Args: never; Returns: Json }
+      platform_usage: {
+        Args: never
+        Returns: {
+          agents: number
+          ai_usd_month: number
+          emails_month: number
+          emails_today: number
+          leads: number
+          logins: number
+          storage_bytes: number
+          tenant_id: string
+          web_properties: number
+        }[]
+      }
+      preview_score_rule_changes: {
+        Args: { p_changes: Json }
+        Returns: {
+          active_leads: number
+          alta_after: number
+          alta_before: number
+          band_changed: number
+          degenerate_after: boolean
+          degenerate_before: boolean
+          score_changed: number
+          tenant_id: string
+          tenant_name: string
+        }[]
+      }
       public_rate_limit: {
         Args: {
           p_bucket: string
@@ -3232,7 +3554,29 @@ export type Database = {
       }
       recalc_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
       recompute_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
+      recompute_scores_bulk: { Args: { p_tenant_id?: string }; Returns: number }
+      record_heartbeat: {
+        Args: {
+          p_detail?: Json
+          p_duration_ms?: number
+          p_error?: string
+          p_job: string
+          p_ok: boolean
+        }
+        Returns: undefined
+      }
+      record_resend_send: {
+        Args: {
+          p_account: string
+          p_daily_used?: number
+          p_exhausted?: string
+          p_monthly_used?: number
+          p_sent: number
+        }
+        Returns: undefined
+      }
       refresh_quality_bands: { Args: never; Returns: number }
+      resend_quota_status: { Args: { p_account: string }; Returns: Json }
       rls_jwt_base64url_encode: { Args: { data: string }; Returns: string }
       rls_jwt_sign: { Args: { payload: Json; secret: string }; Returns: string }
       rls_test_create_user: {
@@ -3245,6 +3589,25 @@ export type Database = {
         | { Args: { p_email: string }; Returns: string }
         | { Args: { p_email: string; p_secret: string }; Returns: string }
       schema_snapshot: { Args: never; Returns: Json }
+      scoring_health: { Args: { p_tenant_id: string }; Returns: Json }
+      scoring_quality_preview: {
+        Args: { p_changes: Json }
+        Returns: {
+          lead_id: string
+          q: number
+          tenant_id: string
+        }[]
+      }
+      scoring_rule_usage: {
+        Args: { p_days?: number; p_tenant_id?: string }
+        Returns: {
+          category: string
+          dimension: string
+          hits: number
+          leads: number
+          match_value: string
+        }[]
+      }
       seed_default_lead_tags: {
         Args: { p_tenant_id: string }
         Returns: undefined

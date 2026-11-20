@@ -21,7 +21,7 @@ describe('grupos del sidebar', () => {
   it('super_admin añade Administración y abre Estudio', () => {
     const groups = navGroupsForRole('super_admin')
     expect(groups.at(-1)?.label).toBe('Administración')
-    expect(groups.at(-1)?.items.map(i => i.href)).toEqual(['/admin', '/solicitudes'])
+    expect(groups.at(-1)?.items.map(i => i.href)).toEqual(['/admin', '/admin/operacion', '/solicitudes'])
     expect(groups.flatMap(g => g.items).find(i => i.href === '/studio')?.badgeLabel).toBeUndefined()
   })
 
@@ -31,6 +31,6 @@ describe('grupos del sidebar', () => {
 
   it('modo hub conserva sus 4 rutas', () => {
     expect(navItemsForRole('super_admin', { hubMode: true }).map(i => i.href))
-      .toEqual(['/admin', '/studio', '/solicitudes', '/notifications'])
+      .toEqual(['/admin', '/admin/operacion', '/studio', '/solicitudes', '/notifications'])
   })
 })

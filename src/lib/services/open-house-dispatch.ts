@@ -5,6 +5,8 @@ import {
   BATCH_SIZE, PAUSE_BETWEEN_CALLS_MS, batchIdempotencyKey, isRateLimit, sendPermissiveBatch, sleep,
 } from '@/lib/email/batch-send'
 import { parseEmailContent } from '@/lib/email-content'
+import { quotaBudget, quotaErrorKind, quotaWaitMessage, type QuotaKind } from '@/lib/email/quota'
+import { readQuotaRemaining } from '@/lib/email/quota-server'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
 import { resolveOpenHouseSender } from '@/lib/services/open-house-sender'
 import {
@@ -217,20 +219,28 @@ export async function dispatchOpenHouseEmail(
   let sentNow = 0
   let outOfTime = false
   let rateLimited = false
+  let quotaHit: QuotaKind | null = null
 
   // 4. Lotes. Cualquier excepción inesperada (una variable de entorno que
   // falta, un fallo de red) devuelve el correo a `pending` con el error a la
   // vista: sin esto quedaría en `sending` hasta la recuperación de 15 minutos
   // y la pantalla diría "enviando" sin explicar nada.
   try {
+    const budget = quotaBudget(await readQuotaRemaining(db, identity.account))
     while (Date.now() < opts.deadline) {
+      // Cuota de la cuenta de envío: el lote nunca pasa de lo que queda hoy y
+      // en el mes. Con la cuota agotada, el correo queda en espera y el
+      // orquestador lo retoma en el siguiente periodo (fase 3 del plan SaaS).
+      const allowed = budget.allowed(BATCH_SIZE)
+      if (allowed === 0) { quotaHit = budget.binding; break }
+
       const { data: pendingRows, error: pendingErr } = await db
         .from('open_house_email_recipients')
         .select('lead_id, language, attempts')
         .eq('email_id', email.id)
         .eq('status', 'pending')
         .order('lead_id')
-        .limit(BATCH_SIZE)
+        .limit(allowed)
       if (pendingErr) {
         await finish(db, email.id, { status: 'pending', last_error: pendingErr.message })
         return { outcome: 'failed', sent: sentNow, detail: pendingErr.message }
@@ -310,6 +320,7 @@ export async function dispatchOpenHouseEmail(
           client, crm, batchIdempotencyKey(`open-house/${email.id}`, crm.map(c => c.leadId)),
         )
         if (res.rateLimited) rateLimited = true
+        if (res.quota) quotaHit = res.quota
         failedRows.push(...res.failed.map(f => ({ lead_id: f.leadId, error: f.error })))
         sentRows.push(...res.sent.map(s => ({ lead_id: s.item.leadId, resend_email_id: s.id, subject: s.item.payload.subject as string })))
         await sleep(PAUSE_BETWEEN_CALLS_MS)
@@ -321,6 +332,8 @@ export async function dispatchOpenHouseEmail(
         if (rateLimited || Date.now() >= opts.deadline) break
         const res = await client.emails.send(t.payload, { idempotencyKey: `open-house/${email.id}/${t.leadId}` })
         if (res.error) {
+          const q = quotaErrorKind(res.error)
+          if (q) { quotaHit = q; rateLimited = true; break }
           if (isRateLimit(res.error as any)) { rateLimited = true; break }
           failedRows.push({ lead_id: t.leadId, error: res.error.message })
         } else if (res.data?.id) {
@@ -329,6 +342,7 @@ export async function dispatchOpenHouseEmail(
         await sleep(PAUSE_BETWEEN_CALLS_MS)
       }
 
+      budget.spend(sentRows.length)
       const sentAt = new Date().toISOString()
       if (sentRows.length > 0) {
         const { error: upErr } = await db.from('open_house_email_recipients').upsert(
@@ -398,7 +412,7 @@ export async function dispatchOpenHouseEmail(
     skipped_count: counts.skipped,
     failed_count:  counts.failed,
     finished_at:   done ? new Date().toISOString() : null,
-    last_error:    rateLimited ? 'Resend limitó la velocidad de envío; se reanuda en la próxima ejecución.' : (outOfTime && !done ? 'Se reanuda en la próxima ejecución.' : null),
+    last_error:    quotaHit && !done ? quotaWaitMessage(quotaHit, { sentNow, pending: counts.pending }) : rateLimited ? 'Resend limitó la velocidad de envío; se reanuda en la próxima ejecución.' : (outOfTime && !done ? 'Se reanuda en la próxima ejecución.' : null),
   })
 
   console.log(JSON.stringify({

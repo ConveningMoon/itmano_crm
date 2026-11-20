@@ -2274,3 +2274,29 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
   line-height: 17px;
   text-align: center;
 }
+
+/* ─── Panel de operación (/admin/operacion) ───────────────────────────────── */
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.ops-gauge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 8px 0;
+}
+.ops-gauge + .ops-gauge { border-top: 1px solid var(--border-subtle); }
+.ops-gauge-label { font-size: 13px; color: var(--text-secondary); }
+.ops-gauge-value { font-size: 13px; color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
+.ops-gauge-hint { grid-column: 1 / -1; font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+.meter.meter-wide { grid-column: 1 / -1; width: 100%; }
+.ops-facts { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; font-size: 12px; margin-top: 8px; }
+.ops-facts dt { color: var(--text-muted); }
+.ops-facts dd { margin: 0; color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+.ops-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+.ops-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--text-muted); }
+.ops-form .ops-form-wide { grid-column: 1 / -1; }
+.ops-cell-limit { color: var(--text-muted); }

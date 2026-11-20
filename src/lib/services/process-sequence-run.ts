@@ -11,7 +11,7 @@ import { isRunStale } from '@/lib/subscriptions/access'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export interface ProcessRunResult {
-  action:        'sent' | 'completed' | 'paused' | 'skipped'
+  action:        'sent' | 'completed' | 'paused' | 'postponed' | 'skipped'
   reason:        string
   emailSendId?:  string
   // Diagnostic context (used by the orchestrator dry-run response + logging)
@@ -221,5 +221,5 @@ export async function processSequenceRun(params: {
   if (result.ok) {
     return { action: result.outcome, reason: result.outcome, emailSendId: result.resendEmailId, ...diag }
   }
-  return { action: 'paused', reason: result.reason, ...diag }
+  return { action: result.action, reason: result.reason, ...diag }
 }

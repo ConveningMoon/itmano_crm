@@ -1,5 +1,6 @@
 import 'server-only'
 import { resendForAccount } from '@/lib/resend'
+import { quotaErrorKind, quotaRejectMessage } from '@/lib/email/quota'
 import { resolveSenderIdentity, senderFromForAgent } from '@/lib/services/sender-identity'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { generateUnsubscribeUrl } from '@/lib/services/unsubscribe-url'
@@ -101,6 +102,10 @@ export async function sendOneOffEmail(
       html:    rendered.html,
     })
     if (error || !data?.id) {
+      // Un tope de cuota no es un fallo del correo: se dice en claro y no se
+      // reintenta solo (un one-off lo lanza una persona que está mirando).
+      const quota = quotaErrorKind(error)
+      if (quota) return { ok: false, error: quotaRejectMessage(quota) }
       return { ok: false, error: `No se pudo enviar el correo: ${error?.message ?? 'Resend no devolvió id'}` }
     }
     resendEmailId = data.id

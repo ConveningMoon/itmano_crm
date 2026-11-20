@@ -8,11 +8,13 @@
 winget install Volta.Volta
 winget install astral-sh.uv
 volta install node@24.20.0 npm@11.19.0
+volta install vercel@latest
 uv tool install --python 3.12 "graphifyy[sql]==0.9.55"
 npm ci
 npm run setup:hooks
 graphify install --platform claude
 graphify install --platform codex
+vercel login
 ```
 
 Usa un clon local fuera de OneDrive, por ejemplo `C:\dev\itmano-crm`.
@@ -25,11 +27,13 @@ necesario para `next build` y el segundo para desarrollo y suites de Vitest.
 curl https://get.volta.sh | bash
 brew install uv
 volta install node@24.20.0 npm@11.19.0
+volta install vercel@latest
 uv tool install --python 3.12 "graphifyy[sql]==0.9.55"
 npm ci
 npm run setup:hooks
 graphify install --platform claude
 graphify install --platform codex
+vercel login
 ```
 
 Usa una ruta no sincronizada como `~/Developer/itmano-crm`. Reinicia la shell
@@ -42,6 +46,14 @@ para los clones de desarrollo; `engines` y `devEngines` aceptan cualquier patch
 compatible de Node 24 y npm 11 porque Vercel y otros runtimes gestionados los
 actualizan en su propio calendario. Un cambio de versión mayor debe actualizar
 Volta, engines, devEngines y CI en el mismo commit.
+
+Las herramientas globales (CLI de Vercel incluida) se instalan con
+`volta install`, nunca con `npm i -g`: una copia instalada con npm antes de Volta
+queda primero en el `PATH` y tapa a la de Volta. En Windows pasó con una CLI de
+Vercel v37 que hacía parecer desactualizados los comandos. Comprueba con
+`where vercel` (Windows) o `which -a vercel` (macOS) que sólo responde la ruta de
+Volta, y retira la otra con `npm uninstall -g vercel`. `vercel login` autoriza con
+un código de dispositivo en el navegador; lo completa Dylan, no un agente.
 
 ## Graphify
 
