@@ -26,11 +26,11 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 | # | Fase | Archivo | Depende de | Estado |
 |---|---|---|---|---|
 | 0 | Línea base medida el 2026-11-18 | [00-linea-base.md](00-linea-base.md) | — | ✅ referencia |
-| 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | ✅ `feat/saas-fase-01-seguridad` (2026-11-18), pendiente de PR |
-| 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | 🟨 2A hecha en `feat/saas-fase-02-panel` (2026-11-18), migración ya en producción; falta anotar los datos de proveedores y la 2B |
-| 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | 🟨 código hecho en `feat/saas-fase-03-correo` (2026-11-19), migración en sandbox y producción; faltan los pasos de Dylan (hook, cron-job.org, Inbound y D8) |
+| 1 | Seguridad y limpieza rápida | [fase-01-seguridad-limpieza.md](fase-01-seguridad-limpieza.md) | — | ✅ mergeada con el PR #311 (2026-11-20) |
+| 2 | Panel de operación y alertas | [fase-02-panel-operacion.md](fase-02-panel-operacion.md) | 1 | 🟨 2A mergeada con el PR #311 (2026-11-20); falta anotar los datos de proveedores y la 2B |
+| 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | 🟨 código mergeado (PR #311, 2026-11-20); faltan los pasos de Dylan (hook, cron-job.org, Inbound y D8) |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
-| 5 | Cobros con Paddle Live | [fase-05-cobros-paddle.md](fase-05-cobros-paddle.md) | 1 | ⬜ pendiente |
+| 5 | Cobros con Paddle Live | [fase-05-cobros-paddle.md](fase-05-cobros-paddle.md) | 1 | 🟨 código hecho en `feat/saas-fase-05-paddle` (2026-11-20); faltan el catálogo y las variables en Paddle sandbox y Live, la prueba de punta a punta y el primer cobro real |
 | 6 | Límites del plan en código | [fase-06-limites-plan.md](fase-06-limites-plan.md) | 5 | ⬜ pendiente |
 | 7 | Telegram autoservicio | [fase-07-telegram.md](fase-07-telegram.md) | — | ⬜ pendiente |
 | 8 | Alta y onboarding autoservicio | [fase-08-alta-autoservicio.md](fase-08-alta-autoservicio.md) | 3, 5, 6, 7 | ⬜ pendiente |
@@ -69,6 +69,7 @@ necesita casi todo lo anterior.
 | 2026-11-18 | A&J mantiene su propia cuenta de Resend (plan Free); no se migra a ITMANO. |
 | 2026-11-18 | Objetivo de producto: autoservicio tipo SaaS (pagar, configurar, usar) con el mínimo contacto con ITMANO. |
 | 2026-11-18 | Los Magic Links salen de la cuenta de Resend de ITMANO: su cuota se supervisa. |
+| 2026-11-20 | D3: Partner autoservicio con catálogo $249/mes + $49/mes por login extra (cantidad en Paddle); precio negociado sólo por excepción. |
 
 ## Decisiones pendientes de Dylan
 
@@ -78,7 +79,6 @@ Cada fase las repite donde aplican. Respóndelas antes de empezar esa fase.
 |---|---|---|---|
 | D1 | ¿Qué plan tiene hoy la cuenta de Resend de ITMANO? | Si es Free (100/día), pasar a Pro ($20) antes del primer cliente nuevo | 3 |
 | D2 | ¿La prueba de 14 días pide tarjeta? | Sin tarjeta, pero con verificación de email y sin dominio propio | 8 |
-| D3 | ¿Partner se vende con precio de catálogo + asientos, o sólo negociado? | Catálogo $249 + $49 por login extra en Paddle, negociado sólo por excepción | 5, 8 |
 | D4 | ¿El límite de leads es duro o blando? | Blando con aviso al 80% y bloqueo de altas nuevas al 110% | 6 |
 | D5 | ¿Qué pasa al vencer la prueba sin pago? | Modo degradado automático al día 15 (ya existe la regla de acceso) | 6, 8 |
 | D6 | Envíos masivos de A&J con Resend Free (100/día) | Repartir el envío en días o que A&J suba de plan; decidir con A&J | 3 |

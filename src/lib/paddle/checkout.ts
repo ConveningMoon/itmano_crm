@@ -1,6 +1,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getPaddle, resolveStandardPriceId, type BillingCycle } from '@/lib/paddle/env'
+import { catalogPrices, getPaddle, type BillingCycle } from '@/lib/paddle/env'
+import { negotiatedPartnerPrice, subscriptionItems } from '@/lib/paddle/items'
+import { countTenantLogins } from '@/lib/paddle/manage'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 /**
@@ -29,17 +31,19 @@ export async function createCheckoutTransaction(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = row as any
-  // Partner: precio negociado en la fila. Esencial/Growth: catálogo estándar.
-  const priceId = plan === 'partner'
-    ? (r?.paddle_price_id as string | null)
-    : resolveStandardPriceId(plan, cycle)
+  // Catálogo para los tres planes (D3); Partner con asientos por login extra.
+  // Un precio negociado guardado en la fila (no de catálogo) es la excepción:
+  // sustituye al catálogo y no cobra asientos.
+  const prices = catalogPrices()
+  const items = subscriptionItems({
+    plan, cycle,
+    logins: await countTenantLogins(supabase, tenantId),
+    prices,
+    negotiatedPriceId: negotiatedPartnerPrice(plan, r?.paddle_price_id as string | null, prices),
+  })
 
-  if (!priceId) {
-    throw new Error(
-      plan === 'partner'
-        ? 'Este equipo aún no tiene una inversión Partner asignada. Contacta a ITMANO.'
-        : 'La configuración de planes no está completa. Contacta a ITMANO.',
-    )
+  if (!items.ok) {
+    throw new Error('La configuración de planes no está completa. Contacta a ITMANO.')
   }
 
   const customerId = (r?.paddle_customer_id as string | null) ?? undefined
@@ -56,7 +60,7 @@ export async function createCheckoutTransaction(
   // devuelve un mensaje genérico en español.
   try {
     const txn = await getPaddle().transactions.create({
-      items: [{ priceId, quantity: 1 }],
+      items: items.items,
       ...(customerId ? { customerId } : {}),
       customData: { tenant_id: tenantId, plan },
     })

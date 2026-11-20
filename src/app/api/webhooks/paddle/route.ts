@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withHeartbeat } from '@/lib/ops/heartbeat'
-import { getPaddle } from '@/lib/paddle/env'
+import { catalogPrices, getPaddle } from '@/lib/paddle/env'
+import { planOfPrice, primaryPriceId } from '@/lib/paddle/items'
 import { applySubscriptionEvent } from '@/lib/paddle/persist'
 import type { PaddleSubscriptionEvent } from '@/lib/paddle/reducer'
 import type { BillingCycle } from '@/lib/paddle/env'
@@ -107,6 +108,14 @@ async function handlePaddleWebhook(request: NextRequest) {
   //   currentBillingPeriod.endsAt, scheduledChange.{action,effectiveAt}, customData.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = event.data as any
+  // Partner de catálogo lleva dos ítems (base + asientos) y Paddle no garantiza
+  // su orden: el precio que identifica la suscripción es el que no es asiento.
+  const prices = catalogPrices()
+  const priceId = primaryPriceId(((d.items ?? []) as { price?: { id?: string } }[]).map(i => i?.price?.id), prices)
+  // El plan de un precio de catálogo manda sobre custom_data: si ITMANO cambia
+  // el precio desde el panel de Paddle, el CRM sigue la verdad de lo cobrado.
+  const customData = (d.customData as Record<string, unknown> | null) ?? null
+  const pricePlan = planOfPrice(priceId, prices)?.plan
   const normalized: PaddleSubscriptionEvent = {
     eventId:          event.eventId,
     eventType:        event.eventType,
@@ -114,11 +123,11 @@ async function handlePaddleWebhook(request: NextRequest) {
     subscriptionId:   d.id,
     customerId:       d.customerId,
     status:           d.status,
-    priceId:          d.items?.[0]?.price?.id ?? null,
+    priceId,
     billingCycle:     (d.billingCycle?.interval as BillingCycle | undefined) ?? null,
     currentPeriodEnd: d.currentBillingPeriod?.endsAt ?? null,
     cancelAt:         d.scheduledChange?.action === 'cancel' ? (d.scheduledChange.effectiveAt ?? null) : null,
-    customData:       (d.customData as Record<string, unknown> | null) ?? null,
+    customData:       pricePlan ? { ...(customData ?? {}), plan: pricePlan } : customData,
   }
 
   try {

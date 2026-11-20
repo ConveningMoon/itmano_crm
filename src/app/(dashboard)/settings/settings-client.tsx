@@ -19,7 +19,7 @@ import { TenantSection } from './team-profile-section'
 import { AgentsSection } from './agents-section'
 import { EmailSettingsSection } from './email-settings-section'
 import { AgencyDescriptionCard } from './agency-description-card'
-import { SubscriptionCard } from './subscription-card'
+import { SubscriptionCard, type BillingOptions } from './subscription-card'
 import { AccountSection } from './account-section'
 import { SettingsSectionHead } from '@/components/ui/settings-row'
 
@@ -50,6 +50,7 @@ interface Props {
   aiLimitSubtitle?: string
   aiByAgent: AgentAiBreakdown | null
   subscription: TenantSubscription | null
+  billingOptions: BillingOptions
   // Catálogo de etiquetas del tenant + cuántos leads usa cada una (116).
   leadTags: LeadTag[]
   leadTagCounts: Record<string, number>
@@ -58,7 +59,7 @@ interface Props {
 export function SettingsClient({
   tenant, agents, agentAccess, accessCount, businessProfile, scoringPanel,
   canManageAgents, multiAgent, canLinkSelf, myAgentId, senderDomain, ownerAgentId, canDeleteAgents, userEmail, userRole,
-  aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription,
+  aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription, billingOptions,
   leadTags, leadTagCounts,
 }: Props) {
   const searchParams = useSearchParams()
@@ -136,7 +137,7 @@ export function SettingsClient({
       cuenta: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <SettingsSectionHead title="Cuenta y acceso" description="Tu plan y cómo entras al CRM." />
-          <SubscriptionCard subscription={subscription} canManage={canManageAgents} />
+          <SubscriptionCard subscription={subscription} canManage={canManageAgents} billingOptions={billingOptions} />
           <AccountSection
             userEmail={userEmail}
             userRole={userRole}
