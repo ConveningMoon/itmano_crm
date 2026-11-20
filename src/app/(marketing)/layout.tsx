@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Archivo } from 'next/font/google'
+import localFont from 'next/font/local'
 import { MarketingNav } from '@/components/marketing/nav'
 import { MarketingFooter } from '@/components/marketing/footer'
 
@@ -18,13 +18,19 @@ export const metadata: Metadata = {
 // Voz display de las páginas públicas: Archivo en su ancho expandido, la
 // grotesca de letrero y de plano arquitectónico. Se lee de un vistazo, como un
 // cartel de "Se vende". Sólo titulares y cifras grandes; el texto corrido y la
-// interfaz siguen en Inter, la letra del CRM. Se autohospeda con next/font y
-// sólo carga en las rutas (marketing).
-const display = Archivo({
-  subsets: ['latin'],
-  axes: ['wdth'],
+// interfaz siguen en Inter, la letra del CRM. Archivo (OFL, ver
+// src/app/fonts/OFL-Archivo.txt) va versionada en el repo, con sus ejes de peso
+// y ancho, y sólo carga en las rutas (marketing). Sin next/font/google para que
+// el build no dependa de Google Fonts.
+const display = localFont({
+  src: '../fonts/archivo-latin.woff2',
+  weight: '100 900',
   variable: '--font-display',
   display: 'swap',
+  declarations: [
+    { prop: 'font-stretch', value: '62% 125%' },
+    { prop: 'unicode-range', value: 'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD' },
+  ],
 })
 
 // Layout público de marketing: nav fijo + contenido + footer. Comparte los

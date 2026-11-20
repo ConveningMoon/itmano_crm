@@ -2,8 +2,9 @@
    navegador a descargar y parsear globals.css ANTES de descubrir la fuente, y
    recién ahí abre DNS+TLS contra googleapis y después contra gstatic — dos
    conexiones a terceros encadenadas en el camino crítico de render. La fuente se
-   autohospeda con next/font en src/app/layout.tsx, que la sirve desde nuestro
-   propio dominio y expone la familia en --font-inter (ver --font-sans abajo). */
+   autohospeda con next/font/local (archivos en src/app/fonts/) desde
+   src/app/layout.tsx, que la sirve desde nuestro propio dominio y expone la
+   familia en --font-inter y el latín extendido en --font-inter-ext. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -64,9 +65,11 @@
   --status-lost: #A89878;
 
   --radius: 8px;
-  /* --font-inter lo inyecta next/font desde el layout raíz. El fallback cubre
-     el render de cualquier superficie que no cuelgue de ese layout. */
-  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  /* --font-inter y --font-inter-ext los inyecta next/font desde el layout raíz.
+     La extendida va primero: su unicode-range sólo cubre el latín extendido y el
+     navegador la salta para el resto. El fallback cubre el render de cualquier
+     superficie que no cuelgue de ese layout. */
+  --font-sans: var(--font-inter-ext, 'Inter'), var(--font-inter), 'Inter', system-ui, sans-serif;
 
   /* shadcn base overrides */
   --background: #0B0C0E;
