@@ -12,7 +12,7 @@ import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { TRIAL, trialEndsAtFromNow } from '@/lib/plans'
 import { initialAiBudgetUsd, planAiBudgetUsd } from '@/lib/services/ai-budget'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
-import { resendForAccount, resolveResendAccount, itmanoResendConfigured } from '@/lib/resend'
+import { resendForAccount, resolveResendAccount, resendAccountConfigured } from '@/lib/resend'
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
@@ -73,8 +73,9 @@ const CreateTenantSchema = z.object({
                   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'El slug debe ser kebab-case (minúsculas, números y guiones)'),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido (formato #RRGGBB)').optional(),
   plan:         z.enum(['esencial', 'growth', 'partner']).default('esencial'),
-  // Período de prueba (gancho de adquisición): arranca como plan Partner en
-  // status 'trial' con vencimiento a TRIAL.days y presupuesto de IA de cortesía.
+  // Período de prueba (gancho de adquisición): arranca como TRIAL.plan (Growth)
+  // en status 'trial' con vencimiento a TRIAL.days y presupuesto de IA de
+  // cortesía. Con startTrial, el `plan` elegido se ignora.
   startTrial:   z.boolean().default(false),
 })
 
@@ -229,9 +230,11 @@ async function resendClientForTenant(
   const supabase = createAdminClient()
   const { data } = await supabase.from('tenants').select('resend_account').eq('id', tenantId).maybeSingle()
   const account = resolveResendAccount((data as { resend_account?: string } | null)?.resend_account)
-  // Evita registrar el dominio en la cuenta equivocada por un fallback silencioso.
-  if (account === 'itmano' && !itmanoResendConfigured()) {
-    return { ok: false, error: 'Configura RESEND_API_KEY_ITMANO antes de gestionar dominios de este tenant.' }
+  // Sin la llave de su cuenta, la API de dominios respondería 401 con un mensaje
+  // opaco: se corta antes con la variable que falta.
+  if (!resendAccountConfigured(account)) {
+    const envName = account === 'itmano' ? 'RESEND_API_KEY_ITMANO' : 'RESEND_API_KEY'
+    return { ok: false, error: `Configura ${envName} antes de gestionar dominios de este tenant.` }
   }
   return { ok: true, client: resendForAccount(account), account }
 }

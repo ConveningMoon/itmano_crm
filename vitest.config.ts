@@ -17,8 +17,10 @@ for (const archivo of ['.env.test.local', '.env.development.local']) {
   dotenvConfig({ path: archivo, quiet: true })
 }
 
-// Algunos módulos validan la key al importarse aunque el test no envíe correo.
-// El valor sintético evita depender de secretos reales en suites unitarias.
+// Llave sintética de la cuenta 'aj': sin ella, src/lib/resend.ts corta sus
+// envíos con `missing_api_key` antes del guard de simulación, y las suites que
+// ejercitan a un tenant de esa cuenta dejarían de probar el camino normal. No
+// envía nada real: fuera de producción el guard simula los envíos.
 process.env.RESEND_API_KEY ??= 'test-key-no-envia-nada'
 
 export default defineConfig({

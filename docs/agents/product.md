@@ -37,6 +37,10 @@ La fase activa es comercialización. No empieces sin petición explícita el
 onboarding automático de tenants, analytics avanzado, campañas de reactivación,
 AWS SES, WhatsApp, ManyChat o signup autoservicio.
 
+El 2026-11-18 Dylan pidió explícitamente el signup y el onboarding autoservicio:
+siguen el orden y las decisiones de `docs/plan-saas/README.md` (fase 8), no
+antes de sus dependencias.
+
 ## Principios de experiencia
 
 - El dashboard es el producto visible; protege el pulido del tenant piloto sin

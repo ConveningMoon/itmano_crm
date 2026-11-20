@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { getPaddle } from '@/lib/paddle/env'
 import { applySubscriptionEvent } from '@/lib/paddle/persist'
 import type { PaddleSubscriptionEvent } from '@/lib/paddle/reducer'
@@ -32,7 +33,7 @@ const HANDLED = new Set([
   'subscription.canceled',
 ])
 
-export async function POST(request: NextRequest) {
+async function handlePaddleWebhook(request: NextRequest) {
   const signature = request.headers.get('paddle-signature') ?? ''
   const secret    = process.env.PADDLE_NOTIFICATION_WEBHOOK_SECRET
 
@@ -132,3 +133,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'processing failed' }, { status: 500 })
   }
 }
+
+export const POST = withHeartbeat('webhook:paddle', handlePaddleWebhook)

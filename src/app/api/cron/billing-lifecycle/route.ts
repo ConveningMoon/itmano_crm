@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
@@ -49,7 +50,7 @@ function logError(step: string, tenantId: string | null, error: unknown): void {
 const RETENTION_WARNING_MESSAGE =
   'Este equipo lleva 11 meses cancelado. La politica de retencion elimina sus datos al cumplirse 12.'
 
-export async function GET(request: NextRequest) {
+async function runBillingLifecycle(request: NextRequest) {
   const secret = process.env.CRON_SECRET
   if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -304,3 +305,5 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ ok: true, ...report })
 }
+
+export const GET = withHeartbeat('cron:billing-lifecycle', runBillingLifecycle)

@@ -1,18 +1,15 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runAutoCalibrations, type AutoCalibrationOutcome } from '@/lib/scoring/auto-calibration'
 import { NextRequest, NextResponse } from 'next/server'
+import { withHeartbeat } from '@/lib/ops/heartbeat'
 
 // Vercel Cron (vercel.json) llama con GET y `Authorization: Bearer CRON_SECRET`.
 // Hasta noviembre de 2026 la ruta sólo exportaba POST: la entrada diaria de
 // Vercel recibía 405 y las bandas de calidad quedaron congeladas desde el
 // 25 de agosto. POST se conserva para lanzamientos manuales o externos.
-export async function GET(request: NextRequest) {
-  return runScoreDecay(request)
-}
+export const GET = withHeartbeat('cron:score-decay', runScoreDecay)
 
-export async function POST(request: NextRequest) {
-  return runScoreDecay(request)
-}
+export const POST = withHeartbeat('cron:score-decay', runScoreDecay)
 
 async function runScoreDecay(request: NextRequest) {
   const authHeader = request.headers.get('authorization')

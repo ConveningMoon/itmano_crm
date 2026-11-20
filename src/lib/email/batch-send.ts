@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import type { Resend } from 'resend'
+import { quotaErrorKind, type QuotaKind } from '@/lib/email/quota'
 
 // Envío por lotes a Resend que comparten los despachadores masivos (open houses
 // y correos grupales). Aquí vive lo que un error convertiría en correos
@@ -36,6 +37,8 @@ export interface BatchItem<P> {
 
 export interface BatchResult<P> {
   rateLimited: boolean
+  /** Resend rechazó el lote por la cuota de la cuenta (429 de cuota, no de velocidad). */
+  quota:       QuotaKind | null
   sent:        { item: BatchItem<P>; id: string }[]
   failed:      { leadId: string; error: string }[]
 }
@@ -47,12 +50,16 @@ export async function sendPermissiveBatch<P>(
   items: BatchItem<P>[],
   idempotencyKey: string,
 ): Promise<BatchResult<P>> {
-  const out: BatchResult<P> = { rateLimited: false, sent: [], failed: [] }
+  const out: BatchResult<P> = { rateLimited: false, quota: null, sent: [], failed: [] }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const res = await client.batch.send(items.map(i => i.payload) as any, { idempotencyKey, batchValidation: 'permissive' })
   if (res.error) {
+    // Un tope de cuota también llega como 429, pero no se arregla esperando
+    // unos segundos: el lote queda pendiente hasta el próximo periodo.
+    out.quota = quotaErrorKind(res.error)
+    if (out.quota) out.rateLimited = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (isRateLimit(res.error as any)) out.rateLimited = true
+    else if (isRateLimit(res.error as any)) out.rateLimited = true
     else items.forEach(i => out.failed.push({ leadId: i.leadId, error: res.error!.message }))
     return out
   }
