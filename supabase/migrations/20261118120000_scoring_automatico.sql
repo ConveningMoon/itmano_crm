@@ -417,11 +417,22 @@ create index if not exists scoring_calibrations_tenant_created
 
 alter table public.scoring_calibrations enable row level security;
 
-drop policy if exists scoring_calibrations_select_super_admin on public.scoring_calibrations;
-create policy scoring_calibrations_select_super_admin
-  on public.scoring_calibrations for select
-  to authenticated
-  using ((select public.is_super_admin()));
+-- Idempotente sin borrar la policy: el MCP de Supabase pide confirmación ante
+-- cualquier sentencia destructiva y la rechaza en clientes sin esa confirmación.
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'scoring_calibrations'
+      and policyname = 'scoring_calibrations_select_super_admin'
+  ) then
+    create policy scoring_calibrations_select_super_admin
+      on public.scoring_calibrations for select
+      to authenticated
+      using ((select public.is_super_admin()));
+  end if;
+end;
+$$;
 
 revoke all on public.scoring_calibrations from anon;
 grant select on public.scoring_calibrations to authenticated;
