@@ -29,7 +29,8 @@ const SEO_FILES = new Set(['/sitemap.xml'])
 // The matcher (below) excludes ALL /api routes — each has its own auth (cron/
 // webhook secrets, Resend signature, or self-guard via getCurrentTenantContext) —
 // plus the public marketing routes (`/` landing, /planes, /terminos,
-// /privacidad, /reembolsos), /login, /auth/*, /unsubscribe, the three hosted
+// /privacidad, /reembolsos), /pago (enlace de pago de Paddle), /login, /auth/*,
+// /unsubscribe, the three hosted
 // prefixes (hp/, web/, nl/) and static assets. sitemap.xml DOES enter the
 // matcher (it needs the host rewrite above to reach /nl on news.itmano.com)
 // and is exempted from the auth guard by SEO_FILES instead. robots.txt stays
@@ -122,6 +123,6 @@ export const config = {
 // matcher para que el rewrite por host lo mande a /nl en news.itmano.com; ver
 // SEO_FILES arriba para su exención del guard de auth.
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|hp/|web/|nl/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
+    '/((?!api|_next/static|_next/image|favicon.ico|login|auth|unsubscribe|planes|terminos|privacidad|reembolsos|pago|hp/|web/|nl/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|txt|mp4|webm)$).+)',
   ],
 }
