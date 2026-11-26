@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { syncPartnerSeats } from '@/lib/paddle/manage'
 import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths } from '@/lib/newsletters/revalidate'
@@ -62,6 +63,7 @@ async function runBillingLifecycle(request: NextRequest) {
     newslettersUnpublished: 0,
     domainsReleased:        0,
     retentionWarnings:      0,
+    seatsUpdated:           0,
     // Que pasos completaron su pasada vs. cuales abortaron por una excepcion en
     // la consulta base (no en una fila individual — eso se registra por log y
     // el paso sigue). Sin esto, el reporte no distingue "no habia nada que
@@ -71,6 +73,7 @@ async function runBillingLifecycle(request: NextRequest) {
       newsletters: 'ok' as 'ok' | 'failed',
       domain:      'ok' as 'ok' | 'failed',
       retention:   'ok' as 'ok' | 'failed',
+      seats:       'ok' as 'ok' | 'failed',
     },
   }
 
@@ -301,6 +304,26 @@ async function runBillingLifecycle(request: NextRequest) {
   } catch (err) {
     logError('retention', null, err)
     report.steps.retention = 'failed'
+  }
+
+  // ── Asientos de Partner (fase 5) ───────────────────────────────────────────
+  // Al dar o quitar acceso ya se sincronizan; esta pasada corrige cualquier
+  // llamada a Paddle que haya fallado. Sólo Partner de catálogo con
+  // suscripción viva; syncPartnerSeats descarta el resto y nunca lanza.
+  try {
+    const { data: partners, error } = await supabase
+      .from('subscriptions')
+      .select('tenant_id')
+      .eq('plan', 'partner')
+      .in('status', ['active', 'past_due'])
+      .not('paddle_subscription_id', 'is', null)
+    if (error) throw error
+    for (const row of (partners ?? []) as { tenant_id: string }[]) {
+      if (await syncPartnerSeats(row.tenant_id, supabase) === 'updated') report.seatsUpdated += 1
+    }
+  } catch (err) {
+    logError('seats', null, err)
+    report.steps.seats = 'failed'
   }
 
   return NextResponse.json({ ok: true, ...report })

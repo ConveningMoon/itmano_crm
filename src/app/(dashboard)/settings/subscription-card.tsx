@@ -1,27 +1,51 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { AlertCircle } from 'lucide-react'
 import { requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
-import { openBillingPortal } from './billing-actions'
+import {
+  cancelSubscriptionAction, changePlanAction, openBillingPortal, previewPlanChangeAction, resumeSubscriptionAction,
+} from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, checkoutPlans, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
-import { PLANS, trialDaysLeft } from '@/lib/plans'
+import { PLANS, PARTNER_SEAT, trialDaysLeft } from '@/lib/plans'
+import { billingMode } from '@/lib/paddle/self-service'
+import type { PlanChangePreview } from '@/lib/paddle/manage'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { FechaLocal } from '@/components/ui/local-date'
 import { SettingsCard, SettingsRow } from '@/components/ui/settings-row'
 
 // ─── Subscription card ────────────────────────────────────────────────────────
-// Sales-led: sin procesador de pagos todavía, el owner SOLICITA cambio o
-// cancelación y el equipo ITMANO la procesa (se le notifica al instante).
+// Dos modos (fase 5 del plan SaaS, src/lib/paddle/self-service.ts):
+//   · Autoservicio: con una suscripción viva en Paddle, el owner cambia de plan
+//     o de ciclo (con vista previa del cobro), cancela al final del período y
+//     reactiva, sin pasar por ITMANO. El estado lo confirma el webhook.
+//   · Solicitud: exentos (piloto), Partner con precio acordado o sin suscripción
+//     de pago. El owner SOLICITA y el equipo ITMANO lo procesa.
 
-export function SubscriptionCard({ subscription, canManage }: {
-  subscription: TenantSubscription | null
-  canManage: boolean
+export interface BillingOptions {
+  /** Partner tiene precios de catálogo y de asiento configurados. */
+  partnerCatalog: boolean
+  /** El plan actual es un Partner con precio negociado (excepción). */
+  negotiated:     boolean
+}
+
+const DATE = { day: 'numeric', month: 'long' } as const
+
+export function SubscriptionCard({ subscription, canManage, billingOptions }: {
+  subscription:   TenantSubscription | null
+  canManage:      boolean
+  billingOptions: BillingOptions
 }) {
+  const router = useRouter()
   const [mode, setMode] = useState<'view' | 'changing' | 'confirmCancel'>('view')
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
+  const [targetCycle, setTargetCycle] = useState<BillingCycle>(subscription?.billingCycle ?? 'month')
+  const [preview, setPreview] = useState<PlanChangePreview | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [previewPending, startPreview] = useTransition()
   const [checkoutCycle, setCheckoutCycle] = useState<BillingCycle>('month')
   const [portalError, setPortalError] = useState<string | null>(null)
   const [portalPending, startPortalTransition] = useTransition()
@@ -35,18 +59,55 @@ export function SubscriptionCard({ subscription, canManage }: {
   }
 
   const cfg = PLAN_CONFIG[subscription.plan]
+  const selfService = billingMode({
+    plan:                 subscription.plan,
+    status:               subscription.status,
+    billingExempt:        subscription.billingExempt,
+    billingCycle:         subscription.billingCycle,
+    paddleSubscriptionId: subscription.paddleSubscriptionId,
+    cancelAt:             subscription.cancelAt,
+    negotiatedPriceId:    billingOptions.negotiated ? 'negotiated' : null,
+  }) === 'self_service'
   const hasPendingRequest = subscription.status === 'change_requested' || subscription.status === 'cancel_requested'
   const statusTone = subscription.status === 'active' ? 'green'
                    : subscription.status === 'cancelled' ? 'coral'
                    : 'gold'
+  const changeablePlans = PLAN_ORDER.filter(p => p !== 'partner' || billingOptions.partnerCatalog)
+
+  function resetPanel() {
+    setMode('view'); setSelectedPlan(null); setPreview(null); setError(null)
+  }
 
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>) {
     setError(null)
     startTransition(async () => {
       const res = await action()
       if (!res.ok) { setError(res.error); return }
-      setMode('view')
-      setSelectedPlan(null)
+      resetPanel()
+    })
+  }
+
+  // Acciones contra Paddle: el webhook escribe el estado nuevo unos segundos
+  // después. Se refresca al instante y otra vez al rato para recogerlo.
+  function runPaddle(action: () => Promise<{ ok: true; data: null } | { ok: false; error: string }>, done: string) {
+    setError(null); setNotice(null)
+    startTransition(async () => {
+      const res = await action()
+      if (!res.ok) { setError(res.error); return }
+      resetPanel()
+      setNotice(done)
+      router.refresh()
+      setTimeout(() => router.refresh(), 5000)
+    })
+  }
+
+  function choose(plan: SubscriptionPlan, cycle: BillingCycle) {
+    setSelectedPlan(plan); setTargetCycle(cycle); setPreview(null); setError(null)
+    if (plan === subscription!.plan && cycle === subscription!.billingCycle) return
+    startPreview(async () => {
+      const res = await previewPlanChangeAction(plan, cycle)
+      if (!res.ok) { setError(res.error); return }
+      setPreview(res.data)
     })
   }
 
@@ -61,6 +122,8 @@ export function SubscriptionCard({ subscription, canManage }: {
     })
   }
 
+  const isCurrentTarget = selectedPlan === subscription.plan && targetCycle === subscription.billingCycle
+
   return (
     <SettingsCard
       title="Suscripción"
@@ -72,10 +135,18 @@ export function SubscriptionCard({ subscription, canManage }: {
     >
       <SettingsRow
         label="Plan"
-        hint="El plan Partner se define a medida con nuestro equipo. Para cancelar tu suscripción, usa el portal de inversión o escríbenos."
+        hint={selfService
+          ? 'Puedes cambiar de plan o cancelar cuando quieras desde aquí.'
+          : 'Para cambiar o cancelar tu plan, envía una solicitud y el equipo ITMANO la procesa.'}
       >
         <span className="settings-value">Plan {cfg.label}</span>
         <p className="settings-note settings-note-gap">{cfg.blurb}</p>
+        {subscription.plan === 'partner' && !billingOptions.negotiated && (
+          <p className="settings-note settings-note-gap">
+            Incluye {PARTNER_SEAT.includedLogins} logins. Cada login adicional suma ${PARTNER_SEAT.extraLoginUsd}/mes y se
+            ajusta solo al dar o quitar acceso, prorrateado.
+          </p>
+        )}
       </SettingsRow>
 
       <SettingsRow label="Inversión">
@@ -86,9 +157,9 @@ export function SubscriptionCard({ subscription, canManage }: {
         <SettingsRow label="Facturación">
           <span className="settings-value">
             {BILLING_CYCLE_LABELS[subscription.billingCycle]}
-            {subscription.currentPeriodEnd && (
+            {subscription.currentPeriodEnd && !subscription.cancelAt && (
               <> · Renueva el{' '}
-                <FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={{ day: 'numeric', month: 'long' }} />
+                <FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={DATE} />
               </>
             )}
           </span>
@@ -101,21 +172,36 @@ export function SubscriptionCard({ subscription, canManage }: {
             <AlertCircle size={14} aria-hidden="true" />
             <span>
               Tu suscripción termina el{' '}
-              <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>.
+              <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={DATE} /></strong>.
               Conservas el acceso completo hasta entonces.
+              {canManage && selfService && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="settings-link-btn"
+                    onClick={() => runPaddle(resumeSubscriptionAction, 'Listo: tu suscripción seguirá renovándose.')}
+                    disabled={pending}
+                  >
+                    {pending ? 'Reactivando…' : 'Reactivar suscripción'}
+                  </button>
+                </>
+              )}
             </span>
           </div>
         )}
+
+        {notice && <p className="settings-note settings-note-gold" role="status">{notice}</p>}
 
         {subscription.status === 'trial' && subscription.trialEndsAt && (
           <div className="settings-note settings-note-gold">
             {trialDaysLeft(subscription.trialEndsAt) > 0 ? (
               <>Tu período de prueba termina el{' '}
-                <strong><FechaLocal fecha={subscription.trialEndsAt} locale="es" opciones={{ day: 'numeric', month: 'long' }} /></strong>
+                <strong><FechaLocal fecha={subscription.trialEndsAt} locale="es" opciones={DATE} /></strong>
                 {' '}({trialDaysLeft(subscription.trialEndsAt)} día{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'} restante{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'}).
-                El equipo ITMANO te contactará para elegir tu plan definitivo.</>
+                Elige tu plan con &quot;Pagar ahora&quot; para seguir sin interrupciones.</>
             ) : (
-              <>Tu período de prueba terminó. El equipo ITMANO te contactará para continuar — o escríbenos a customer@itmano.com.</>
+              <>Tu período de prueba terminó. Elige tu plan con &quot;Pagar ahora&quot; para recuperar el acceso completo, o escríbenos a customer@itmano.com.</>
             )}
           </div>
         )}
@@ -150,7 +236,7 @@ export function SubscriptionCard({ subscription, canManage }: {
             procesando esa solicitud sería incoherente. */}
         {canManage && !hasPendingRequest && (() => {
           // Regla y motivo en checkoutPlans (src/lib/subscriptions.ts).
-          const buyablePlans = checkoutPlans(subscription)
+          const buyablePlans = checkoutPlans(subscription, { partnerCatalog: billingOptions.partnerCatalog })
           if (buyablePlans.length === 0) return null
           return (
             <div className="settings-panel">
@@ -191,10 +277,10 @@ export function SubscriptionCard({ subscription, canManage }: {
           )
         })()}
 
-        {canManage && (
+        {canManage && subscription.paddleCustomerId && (
           <div className="settings-stack settings-stack-tight settings-stack-start">
             <button type="button" className="btn btn-ghost" onClick={openPortal} disabled={portalPending}>
-              {portalPending ? 'Abriendo…' : 'Gestionar inversión y facturas'}
+              {portalPending ? 'Abriendo…' : 'Gestionar tarjeta y facturas'}
             </button>
             {portalError && (
               <p className="settings-alert" role="alert">
@@ -204,8 +290,80 @@ export function SubscriptionCard({ subscription, canManage }: {
           </div>
         )}
 
-        {/* Selector de cambio de plan */}
-        {mode === 'changing' && (
+        {/* Cambio de plan en autoservicio: plan + ciclo, vista previa del cobro
+            calculada por Paddle y confirmación. */}
+        {mode === 'changing' && selfService && (
+          <div className="settings-panel">
+            <div className="settings-inline settings-inline-between">
+              <span className="settings-option-name">Elige el nuevo plan</span>
+              <div className="settings-inline settings-inline-tight">
+                {(['month', 'year'] as BillingCycle[]).map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    className="settings-cycle"
+                    aria-pressed={targetCycle === c}
+                    onClick={() => selectedPlan ? choose(selectedPlan, c) : setTargetCycle(c)}
+                  >
+                    {BILLING_CYCLE_LABELS[c]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-stack settings-stack-tight" role="radiogroup" aria-label="Nuevo plan">
+              {changeablePlans.map(p => (
+                <label key={p} className="settings-option settings-option-radio" data-selected={selectedPlan === p}>
+                  <input
+                    type="radio"
+                    name="plan"
+                    checked={selectedPlan === p}
+                    onChange={() => choose(p, targetCycle)}
+                  />
+                  <span>
+                    <span className="settings-option-name">
+                      {PLAN_CONFIG[p].label}{p === subscription.plan ? ' (actual)' : ''}
+                    </span>
+                    <span className="settings-option-price settings-option-price-inline">
+                      {targetCycle === 'year' ? PLANS[p].inversionAnual : PLANS[p].inversion}
+                    </span>
+                    <span className="settings-note settings-note-gap">{PLAN_CONFIG[p].blurb}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {selectedPlan && isCurrentTarget && (
+              <p className="settings-note">Ya tienes ese plan con ese ciclo de facturación.</p>
+            )}
+            {previewPending && <p className="settings-note" role="status">Calculando el cambio con Paddle…</p>}
+            {preview && !previewPending && (
+              <p className="settings-note settings-note-gold" role="status">
+                {preview.action === 'charge'
+                  ? <>Se cobra hoy <strong>{preview.amount}</strong> por la diferencia del período en curso.</>
+                  : <>Te queda <strong>{preview.amount}</strong> a favor, que se descuenta de tus próximos cobros.</>}
+                {preview.recurring && <> Después pagarás <strong>{preview.recurring}</strong> por {targetCycle === 'year' ? 'año' : 'mes'}.</>}
+              </p>
+            )}
+
+            <div className="settings-inline settings-inline-tight">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => selectedPlan && runPaddle(
+                  () => changePlanAction(selectedPlan, targetCycle),
+                  'Listo: Paddle confirma el cambio en unos segundos y esta página se actualiza sola.',
+                )}
+                disabled={pending || previewPending || !preview || !selectedPlan}
+              >
+                {pending ? 'Cambiando…' : 'Confirmar cambio'}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={resetPanel}>Cancelar</button>
+            </div>
+          </div>
+        )}
+
+        {/* Cambio de plan por solicitud (exentos, Partner acordado, sin Paddle) */}
+        {mode === 'changing' && !selfService && (
           <div className="settings-panel">
             <span className="settings-option-name">Elige el nuevo plan</span>
             <div className="settings-stack settings-stack-tight" role="radiogroup" aria-label="Nuevo plan">
@@ -234,7 +392,7 @@ export function SubscriptionCard({ subscription, canManage }: {
               >
                 {pending ? 'Enviando…' : 'Solicitar cambio'}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => { setMode('view'); setSelectedPlan(null); setError(null) }}>Cancelar</button>
+              <button type="button" className="btn btn-ghost" onClick={resetPanel}>Cancelar</button>
             </div>
           </div>
         )}
@@ -242,20 +400,31 @@ export function SubscriptionCard({ subscription, canManage }: {
         {/* Confirmación de cancelación */}
         {mode === 'confirmCancel' && (
           <div className="settings-panel settings-panel-danger">
-            <p className="settings-value settings-confirm-text">
-              ¿Solicitar la cancelación de tu suscripción? El equipo ITMANO te contactará para
-              confirmarla. Tus datos no se eliminan al enviar la solicitud.
-            </p>
+            {selfService ? (
+              <p className="settings-value settings-confirm-text">
+                ¿Cancelar tu suscripción? Se cancela al final del período pagado
+                {subscription.currentPeriodEnd && (
+                  <> (<FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={DATE} />)</>
+                )}: conservas todo hasta entonces y puedes reactivarla antes. Tus datos no se eliminan.
+              </p>
+            ) : (
+              <p className="settings-value settings-confirm-text">
+                ¿Solicitar la cancelación de tu suscripción? El equipo ITMANO te contactará para
+                confirmarla. Tus datos no se eliminan al enviar la solicitud.
+              </p>
+            )}
             <div className="settings-inline settings-inline-tight">
               <button
                 type="button"
                 className="btn btn-danger"
-                onClick={() => run(requestSubscriptionCancel)}
+                onClick={() => selfService
+                  ? runPaddle(cancelSubscriptionAction, 'Listo: la cancelación quedó programada. Puedes reactivarla hasta esa fecha.')
+                  : run(requestSubscriptionCancel)}
                 disabled={pending}
               >
-                {pending ? 'Enviando…' : 'Sí, solicitar cancelación'}
+                {pending ? 'Enviando…' : selfService ? 'Sí, cancelar al final del período' : 'Sí, solicitar cancelación'}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => { setMode('view'); setError(null) }}>Volver</button>
+              <button type="button" className="btn btn-ghost" onClick={resetPanel}>Volver</button>
             </div>
           </div>
         )}
@@ -266,11 +435,11 @@ export function SubscriptionCard({ subscription, canManage }: {
           </p>
         )}
 
-        {/* Acciones — solo owner/super y sin solicitud pendiente */}
-        {canManage && mode === 'view' && !hasPendingRequest && subscription.status !== 'cancelled' && (
+        {/* Acciones — solo owner/super, sin solicitud pendiente y sin cancelación programada */}
+        {canManage && mode === 'view' && !hasPendingRequest && subscription.status !== 'cancelled' && !subscription.cancelAt && (
           <div className="settings-inline settings-inline-tight">
-            <button type="button" className="btn btn-primary" onClick={() => { setMode('changing'); setError(null) }}>Cambiar de plan</button>
-            <button type="button" className="btn btn-danger" onClick={() => { setMode('confirmCancel'); setError(null) }}>
+            <button type="button" className="btn btn-primary" onClick={() => { setMode('changing'); setError(null); setNotice(null) }}>Cambiar de plan</button>
+            <button type="button" className="btn btn-danger" onClick={() => { setMode('confirmCancel'); setError(null); setNotice(null) }}>
               Cancelar suscripción
             </button>
           </div>

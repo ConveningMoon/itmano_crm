@@ -6,6 +6,8 @@ import { getAiUsageSummary, getAgentAiBreakdown } from '@/lib/data/ai-usage'
 import { maskAiCosts } from '@/lib/ai-usage/view'
 import { getAiLimitIndicatorFor } from '@/lib/services/ai-limit'
 import { getSubscription } from '@/lib/data/subscriptions'
+import { catalogPrices } from '@/lib/paddle/env'
+import { negotiatedPartnerPrice } from '@/lib/paddle/items'
 import { getTenantRow } from '@/lib/data/tenants'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { PLANS } from '@/lib/plans'
@@ -131,6 +133,14 @@ async function SettingsContent() {
   // Los montos en USD del uso de IA son información interna de ITMANO. Para
   // usuarios del tenant se ceroan ANTES de cruzar al cliente (no basta con
   // ocultarlos en la UI — no deben viajar en el payload RSC).
+  // Facturación en autoservicio (fase 5): qué ofrece la tarjeta depende de los
+  // precios configurados en el servidor. Sólo viajan booleanos, nunca ids.
+  const prices = catalogPrices()
+  const billingOptions = {
+    partnerCatalog: !!(prices.plans.partner.month && prices.plans.partner.year && prices.seat.month && prices.seat.year),
+    negotiated:     !!(subscription && negotiatedPartnerPrice(subscription.plan, subscription.paddlePriceId, prices)),
+  }
+
   const showAiCosts = ctx.role === 'super_admin'
   const { summary: aiUsage, byAgent: aiByAgent } = maskAiCosts(aiUsageRaw, aiByAgentRaw, showAiCosts)
 
@@ -163,6 +173,7 @@ async function SettingsContent() {
         aiLimitSubtitle={aiLimit?.perAgent ? 'de tu parte del límite del equipo' : undefined}
         aiByAgent={aiByAgent}
         subscription={subscription}
+        billingOptions={billingOptions}
         leadTags={leadTags}
         leadTagCounts={leadTagCounts}
     />

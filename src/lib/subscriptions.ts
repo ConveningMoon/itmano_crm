@@ -31,6 +31,8 @@ export interface TenantSubscription {
   /** Precio negociado de Paddle. Solo Partner lo usa (catálogo estándar en env). */
   paddlePriceId:    string | null
   paddleCustomerId: string | null
+  /** Suscripción viva en Paddle: habilita el autoservicio (cambio, cancelación). */
+  paddleSubscriptionId: string | null
   /** A&J (piloto): true — nunca toca Paddle. */
   billingExempt:    boolean
   /** ISO timestamp de cuándo la suscripción perdió acceso completo (paused/cancelled). */
@@ -82,12 +84,14 @@ export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
  *   (activado por ITMANO y pendiente del primer pago).
  * - Pago vencido (past_due): igual que activa; se arregla en el portal.
  * - Prueba, pausada o cancelada: todos, porque no hay cobro en curso.
- * - Partner sólo con precio negociado (`paddlePriceId`).
+ * - Partner con precio de catálogo configurado (`partnerCatalog`, fase 5) o con
+ *   precio negociado (`paddlePriceId`).
  */
 export function checkoutPlans(sub: Pick<TenantSubscription,
-  'plan' | 'status' | 'billingCycle' | 'paddlePriceId' | 'billingExempt'>): SubscriptionPlan[] {
+  'plan' | 'status' | 'billingCycle' | 'paddlePriceId' | 'billingExempt'>,
+  opts: { partnerCatalog?: boolean } = {}): SubscriptionPlan[] {
   if (sub.billingExempt) return []
-  const purchasable = (p: SubscriptionPlan) => p !== 'partner' || !!sub.paddlePriceId
+  const purchasable = (p: SubscriptionPlan) => p !== 'partner' || !!opts.partnerCatalog || !!sub.paddlePriceId
   // past_due también tiene una suscripción viva en Paddle (pago fallido): se
   // resuelve actualizando el método de pago en el portal, no comprando otra.
   if (sub.status === 'active' || sub.status === 'past_due') {

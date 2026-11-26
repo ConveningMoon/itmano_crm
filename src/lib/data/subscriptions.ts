@@ -11,7 +11,7 @@ export const getSubscription = cache(async function getSubscription(
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, cancel_at, paddle_price_id, paddle_customer_id, billing_exempt, degraded_at')
+    .select('plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, cancel_at, paddle_price_id, paddle_customer_id, paddle_subscription_id, billing_exempt, degraded_at')
     .eq('tenant_id', tenantId)
     .maybeSingle()
   // getTenantAccessFor y el límite de IA leen de aquí y fallan en abierto: este
@@ -35,6 +35,7 @@ export const getSubscription = cache(async function getSubscription(
     cancelAt:         (s.cancel_at as string | null) ?? null,
     paddlePriceId:    (s.paddle_price_id as string | null) ?? null,
     paddleCustomerId: (s.paddle_customer_id as string | null) ?? null,
+    paddleSubscriptionId: (s.paddle_subscription_id as string | null) ?? null,
     billingExempt:    (s.billing_exempt as boolean | null) ?? false,
     degradedAt:       (s.degraded_at as string | null) ?? null,
   }
