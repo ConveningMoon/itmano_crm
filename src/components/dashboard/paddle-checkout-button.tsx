@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { initializePaddle, type Paddle } from '@paddle/paddle-js'
+import { useRouter } from 'next/navigation'
 import { startCheckout } from '@/app/(dashboard)/settings/billing-actions'
 import type { SubscriptionPlan, BillingCycle } from '@/lib/subscriptions'
 
-// El client token es público a propósito: solo abre checkouts y previsualiza
-// precios. La API key de Paddle NUNCA llega al navegador (vive solo en
+// Crea la transacción en el servidor y lleva al checkout inline de /pago, que
+// la abre con `?_ptxn=` y vuelve a Configuración al completar el pago
+// (`desde=crm`). La API key de Paddle NUNCA llega al navegador (vive solo en
 // src/lib/paddle/env.ts, server-only).
 
 interface Props {
@@ -16,19 +17,9 @@ interface Props {
 }
 
 export function PaddleCheckoutButton({ plan, cycle, label }: Props) {
-  const [paddle, setPaddle] = useState<Paddle | null>(null)
+  const router              = useRouter()
   const [error, setError]   = useState<string | null>(null)
   const [pending, startTx]  = useTransition()
-
-  async function ensurePaddle(): Promise<Paddle | null> {
-    if (paddle) return paddle
-    const instance = await initializePaddle({
-      environment: process.env.NEXT_PUBLIC_PADDLE_ENV === 'production' ? 'production' : 'sandbox',
-      token:       process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN ?? '',
-    })
-    setPaddle(instance ?? null)
-    return instance ?? null
-  }
 
   function onClick() {
     setError(null)
@@ -36,14 +27,9 @@ export function PaddleCheckoutButton({ plan, cycle, label }: Props) {
       const result = await startCheckout(plan, cycle)
       if (!result.ok) { setError(result.error); return }
 
-      const instance = await ensurePaddle()
-      if (!instance) { setError('No se pudo cargar el proceso de inversión.'); return }
-
-      instance.Checkout.open({
-        transactionId: result.data.transactionId,
-        // Español fijo: sin esto Paddle usa el idioma del navegador.
-        settings: { theme: 'dark', displayMode: 'overlay', locale: 'es' },
-      })
+      // Dentro de la transición: el botón sigue pendiente hasta que /pago carga.
+      const params = new URLSearchParams({ _ptxn: result.data.transactionId, desde: 'crm' })
+      router.push(`/pago?${params}`)
     })
   }
 
