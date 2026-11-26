@@ -4,9 +4,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { catalogPrices, getPaddle } from '@/lib/paddle/env'
 import {
-  extraSeats, formatPaddleAmount, isSeatPrice, negotiatedPartnerPrice, subscriptionItems, type Cycle,
+  extraSeats, formatPaddleAmount, negotiatedPartnerPrice, reconcileItems, subscriptionItems, type Cycle,
 } from '@/lib/paddle/items'
-import { cancelBlock, planChangeBlock, resumeBlock, type BillingRow } from '@/lib/paddle/self-service'
+import { cancelBlock, planChangeBlock, resumeBlock, resumePausedBlock, type BillingRow } from '@/lib/paddle/self-service'
 import type { SubscriptionPlan, SubscriptionStatus } from '@/lib/subscriptions'
 
 // Autoservicio de la suscripción en Paddle (fase 5 del plan SaaS): cambiar de
@@ -154,50 +154,68 @@ export async function resumeSubscription(tenantId: string): Promise<Result<null>
   }
 }
 
-export type SeatSyncOutcome = 'updated' | 'in_sync' | 'not_partner_catalog' | 'missing_seat_price' | 'error'
+export type ReconcileOutcome = 'updated' | 'in_sync' | 'not_applicable' | 'error'
 
 /**
- * Deja los asientos de un Partner de catálogo iguales a sus logins extra. Se
- * llama al dar o quitar acceso y en la pasada diaria de billing-lifecycle, que
- * corrige cualquier llamada que haya fallado. Nunca lanza.
+ * Deja la suscripción de Paddle como debe estar: cada plan con cantidad 1 y,
+ * en Partner de catálogo, tantos asientos como logins extra
+ * (reconcileItems). Se llama al dar o quitar acceso, cuando el webhook ve una
+ * cantidad rara y en la pasada diaria de billing-lifecycle, que corrige
+ * cualquier llamada que haya fallado. Nunca lanza.
  */
-export async function syncPartnerSeats(tenantId: string, db: SupabaseClient = createAdminClient()): Promise<SeatSyncOutcome> {
+export async function reconcileSubscriptionItems(tenantId: string, db: SupabaseClient = createAdminClient()): Promise<ReconcileOutcome> {
   try {
     const row = await loadBillingRow(db, tenantId)
-    if (!row || row.plan !== 'partner' || row.negotiatedPriceId || !row.paddleSubscriptionId || !row.billingCycle) return 'not_partner_catalog'
-    if (row.status !== 'active' && row.status !== 'past_due') return 'not_partner_catalog'
+    if (!row || row.negotiatedPriceId || !row.paddleSubscriptionId) return 'not_applicable'
+    if (row.status !== 'active' && row.status !== 'past_due') return 'not_applicable'
 
     const prices = catalogPrices()
-    const logins = await countTenantLogins(db, tenantId)
-    const wanted = extraSeats(logins)
     const sub = await getPaddle().subscriptions.get(row.paddleSubscriptionId)
-    const current = sub.items.filter(i => isSeatPrice(i.price?.id, prices)).reduce((n, i) => n + i.quantity, 0)
-    if (current === wanted) return 'in_sync'
-
-    const items = subscriptionItems({ plan: 'partner', cycle: row.billingCycle, logins, prices })
-    if (!items.ok) return items.reason === 'missing_seat_price' ? 'missing_seat_price' : 'error'
-    // Se conservan los ítems que no son de catálogo (p. ej. un add-on puesto a
-    // mano en Paddle): el update reemplaza la lista completa.
-    const base = new Set(items.items.map(i => i.priceId))
-    const others = sub.items
-      .filter(i => i.price?.id && !base.has(i.price.id) && !isSeatPrice(i.price.id, prices) && i.price.id !== prices.plans.partner[row.billingCycle as Cycle])
+    const current = sub.items
+      .filter(i => i.price?.id)
       .map(i => ({ priceId: i.price!.id, quantity: i.quantity }))
+    const seats = row.plan === 'partner' ? extraSeats(await countTenantLogins(db, tenantId)) : 0
+    const wanted = reconcileItems(current, { extraSeats: seats, prices })
+    if (!wanted) return 'in_sync'
+
     await getPaddle().subscriptions.update(row.paddleSubscriptionId, {
-      items: [...items.items, ...others],
+      items: wanted,
       prorationBillingMode: 'prorated_immediately',
     })
-    console.log(JSON.stringify({ service: 'paddle-seats', tenant_id: tenantId, from: current, to: wanted }))
+    console.log(JSON.stringify({
+      service: 'paddle-items', tenant_id: tenantId,
+      from: current.map(i => `${i.priceId}x${i.quantity}`), to: wanted.map(i => `${i.priceId}x${i.quantity}`),
+    }))
     return 'updated'
   } catch (err) {
-    logPaddleError('sync_seats', tenantId, err)
+    logPaddleError('reconcile_items', tenantId, err)
     return 'error'
   }
 }
 
 /**
- * Sincroniza los asientos sin hacer esperar a quien dio o quitó el acceso. Si
- * falla, la pasada diaria de billing-lifecycle lo corrige.
+ * Reconcilia sin hacer esperar a quien dio o quitó el acceso (o al webhook).
+ * Si falla, la pasada diaria de billing-lifecycle lo corrige.
  */
-export function scheduleSeatSync(tenantId: string): void {
-  after(async () => { await syncPartnerSeats(tenantId) })
+export function scheduleItemsReconcile(tenantId: string): void {
+  after(async () => { await reconcileSubscriptionItems(tenantId) })
+}
+
+/**
+ * Reactiva una suscripción pausada (por ejemplo, tras agotarse los reintentos
+ * de cobro). Paddle cobra al reanudar; si la tarjeta sigue fallando, el cliente
+ * la cambia en el portal. Un checkout nuevo crearía una segunda suscripción.
+ */
+export async function resumePausedSubscription(tenantId: string): Promise<Result<null>> {
+  const row = await loadBillingRow(createAdminClient(), tenantId)
+  if (!row) return { ok: false, error: 'Este equipo no tiene una suscripción registrada.' }
+  const blocked = resumePausedBlock(row)
+  if (blocked) return { ok: false, error: blocked }
+  try {
+    await getPaddle().subscriptions.resume(row.paddleSubscriptionId as string, { effectiveFrom: 'immediately' })
+    return { ok: true, data: null }
+  } catch (err) {
+    logPaddleError('resume_paused', tenantId, err)
+    return { ok: false, error: 'Paddle no pudo reactivar la suscripción. Revisa tu tarjeta en "Gestionar tarjeta y facturas" o escríbenos.' }
+  }
 }

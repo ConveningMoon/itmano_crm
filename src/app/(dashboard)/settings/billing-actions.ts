@@ -5,7 +5,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess } from '@/lib/auth/guards'
 import { createCheckoutTransaction, createPortalUrl } from '@/lib/paddle/checkout'
 import {
-  cancelAtPeriodEnd, changePlan, previewPlanChange, resumeSubscription, type PlanChangePreview,
+  cancelAtPeriodEnd, changePlan, previewPlanChange, resumePausedSubscription, resumeSubscription, type PlanChangePreview,
 } from '@/lib/paddle/manage'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import type { BillingCycle } from '@/lib/paddle/env'
@@ -87,6 +87,15 @@ export async function cancelSubscriptionAction(): Promise<Result<null>> {
   const t = await billingTenant()
   if (!t.ok) return t
   const res = await cancelAtPeriodEnd(t.tenantId)
+  if (res.ok) revalidatePath('/settings')
+  return res
+}
+
+/** Reanuda una suscripción pausada (no la cancelación programada: esa es resumeSubscriptionAction). */
+export async function resumePausedAction(): Promise<Result<null>> {
+  const t = await billingTenant()
+  if (!t.ok) return t
+  const res = await resumePausedSubscription(t.tenantId)
   if (res.ok) revalidatePath('/settings')
   return res
 }

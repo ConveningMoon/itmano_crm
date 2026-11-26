@@ -27,6 +27,7 @@ export const SELF_SERVICE_MESSAGES = {
   cancelling:  'Tu suscripción tiene una cancelación programada. Reactívala antes de cambiar de plan.',
   notCancelling: 'Tu suscripción no tiene una cancelación programada.',
   alreadyCancelling: 'La cancelación ya está programada.',
+  notPaused:   'Tu suscripción no está en pausa.',
 } as const
 
 /** Puede gestionarse en autoservicio: tiene suscripción viva en Paddle y no es un trato aparte. */
@@ -64,8 +65,25 @@ export function resumeBlock(row: BillingRow): string | null {
   return null
 }
 
-/** Qué ofrece la tarjeta de Suscripción: autoservicio con Paddle o solicitud a ITMANO. */
-export function billingMode(row: BillingRow): 'self_service' | 'request' {
+/** Reanudar una suscripción pausada en Paddle (no la cancelación programada: esa es resumeBlock). */
+export function resumePausedBlock(row: BillingRow): string | null {
+  if (row.billingExempt) return SELF_SERVICE_MESSAGES.exempt
+  if (!row.paddleSubscriptionId) return SELF_SERVICE_MESSAGES.noPaddle
+  if (row.status !== 'paused') return SELF_SERVICE_MESSAGES.notPaused
+  return null
+}
+
+/**
+ * Qué ofrece la tarjeta de Suscripción:
+ *   · self_service: suscripción viva en Paddle → cambiar, cancelar, reactivar.
+ *   · paused: pausada en Paddle → sólo reanudarla (un checkout nuevo crearía
+ *     una segunda suscripción) y el portal para cambiar la tarjeta.
+ *   · request: exentos, Partner acordado o sin Paddle → solicitud a ITMANO.
+ */
+export function billingMode(row: BillingRow): 'self_service' | 'paused' | 'request' {
   if (row.billingExempt || row.negotiatedPriceId) return 'request'
-  return row.paddleSubscriptionId && (row.status === 'active' || row.status === 'past_due') ? 'self_service' : 'request'
+  if (!row.paddleSubscriptionId) return 'request'
+  if (row.status === 'active' || row.status === 'past_due') return 'self_service'
+  if (row.status === 'paused') return 'paused'
+  return 'request'
 }

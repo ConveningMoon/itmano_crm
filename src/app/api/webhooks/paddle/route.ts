@@ -3,6 +3,7 @@ import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { catalogPrices, getPaddle } from '@/lib/paddle/env'
 import { planOfPrice, primaryPriceId } from '@/lib/paddle/items'
 import { applySubscriptionEvent } from '@/lib/paddle/persist'
+import { scheduleItemsReconcile } from '@/lib/paddle/manage'
 import type { PaddleSubscriptionEvent } from '@/lib/paddle/reducer'
 import type { BillingCycle } from '@/lib/paddle/env'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -132,6 +133,14 @@ async function handlePaddleWebhook(request: NextRequest) {
 
   try {
     const result = await applySubscriptionEvent(normalized)
+    // El checkout de Paddle deja cambiar la cantidad: un plan comprado con
+    // cantidad > 1 se corrige a 1 en Paddle (con su crédito prorrateado), sin
+    // hacer esperar a Paddle por la respuesta.
+    const tenantId = typeof customData?.tenant_id === 'string' ? customData.tenant_id : null
+    const items = (d.items ?? []) as { price?: { id?: string }; quantity?: number }[]
+    if (result === 'applied' && tenantId && items.some(i => planOfPrice(i.price?.id, prices) && (i.quantity ?? 1) > 1)) {
+      scheduleItemsReconcile(tenantId)
+    }
     return NextResponse.json({ ok: true, result })
   } catch (err) {
     console.error(JSON.stringify({

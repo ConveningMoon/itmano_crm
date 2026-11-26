@@ -13,7 +13,7 @@ import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { detectCutout } from '@/lib/studio/agent-photo'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { PLANS } from '@/lib/plans'
-import { scheduleSeatSync } from '@/lib/paddle/manage'
+import { scheduleItemsReconcile } from '@/lib/paddle/manage'
 import { normalizeLocalPart } from '@/lib/email/sender-address'
 
 const LANGUAGE_ENUM = SUPPORTED_LANGUAGE_CODES as [string, ...string[]]
@@ -703,7 +703,7 @@ export async function inviteAgentAccess(
   if (inviteErr) return { ok: false, error: inviteErr.message }
 
   revalidatePath('/settings')
-  scheduleSeatSync(a.tenant_id)
+  scheduleItemsReconcile(a.tenant_id)
   return { ok: true, email: normalized, created }
 }
 
@@ -738,7 +738,7 @@ export async function revokeAgentAccess(
 
   revalidatePath('/settings')
   revalidatePath('/leads')
-  scheduleSeatSync(a.tenant_id)
+  scheduleItemsReconcile(a.tenant_id)
   return { ok: true }
 }
 
@@ -935,7 +935,7 @@ export async function deleteAgent(
   revalidatePath('/dashboard')
   revalidatePath('/properties')
   revalidatePath('/sources')
-  scheduleSeatSync(tenantId)
+  scheduleItemsReconcile(tenantId)
   return { ok: true, reassignedTo: targetAgentId }
 }
 

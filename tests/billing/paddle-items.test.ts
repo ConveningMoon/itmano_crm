@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extraSeats, formatPaddleAmount, isCatalogPrice, negotiatedPartnerPrice, planOfPrice, primaryPriceId,
-  subscriptionItems, type CatalogPrices,
+  reconcileItems, subscriptionItems, type CatalogPrices,
 } from '@/lib/paddle/items'
 import {
   billingMode, cancelBlock, planChangeBlock, resumeBlock, SELF_SERVICE_MESSAGES, type BillingRow,
@@ -111,11 +111,40 @@ describe('autoservicio de la suscripción', () => {
     expect(billingMode(row({ status: 'trial', paddleSubscriptionId: null }))).toBe('request')
     expect(billingMode(row({ billingExempt: true }))).toBe('request')
     expect(billingMode(row({ plan: 'partner', negotiatedPriceId: 'pri_trato' }))).toBe('request')
+    // Pausada en Paddle: sólo reanudar (un checkout nuevo crearía otra suscripción).
+    expect(billingMode(row({ status: 'paused' }))).toBe('paused')
+    expect(billingMode(row({ status: 'paused', paddleSubscriptionId: null }))).toBe('request')
   })
 
   it('Partner se ofrece en el checkout cuando su catálogo está configurado', () => {
     const trial = { plan: 'esencial' as const, status: 'trial' as const, billingCycle: null, paddlePriceId: null, billingExempt: false }
     expect(checkoutPlans(trial)).toEqual(['esencial', 'growth'])
     expect(checkoutPlans(trial, { partnerCatalog: true })).toEqual(['esencial', 'growth', 'partner'])
+  })
+
+  it('una suscripción pausada que sigue en Paddle no ofrece un checkout nuevo', () => {
+    const paused = { plan: 'growth' as const, status: 'paused' as const, billingCycle: 'month' as const, paddlePriceId: null, billingExempt: false }
+    expect(checkoutPlans({ ...paused, paddleSubscriptionId: 'sub_1' })).toEqual([])
+    expect(checkoutPlans({ ...paused, paddleSubscriptionId: null })).toEqual(['esencial', 'growth'])
+  })
+})
+
+describe('reconciliar ítems de Paddle', () => {
+  it('deja cada plan con cantidad 1', () => {
+    expect(reconcileItems([{ priceId: 'pri_es_m', quantity: 2 }], { extraSeats: 0, prices: PRICES }))
+      .toEqual([{ priceId: 'pri_es_m', quantity: 1 }])
+  })
+
+  it('Partner: asientos del ciclo del plan, y nada si ya coincide', () => {
+    expect(reconcileItems([{ priceId: 'pri_pa_y', quantity: 1 }], { extraSeats: 2, prices: PRICES }))
+      .toEqual([{ priceId: 'pri_pa_y', quantity: 1 }, { priceId: 'pri_seat_y', quantity: 2 }])
+    expect(reconcileItems([{ priceId: 'pri_seat_y', quantity: 2 }, { priceId: 'pri_pa_y', quantity: 1 }], { extraSeats: 2, prices: PRICES }))
+      .toBeNull()
+  })
+
+  it('conserva lo que no es de catálogo y no toca un precio negociado', () => {
+    expect(reconcileItems([{ priceId: 'pri_gr_m', quantity: 1 }, { priceId: 'pri_addon', quantity: 3 }], { extraSeats: 0, prices: PRICES }))
+      .toBeNull()
+    expect(reconcileItems([{ priceId: 'pri_trato', quantity: 1 }], { extraSeats: 4, prices: PRICES })).toBeNull()
   })
 })

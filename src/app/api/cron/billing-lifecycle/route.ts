@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withHeartbeat } from '@/lib/ops/heartbeat'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { syncPartnerSeats } from '@/lib/paddle/manage'
+import { reconcileSubscriptionItems } from '@/lib/paddle/manage'
 import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths } from '@/lib/newsletters/revalidate'
@@ -306,20 +306,20 @@ async function runBillingLifecycle(request: NextRequest) {
     report.steps.retention = 'failed'
   }
 
-  // ── Asientos de Partner (fase 5) ───────────────────────────────────────────
-  // Al dar o quitar acceso ya se sincronizan; esta pasada corrige cualquier
-  // llamada a Paddle que haya fallado. Sólo Partner de catálogo con
-  // suscripción viva; syncPartnerSeats descarta el resto y nunca lanza.
+  // ── Ítems de Paddle (fase 5) ───────────────────────────────────────────────
+  // Cada plan con cantidad 1 y los asientos de Partner iguales a los logins
+  // extra. Al dar o quitar acceso, y cuando el webhook ve una cantidad rara,
+  // ya se corrige; esta pasada arregla cualquier llamada a Paddle que haya
+  // fallado. reconcileSubscriptionItems descarta lo que no aplica y nunca lanza.
   try {
-    const { data: partners, error } = await supabase
+    const { data: subs, error } = await supabase
       .from('subscriptions')
       .select('tenant_id')
-      .eq('plan', 'partner')
       .in('status', ['active', 'past_due'])
       .not('paddle_subscription_id', 'is', null)
     if (error) throw error
-    for (const row of (partners ?? []) as { tenant_id: string }[]) {
-      if (await syncPartnerSeats(row.tenant_id, supabase) === 'updated') report.seatsUpdated += 1
+    for (const row of (subs ?? []) as { tenant_id: string }[]) {
+      if (await reconcileSubscriptionItems(row.tenant_id, supabase) === 'updated') report.seatsUpdated += 1
     }
   } catch (err) {
     logError('seats', null, err)

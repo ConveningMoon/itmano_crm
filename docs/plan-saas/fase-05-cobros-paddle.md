@@ -94,6 +94,25 @@ tarjeta de prueba de Paddle (`4242 4242 4242 4242`):
 Igual que el paso 1 en la cuenta Live (cuenta verificada), y luego el primer
 cobro real con tu tarjeta y su reembolso desde Paddle.
 
+## Prueba en sandbox (2026-11-26)
+
+Hecha por el agente en local contra Paddle sandbox, con el webhook en el
+despliegue sandbox: pago de Esencial, subida a Growth, cambio a anual,
+cancelación y reactivación, Partner con 4 y 5 logins (1 y 2 asientos, y bajada
+a 0), portal y pago fallido simulado (pago pendiente → pausa → modo degradado).
+Todo pasó. Correcciones que salieron de ahí (rama `fix/paddle-hallazgos`):
+
+- Una suscripción **pausada** en Paddle ya no ofrece un checkout nuevo (crearía
+  otra suscripción): la tarjeta ofrece "Reactivar suscripción", que la reanuda
+  en Paddle (`resumePausedSubscription`).
+- El checkout de Paddle deja cambiar la **cantidad** del plan. El CRM la
+  devuelve a 1 en Paddle (`reconcileSubscriptionItems`): al recibir el webhook,
+  al dar o quitar acceso y en la pasada diaria. Opcional en Paddle: limitar a 1
+  la cantidad de los 6 precios de plan para que el selector ni aparezca.
+- Checkout siempre en español (`locale: 'es'`), fechas con año cuando no son
+  del año en curso, inversión anual en la tarjeta y eventos descartados por
+  viejos marcados como procesados.
+
 ## Criterio de terminado
 
 Un tenant de prueba en producción compra Esencial, sube a Growth, cancela y
