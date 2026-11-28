@@ -2353,17 +2353,164 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
 .ops-form .ops-form-wide { grid-column: 1 / -1; }
 .ops-cell-limit { color: var(--text-muted); }
 
-/* ─── Enlace de pago de Paddle (/pago) ────────────────────────────────────── */
+/* ─── Checkout inline de Paddle y enlace de pago (/pago) ──────────────────── */
 .pago-page {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 24px 16px 48px;
   background: var(--bg-base);
 }
+.pago-header {
+  width: 100%;
+  max-width: 980px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pago-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+}
+.pago-secure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.pago-secure svg { color: var(--gold-2); }
+
+/* Móvil: resumen encima del formulario. Escritorio: formulario y resumen al lado. */
+.pago-layout {
+  width: 100%;
+  max-width: 980px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "heading" "summary" "checkout";
+  gap: 16px;
+}
+@media (min-width: 900px) {
+  .pago-layout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: "heading heading" "checkout summary";
+    align-items: start;
+    gap: 20px 24px;
+  }
+  .pago-summary { position: sticky; top: 24px; }
+}
+.pago-heading {
+  grid-area: heading;
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.pago-panel {
+  min-width: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--highlight-top);
+}
+/* El frame de Paddle trae su propio padding y pide min-width ≥ 312px. En
+   pantallas más angostas desplaza dentro del panel, no la página. */
+.pago-checkout {
+  grid-area: checkout;
+  position: relative;
+  padding: 4px;
+  overflow-x: auto;
+}
+.pago-paddle-frame { min-height: 450px; }
+.pago-checkout-skeleton {
+  position: absolute;
+  inset: 4px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+
+.pago-summary {
+  grid-area: summary;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+.pago-summary-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pago-summary-skeleton { display: flex; flex-direction: column; gap: 8px; }
+.pago-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.pago-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.pago-line-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-weight: 500; }
+.pago-line-detail { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.pago-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pago-totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+.pago-totals dt { color: var(--text-secondary); }
+.pago-totals dd { margin: 0; color: var(--text-primary); text-align: right; font-variant-numeric: tabular-nums; }
+.pago-totals .pago-total-label,
+.pago-totals .pago-total-value {
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.pago-totals .pago-total-value { color: var(--gold-2); }
+.pago-renewal {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gold-2) 5%, transparent);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.pago-renewal strong { color: var(--text-primary); font-weight: 600; white-space: nowrap; }
+.pago-fine { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.pago-fine a { color: var(--gold-2); text-decoration: underline; text-underline-offset: 2px; }
+.pago-fine a:hover { color: var(--gold-1); }
+
+/* Confirmación, error y enlace sin pago. */
 .pago-card {
   width: 100%;
   max-width: 420px;
+  margin-top: 8vh;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

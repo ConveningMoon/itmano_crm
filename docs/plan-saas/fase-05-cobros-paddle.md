@@ -38,6 +38,12 @@ Rama `feat/saas-fase-05-paddle`.
       de los ítems) y, si es de catálogo, el plan sale del precio.
 - [x] Portal de cliente de Paddle ("Gestionar tarjeta y facturas"), sólo cuando
       el equipo ya es cliente de Paddle.
+- [x] Checkout **inline** en `/pago` con el diseño del CRM (sección abajo):
+      "Pagar ahora" crea la transacción en el servidor y navega a
+      `/pago?_ptxn=<id>&desde=crm`; al completar vuelve a
+      `/settings?tab=cuenta`.
+- [ ] **Dylan** — estilos del formulario de Paddle (paso 4, abajo), en sandbox
+      y en Live.
 - [ ] **Dylan** — prueba de punta a punta en Paddle **sandbox** (pasos abajo).
 - [ ] **Dylan** — Paddle Live (pasos abajo).
 - [ ] **Dylan** — fecha de vencimiento de `PADDLE_API_KEY` en
@@ -93,6 +99,59 @@ tarjeta de prueba de Paddle (`4242 4242 4242 4242`):
 
 Igual que el paso 1 en la cuenta Live (cuenta verificada), y luego el primer
 cobro real con tu tarjeta y su reembolso desde Paddle.
+
+### 4. Estilos del checkout inline
+
+El frame de Paddle no toma los estilos de la página: se configuran en Paddle →
+**Checkout → Checkout configuration → pestaña Styling**, una vez en sandbox y
+otra en Live. (También con `PATCH /checkout-styles`, pero exige el permiso
+`checkout_settings.write`, que la API key actual no tiene a propósito.)
+
+Generales (los dos modos):
+
+| Ajuste | Valor | Por qué |
+|---|---|---|
+| Fuente | Fuente del sistema | Paddle sólo admite Lato o la del sistema; la del sistema queda más cerca de Inter |
+| Tamaño de texto: inputs y botones | 14px | |
+| Tamaño de texto: labels, enlaces y mensajes | 13px | |
+| Posición de labels | Arriba, peso medio (500) | Como los formularios de Configuración |
+| Altura de botones e inputs | 40px | |
+| Grosor de bordes de botones e inputs | 1px | |
+| Esquinas de botones | 8px | `.btn` |
+| Esquinas de inputs | 9px | `.settings-input` |
+| Ancho de botones | 100% | Paddle rechaza menos de 70% |
+| Sombra de inputs | Desactivada | |
+| Anillo de foco de botones | Activado | Su color no se puede cambiar |
+| Padding del checkout | Activado | `/pago` asume el `min-width: 312px` que Paddle pide con padding |
+| Color de marca (overall) | `#DDB968` | Sólo lo usa el overlay; se deja coherente |
+
+Modo **oscuro** (`/pago` abre el checkout con `theme: 'dark'`; el modo claro
+no se usa). El fondo del frame es transparente y deja ver el panel de la
+página (`#111215`):
+
+| Elemento | Fondo | Texto | Borde | Hover |
+|---|---|---|---|---|
+| Botón primario | `#DDB968` | `#0B0C0E` | `#DDB968` | fondo y borde `#B08D45`, texto `#0B0C0E` |
+| Botón secundario | `#16181C` | `#E8E6E1` | `#2E2E31` | fondo `#1C1F24`, borde `#2E2E31`, texto `#E8E6E1` |
+| Inputs | `#0B0C0E` | `#E8E6E1`, placeholder `#8A877F` | `#2E2E31` | — |
+| Foco de inputs | — | — | `#DDB968` | sombra `rgba(221, 185, 104, 0.14)` (hex: `#28241B`) |
+| Selector de método de pago | — | — | `#2E2E31` | — |
+| Checkbox | `#DDB968` (marcado) | — | — | — |
+| Labels | — | `#A09D95` | — | — |
+| Enlaces | — | `#DDB968` | — | `#B08D45` |
+| Mensaje de descuento | `#16181C` | — | `#2E2E31` | — |
+
+Referencias del sistema de diseño: fondo `#0B0C0E` (`--bg-base`), tarjetas
+`#16181C` (`--bg-elevated`), texto `#E8E6E1` y `#A09D95` (`--text-primary`,
+`--text-secondary`), dorado `#DDB968` y `#B08D45` (`--gold-2`, `--gold-3`).
+Los bordes `#2E2E31` son `--border-hover` (blanco al 12%) en hex sobre el
+panel; si Paddle acepta `rgba`, usa `rgba(255, 255, 255, 0.12)`.
+
+Lo que Paddle exige al checkout inline y ya cumple `/pago`: qué se compra,
+subtotal, impuestos y total con moneda, cuánto y cada cuánto se renueva
+(resumen propio armado con `checkout.loaded` y `checkout.updated`,
+`src/lib/paddle/checkout-summary.ts`), el frame completo con su pie y el enlace
+a `/reembolsos`. El "Default payment link" sigue siendo `https://<dominio>/pago`.
 
 ## Prueba en sandbox (2026-11-26)
 

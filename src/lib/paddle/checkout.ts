@@ -7,7 +7,7 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 /**
  * Crea la transacción EN EL SERVIDOR y devuelve su id para que el navegador
- * abra el overlay con `Paddle.Checkout.open({ transactionId })`.
+ * la pague en el checkout inline de /pago (`?_ptxn=<id>`).
  *
  * Por qué server-side y no `items:[{priceId}]` desde el cliente (spec §2):
  *   1. Partner tiene precio por trato, guardado en subscriptions.paddle_price_id.
