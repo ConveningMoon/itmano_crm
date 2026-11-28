@@ -83,14 +83,17 @@ export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']
  *   plan". Sólo se ofrece el plan actual si todavía no tiene ciclo de Paddle
  *   (activado por ITMANO y pendiente del primer pago).
  * - Pago vencido (past_due): igual que activa; se arregla en el portal.
- * - Prueba, pausada o cancelada: todos, porque no hay cobro en curso.
+ * - Pausada con suscripción en Paddle: ninguno. Sigue existiendo y se reanuda
+ *   ("Reactivar suscripción"); un checkout nuevo crearía una segunda.
+ * - Prueba, cancelada o pausada sin Paddle: todos, porque no hay cobro en curso.
  * - Partner con precio de catálogo configurado (`partnerCatalog`, fase 5) o con
  *   precio negociado (`paddlePriceId`).
  */
 export function checkoutPlans(sub: Pick<TenantSubscription,
-  'plan' | 'status' | 'billingCycle' | 'paddlePriceId' | 'billingExempt'>,
+  'plan' | 'status' | 'billingCycle' | 'paddlePriceId' | 'billingExempt'> & { paddleSubscriptionId?: string | null },
   opts: { partnerCatalog?: boolean } = {}): SubscriptionPlan[] {
   if (sub.billingExempt) return []
+  if (sub.status === 'paused' && sub.paddleSubscriptionId) return []
   const purchasable = (p: SubscriptionPlan) => p !== 'partner' || !!opts.partnerCatalog || !!sub.paddlePriceId
   // past_due también tiene una suscripción viva en Paddle (pago fallido): se
   // resuelve actualizando el método de pago en el portal, no comprando otra.

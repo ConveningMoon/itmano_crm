@@ -41,7 +41,8 @@ export function PaddleCheckoutButton({ plan, cycle, label }: Props) {
 
       instance.Checkout.open({
         transactionId: result.data.transactionId,
-        settings: { theme: 'dark', displayMode: 'overlay' },
+        // Español fijo: sin esto Paddle usa el idioma del navegador.
+        settings: { theme: 'dark', displayMode: 'overlay', locale: 'es' },
       })
     })
   }

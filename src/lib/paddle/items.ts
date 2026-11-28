@@ -108,6 +108,39 @@ export function negotiatedPartnerPrice(
   return isCatalogPrice(storedPriceId, prices) ? null : storedPriceId
 }
 
+/**
+ * Ítems que debería tener una suscripción de catálogo, o null si ya están bien.
+ *
+ *   · Cada precio de plan con cantidad 1: el checkout de Paddle deja cambiar la
+ *     cantidad, y 2 × Esencial para un mismo equipo no significa nada.
+ *   · Partner: un ítem de asiento con los logins extra (ninguno si no hay).
+ *     Otro plan: sin asientos.
+ *   · Lo que no es de catálogo (un add-on puesto a mano en Paddle) no se toca.
+ *
+ * El ciclo de los asientos sale del precio del plan, no de la base de datos:
+ * Paddle es quien cobra.
+ */
+export function reconcileItems(
+  current: PaddleItem[],
+  opts: { extraSeats: number; prices: CatalogPrices },
+): PaddleItem[] | null {
+  const { prices } = opts
+  const plans = current.filter(i => planOfPrice(i.priceId, prices))
+  const others = current.filter(i => !planOfPrice(i.priceId, prices) && !isSeatPrice(i.priceId, prices))
+  const primary = plans[0] ? planOfPrice(plans[0].priceId, prices) : null
+  if (!primary) return null
+
+  const wanted: PaddleItem[] = plans.map(i => ({ priceId: i.priceId, quantity: 1 }))
+  if (primary.plan === 'partner' && opts.extraSeats > 0) {
+    const seat = prices.seat[primary.cycle]
+    if (seat) wanted.push({ priceId: seat, quantity: opts.extraSeats })
+  }
+  wanted.push(...others)
+
+  const key = (items: PaddleItem[]) => items.map(i => `${i.priceId}x${i.quantity}`).sort().join(',')
+  return key(wanted) === key(current) ? null : wanted
+}
+
 /** "$12.34" desde el importe en centavos que devuelve Paddle. */
 export function formatPaddleAmount(minorUnits: string | number, currency: string): string {
   const n = Number(minorUnits) / 100

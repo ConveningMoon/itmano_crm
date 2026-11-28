@@ -72,7 +72,16 @@ export async function applySubscriptionEvent(
   // patch. Se pasa el objeto entero al update — no se desarma campo por campo,
   // porque `plan` es una clave OPCIONAL que solo debe escribirse si vino.
   const patch = reduceSubscriptionEvent(event, snapshot)
-  if (!patch) return 'stale'
+  if (!patch) {
+    // Viejo o con la misma hora que uno ya aplicado (Paddle manda created y
+    // activated juntos): se descarta a propósito, así que también está
+    // procesado. Sin esto la traza lo muestra pendiente para siempre.
+    await supabase
+      .from('paddle_webhook_events')
+      .update({ tenant_id: tenantId, processed_at: new Date().toISOString() })
+      .eq('event_id', event.eventId)
+    return 'stale'
+  }
 
   const { data: updated, error } = await supabase
     .from('subscriptions').update(patch).eq('tenant_id', tenantId).select('tenant_id')

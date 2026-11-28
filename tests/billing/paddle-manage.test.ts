@@ -34,6 +34,7 @@ vi.mock('@/lib/paddle/env', () => ({
       },
       update: async (id: string, body: unknown) => { state.calls.push({ op: 'update', id, body }); return {} },
       cancel: async (id: string, body: unknown) => { state.calls.push({ op: 'cancel', id, body }); return {} },
+      resume: async (id: string, body: unknown) => { state.calls.push({ op: 'resume', id, body }); return {} },
       get:    async (id: string) => { state.calls.push({ op: 'get', id }); return { items: state.paddleItems } },
     },
   }),
@@ -54,7 +55,9 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }))
 
-const { cancelAtPeriodEnd, changePlan, previewPlanChange, resumeSubscription, syncPartnerSeats } = await import('@/lib/paddle/manage')
+const {
+  cancelAtPeriodEnd, changePlan, previewPlanChange, reconcileSubscriptionItems, resumePausedSubscription, resumeSubscription,
+} = await import('@/lib/paddle/manage')
 
 const activeSub = (over: Record<string, unknown> = {}) => ({
   plan: 'esencial', status: 'active', billing_exempt: false, billing_cycle: 'month',
@@ -121,7 +124,7 @@ describe('asientos de Partner', () => {
     state.sub = activeSub({ plan: 'partner', paddle_price_id: 'pri_pa_m' })
     state.logins = 6
     state.paddleItems = [{ price: { id: 'pri_pa_m' }, quantity: 1 }, { price: { id: 'pri_seat_m' }, quantity: 1 }]
-    expect(await syncPartnerSeats('tenant-1')).toBe('updated')
+    expect(await reconcileSubscriptionItems('tenant-1')).toBe('updated')
     expect(state.calls[1]).toEqual({
       op: 'update', id: 'sub_1',
       body: { items: [{ priceId: 'pri_pa_m', quantity: 1 }, { priceId: 'pri_seat_m', quantity: 3 }], prorationBillingMode: 'prorated_immediately' },
@@ -132,7 +135,7 @@ describe('asientos de Partner', () => {
     state.sub = activeSub({ plan: 'partner', paddle_price_id: 'pri_pa_m' })
     state.logins = 3
     state.paddleItems = [{ price: { id: 'pri_pa_m' }, quantity: 1 }, { price: { id: 'pri_seat_m' }, quantity: 2 }]
-    await syncPartnerSeats('tenant-1')
+    await reconcileSubscriptionItems('tenant-1')
     expect((state.calls[1].body as { items: unknown }).items).toEqual([{ priceId: 'pri_pa_m', quantity: 1 }])
   })
 
@@ -140,11 +143,44 @@ describe('asientos de Partner', () => {
     state.sub = activeSub({ plan: 'partner', paddle_price_id: 'pri_pa_m' })
     state.logins = 4
     state.paddleItems = [{ price: { id: 'pri_pa_m' }, quantity: 1 }, { price: { id: 'pri_seat_m' }, quantity: 1 }]
-    expect(await syncPartnerSeats('tenant-1')).toBe('in_sync')
+    expect(await reconcileSubscriptionItems('tenant-1')).toBe('in_sync')
 
     state.calls = []
     state.sub = activeSub({ plan: 'partner', paddle_price_id: 'pri_trato' })
-    expect(await syncPartnerSeats('tenant-1')).toBe('not_partner_catalog')
+    expect(await reconcileSubscriptionItems('tenant-1')).toBe('not_applicable')
+    expect(state.calls).toEqual([])
+  })
+})
+
+describe('cantidad del plan', () => {
+  it('un plan comprado con cantidad 2 vuelve a 1 en Paddle', async () => {
+    state.sub = activeSub({ plan: 'growth', paddle_price_id: 'pri_gr_m' })
+    state.paddleItems = [{ price: { id: 'pri_gr_m' }, quantity: 2 }]
+    expect(await reconcileSubscriptionItems('tenant-1')).toBe('updated')
+    expect(state.calls[1]).toEqual({
+      op: 'update', id: 'sub_1',
+      body: { items: [{ priceId: 'pri_gr_m', quantity: 1 }], prorationBillingMode: 'prorated_immediately' },
+    })
+  })
+
+  it('un plan que no es Partner no conserva asientos', async () => {
+    state.sub = activeSub({ plan: 'growth', paddle_price_id: 'pri_gr_m' })
+    state.paddleItems = [{ price: { id: 'pri_gr_m' }, quantity: 1 }, { price: { id: 'pri_seat_m' }, quantity: 1 }]
+    await reconcileSubscriptionItems('tenant-1')
+    expect((state.calls[1].body as { items: unknown }).items).toEqual([{ priceId: 'pri_gr_m', quantity: 1 }])
+  })
+})
+
+describe('suscripción en pausa', () => {
+  it('se reanuda en Paddle de inmediato', async () => {
+    state.sub = activeSub({ status: 'paused' })
+    expect(await resumePausedSubscription('tenant-1')).toEqual({ ok: true, data: null })
+    expect(state.calls).toEqual([{ op: 'resume', id: 'sub_1', body: { effectiveFrom: 'immediately' } }])
+  })
+
+  it('una suscripción activa no se "reanuda"', async () => {
+    const res = await resumePausedSubscription('tenant-1')
+    expect(res.ok).toBe(false)
     expect(state.calls).toEqual([])
   })
 })

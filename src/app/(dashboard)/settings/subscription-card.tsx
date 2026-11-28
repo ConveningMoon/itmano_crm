@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AlertCircle } from 'lucide-react'
 import { requestSubscriptionChange, requestSubscriptionCancel, withdrawSubscriptionRequest } from './actions'
 import {
-  cancelSubscriptionAction, changePlanAction, openBillingPortal, previewPlanChangeAction, resumeSubscriptionAction,
+  cancelSubscriptionAction, changePlanAction, openBillingPortal, previewPlanChangeAction, resumePausedAction, resumeSubscriptionAction,
 } from './billing-actions'
 import { PLAN_CONFIG, PLAN_ORDER, checkoutPlans, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, PARTNER_SEAT, trialDaysLeft } from '@/lib/plans'
@@ -30,7 +30,14 @@ export interface BillingOptions {
   negotiated:     boolean
 }
 
-const DATE = { day: 'numeric', month: 'long' } as const
+const DATE_SIN_ANIO = { day: 'numeric', month: 'long' } as const
+const DATE_CON_ANIO = { day: 'numeric', month: 'long', year: 'numeric' } as const
+
+// Una renovación anual cae en otro año: sin el año, "26 de noviembre" parece
+// hoy. Dentro del año en curso se omite para que se lea corto.
+function opcionesFecha(iso: string): Intl.DateTimeFormatOptions {
+  return new Date(iso).getUTCFullYear() === new Date().getUTCFullYear() ? DATE_SIN_ANIO : DATE_CON_ANIO
+}
 
 export function SubscriptionCard({ subscription, canManage, billingOptions }: {
   subscription:   TenantSubscription | null
@@ -59,7 +66,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
   }
 
   const cfg = PLAN_CONFIG[subscription.plan]
-  const selfService = billingMode({
+  const modo = billingMode({
     plan:                 subscription.plan,
     status:               subscription.status,
     billingExempt:        subscription.billingExempt,
@@ -67,7 +74,11 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
     paddleSubscriptionId: subscription.paddleSubscriptionId,
     cancelAt:             subscription.cancelAt,
     negotiatedPriceId:    billingOptions.negotiated ? 'negotiated' : null,
-  }) === 'self_service'
+  })
+  const selfService = modo === 'self_service'
+  const pausedInPaddle = modo === 'paused'
+  // La inversión que se paga de verdad: con facturación anual, el precio anual.
+  const inversion = subscription.billingCycle === 'year' ? PLANS[subscription.plan].inversionAnual : cfg.inversion
   const hasPendingRequest = subscription.status === 'change_requested' || subscription.status === 'cancel_requested'
   const statusTone = subscription.status === 'active' ? 'green'
                    : subscription.status === 'cancelled' ? 'coral'
@@ -150,7 +161,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
       </SettingsRow>
 
       <SettingsRow label="Inversión">
-        <span className="settings-value">{cfg.inversion}</span>
+        <span className="settings-value">{inversion}</span>
       </SettingsRow>
 
       {subscription.billingCycle && (
@@ -159,7 +170,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
             {BILLING_CYCLE_LABELS[subscription.billingCycle]}
             {subscription.currentPeriodEnd && !subscription.cancelAt && (
               <> · Renueva el{' '}
-                <FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={DATE} />
+                <FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={opcionesFecha(subscription.currentPeriodEnd)} />
               </>
             )}
           </span>
@@ -172,7 +183,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
             <AlertCircle size={14} aria-hidden="true" />
             <span>
               Tu suscripción termina el{' '}
-              <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={DATE} /></strong>.
+              <strong><FechaLocal fecha={subscription.cancelAt} locale="es" opciones={opcionesFecha(subscription.cancelAt)} /></strong>.
               Conservas el acceso completo hasta entonces.
               {canManage && selfService && (
                 <>
@@ -197,7 +208,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
           <div className="settings-note settings-note-gold">
             {trialDaysLeft(subscription.trialEndsAt) > 0 ? (
               <>Tu período de prueba termina el{' '}
-                <strong><FechaLocal fecha={subscription.trialEndsAt} locale="es" opciones={DATE} /></strong>
+                <strong><FechaLocal fecha={subscription.trialEndsAt} locale="es" opciones={opcionesFecha(subscription.trialEndsAt)} /></strong>
                 {' '}({trialDaysLeft(subscription.trialEndsAt)} día{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'} restante{trialDaysLeft(subscription.trialEndsAt) === 1 ? '' : 's'}).
                 Elige tu plan con &quot;Pagar ahora&quot; para seguir sin interrupciones.</>
             ) : (
@@ -224,6 +235,29 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* Pausada en Paddle (p. ej. tras agotarse los reintentos de cobro): la
+            suscripción sigue existiendo y se reanuda; un checkout nuevo crearía
+            una segunda. Si la tarjeta falló, se cambia antes en el portal. */}
+        {canManage && pausedInPaddle && (
+          <div className="settings-panel">
+            <p className="settings-note">
+              Tu suscripción está en pausa. Al reactivarla, Paddle cobra el período y recuperas el acceso
+              completo de inmediato. Si tu último pago falló, actualiza primero la tarjeta en
+              &quot;Gestionar tarjeta y facturas&quot;.
+            </p>
+            <div className="settings-inline settings-inline-tight">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => runPaddle(resumePausedAction, 'Listo: Paddle confirma la reactivación en unos segundos y esta página se actualiza sola.')}
+                disabled={pending}
+              >
+                {pending ? 'Reactivando…' : 'Reactivar suscripción'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -404,7 +438,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
               <p className="settings-value settings-confirm-text">
                 ¿Cancelar tu suscripción? Se cancela al final del período pagado
                 {subscription.currentPeriodEnd && (
-                  <> (<FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={DATE} />)</>
+                  <> (<FechaLocal fecha={subscription.currentPeriodEnd} locale="es" opciones={opcionesFecha(subscription.currentPeriodEnd)} />)</>
                 )}: conservas todo hasta entonces y puedes reactivarla antes. Tus datos no se eliminan.
               </p>
             ) : (
@@ -435,8 +469,9 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
           </p>
         )}
 
-        {/* Acciones — solo owner/super, sin solicitud pendiente y sin cancelación programada */}
-        {canManage && mode === 'view' && !hasPendingRequest && subscription.status !== 'cancelled' && !subscription.cancelAt && (
+        {/* Acciones — solo owner/super, sin solicitud pendiente, sin cancelación
+            programada y sin pausa en Paddle (ahí la única acción es reanudar) */}
+        {canManage && mode === 'view' && !hasPendingRequest && !pausedInPaddle && subscription.status !== 'cancelled' && !subscription.cancelAt && (
           <div className="settings-inline settings-inline-tight">
             <button type="button" className="btn btn-primary" onClick={() => { setMode('changing'); setError(null); setNotice(null) }}>Cambiar de plan</button>
             <button type="button" className="btn btn-danger" onClick={() => { setMode('confirmCancel'); setError(null); setNotice(null) }}>

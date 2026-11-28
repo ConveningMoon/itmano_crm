@@ -56,7 +56,7 @@ export function PagoClient() {
     initializePaddle({
       environment: process.env.NEXT_PUBLIC_PADDLE_ENV === 'production' ? 'production' : 'sandbox',
       token:       TOKEN,
-      checkout:    { settings: { displayMode: 'overlay', theme: 'dark' } },
+      checkout:    { settings: { displayMode: 'overlay', theme: 'dark', locale: 'es' } },
       eventCallback: event => {
         if (!activo) return
         if (event.name === 'checkout.loaded') setEstado('abierto')
