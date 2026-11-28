@@ -5,8 +5,14 @@ import { reconcileSubscriptionItems } from '@/lib/paddle/manage'
 import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths } from '@/lib/newsletters/revalidate'
+import { revalidateTag } from 'next/cache'
+import { hostedTag } from '@/lib/hosted-cache'
+import { planPublishCap, selectOverCapAction } from '@/lib/subscriptions/over-cap'
+import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id'])
+const OVER_CAP_SUBSCRIPTION_COLUMNS = columns('subscriptions', ['tenant_id', 'plan', 'over_cap_since'])
+const PUBLISHED_PROPERTY_COLUMNS = columns('properties', ['id'])
 
 // Los plazos de 14 y 60 dias no los dispara ningun webhook: hacen falta pasadas
 // programadas. Diario, via cron-job.org (misma infraestructura que el
@@ -36,6 +42,16 @@ function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString()
 }
 
+// Purga el catalogo publico /web/<tenant> tras despublicar. updateTag no existe
+// fuera de Server Actions: se usa revalidateTag con expire 0. Best-effort.
+function expireWebCatalog(tenantId: string): void {
+  try {
+    revalidateTag(hostedTag.web(tenantId), { expire: 0 })
+  } catch (err) {
+    logError('over-cap', tenantId, err)
+  }
+}
+
 function logError(step: string, tenantId: string | null, error: unknown): void {
   console.error(JSON.stringify({
     service:   'billing-lifecycle',
@@ -60,6 +76,9 @@ async function runBillingLifecycle(request: NextRequest) {
   const supabase = createAdminClient()
   const report = {
     propertiesUnpublished:  0,
+    overCapMarked:          0,
+    overCapCleared:         0,
+    overCapUnpublished:     0,
     newslettersUnpublished: 0,
     domainsReleased:        0,
     retentionWarnings:      0,
@@ -70,6 +89,7 @@ async function runBillingLifecycle(request: NextRequest) {
     // hacer" de "fallo en silencio".
     steps: {
       properties:  'ok' as 'ok' | 'failed',
+      overCap:     'ok' as 'ok' | 'failed',
       newsletters: 'ok' as 'ok' | 'failed',
       domain:      'ok' as 'ok' | 'failed',
       retention:   'ok' as 'ok' | 'failed',
@@ -133,6 +153,87 @@ async function runBillingLifecycle(request: NextRequest) {
   } catch (err) {
     logError('properties', null, err)
     report.steps.properties = 'failed'
+  }
+
+  // ── 1a. Propiedades por encima del tope del PLAN (gracia de 14 dias) ────────
+  // Cubre a los tenants que siguen activos/en prueba/past_due (los degradados
+  // los trata el paso 1 con el tope de cortesia). Por tenant: si publicadas >
+  // tope del plan se fija `over_cap_since` (primera pasada), a los 14 dias se
+  // despublican las sobrantes (se conservan las mas recientes, no destructivo)
+  // y si vuelve a estar dentro del tope la marca se limpia. Una consulta para
+  // las suscripciones y un conteo head por tenant que lo necesita (pocos
+  // tenants); un tenant con tope ilimitado y sin marca no consulta nada.
+  try {
+    const { data: capSubs, error: capSubsError } = await supabase
+      .from('subscriptions')
+      .select(OVER_CAP_SUBSCRIPTION_COLUMNS)
+      .not('status', 'in', '(paused,cancelled,expired)')
+      .eq('billing_exempt', false)
+
+    if (capSubsError) throw capSubsError
+
+    const now = new Date()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const row of (capSubs ?? []) as any[]) {
+      try {
+        const cap = planPublishCap(row.plan as SubscriptionPlan)
+        const overCapSince = (row.over_cap_since as string | null) ?? null
+        if (cap === null && overCapSince === null) continue
+
+        const { count, error: countError } = await supabase
+          .from('properties')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', row.tenant_id)
+          .eq('published_to_web', true)
+        if (countError) throw countError
+
+        const published = count ?? 0
+        const action = selectOverCapAction({ published, cap, overCapSince, now })
+
+        if (action === 'mark' || action === 'clear') {
+          const { error } = await supabase
+            .from('subscriptions')
+            .update({ over_cap_since: action === 'mark' ? now.toISOString() : null })
+            .eq('tenant_id', row.tenant_id)
+          if (error) { logError('over-cap', row.tenant_id, error); continue }
+          if (action === 'mark') report.overCapMarked += 1
+          else report.overCapCleared += 1
+          continue
+        }
+
+        if (action === 'unpublish' && cap !== null) {
+          const { data: publishedRows, error: publishedError } = await supabase
+            .from('properties')
+            .select(PUBLISHED_PROPERTY_COLUMNS)
+            .eq('tenant_id', row.tenant_id)
+            .eq('published_to_web', true)
+            .order('updated_at', { ascending: false })
+            .order('id', { ascending: false })
+          if (publishedError) throw publishedError
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const toUnpublish = ((publishedRows ?? []) as any[]).slice(cap).map(p => p.id as string)
+          if (toUnpublish.length === 0) continue
+
+          const { error } = await supabase
+            .from('properties')
+            .update({ published_to_web: false, unpublished_by_billing: true })
+            .eq('tenant_id', row.tenant_id)
+            .in('id', toUnpublish)
+          if (error) { logError('over-cap', row.tenant_id, error); continue }
+
+          report.overCapUnpublished += toUnpublish.length
+          expireWebCatalog(row.tenant_id)
+          // over_cap_since se queda: la pasada siguiente ve published <= cap y
+          // lo limpia ('clear').
+        }
+      } catch (err) {
+        logError('over-cap', row.tenant_id, err)
+      }
+    }
+  } catch (err) {
+    logError('over-cap', null, err)
+    report.steps.overCap = 'failed'
   }
 
   // ── 1b. Newsletters: mismo criterio de gracia que propiedades ───────────────

@@ -131,7 +131,7 @@ describe('applySubscriptionEvent — resiliencia de la reactivación', () => {
     // Lo crítico: el webhook tiene éxito aunque la restauración haya fallado.
     expect(result).toBe('applied')
     // La restauración sí se intentó (la transición se detectó correctamente).
-    expect(mockRestore).toHaveBeenCalledWith('tenant-x')
+    expect(mockRestore).toHaveBeenCalledWith('tenant-x', { cap: 0 })
     // El fallo queda registrado de forma inequívoca — es la única señal de
     // que este cliente quedó con propiedades aún despublicadas.
     expect(errorSpy).toHaveBeenCalledWith(
@@ -157,7 +157,7 @@ describe('applySubscriptionEvent — resiliencia de la reactivación', () => {
     const result = await applySubscriptionEvent(reactivationEvent)
 
     expect(result).toBe('applied')
-    expect(mockRestore).toHaveBeenCalledWith('tenant-x')
+    expect(mockRestore).toHaveBeenCalledWith('tenant-x', { cap: 0 })
     expect(errorSpy).not.toHaveBeenCalled()
   })
 })

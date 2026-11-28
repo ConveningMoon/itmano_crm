@@ -4,6 +4,7 @@ import { reduceSubscriptionEvent, type PaddleSubscriptionEvent, type Subscriptio
 import type { SubscriptionStatus, SubscriptionPlan } from '@/lib/subscriptions'
 import { planAiBudgetUsd } from '@/lib/services/ai-budget'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
+import { planPublishCap } from '@/lib/subscriptions/over-cap'
 import { notifyDegradation } from '@/lib/subscriptions/notify-degradation'
 
 /**
@@ -127,7 +128,7 @@ export async function applySubscriptionEvent(
   // el instante exacto en que el tenant vuelve a estar al día.
   if (snapshot.degradedAt && patch.degraded_at === null) {
     try {
-      await restoreAfterReactivation(tenantId)
+      await restoreAfterReactivation(tenantId, { cap: planPublishCap(patch.plan ?? planAnterior ?? 'esencial') })
     } catch (err) {
       // NO se relanza a propósito. El estado de FACTURACIÓN (lo crítico) ya
       // quedó bien escrito arriba — devolver 500 aquí no lo arregla, y además

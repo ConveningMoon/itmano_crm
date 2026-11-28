@@ -6,6 +6,7 @@ import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { resolveTargetTenant } from '@/lib/auth/guards'
 import { recordAiUsage } from '@/lib/services/ai-usage'
 import { assertAiWithinLimit } from '@/lib/services/ai-limit'
+import { assertEntitlement } from '@/lib/subscriptions/entitlements-server'
 import type { PropertyInput } from './actions'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { toList, cleanProse } from '@/lib/properties/ai-text'
@@ -186,6 +187,15 @@ export async function generatePropertyFromPdf(
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'La generación con IA no está configurada (falta ANTHROPIC_API_KEY).' }
+  }
+
+  // Derecho del plan: Esencial no incluye Crear con IA. Va ANTES de cualquier
+  // llamada a la IA (y de subir el PDF). La ruta de IA nunca publica: el
+  // borrador sale con published_to_web = false y el tope se evalúa al guardar.
+  const intakeTenant = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
+  if (typeof intakeTenant === 'string') {
+    const denied = await assertEntitlement(intakeTenant, 'aiPropertyIntake')
+    if (denied) return denied
   }
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).

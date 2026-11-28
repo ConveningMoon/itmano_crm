@@ -10,7 +10,7 @@ import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import {
   parseEmbedInput, toPropertyEmbeds, EMBED_PLACEMENTS, MAX_EMBEDS, MAX_EMBED_URL,
 } from '@/lib/services/property-embeds'
-import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { assertEntitlement } from '@/lib/subscriptions/entitlements-server'
 import { hostedTag } from '@/lib/hosted-cache'
 
 // http(s)-only URL, empty string tolerated (normalized to null before insert).
@@ -222,9 +222,9 @@ export async function createProperty(
   const db = createAdminClient()
 
   // Una propiedad nueva puede crearse sin publicar sin importar el modo de
-  // facturación; el tope solo se evalúa si nace ya publicada.
+  // facturación; el tope (plan y modo degradado) solo se evalúa si nace ya publicada.
   if (parsed.data.published_to_web) {
-    const capDenied = await assertPublishCap(db, targetTenant)
+    const capDenied = await assertEntitlement(targetTenant, 'publishProperty', { isSuperAdmin: ctx.role === 'super_admin' })
     if (capDenied) return capDenied
   }
 
@@ -304,7 +304,7 @@ export async function updateProperty(
   // nueva.
   const wasPublished = existingRow.published_to_web === true
   if (parsed.data.published_to_web && !wasPublished) {
-    const capDenied = await assertPublishCap(db, existingRow.tenant_id as string)
+    const capDenied = await assertEntitlement(existingRow.tenant_id as string, 'publishProperty', { isSuperAdmin: ctx.role === 'super_admin' })
     if (capDenied) return capDenied
   }
 
@@ -365,32 +365,6 @@ export async function deleteProperty(
   revalidatePath('/properties')
   expirePublicCatalog(existingRow.tenant_id as string)
   return { ok: true }
-}
-
-// Tope de propiedades publicadas en modo degradado (spec §10). Solo aplica
-// cuando la propiedad PASA a publicarse — nunca bloquea crear/editar una
-// propiedad que se queda sin publicar o que ya estaba publicada (eso rompería
-// "seguir creando y editando con normalidad" del modo degradado).
-async function assertPublishCap(
-  db: ReturnType<typeof createAdminClient>,
-  tenantId: string,
-): Promise<{ ok: false; error: string } | null> {
-  const access = await getTenantAccessFor(tenantId)
-  if (access.publishedPropertiesCap === null) return null
-
-  const { count } = await db
-    .from('properties')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId)
-    .eq('published_to_web', true)
-
-  if ((count ?? 0) >= access.publishedPropertiesCap) {
-    return {
-      ok: false,
-      error: `Tu suscripción inactiva permite ${access.publishedPropertiesCap} propiedades publicadas. Despublica una o reactiva tu suscripción.`,
-    }
-  }
-  return null
 }
 
 // Translates the (tenant_id, slug) unique-index violation into a friendly
