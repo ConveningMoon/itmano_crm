@@ -86,11 +86,11 @@ export async function notifyDegradation(
   const name = (t?.name as string | undefined) ?? tenantId
   const slug = (t?.slug as string | undefined) ?? tenantId
 
-  const label = status === 'paused' ? 'pausó' : 'canceló'
+  const label = status === 'paused' ? 'pausó' : status === 'expired' ? 'terminó su prueba sin activar' : 'canceló'
   const { error } = await supabase.from('notifications').insert({
     tenant_id: tenantId,
     type:      'subscription_request',
-    message:   `${name} ${label} su suscripción. La cuenta pasó a modo degradado.`,
+    message:   `${name} ${label} ${status === 'expired' ? 'un plan' : 'su suscripción'}. La cuenta pasó a modo degradado.`,
     read:      false,
     agent_id:  null,
   })

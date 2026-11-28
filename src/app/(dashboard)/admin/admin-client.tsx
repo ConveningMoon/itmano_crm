@@ -13,9 +13,10 @@ import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
 // Estado editable del select de suscripción: las solicitudes pendientes
 // (change/cancel_requested) se editan como 'active' — guardar las resuelve.
-function editableStatus(status: string | null): 'trial' | 'active' | 'cancelled' {
+function editableStatus(status: string | null): 'trial' | 'active' | 'cancelled' | 'expired' {
   if (status === 'trial') return 'trial'
   if (status === 'cancelled') return 'cancelled'
+  if (status === 'expired') return 'expired'
   return 'active'
 }
 
@@ -259,7 +260,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [aiUnlimited, setAiUnlimited] = useState(tenant.aiUnlimited)
   const [pagesManaged, setPagesManaged] = useState(tenant.pagesManagedByItmano)
   const [subPlan, setSubPlan]     = useState<SubscriptionPlan>((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
-  const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'cancelled'>(editableStatus(tenant.subscriptionStatus))
+  const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'cancelled' | 'expired'>(editableStatus(tenant.subscriptionStatus))
   const [trialEnd, setTrialEnd]   = useState(dateInputValue(tenant.subscriptionTrialEndsAt))
   const [paddlePriceId, setPaddlePriceId] = useState(tenant.subscriptionPaddlePriceId ?? '')
   const [billingExempt, setBillingExempt] = useState(tenant.subscriptionBillingExempt)
@@ -571,12 +572,13 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               </select>
               <select
                 value={subStatus}
-                onChange={e => setSubStatus(e.target.value as 'trial' | 'active' | 'cancelled')}
+                onChange={e => setSubStatus(e.target.value as 'trial' | 'active' | 'cancelled' | 'expired')}
                 style={{ ...INPUT, width: '170px', cursor: 'pointer' }}
               >
                 <option value="active">Activa</option>
                 <option value="trial">Período de prueba</option>
                 <option value="cancelled">Cancelada</option>
+                <option value="expired">{SUBSCRIPTION_STATUS_LABELS.expired}</option>
               </select>
               {subStatus === 'trial' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -6,6 +6,7 @@ import { GRACE_DAYS, DEGRADED_LIMITS } from '@/lib/subscriptions/access'
 import { columns } from '@/lib/supabase/columns'
 import { revalidateNewsletterPaths } from '@/lib/newsletters/revalidate'
 import { runOverCapStep } from '@/lib/subscriptions/over-cap-step'
+import { runTrialExpiryStep, runTrialNoticeStep } from '@/lib/subscriptions/trial-expiry-step'
 
 const UNPUBLISHED_EDITION_COLUMNS = columns('newsletter_editions', ['id'])
 
@@ -50,7 +51,7 @@ function logError(step: string, tenantId: string | null, error: unknown): void {
 // paso 3 NO depende de este texto (ver el chequeo junto a su insercion) para
 // que retocar el copy no reabra la ventana de duplicados.
 const RETENTION_WARNING_MESSAGE =
-  'Este equipo lleva 11 meses cancelado. La politica de retencion elimina sus datos al cumplirse 12.'
+  'Este equipo lleva 11 meses sin suscripcion activa. La politica de retencion elimina sus datos al cumplirse 12.'
 
 async function runBillingLifecycle(request: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -60,6 +61,8 @@ async function runBillingLifecycle(request: NextRequest) {
 
   const supabase = createAdminClient()
   const report = {
+    trialsExpired:          0,
+    trialNoticesSent:       0,
     propertiesUnpublished:  0,
     overCapMarked:          0,
     overCapCleared:         0,
@@ -73,6 +76,8 @@ async function runBillingLifecycle(request: NextRequest) {
     // el paso sigue). Sin esto, el reporte no distingue "no habia nada que
     // hacer" de "fallo en silencio".
     steps: {
+      trialExpiry: 'ok' as 'ok' | 'failed',
+      trialNotice: 'ok' as 'ok' | 'failed',
       properties:  'ok' as 'ok' | 'failed',
       overCap:     'ok' as 'ok' | 'failed',
       newsletters: 'ok' as 'ok' | 'failed',
@@ -82,6 +87,23 @@ async function runBillingLifecycle(request: NextRequest) {
     },
   }
 
+  // ── 0. Pruebas vencidas -> 'expired' ────────────────────────────────────────
+  // Va primero: los pasos siguientes ya ven el estado nuevo. Despues, los avisos
+  // de fin de prueba (3 dias antes y el dia del vencimiento).
+  const startedAt = new Date()
+  try {
+    report.trialsExpired += (await runTrialExpiryStep(supabase, startedAt, logError)).expired
+  } catch (err) {
+    logError('trial-expiry', null, err)
+    report.steps.trialExpiry = 'failed'
+  }
+  try {
+    report.trialNoticesSent += (await runTrialNoticeStep(supabase, startedAt, logError)).sent
+  } catch (err) {
+    logError('trial-notice', null, err)
+    report.steps.trialNotice = 'failed'
+  }
+
   // ── 1. Propiedades: gracia de 14 dias agotada ───────────────────────────────
   // Todo el paso va envuelto: si la excepcion ocurre en la consulta base (red,
   // timeout), los pasos 2 y 3 deben poder correr igual ese dia.
@@ -89,7 +111,7 @@ async function runBillingLifecycle(request: NextRequest) {
     const { data: overdueProps, error: overduePropsError } = await supabase
       .from('subscriptions')
       .select('tenant_id')
-      .in('status', ['paused', 'cancelled'])
+      .in('status', ['paused', 'cancelled', 'expired'])
       .eq('billing_exempt', false)
       .lte('degraded_at', daysAgoIso(GRACE_DAYS.properties))
 
@@ -163,7 +185,7 @@ async function runBillingLifecycle(request: NextRequest) {
     const { data: overdueNewsletters, error: overdueNewslettersError } = await supabase
       .from('subscriptions')
       .select('tenant_id')
-      .in('status', ['paused', 'cancelled'])
+      .in('status', ['paused', 'cancelled', 'expired'])
       .eq('billing_exempt', false)
       .lte('degraded_at', daysAgoIso(GRACE_DAYS.properties))
 
@@ -211,7 +233,7 @@ async function runBillingLifecycle(request: NextRequest) {
     const { data: overdueDomains, error: overdueDomainsError } = await supabase
       .from('subscriptions')
       .select('tenant_id')
-      .in('status', ['paused', 'cancelled'])
+      .in('status', ['paused', 'cancelled', 'expired'])
       .eq('billing_exempt', false)
       .lte('degraded_at', daysAgoIso(GRACE_DAYS.sendingDomain))
 
@@ -259,7 +281,7 @@ async function runBillingLifecycle(request: NextRequest) {
     const { data: oldCancelled, error: oldCancelledError } = await supabase
       .from('subscriptions')
       .select('tenant_id, degraded_at')
-      .eq('status', 'cancelled')
+      .in('status', ['cancelled', 'expired'])
       .eq('billing_exempt', false)
       .lte('degraded_at', daysAgoIso(330))
 

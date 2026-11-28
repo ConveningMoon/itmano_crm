@@ -16,6 +16,10 @@ import { resendForAccount, resolveResendAccount, resendAccountConfigured } from 
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 import { resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
+import { degradedTransition } from '@/lib/subscriptions/transition'
+import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
+import { planPublishCap } from '@/lib/subscriptions/over-cap'
+import type { SubscriptionStatus } from '@/lib/subscriptions'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as the scoring actions (scoring-actions.ts). The admin client (service_role) is the correct
@@ -404,7 +408,7 @@ export async function setTenantSender(
 const UpdateSubscriptionSchema = z.object({
   tenantId: z.string().trim().min(1),
   plan:     z.enum(['esencial', 'growth', 'partner']),
-  status:   z.enum(['trial', 'active', 'cancelled']),
+  status:   z.enum(['trial', 'active', 'cancelled', 'expired']),
   // Requerido cuando status = 'trial' (constraint de coherencia en la 055).
   // Permite fijar o EXTENDER el vencimiento de la prueba.
   trialEndsAt: z.string().datetime({ offset: true }).nullish(),
@@ -443,11 +447,26 @@ export async function updateTenantSubscription(
   // a mano para ese tenant.
   const { data: existing } = await supabase
     .from('subscriptions')
-    .select('plan')
+    .select('plan, status, trial_ends_at')
     .eq('tenant_id', parsed.data.tenantId)
     .maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sin tipos generados de Supabase, la fila llega untyped
   const planAnterior = ((existing as any)?.plan as SubscriptionPlan | undefined) ?? null
+
+  // Entrar/salir del modo degradado a mano se comporta como con Paddle:
+  // degraded_at ancla las gracias (se fija al entrar, se limpia al salir) y al
+  // salir se restaura lo que el sistema bajó. Una prueba vencida cuenta como
+  // degradada aunque el cron aún no la marque 'expired'.
+  const ahora = new Date()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prev = existing as any
+  const transicion = prev
+    ? degradedTransition(
+        { status: prev.status as SubscriptionStatus, trialEndsAt: prev.trial_ends_at as string | null },
+        { status: parsed.data.status, trialEndsAt: parsed.data.trialEndsAt ?? null },
+        ahora,
+      )
+    : null
 
   // Upsert: tenants creados antes de la migración 054 podrían no tener fila.
   const { error } = await supabase
@@ -460,7 +479,9 @@ export async function updateTenantSubscription(
       trial_ends_at:  parsed.data.status === 'trial' ? parsed.data.trialEndsAt : null,
       paddle_price_id: parsed.data.paddlePriceId?.trim() || null,
       billing_exempt:  parsed.data.billingExempt,
-      updated_at:      new Date().toISOString(),
+      updated_at:      ahora.toISOString(),
+      ...(transicion === 'enter' ? { degraded_at: ahora.toISOString() } : {}),
+      ...(transicion === 'leave' ? { degraded_at: null } : {}),
     }, { onConflict: 'tenant_id' })
   if (error) return { ok: false, error: error.message }
 
@@ -495,9 +516,22 @@ export async function updateTenantSubscription(
     }
   }
 
-  // El tope de correos cambia con el plan: reanuda ya las secuencias dormidas
-  // por cuota. Best-effort, con log.
-  if (parsed.data.plan !== planAnterior) {
+  // Salida del modo degradado: restaura lo que bajó el sistema (con el tope del
+  // plan nuevo). Best-effort, con log: el guardado ya quedó escrito.
+  if (transicion === 'leave') {
+    try {
+      await restoreAfterReactivation(parsed.data.tenantId, { cap: planPublishCap(parsed.data.plan) })
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'admin-restore', tenant_id: parsed.data.tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }
+
+  // El tope de correos cambia con el plan (o al reactivar): reanuda ya las
+  // secuencias dormidas por cuota. Best-effort, con log.
+  if (parsed.data.plan !== planAnterior || transicion === 'leave') {
     try {
       await resumeQuotaPausedRuns(parsed.data.tenantId)
     } catch (err) {
