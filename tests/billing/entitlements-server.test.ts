@@ -6,7 +6,10 @@ const countSends = vi.fn()
 
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
 vi.mock('@/lib/data/subscriptions', () => ({ getSubscription: (...a: unknown[]) => getSubscription(...a) }))
-vi.mock('@/lib/subscriptions/quota', () => ({ countMonthlyCorporateSends: (...a: unknown[]) => countSends(...a) }))
+vi.mock('@/lib/subscriptions/quota', async (orig) => ({
+  ...(await orig<typeof import('@/lib/subscriptions/quota')>()),
+  countMonthlyCorporateSends: (...a: unknown[]) => countSends(...a),
+}))
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -56,5 +59,23 @@ describe('assertEntitlement', () => {
   it('super_admin salta el tope de leads', async () => {
     counts.leads = 9999
     expect(await assertEntitlement('t1', 'createLead', { isSuperAdmin: true })).toBeNull()
+  })
+
+  it('pasa degradedAt y trialEndsAt a la ventana de correos solo en prueba', async () => {
+    getSubscription.mockResolvedValue({
+      plan: 'growth', status: 'trial', billingExempt: false,
+      trialEndsAt: '2026-08-10T00:00:00.000Z', degradedAt: null,
+    })
+    await assertEntitlement('t1', 'manualEmail')
+    expect(countSends).toHaveBeenCalledWith('t1', null, '2026-08-10T00:00:00.000Z')
+  })
+
+  it('suscripcion activa con prueba vieja: trialEndsAt no llega a la ventana', async () => {
+    getSubscription.mockResolvedValue({
+      plan: 'growth', status: 'active', billingExempt: false,
+      trialEndsAt: '2026-08-10T00:00:00.000Z', degradedAt: '2026-08-12T00:00:00.000Z',
+    })
+    await assertEntitlement('t1', 'manualEmail')
+    expect(countSends).toHaveBeenCalledWith('t1', '2026-08-12T00:00:00.000Z', null)
   })
 })

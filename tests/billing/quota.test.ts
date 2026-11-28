@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { getTenantAccess, DEGRADED_LIMITS, isRunStale } from '@/lib/subscriptions/access'
-import { quotaWindowStart } from '@/lib/subscriptions/quota'
+import { quotaWindowStart, windowTrialEnd } from '@/lib/subscriptions/quota'
 
 describe('cuota de envio corporativo', () => {
   it('un tenant activo no tiene cuota propia', () => {
@@ -64,5 +64,24 @@ describe('quotaWindowStart', () => {
 
   it('degradedAt manda sobre trialEndsAt', () => {
     expect(quotaWindowStart(now, '2026-08-15T00:00:00.000Z', '2026-08-10T00:00:00.000Z')).toBe('2026-08-15T00:00:00.000Z')
+  })
+})
+
+describe('windowTrialEnd', () => {
+  const now = new Date('2026-08-20T12:00:00.000Z')
+  const past = '2026-08-10T00:00:00.000Z'
+
+  it('suscripcion activa con prueba vieja del mes: la ventana sigue en el 1 del mes', () => {
+    const trial = windowTrialEnd({ status: 'active', trialEndsAt: past })
+    expect(trial).toBeNull()
+    expect(quotaWindowStart(now, null, trial)).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('en prueba pasa trialEndsAt', () => {
+    expect(windowTrialEnd({ status: 'trial', trialEndsAt: past })).toBe(past)
+  })
+
+  it('sin suscripcion no hay fecha', () => {
+    expect(windowTrialEnd(null)).toBeNull()
   })
 })

@@ -38,6 +38,17 @@ export function quotaWindowStart(
   return (degraded > monthStart ? degraded : monthStart).toISOString()
 }
 
+/**
+ * trialEndsAt sólo mueve la ventana mientras la suscripción SIGUE en prueba
+ * (misma regla que getTenantAccess). Un tenant que ya pagó conserva un
+ * trial_ends_at viejo; usarlo subcontaría sus correos y le dejaría pasar el tope.
+ */
+export function windowTrialEnd(
+  sub: { status: string; trialEndsAt: string | null } | null | undefined,
+): string | null {
+  return sub?.status === 'trial' ? sub.trialEndsAt : null
+}
+
 export async function countMonthlyCorporateSends(
   tenantId: string,
   degradedAt: string | null,
@@ -59,15 +70,13 @@ export async function countMonthlyCorporateSends(
  * degradado manda la cuota de cortesía, que es menor.
  */
 export async function monthlyEmailAllowance(tenantId: string): Promise<{ limit: number; used: number }> {
-  const supabase = createAdminClient()
-  const [access, subscription, { data: sub }] = await Promise.all([
+  const [access, subscription] = await Promise.all([
     getTenantAccessFor(tenantId),
     getSubscription(tenantId),
-    supabase.from('subscriptions').select('degraded_at').eq('tenant_id', tenantId).maybeSingle(),
   ])
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
-  const used = await countMonthlyCorporateSends(tenantId, degradedAt, subscription?.trialEndsAt ?? null)
+  const used = await countMonthlyCorporateSends(
+    tenantId, subscription?.degradedAt ?? null, windowTrialEnd(subscription),
+  )
   const limit = access.monthlyEmailQuota ?? PLANS[subscription?.plan ?? 'esencial'].limits.emailsPerMonth
   return { limit, used }
 }
@@ -75,26 +84,20 @@ export async function monthlyEmailAllowance(tenantId: string): Promise<{ limit: 
 /**
  * Gate para los servicios de envío. Devuelve null si puede enviar, o un
  * `{ ok: false, error }` listo para retornar (mismo patrón que assertAiWithinLimit).
- *
- * Firma pública sin cambios (`tenantId` solamente): resuelve `degraded_at` con
- * una consulta propia en paralelo a `getTenantAccessFor` — ese helper es puro
- * respecto al acceso calculado y no expone la fecha cruda de degradación, así
- * que no se toca (Task 11) para obtenerla.
+ * `degradedAt` sale de getSubscription (cacheada), sin consulta propia.
  */
 export async function assertEmailQuota(
   tenantId: string,
 ): Promise<{ ok: false; error: string } | null> {
-  const supabase = createAdminClient()
-  const [access, subscription, { data: sub }] = await Promise.all([
+  const [access, subscription] = await Promise.all([
     getTenantAccessFor(tenantId),
     getSubscription(tenantId),
-    supabase.from('subscriptions').select('degraded_at').eq('tenant_id', tenantId).maybeSingle(),
   ])
   if (access.monthlyEmailQuota === null) return null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
-  const used = await countMonthlyCorporateSends(tenantId, degradedAt, subscription?.trialEndsAt ?? null)
+  const used = await countMonthlyCorporateSends(
+    tenantId, subscription?.degradedAt ?? null, windowTrialEnd(subscription),
+  )
   if (used < access.monthlyEmailQuota) return null
 
   return {

@@ -2,7 +2,7 @@ import 'server-only'
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getSubscription } from '@/lib/data/subscriptions'
-import { countMonthlyCorporateSends } from '@/lib/subscriptions/quota'
+import { countMonthlyCorporateSends, windowTrialEnd } from '@/lib/subscriptions/quota'
 import {
   getEntitlements,
   type Entitlement,
@@ -26,19 +26,18 @@ export const getTenantUsage = cache(async function getTenantUsage(
   tenantId: string,
 ): Promise<TenantUsage> {
   const supabase = createAdminClient()
-  const [subscription, leads, agents, properties] = await Promise.all([
-    getSubscription(tenantId),
+  // El conteo de correos depende de la suscripción (degradedAt/trialEndsAt):
+  // se encadena a su promesa para correr en el mismo Promise.all que los demás
+  // conteos, sin un salto serial extra.
+  const sub = getSubscription(tenantId)
+  const [leads, agents, properties, emailsMonth] = await Promise.all([
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     supabase.from('agents').select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId).eq('active', true),
     supabase.from('properties').select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId).eq('published_to_web', true),
+    sub.then((s) => countMonthlyCorporateSends(tenantId, s?.degradedAt ?? null, windowTrialEnd(s))),
   ])
-  // La ventana de correos depende de degradedAt/trialEndsAt, por eso va después
-  // de leer la suscripción (que ya viene cacheada y corre en paralelo a los conteos).
-  const emailsMonth = await countMonthlyCorporateSends(
-    tenantId, subscription?.degradedAt ?? null, subscription?.trialEndsAt ?? null,
-  )
   return {
     leads: leads.count ?? 0,
     agents: agents.count ?? 0,
