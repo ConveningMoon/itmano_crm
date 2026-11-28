@@ -31,7 +31,7 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 | 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | 🟨 código mergeado (PR #311, 2026-11-20); faltan los pasos de Dylan (hook, cron-job.org, Inbound y D8) |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
 | 5 | Cobros con Paddle Live | [fase-05-cobros-paddle.md](fase-05-cobros-paddle.md) | 1 | 🟨 código hecho en `feat/saas-fase-05-paddle` (2026-11-20); faltan el catálogo y las variables en Paddle sandbox y Live, la prueba de punta a punta y el primer cobro real |
-| 6 | Límites del plan en código | [fase-06-limites-plan.md](fase-06-limites-plan.md) | 5 | ⬜ pendiente |
+| 6 | Límites del plan en código | [fase-06-limites-plan.md](fase-06-limites-plan.md) | 5 | 🟨 código hecho en `feat/saas-fase-06-limites` (2026-11-28); migraciones en sandbox; falta producción y PR |
 | 7 | Telegram autoservicio | [fase-07-telegram.md](fase-07-telegram.md) | — | ⬜ pendiente |
 | 8 | Alta y onboarding autoservicio | [fase-08-alta-autoservicio.md](fase-08-alta-autoservicio.md) | 3, 5, 6, 7 | ⬜ pendiente |
 | 9 | Proveedores de IA: gasto y crédito real | [fase-09-proveedores-ia.md](fase-09-proveedores-ia.md) | 2 | ⬜ pendiente |
@@ -72,6 +72,8 @@ necesita casi todo lo anterior.
 | 2026-11-18 | Objetivo de producto: autoservicio tipo SaaS (pagar, configurar, usar) con el mínimo contacto con ITMANO. |
 | 2026-11-18 | Los Magic Links salen de la cuenta de Resend de ITMANO: su cuota se supervisa. |
 | 2026-11-20 | D3: Partner autoservicio con catálogo $249/mes + $49/mes por login extra (cantidad en Paddle); precio negociado sólo por excepción. |
+| 2026-11-28 | D4: límite de leads blando; aviso al 80%, bloqueo de altas manuales, importaciones y API de agente al 110%; el intake nunca se bloquea. |
+| 2026-11-28 | D5: la prueba sin pago se degrada sola al día 15 (estado `expired`), con avisos a 3 días y el día del vencimiento. |
 
 ## Decisiones pendientes de Dylan
 
@@ -81,8 +83,6 @@ Cada fase las repite donde aplican. Respóndelas antes de empezar esa fase.
 |---|---|---|---|
 | D1 | ¿Qué plan tiene hoy la cuenta de Resend de ITMANO? | Si es Free (100/día), pasar a Pro ($20) antes del primer cliente nuevo | 3 |
 | D2 | ¿La prueba de 14 días pide tarjeta? | Sin tarjeta, pero con verificación de email y sin dominio propio | 8 |
-| D4 | ¿El límite de leads es duro o blando? | Blando con aviso al 80% y bloqueo de altas nuevas al 110% | 6 |
-| D5 | ¿Qué pasa al vencer la prueba sin pago? | Modo degradado automático al día 15 (ya existe la regla de acceso) | 6, 8 |
 | D6 | Envíos masivos de A&J con Resend Free (100/día) | Repartir el envío en días o que A&J suba de plan; decidir con A&J | 3 |
 | D7 | ¿Crédito prepagado o auto-recarga en Anthropic y Google? | Auto-recarga con tope mensual, y el panel vigila el gasto | 9 |
 | D8 | ¿A dónde van las respuestas de un equipo con dominio propio? (el MX del dominio es su buzón real) | Subdominio de respuestas (`reply.dominio.com`) con reenvío al agente | 3, 8 |
@@ -115,3 +115,18 @@ Anota aquí, con fecha, lo que una fase descubrió y cambia a otra.
 - 2026-11-19 — Fase 3: Inbound en un dominio propio choca con el buzón real
   del equipo (MX). Decisión D8 nueva; afecta a las instrucciones de DNS de la
   fase 8C.
+- 2026-11-28 — Fase 6: la tabla `subscriptions` tiene el CHECK
+  `subscriptions_trial_ends_at_coherent` (migración 055); una fila `trial` o
+  `expired` debe conservar `trial_ends_at`. Cualquier escritura de estado debe
+  respetarlo (la migración `20261128160000` lo relajó para `expired`).
+- 2026-11-28 — Fase 6: `trial` y `expired` salen sólo por el checkout de Paddle
+  (o `super_admin`); no hay solicitud comercial desde esos estados.
+- 2026-11-28 — Fase 6: la automatización de correo para al 100% del tope del
+  plan y el envío humano sigue hasta el 110%; los runs pausados por cuota se
+  reanudan al subir de plan.
+- 2026-11-28 — Fase 6: la fase 8 debe usar `assertEntitlement` /
+  `assertEmailQuota` en toda ruta nueva que cree leads, publique propiedades o
+  envíe correo a leads.
+- 2026-11-28 — Fase 6: `tests/billing/entitlement-gates.test.ts` falla si una
+  vía nueva escribe leads, publica o envía correo sin compuerta; sus listas
+  blancas llevan el motivo de cada excepción.
