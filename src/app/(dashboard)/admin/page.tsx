@@ -74,7 +74,7 @@ async function AdminContent() {
           <AlertTriangle size={14} aria-hidden />
           <span>
             {scoringBlindTenants.length === 1
-              ? <>En <strong>{scoringBlindTenants[0].name}</strong> la calidad no distingue entre leads: casi todos tienen el mismo puntaje.</>
+              ? <>En <strong>{scoringBlindTenants[0].name}</strong> la calidad no distingue entre leads: ninguno se separa del resto.</>
               : <>En <strong>{scoringBlindTenants.map(t => t.name).join(', ')}</strong> la calidad no distingue entre leads.</>}
             {' '}
             {/* <a> y no <Link>: Tabs lee la pestaña de la URL al montarse, y una

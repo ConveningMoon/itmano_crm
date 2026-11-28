@@ -14,14 +14,14 @@ const ICON: Record<HealthLevel, React.ReactNode> = {
 }
 
 const BAND_SUB: Record<ScoringHealth['bandMode'], string> = {
-  quintiles:         'Cada banda reúne un 20% de la cartera activa.',
+  quintiles:         'Quintiles de la cartera activa; un empate queda en la banda más baja que toca.',
   fijos_pocos_leads: 'Menos de 20 leads activos: cortes 80 / 60 / 35 / 15.',
-  fijos_sin_senal:   'Casi todos empatan: cortes 80 / 60 / 35 / 15.',
+  fijos_sin_senal:   'Ningún lead se separa del resto: cortes 80 / 60 / 35 / 15.',
   sin_calcular:      'El cron diario todavía no las calculó.',
 }
 
 export function HealthSummary({ health, title }: { health: ScoringHealth; title?: string }) {
-  const { raw, level, bandMode, fitCoverage, fitCoverageBase, calibration, findings } = health
+  const { raw, level, bandMode, fitCoverage, fitCoverageBase, fitCoverageScope, calibration, findings } = health
   const avance = Math.min(100, Math.round((calibration.closesWithFit / calibration.needed) * 100))
 
   return (
@@ -40,8 +40,8 @@ export function HealthSummary({ health, title }: { health: ScoringHealth; title?
           <div className="scoring-metric-value">{fitCoverage === null ? '—' : `${fitCoverage}%`}</div>
           <div className="scoring-metric-sub">
             {fitCoverageBase > 0
-              ? `de ${fitCoverageBase} ${raw.recentLeads > 0 ? 'en 90 días' : 'activos'}`
-              : 'sin leads todavía'}
+              ? `de ${fitCoverageBase} ${fitCoverageScope === 'recientes' ? 'en 90 días' : 'activos'}, solo fuentes con filtrado`
+              : 'sin leads de fuentes con filtrado'}
           </div>
         </div>
 
@@ -79,7 +79,14 @@ export function HealthSummary({ health, title }: { health: ScoringHealth; title?
           {findings.map(f => (
             <li key={f.code} className="scoring-finding" data-level={f.level}>
               {ICON[f.level]}
-              <span><strong>{f.title}.</strong> {f.detail}</span>
+              <span>
+                <strong>{f.title}.</strong> {f.detail}
+                {f.items && f.items.length > 0 && (
+                  <ul className="scoring-finding-items">
+                    {f.items.map(item => <li key={item}>{item}</li>)}
+                  </ul>
+                )}
+              </span>
             </li>
           ))}
         </ul>

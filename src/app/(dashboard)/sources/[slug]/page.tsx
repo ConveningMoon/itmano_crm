@@ -132,12 +132,20 @@ async function ChannelDetailPage({
               {channel.publicId} · slug: {channel.slug}
             </div>
           )}
-          <span style={{
-            fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-            background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
-          }}>
-            Agente: {channel.agentName ?? 'Toda la agencia'}
-          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <span style={{
+              fontSize: '11px', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap',
+              background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+            }}>
+              Agente: {channel.agentName ?? 'Toda la agencia'}
+            </span>
+            <span style={{
+              fontSize: '11px', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap',
+              background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+            }}>
+              {channel.asksFitQuestions ? 'Con preguntas de filtrado' : 'Solo registro'}
+            </span>
+          </div>
         </div>
         <ChannelActions
           channelId={channel.id}
@@ -145,6 +153,7 @@ async function ChannelDetailPage({
           channelActive={channel.active}
           channelType={channel.channelType}
           emailSequenceId={channel.emailSequenceId}
+          asksFitQuestions={channel.asksFitQuestions}
           agentId={channel.agentId}
           agents={agents}
           sequences={sequences.filter(s => s.activationType === 'form').map(s => ({ id: s.id, name: s.name }))}

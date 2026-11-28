@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { columns } from '@/lib/supabase/columns'
+import { asksFitQuestions } from '@/lib/sources/fit-questions'
 import type { PeriodDays } from '@/lib/dashboard/period'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -16,6 +17,8 @@ export interface AcquisitionChannel {
   slug: string
   active: boolean
   emailSequenceId: string | null
+  /** Hace preguntas de filtrado; ya resuelto el valor por defecto según el tipo. */
+  asksFitQuestions: boolean
   agentId: string | null      // owning agent (routing); null = "Toda la agencia"
   agentName: string | null    // resolved display name, null when agentId is null
   metadata: Record<string, unknown>
@@ -126,6 +129,7 @@ function toChannel(c: any, agentNameMap: Map<string, string>, m: RawMetrics[stri
     slug:            c.slug,
     active:          c.active,
     emailSequenceId: c.email_sequence_id,
+    asksFitQuestions: asksFitQuestions(c.channel_type, c.asks_fit_questions),
     agentId:         c.agent_id ?? null,
     agentName:       c.agent_id ? (agentNameMap.get(c.agent_id) ?? null) : null,
     metadata:        c.metadata ?? {},

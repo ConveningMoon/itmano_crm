@@ -25,6 +25,7 @@ export type Database = {
           active: boolean
           agent_id: string | null
           archived_at: string | null
+          asks_fit_questions: boolean | null
           channel_type: string
           created_at: string
           email_sequence_id: string | null
@@ -40,6 +41,7 @@ export type Database = {
           active?: boolean
           agent_id?: string | null
           archived_at?: string | null
+          asks_fit_questions?: boolean | null
           channel_type: string
           created_at?: string
           email_sequence_id?: string | null
@@ -55,6 +57,7 @@ export type Database = {
           active?: boolean
           agent_id?: string | null
           archived_at?: string | null
+          asks_fit_questions?: boolean | null
           channel_type?: string
           created_at?: string
           email_sequence_id?: string | null
@@ -3440,6 +3443,10 @@ export type Database = {
         Args: { p_agent_id: string; p_months?: number; p_tenant_id: string }
         Returns: Json
       }
+      channel_asks_fit_questions: {
+        Args: { p_channel_type: string; p_explicit: boolean }
+        Returns: boolean
+      }
       channel_leads_trend: {
         Args: { p_days: number; p_tenant_id: string; p_time_zone: string }
         Returns: Json
@@ -3554,6 +3561,17 @@ export type Database = {
           remaining: number
           reset_at: string
         }[]
+      }
+      quality_band_for: {
+        Args: {
+          p_fixed: boolean
+          p_p20: number
+          p_p40: number
+          p_p60: number
+          p_p80: number
+          p_q: number
+        }
+        Returns: string
       }
       recalc_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
       recompute_lead_score: { Args: { p_lead_id: string }; Returns: undefined }
