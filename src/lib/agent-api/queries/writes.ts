@@ -5,6 +5,7 @@ import { toIso } from '../schemas/common'
 import {
   CreateLeadSchema, UpdateLeadSchema, CreateNoteSchema, CreateDraftSchema,
 } from '../schemas/write'
+import { assertEntitlement } from '@/lib/subscriptions/entitlements-server'
 import { getLead } from './leads'
 import type { AgentContext } from '../auth'
 
@@ -54,6 +55,11 @@ async function requireAgent(ctx: AgentContext, agentId: string): Promise<void> {
 
 export async function createLead(ctx: AgentContext, req: Request): Promise<string> {
   const input = parse(CreateLeadSchema, await readBody(req))
+
+  // Límite blando de leads del plan. ApiErrorCode no tiene 'forbidden':
+  // 'unprocessable' (422, no reintentable) es el más cercano.
+  const limite = await assertEntitlement(ctx.tenantId, 'createLead')
+  if (limite) throw new ApiError('unprocessable', limite.error, { reason: 'plan_limit' })
 
   await requireAgent(ctx, input.owner)
 

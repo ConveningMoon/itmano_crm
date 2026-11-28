@@ -6,6 +6,8 @@ import { mapAgent, type AgentRow } from '@/lib/db'
 import { getLeadsListData } from '@/lib/data/leads'
 import { parseLeadListFilters } from '@/lib/leads/list-filters'
 import { listLeadTags } from '@/lib/data/lead-tags'
+import { getTenantEntitlements } from '@/lib/subscriptions/entitlements-server'
+import { LeadLimitBanner } from './lead-limit-banner'
 import { LeadsClient } from './leads-client'
 import type { ChannelOption } from './new/page'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
@@ -57,16 +59,21 @@ async function LeadsContent({ searchParams }: { searchParams: SearchParams }) {
   // esperar el catálogo añadía una ola entera de round-trips a cada carga.
   const needsRefs = filters.source !== 'all' || filters.tag !== 'all'
   const refs = needsRefs ? await refsPromise : null
-  const [[{ data: rawAgents }, { data: rawChannels }, tags], data] = await Promise.all([
+  // Derechos del plan en la misma ola que la lista (cache() por request). Sin
+  // tenant (super_admin en el hub) no hay tope que mostrar.
+  const [[{ data: rawAgents }, { data: rawChannels }, tags], data, entitlements] = await Promise.all([
     refs ?? refsPromise,
     refs
       ? getLeadsListData(scope, filters, toChannelOptions(refs[1].data), refs[2])
       : getLeadsListData(scope, filters, [], []),
+    tenant_id ? getTenantEntitlements(tenant_id) : null,
   ])
 
   const channels = toChannelOptions(rawChannels)
 
   return (
+    <>
+    <LeadLimitBanner entitlement={entitlements?.createLead ?? null} />
     <LeadsClient
       leads={data.items}
       kanban={data.kanban}
@@ -82,6 +89,7 @@ async function LeadsContent({ searchParams }: { searchParams: SearchParams }) {
       viewerRole={role}
       viewerAgentId={scope.agentId}
     />
+    </>
   )
 }
 
