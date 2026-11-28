@@ -49,4 +49,20 @@ describe('quotaWindowStart', () => {
   it('fecha de degradacion ilegible, cae al 1 del mes', () => {
     expect(quotaWindowStart(now, 'basura')).toBe('2026-08-01T00:00:00.000Z')
   })
+
+  it('quotaWindowStart con prueba vencida usa trialEndsAt', () => {
+    expect(quotaWindowStart(now, null, '2026-08-10T00:00:00.000Z')).toBe('2026-08-10T00:00:00.000Z')
+  })
+
+  it('prueba vencida el mes pasado, cuenta desde el 1 del mes', () => {
+    expect(quotaWindowStart(now, null, '2026-07-10T00:00:00.000Z')).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('prueba aun vigente, no mueve la ventana', () => {
+    expect(quotaWindowStart(now, null, '2026-08-25T00:00:00.000Z')).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('degradedAt manda sobre trialEndsAt', () => {
+    expect(quotaWindowStart(now, '2026-08-15T00:00:00.000Z', '2026-08-10T00:00:00.000Z')).toBe('2026-08-15T00:00:00.000Z')
+  })
 })

@@ -17,9 +17,22 @@ import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
  * con CERO envíos durante once días — lo contrario de lo que busca el modo
  * degradado, que existe para que el cliente siga siendo recuperable.
  */
-export function quotaWindowStart(now: Date, degradedAt: string | null): string {
+export function quotaWindowStart(
+  now: Date,
+  degradedAt: string | null,
+  trialEndsAt: string | null = null,
+): string {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  if (!degradedAt) return monthStart.toISOString()
+  if (!degradedAt) {
+    // Prueba vencida que el cron aún no marcó como degradada: getTenantAccess ya
+    // la trata como degradada, así que su cuota de cortesía arranca al vencer la
+    // prueba y no cuenta los envíos hechos mientras era válida.
+    const trialEnd = trialEndsAt ? new Date(trialEndsAt) : null
+    if (trialEnd && !Number.isNaN(trialEnd.getTime()) && trialEnd < now && trialEnd > monthStart) {
+      return trialEnd.toISOString()
+    }
+    return monthStart.toISOString()
+  }
   const degraded = new Date(degradedAt)
   if (Number.isNaN(degraded.getTime())) return monthStart.toISOString()
   return (degraded > monthStart ? degraded : monthStart).toISOString()
@@ -28,13 +41,14 @@ export function quotaWindowStart(now: Date, degradedAt: string | null): string {
 export async function countMonthlyCorporateSends(
   tenantId: string,
   degradedAt: string | null,
+  trialEndsAt: string | null = null,
 ): Promise<number> {
   const supabase = createAdminClient()
   const { count } = await supabase
     .from('email_sends')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
-    .gte('sent_at', quotaWindowStart(new Date(), degradedAt))
+    .gte('sent_at', quotaWindowStart(new Date(), degradedAt, trialEndsAt))
   return count ?? 0
 }
 
@@ -53,7 +67,7 @@ export async function monthlyEmailAllowance(tenantId: string): Promise<{ limit: 
   ])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
-  const used = await countMonthlyCorporateSends(tenantId, degradedAt)
+  const used = await countMonthlyCorporateSends(tenantId, degradedAt, subscription?.trialEndsAt ?? null)
   const limit = access.monthlyEmailQuota ?? PLANS[subscription?.plan ?? 'esencial'].limits.emailsPerMonth
   return { limit, used }
 }
@@ -71,15 +85,16 @@ export async function assertEmailQuota(
   tenantId: string,
 ): Promise<{ ok: false; error: string } | null> {
   const supabase = createAdminClient()
-  const [access, { data: sub }] = await Promise.all([
+  const [access, subscription, { data: sub }] = await Promise.all([
     getTenantAccessFor(tenantId),
+    getSubscription(tenantId),
     supabase.from('subscriptions').select('degraded_at').eq('tenant_id', tenantId).maybeSingle(),
   ])
   if (access.monthlyEmailQuota === null) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
-  const used = await countMonthlyCorporateSends(tenantId, degradedAt)
+  const used = await countMonthlyCorporateSends(tenantId, degradedAt, subscription?.trialEndsAt ?? null)
   if (used < access.monthlyEmailQuota) return null
 
   return {

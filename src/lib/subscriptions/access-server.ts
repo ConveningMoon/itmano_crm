@@ -28,5 +28,8 @@ export const getTenantAccessFor = cache(async function getTenantAccessFor(
     plan:          s?.plan ?? 'esencial',
     status:        s?.status ?? 'active',
     billingExempt: s?.billingExempt ?? false,
+    // Sin esto una prueba vencida sigue pareciendo 'trial' hasta que el cron la
+    // marque, y todos los gates (IA, secuencias, cuota) la dejarían pasar.
+    trialEndsAt:   s?.trialEndsAt ?? null,
   })
 })
