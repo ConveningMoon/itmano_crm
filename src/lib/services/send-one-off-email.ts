@@ -42,9 +42,9 @@ export async function sendOneOffEmail(
   const leadEmail = l.email as string | null
   if (!leadEmail) return { ok: false, error: 'El lead no tiene email.' }
 
-  // Cuota de envío corporativo en modo degradado. Solo aplica aquí: el modo
+  // Tope mensual de correos del plan (110 % para envío humano). Solo aplica aquí: el modo
   // Personal del composer abre un mailto: y nunca llega a esta función.
-  const quotaDenied = await assertEmailQuota(tenantId)
+  const quotaDenied = await assertEmailQuota(tenantId, 'manual')
   if (quotaDenied) return quotaDenied
 
   const agent      = Array.isArray(l.agents) ? l.agents[0] : l.agents

@@ -180,7 +180,7 @@ export async function sendPurchaseEmail(
   // víspera del cierre) — exactamente el escenario que motiva el tope: un
   // tenant que ya no paga no debe poder quemar la cuota mensual sin que nadie
   // lo esté mirando. Se somete al mismo gate que el envío manual one-off.
-  const quotaDenied = await assertEmailQuota(tenantId)
+  const quotaDenied = await assertEmailQuota(tenantId, 'manual')
   if (quotaDenied) {
     console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'quota_exceeded' }))
     return

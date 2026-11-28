@@ -6,6 +6,7 @@ import { parseEmailContent } from '@/lib/email-content'
 import type { EmailLocale } from '@/lib/services/email-render'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { isRunStale } from '@/lib/subscriptions/access'
+import { getFreshEmailEntitlements, nextMonthStartUtc } from '@/lib/subscriptions/quota'
 
 // Resend template IDs are UUIDs; anything else is a placeholder.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -169,6 +170,30 @@ export async function processSequenceRun(params: {
       action:  'paused',
       reason:  'subscription_inactive',
       details: 'Suscripción inactiva: las secuencias automáticas están en pausa',
+      ...diag,
+    }
+  }
+
+  // ── Guard: tope mensual de correos del plan ────────────────────────────────
+  // Las automatizaciones paran al 100 % del tope. Conteo FRESCO por run (no el
+  // cache() de getTenantUsage): el orquestador procesa hasta 100 runs en un
+  // request y un uso congelado dejaría pasar un lote entero sobre el tope.
+  // El run se reprograma al primer instante del mes siguiente (sigue 'active',
+  // y a menos de 30 días de vencer no es stale); el cron lo retoma solo, y si
+  // el cliente sube de plan antes, el siguiente reintento manual lo libera.
+  const { automatedEmail } = await getFreshEmailEntitlements(tenantId)
+  if (!automatedEmail.allowed) {
+    if (!dryRun) {
+      await db
+        .from('lead_sequence_runs')
+        .update({ next_send_at: nextMonthStartUtc(new Date()) })
+        .eq('id', runId)
+        .eq('tenant_id', tenantId)
+    }
+    return {
+      action:  'paused',
+      reason:  'monthly_quota',
+      details: 'Tope mensual de correos alcanzado: la secuencia se reanuda el mes siguiente',
       ...diag,
     }
   }
