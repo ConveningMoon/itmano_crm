@@ -8,6 +8,7 @@
 // incluye más; nunca llevan dólares (superficie del tenant).
 
 import { PLANS } from '@/lib/plans'
+import { planPublishCap } from '@/lib/subscriptions/over-cap'
 import { getTenantAccess, type AccessInput } from '@/lib/subscriptions/access'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
@@ -95,9 +96,7 @@ export function getEntitlements(input: EntitlementsInput): Record<EntitlementKey
   if (skip) {
     publishProperty = OK
   } else {
-    const planCap = definition.limits.webProperties === null ? 0
-      : definition.limits.webProperties === 'unlimited' ? null
-      : definition.limits.webProperties
+    const planCap = planPublishCap(plan)
     const caps = [planCap, access.publishedPropertiesCap].filter((c): c is number => c !== null)
     const cap = caps.length ? Math.min(...caps) : null
     const used = usage.publishedProperties

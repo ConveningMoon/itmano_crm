@@ -188,7 +188,7 @@ describe('restoreAfterReactivation', () => {
 // Con `cap`, sólo vuelven las marcadas más recientes hasta llenar el cupo.
 describe('restoreAfterReactivation con tope del plan', () => {
   // Fake que además registra order/limit/count y devuelve conteo de publicadas.
-  function makeCapFake(opts: { published: number; marked: { id: string }[] }) {
+  function makeCapFake(opts: { published: number; marked: { id: string }[]; countError?: boolean }) {
     const calls: Call[] = []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- doble encadenable de prueba
     function builder(table: string): any {
@@ -205,7 +205,7 @@ describe('restoreAfterReactivation con tope del plan', () => {
         then(ok: (v: unknown) => unknown, err?: (e: unknown) => unknown) {
           let res: unknown
           if (table !== 'properties') res = { data: [], error: null }
-          else if (head) res = { count: opts.published, data: null, error: null }
+          else if (head) res = opts.countError ? { count: null, data: null, error: { message: 'boom' } } : { count: opts.published, data: null, error: null }
           else if (mode === 'update') {
             const inCall = calls.filter(c => c.method === 'in' && c.table === 'properties').at(-1)
             res = { data: ((inCall?.args[1] as string[]) ?? opts.marked.map(m => m.id)).map(id => ({ id })), error: null }
@@ -253,5 +253,35 @@ describe('restoreAfterReactivation con tope del plan', () => {
     const report = await restoreAfterReactivation('tenant-x', { cap: 2 })
     expect(report.propertiesRepublished).toBe(0)
     expect(fake.calls.some(c => c.method === 'update' && c.table === 'properties')).toBe(false)
+  })
+
+  it('un conteo fallido lanza y no republica nada (no se asume 0 publicadas)', async () => {
+    const fake = makeCapFake({ published: 0, marked: five, countError: true })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+    await expect(restoreAfterReactivation('tenant-x', { cap: 2 })).rejects.toBeTruthy()
+    expect(fake.calls.some(c => c.method === 'update' && c.table === 'properties')).toBe(false)
+  })
+
+  it('los candidatos excluyen las ya publicadas y filtran por tenant', async () => {
+    const fake = makeCapFake({ published: 0, marked: five })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+    await restoreAfterReactivation('tenant-x', { cap: 2 })
+    const eqs = fake.calls.filter(c => c.method === 'eq' && c.table === 'properties').map(c => c.args)
+    expect(eqs).toContainEqual(['published_to_web', false])
+    expect(eqs).toContainEqual(['unpublished_by_billing', true])
+    expect(eqs).toContainEqual(['tenant_id', 'tenant-x'])
+  })
+
+  it('limpia over_cap_since del tenant al reactivar (gracia nueva)', async () => {
+    const fake = makeCapFake({ published: 0, marked: five })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockCreateAdminClient.mockReturnValue(fake.client as any)
+    await restoreAfterReactivation('tenant-x', { cap: 2 })
+    const i = fake.calls.findIndex(c => c.method === 'update' && c.table === 'subscriptions')
+    expect(i).toBeGreaterThan(-1)
+    expect(fake.calls[i].args[0]).toEqual({ over_cap_since: null })
+    expect(fake.calls[i + 1]).toEqual({ method: 'eq', args: ['tenant_id', 'tenant-x'], table: 'subscriptions' })
   })
 })

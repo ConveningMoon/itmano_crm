@@ -126,9 +126,12 @@ export async function applySubscriptionEvent(
   // reactivación (ya viene null y seguiría viniendo null). `snapshot.degradedAt`
   // es el estado ANTES de este evento, así que la combinación de ambos aísla
   // el instante exacto en que el tenant vuelve a estar al día.
-  if (snapshot.degradedAt && patch.degraded_at === null) {
+  // El plan siempre existe aqui: degradedAt implica fila, y subscriptions.plan
+  // es NOT NULL.
+  const planActual = patch.plan ?? planAnterior
+  if (snapshot.degradedAt && patch.degraded_at === null && planActual) {
     try {
-      await restoreAfterReactivation(tenantId, { cap: planPublishCap(patch.plan ?? planAnterior ?? 'esencial') })
+      await restoreAfterReactivation(tenantId, { cap: planPublishCap(planActual) })
     } catch (err) {
       // NO se relanza a propósito. El estado de FACTURACIÓN (lo crítico) ya
       // quedó bien escrito arriba — devolver 500 aquí no lo arregla, y además

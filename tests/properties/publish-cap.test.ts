@@ -101,4 +101,16 @@ describe('Crear con IA', () => {
     expect(anthropicCtor).not.toHaveBeenCalled()
     expect(mockAdmin).not.toHaveBeenCalled()
   })
+
+  it('sin tenant resoluble devuelve el error y no sigue (el gate no falla abierto)', async () => {
+    mockCtx.mockResolvedValue({ role: 'super_admin', tenant_id: null, user_id: 'u1' })
+    process.env.ANTHROPIC_API_KEY = 'test'
+    const fd = new FormData()
+    fd.set('file', new File([new Uint8Array([1])], 'a.pdf', { type: 'application/pdf' }))
+    const res = await generatePropertyFromPdf(fd)
+    expect(res.ok).toBe(false)
+    expect(mockAssert).not.toHaveBeenCalled()
+    expect(anthropicCtor).not.toHaveBeenCalled()
+    expect(mockAdmin).not.toHaveBeenCalled()
+  })
 })

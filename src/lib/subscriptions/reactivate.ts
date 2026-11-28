@@ -43,34 +43,46 @@ export async function restoreAfterReactivation(
       .select('id')
     restoredCount = (restored ?? []).length
   } else if (cap > 0) {
-    const { count: publishedNow } = await supabase
+    const { count: publishedNow, error: countError } = await supabase
       .from('properties')
       .select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
       .eq('published_to_web', true)
+    // Un conteo fallido NO puede tomarse como 0: republicaria por encima del
+    // tope. Se lanza; persist.ts lo captura y lo registra.
+    if (countError) throw countError
     const room = cap - (publishedNow ?? 0)
     if (room > 0) {
-      const { data: candidates } = await supabase
+      const { data: candidates, error: candidatesError } = await supabase
         .from('properties')
         .select('id')
         .eq('tenant_id', tenantId)
         .eq('unpublished_by_billing', true)
+        // Una que el usuario republico a mano durante la degradacion sigue
+        // marcada (updateProperty no limpia la marca) y no debe ocupar cupo.
+        .eq('published_to_web', false)
         .order('updated_at', { ascending: false })
         // Mismo desempate que el cron: sin él el conjunto restaurado variaría.
         .order('id', { ascending: false })
         .limit(room)
+      if (candidatesError) throw candidatesError
       const ids = ((candidates ?? []) as { id: string }[]).map(p => p.id)
       if (ids.length > 0) {
-        const { data: restored } = await supabase
+        const { data: restored, error: restoreError } = await supabase
           .from('properties')
           .update({ published_to_web: true, unpublished_by_billing: false })
           .eq('tenant_id', tenantId)
           .in('id', ids)
           .select('id')
+        if (restoreError) throw restoreError
         restoredCount = (restored ?? []).length
       }
     }
   }
+
+  // Gracia nueva: un over_cap_since viejo (de antes de la degradacion) haria
+  // que el cron despublicara de inmediato al reactivarse.
+  await supabase.from('subscriptions').update({ over_cap_since: null }).eq('tenant_id', tenantId)
 
   // Mismo criterio para newsletters: solo `unpublished_by_billing = true`
   // vuelve a `published`. Una edición que el tenant dejó en `draft` a

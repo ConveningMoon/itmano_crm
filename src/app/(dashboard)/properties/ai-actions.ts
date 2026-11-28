@@ -193,10 +193,9 @@ export async function generatePropertyFromPdf(
   // llamada a la IA (y de subir el PDF). La ruta de IA nunca publica: el
   // borrador sale con published_to_web = false y el tope se evalúa al guardar.
   const intakeTenant = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
-  if (typeof intakeTenant === 'string') {
-    const denied = await assertEntitlement(intakeTenant, 'aiPropertyIntake')
-    if (denied) return denied
-  }
+  if (typeof intakeTenant !== 'string') return { ok: false, error: intakeTenant.error }
+  const denied = await assertEntitlement(intakeTenant, 'aiPropertyIntake')
+  if (denied) return denied
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).
   const overLimit = await assertAiWithinLimit(ctx, 'property_intake')
