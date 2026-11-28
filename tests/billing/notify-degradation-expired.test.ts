@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
-const send = vi.fn()
+const send = vi.fn().mockResolvedValue({ error: null })
 vi.mock('@/lib/resend', () => ({ resendForAccount: () => ({ emails: { send: (...a: unknown[]) => send(...a) } }) }))
 const inserts: unknown[] = []
 const tables: string[] = []

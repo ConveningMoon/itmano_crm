@@ -16,7 +16,7 @@ import { resendForAccount, resolveResendAccount, resendAccountConfigured } from 
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 import { resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
-import { degradedTransition, manualDegradedAt } from '@/lib/subscriptions/transition'
+import { degradedTransition, manualDegradedAt, expiredTrialEndsAt } from '@/lib/subscriptions/transition'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 import { planPublishCap } from '@/lib/subscriptions/over-cap'
 import type { SubscriptionStatus } from '@/lib/subscriptions'
@@ -467,6 +467,11 @@ export async function updateTenantSubscription(
         ahora,
       )
     : null
+  // 'expired' sólo tiene sentido desde una prueba: otro origen recibiría el
+  // correo de "tu prueba terminó" sin haber tenido nunca una.
+  if (parsed.data.status === 'expired' && prev?.status !== 'trial' && prev?.status !== 'expired') {
+    return { ok: false, error: 'Prueba vencida sólo aplica a un equipo que estaba en período de prueba.' }
+  }
   const degradedAt = manualDegradedAt({
     transition:       transicion,
     nextStatus:       parsed.data.status,
@@ -478,7 +483,7 @@ export async function updateTenantSubscription(
   // lo conserva (ancla el fin de la prueba) y el resto lo deja en null.
   const trialEndsAt =
     parsed.data.status === 'trial' ? parsed.data.trialEndsAt
-    : parsed.data.status === 'expired' ? ((prev?.trial_ends_at as string | null | undefined) ?? ahora.toISOString())
+    : parsed.data.status === 'expired' ? expiredTrialEndsAt(prev?.trial_ends_at as string | null | undefined, ahora)
     : null
 
   // Upsert: tenants creados antes de la migración 054 podrían no tener fila.

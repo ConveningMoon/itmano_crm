@@ -81,3 +81,23 @@ describe('runTrialExpiryStep: fallos visibles', () => {
     await expect(runTrialExpiryStep(db.client as any, now, vi.fn(), vi.fn() as any)).rejects.toThrow()
   })
 })
+
+describe('runTrialExpiryStep: contador failed', () => {
+  it('suma failed cuando el update de un tenant devuelve error', async () => {
+    const rows = [{ tenant_id: 't1', trial_ends_at: '2026-12-18T00:00:00Z', degraded_at: null }]
+    let updating = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b: any = {
+      select: () => b, lt: () => b, is: () => b, eq: () => b,
+      update: () => { updating = true; return b },
+      then(ok: (v: unknown) => unknown) {
+        return Promise.resolve(updating ? { data: null, error: new Error('x') } : { data: rows, error: null }).then(ok)
+      },
+    }
+    const logError = vi.fn()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = await runTrialExpiryStep({ from: () => { updating = false; return b } } as any, now, logError, vi.fn() as any)
+    expect(r).toEqual({ expired: 0, failed: 1 })
+    expect(logError).toHaveBeenCalled()
+  })
+})

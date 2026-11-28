@@ -56,3 +56,27 @@ describe('manualDegradedAt', () => {
     expect(manualDegradedAt({ ...base, nextStatus: 'active', transition: null, prev: null })).toBeUndefined()
   })
 })
+
+import { expiredTrialEndsAt } from '@/lib/subscriptions/transition'
+import { canRequestPlanChange } from '@/lib/subscriptions/request-guard'
+
+describe('expiredTrialEndsAt', () => {
+  it('conserva una fecha pasada', () => {
+    expect(expiredTrialEndsAt('2026-12-19T00:00:00Z', now)).toBe('2026-12-19T00:00:00Z')
+  })
+  it('una fecha futura se recorta a ahora', () => {
+    expect(expiredTrialEndsAt('2027-01-10T00:00:00Z', now)).toBe(now.toISOString())
+  })
+  it('sin fecha usa ahora', () => {
+    expect(expiredTrialEndsAt(null, now)).toBe(now.toISOString())
+  })
+})
+
+describe('canRequestPlanChange', () => {
+  it('trial y expired no pueden pedir cambio ni cancelación', () => {
+    expect(canRequestPlanChange('trial')).toBe(false)
+    expect(canRequestPlanChange('expired')).toBe(false)
+    expect(canRequestPlanChange('active')).toBe(true)
+    expect(canRequestPlanChange('paused')).toBe(true)
+  })
+})

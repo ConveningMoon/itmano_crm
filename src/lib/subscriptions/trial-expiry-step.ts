@@ -8,6 +8,7 @@ type Db = ReturnType<typeof createAdminClient>
 type LogError = (step: string, tenantId: string | null, error: unknown) => void
 
 const TRIAL_COLUMNS = columns('subscriptions', ['tenant_id', 'trial_ends_at', 'degraded_at'])
+const UPDATED_COLUMNS = columns('subscriptions', ['tenant_id'])
 const NOTICE_COLUMNS = columns('subscriptions', ['tenant_id', 'trial_ends_at'])
 
 // Paso 0 del cron: pruebas vencidas sin suscripción de Paddle y no exentas pasan
@@ -44,7 +45,7 @@ export async function runTrialExpiryStep(
         })
         .eq('tenant_id', row.tenant_id)
         .eq('status', 'trial')
-        .select('tenant_id')
+        .select(UPDATED_COLUMNS)
       if (updateError) { failed += 1; logError('trial-expiry', row.tenant_id, updateError); continue }
       if (!updated || updated.length === 0) continue
       expired += 1

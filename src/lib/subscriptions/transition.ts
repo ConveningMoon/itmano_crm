@@ -50,3 +50,9 @@ export function manualDegradedAt(args: {
     && new Date(prev.trialEndsAt).getTime() < now.getTime()
   return pastTrialEnd ? prev!.trialEndsAt! : now.toISOString()
 }
+
+/** trial_ends_at al marcar 'expired' a mano: el previo, sin pasar de ahora (nunca una fecha futura). */
+export function expiredTrialEndsAt(previous: string | null | undefined, now: Date): string {
+  if (previous && new Date(previous).getTime() < now.getTime()) return previous
+  return now.toISOString()
+}
