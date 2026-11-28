@@ -34,6 +34,9 @@ interface Props {
   // Configuración → Scoring, ya renderizado en el servidor. Sólo llega para
   // super_admin (la pestaña no existe para el resto); null en otro caso.
   scoringPanel: React.ReactNode
+  // Configuración → Cuenta → "Tu plan", ya renderizado en el servidor con su
+  // propio Suspense (lee derechos y uso de la base).
+  planUsage: React.ReactNode
   canManageAgents: boolean
   multiAgent: boolean
   canLinkSelf: boolean
@@ -57,7 +60,7 @@ interface Props {
 }
 
 export function SettingsClient({
-  tenant, agents, agentAccess, accessCount, businessProfile, scoringPanel,
+  tenant, agents, agentAccess, accessCount, businessProfile, scoringPanel, planUsage,
   canManageAgents, multiAgent, canLinkSelf, myAgentId, senderDomain, ownerAgentId, canDeleteAgents, userEmail, userRole,
   aiUsage, aiShowCosts, aiLimit, aiLimitSubtitle, aiByAgent, subscription, billingOptions,
   leadTags, leadTagCounts,
@@ -138,6 +141,7 @@ export function SettingsClient({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <SettingsSectionHead title="Cuenta y acceso" description="Tu plan y cómo entras al CRM." />
           <SubscriptionCard subscription={subscription} canManage={canManageAgents} billingOptions={billingOptions} />
+          {planUsage}
           <AccountSection
             userEmail={userEmail}
             userRole={userRole}

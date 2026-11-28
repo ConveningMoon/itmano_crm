@@ -22,8 +22,9 @@ import { SettingsClient } from './settings-client'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { PageHeader } from '@/components/ui/page-header'
 import { DEFAULT_TENANT_COLOR } from '@/lib/config'
-import { SettingsBodySkeleton } from './settings-skeleton'
+import { SettingsBodySkeleton, PlanUsageSkeleton } from './settings-skeleton'
 import { TenantScoringPanel, TenantScoringSkeleton } from './tenant-scoring-panel'
+import { PlanUsageSection } from './plan-usage-section'
 import { pageMetadata } from '@/lib/routing/page-titles'
 
 export const metadata = pageMetadata('/settings')
@@ -158,6 +159,13 @@ async function SettingsContent() {
             <TenantScoringPanel tenantId={tenantId} />
           </Suspense>
         ) : null}
+        // Tu plan: uso de cada tope. Lee derechos y conteos, así que va en su
+        // propio Suspense y no frena la tarjeta de suscripción.
+        planUsage={(
+          <Suspense fallback={<PlanUsageSkeleton />}>
+            <PlanUsageSection tenantId={tenantId} ai={aiLimit} />
+          </Suspense>
+        )}
         canManageAgents={ctx.role !== 'agent'}
         multiAgent={multiAgent}
         canLinkSelf={canLinkSelf}

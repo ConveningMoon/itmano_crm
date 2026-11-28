@@ -24,3 +24,23 @@ export function SettingsBodySkeleton() {
     </div>
   )
 }
+
+// Forma real de "Tu plan": tarjeta con filas de etiqueta + cifra y su barra.
+export function PlanUsageSkeleton() {
+  return (
+    <div className="settings-card" aria-busy="true">
+      <div style={{ marginBottom: '14px' }}>
+        <Skeleton w="90px" h={16} r={4} />
+      </div>
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="plan-usage-row">
+          <div className="plan-usage-head">
+            <Skeleton w="120px" h={13} r={3} />
+            <Skeleton w="110px" h={12} r={3} />
+          </div>
+          <Skeleton w="100%" h={6} r={3} style={{ marginTop: '8px' }} />
+        </div>
+      ))}
+    </div>
+  )
+}
