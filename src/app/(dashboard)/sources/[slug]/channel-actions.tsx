@@ -13,6 +13,8 @@ interface ChannelActionsProps {
   channelActive:   boolean
   channelType:     string
   emailSequenceId: string | null
+  /** Hace preguntas de filtrado (ya resuelto el valor por defecto según el tipo). */
+  asksFitQuestions: boolean
   agentId:         string | null
   agents:          Array<{ id: string; name: string }>
   sequences:       Array<{ id: string; name: string }>
@@ -53,11 +55,12 @@ const LABEL: React.CSSProperties = {
   display: 'block',
 }
 
-export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, agentId, agents, sequences, managedByItmano, pageUrl, myAgentId }: ChannelActionsProps) {
+export function ChannelActions({ channelId, channelName, channelActive, channelType, emailSequenceId, asksFitQuestions, agentId, agents, sequences, managedByItmano, pageUrl, myAgentId }: ChannelActionsProps) {
   const router = useRouter()
   const [mode,       setMode]       = useState<'idle' | 'edit' | 'confirm_archive'>('idle')
   const [name,       setName]       = useState(channelName)
   const [active,     setActive]     = useState(channelActive)
+  const [filtra,     setFiltra]     = useState(asksFitQuestions)
   const [sequenceId, setSequenceId] = useState<string>(emailSequenceId ?? '')
   const [agId,       setAgId]       = useState<string>(agentId ?? '') // '' = Toda la agencia
   const [page,       setPage]       = useState<string>(pageUrl ?? '')
@@ -72,6 +75,8 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
       const [nameRes, seqRes] = await Promise.all([
         updateChannel(channelId, {
           name, active, agentId: agId || null,
+          // Sólo si cambió: así una fuente sin tocar sigue "según el tipo".
+          ...(filtra !== asksFitQuestions ? { asksFitQuestions: filtra } : {}),
           // Sólo se manda cuando el campo existe: si no, `undefined` deja el
           // metadata como está en vez de borrar el link.
           ...(managedByItmano ? { pageUrl: page.trim() || null } : {}),
@@ -127,7 +132,7 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
           </button>
         )}
         <button
-          onClick={() => { setName(channelName); setActive(channelActive); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setPage(pageUrl ?? ''); setError(null); setMode('edit') }}
+          onClick={() => { setName(channelName); setActive(channelActive); setFiltra(asksFitQuestions); setSequenceId(emailSequenceId ?? ''); setAgId(agentId ?? ''); setPage(pageUrl ?? ''); setError(null); setMode('edit') }}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '7px 14px', fontSize: '12px', fontWeight: 500,
@@ -227,6 +232,37 @@ export function ChannelActions({ channelId, channelName, channelActive, channelT
                       {opt.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ ...LABEL, marginBottom: '10px' }}>Preguntas de filtrado</label>
+                <div style={{ display: 'flex', gap: '8px' }} role="radiogroup" aria-label="Preguntas de filtrado">
+                  {[{ v: true, label: 'Sí, filtra' }, { v: false, label: 'No, solo registro' }].map(opt => (
+                    <button
+                      key={String(opt.v)}
+                      type="button"
+                      role="radio"
+                      aria-checked={filtra === opt.v}
+                      onClick={() => setFiltra(opt.v)}
+                      style={{
+                        padding: '6px 16px', fontSize: '12px', fontWeight: 500, borderRadius: '6px',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        background: filtra === opt.v ? 'color-mix(in srgb, var(--gold-1) 15%, transparent)' : 'var(--bg-elevated)',
+                        color: filtra === opt.v ? 'var(--gold-1)' : 'var(--text-muted)',
+                        border: filtra === opt.v
+                          ? '1px solid color-mix(in srgb, var(--gold-1) 30%, transparent)'
+                          : '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '5px' }}>
+                  {filtra
+                    ? 'El formulario pregunta cuándo compra, cómo paga, presupuesto… Si sus leads llegan sin perfil, el Centro de control avisa de que algo falla.'
+                    : 'Solo registra (por ejemplo, la asistencia a un evento). Estos leads suman puntos después, con los correos: asígnales una secuencia.'}
                 </div>
               </div>
 

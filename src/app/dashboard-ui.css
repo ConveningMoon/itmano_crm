@@ -2270,6 +2270,8 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
 .scoring-finding[data-level='problema'] > svg { color: var(--alert); }
 .scoring-finding[data-level='atencion'] > svg { color: var(--gold-2); }
 .scoring-finding strong { font-weight: 600; color: var(--text-primary); }
+.scoring-finding-items { margin: 4px 0 0; padding-left: 16px; list-style: disc; color: var(--text-muted); }
+.scoring-finding-items li + li { margin-top: 2px; }
 .scoring-tenant-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (min-width: 1200px) { .scoring-tenant-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

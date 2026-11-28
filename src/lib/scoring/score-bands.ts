@@ -10,7 +10,9 @@
 // quintiles no significan nada todavía. Es decir, exactamente la situación de
 // un cliente nuevo — que es cuando la pantalla de Ajustes → Scoring importa.
 //
-// Si cambian aquí, cambian en la vista. Son dos sitios y hay que tocar los dos.
+// Si cambian aquí, cambian en `quality_band_for` (SQL, migración
+// 20261128130000), que es la que usan leads_list y la vista previa de cambios.
+// Son dos sitios y hay que tocar los dos.
 export const QUALITY_CUTS = {
   alta:       80,
   media_alta: 60,
