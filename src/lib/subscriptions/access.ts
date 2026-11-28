@@ -62,6 +62,10 @@ export interface AccessInput {
   status:        SubscriptionStatus
   plan:          SubscriptionPlan
   billingExempt: boolean
+  /** ISO de fin de prueba. Con status 'trial' y fecha pasada, se degrada al instante. */
+  trialEndsAt?:  string | null
+  /** Reloj inyectable para tests; por defecto, ahora. */
+  now?:          Date
 }
 
 export interface TenantAccess {
@@ -122,7 +126,29 @@ export function getTenantAccess(input: AccessInput): TenantAccess {
     }
   }
 
-  if (!isDegraded(input.status)) return FULL_ACCESS(input.plan)
+  // Una prueba vencida se degrada en el instante en que vence, sin esperar al
+  // cron que la marca 'expired': así no hay ventana donde siga gastando IA.
+  const now = input.now ?? new Date()
+  const trialEnd = input.status === 'trial' && input.trialEndsAt ? new Date(input.trialEndsAt).getTime() : NaN
+  const trialExpired = !Number.isNaN(trialEnd) && trialEnd < now.getTime()
+
+  if (!isDegraded(input.status) && !trialExpired) {
+    // Aviso ámbar sólo en los últimos 3 días de prueba; no limita nada.
+    if (!Number.isNaN(trialEnd)) {
+      const daysLeft = Math.ceil((trialEnd - now.getTime()) / 86_400_000)
+      if (daysLeft > 0 && daysLeft <= 3) {
+        return {
+          ...FULL_ACCESS(input.plan),
+          banner: {
+            tone:    'amber',
+            message: `Tu prueba termina en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}. Elige un plan para conservar la IA y tus secuencias.`,
+            cta:     'Elegir plan',
+          },
+        }
+      }
+    }
+    return FULL_ACCESS(input.plan)
+  }
 
   return {
     canUseAi:               false,
@@ -134,8 +160,10 @@ export function getTenantAccess(input: AccessInput): TenantAccess {
     newslettersPublishable: false,
     banner: {
       tone:    'red',
-      message: 'Tu suscripción está inactiva. Conservas tus datos y puedes exportarlos; la generación con IA y las secuencias automáticas están en pausa.',
-      cta:     'Reactivar suscripción',
+      message: trialExpired
+        ? 'Tu prueba terminó. Conservas tus datos y puedes exportarlos; la generación con IA y las secuencias automáticas están en pausa hasta que elijas un plan.'
+        : 'Tu suscripción está inactiva. Conservas tus datos y puedes exportarlos; la generación con IA y las secuencias automáticas están en pausa.',
+      cta:     trialExpired ? 'Elegir plan' : 'Reactivar suscripción',
     },
   }
 }

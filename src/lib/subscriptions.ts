@@ -13,7 +13,7 @@ export type SubscriptionPlan = 'esencial' | 'growth' | 'partner'
 // base ya los admite — este tipo solo se alinea con la base.
 export type SubscriptionStatus =
   | 'trial' | 'active' | 'past_due' | 'paused'
-  | 'cancel_requested' | 'change_requested' | 'cancelled'
+  | 'cancel_requested' | 'change_requested' | 'cancelled' | 'expired'
 
 export interface TenantSubscription {
   plan:          SubscriptionPlan
@@ -69,6 +69,7 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   cancel_requested: 'Cancelación solicitada',
   change_requested: 'Cambio de plan solicitado',
   cancelled:        'Cancelada',
+  expired:          'Prueba vencida',
 }
 
 export const PLAN_ORDER: SubscriptionPlan[] = ['esencial', 'growth', 'partner']

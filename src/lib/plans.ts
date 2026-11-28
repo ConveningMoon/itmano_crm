@@ -8,10 +8,9 @@
 // captura equipos 2+ agentes con multi-login (los suites de equipo del
 // mercado — Lofty/BoldTrail — parten de $449–499/asiento).
 //
-// Enforcement real HOY: solo el presupuesto de IA (ai_monthly_limit_usd,
-// migración 053, aplicado en src/lib/services/ai-limit.ts). Los demás límites
-// son contractuales: los administra el super_admin desde el Centro de control
-// hasta que llegue la fase de billing con enforcement en código.
+// Enforcement: el presupuesto de IA (src/lib/services/ai-limit.ts) y los
+// derechos por plan (src/lib/subscriptions/entitlements.ts) se aplican en
+// código a partir de estos topes.
 
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
@@ -64,7 +63,6 @@ export interface PlanFeatures {
   aiEmailDrafting: boolean      // composer + bootstrap de secuencias
   aiPropertyIntake: boolean     // "Crear con IA" desde PDF
   webPropertySync: boolean      // propiedades → sitio web del cliente
-  fullAnalytics: boolean        // analytics completo (agente/canal/email)
   teamAnalytics: boolean        // vista consolidada de equipo
   multiLogin: boolean           // logins de agente con visibilidad propia
   /**
@@ -162,7 +160,6 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       aiEmailDrafting: true,
       aiPropertyIntake: false,
       webPropertySync: false,
-      fullAnalytics: false,
       teamAnalytics: false,
       multiLogin: false,
       customSendingDomain: false,
@@ -181,10 +178,10 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
     inversionAnual:   '$1,290 / año',
     annualSavingsUsd: 258,
     audience: 'Independientes pro que quieren la IA completa y su web alimentada por el CRM.',
-    blurb: 'Toda la IA generativa, propiedades sincronizadas con tu web y analytics completo.',
+    blurb: 'Toda la IA generativa, propiedades sincronizadas con tu web.',
     limits: {
       logins: 1,
-      trackedAgents: 3,
+      trackedAgents: 1,
       leads: 10000,
       emailsPerMonth: 15000,
       webProperties: 50,
@@ -196,7 +193,6 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       aiEmailDrafting: true,
       aiPropertyIntake: true,
       webPropertySync: true,
-      fullAnalytics: true,
       teamAnalytics: false,
       multiLogin: false,
       customSendingDomain: true,
@@ -231,7 +227,6 @@ export const PLANS: Record<SubscriptionPlan, PlanDefinition> = {
       aiEmailDrafting: true,
       aiPropertyIntake: true,
       webPropertySync: true,
-      fullAnalytics: true,
       teamAnalytics: true,
       multiLogin: true,
       customSendingDomain: true,
@@ -258,9 +253,8 @@ export const PARTNER_SEAT = { includedLogins: 3, extraLoginUsd: 49 }
 // Growth/Partner de pago. La IA lleva un presupuesto de cortesía (no
 // ilimitado: el costo lo paga ITMANO y un trial sin tope es abusable; $25 en
 // 14 días se siente ilimitado en la práctica). El super_admin puede extender
-// el vencimiento desde el Centro de control. Sin lockout automático al
-// vencer: el Centro de control lo marca y el equipo gestiona la conversión
-// (modelo sales-led).
+// el vencimiento desde el Centro de control. Al vencer, el acceso pasa al modo
+// degradado al instante (getTenantAccess) y un cron marca el estado 'expired'.
 
 export const TRIAL = {
   days: 14,
