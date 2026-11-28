@@ -31,7 +31,7 @@ cerrar la fase 8, actualiza esa sección de `product.md`.
 | 3 | Correo: Magic Links, cuotas de Resend y crons | [fase-03-correo-auth-crons.md](fase-03-correo-auth-crons.md) | 2 (tabla de métricas) | 🟨 código mergeado (PR #311, 2026-11-20); faltan los pasos de Dylan (hook, cron-job.org, Inbound y D8) |
 | 4 | Storage: optimización y limpieza | [fase-04-storage.md](fase-04-storage.md) | — (paralela a 2-3) | ⬜ pendiente |
 | 5 | Cobros con Paddle Live | [fase-05-cobros-paddle.md](fase-05-cobros-paddle.md) | 1 | 🟨 código hecho en `feat/saas-fase-05-paddle` (2026-11-20); faltan el catálogo y las variables en Paddle sandbox y Live, la prueba de punta a punta y el primer cobro real |
-| 6 | Límites del plan en código | [fase-06-limites-plan.md](fase-06-limites-plan.md) | 5 | 🟨 código hecho en `feat/saas-fase-06-limites` (2026-11-28); migraciones en sandbox; falta producción y PR |
+| 6 | Límites del plan en código | [fase-06-limites-plan.md](fase-06-limites-plan.md) | 5 | 🟨 código hecho en `feat/saas-fase-06-limites` (2026-11-28); migraciones en sandbox y producción; falta el PR |
 | 7 | Telegram autoservicio | [fase-07-telegram.md](fase-07-telegram.md) | — | ⬜ pendiente |
 | 8 | Alta y onboarding autoservicio | [fase-08-alta-autoservicio.md](fase-08-alta-autoservicio.md) | 3, 5, 6, 7 | ⬜ pendiente |
 | 9 | Proveedores de IA: gasto y crédito real | [fase-09-proveedores-ia.md](fase-09-proveedores-ia.md) | 2 | ⬜ pendiente |

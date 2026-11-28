@@ -1,7 +1,7 @@
 # Fase 6 — Límites del plan en código
 
 **Estado:** código hecho en `feat/saas-fase-06-limites` (2026-11-28);
-migraciones en sandbox. Falta aplicar en producción y el PR.
+migraciones aplicadas en sandbox y en producción (2026-11-28). Falta el PR.
 
 **Objetivo:** un solo módulo de "derechos" (entitlements) que diga qué puede
 hacer un tenant según su plan y estado, consultado por cada superficie en
@@ -98,10 +98,18 @@ tope de correos grupales.
 
 ## Lo que falta
 
-- Aplicar en producción las migraciones `20261128150000_fase06_limites.sql` y
-  `20261128160000_fase06_prueba_vencida_coherente.sql` (antes comprobar que
-  ninguna fila de producción viola el CHECK nuevo) y `get_advisors`.
-- PR (lo abre Dylan).
+- PR (lo abre Dylan). Las migraciones `20261128150000_fase06_limites.sql` y
+  `20261128160000_fase06_prueba_vencida_coherente.sql` ya están en producción
+  (2026-11-28; las filas existentes cumplían el CHECK y los advisors no
+  muestran avisos nuevos).
+- Primer cron en producción tras el despliegue: el tenant Esencial de pruebas
+  (1 propiedad publicada) queda marcado por encima del tope y su propiedad se
+  despublica a los 14 días, salvo que suba de plan.
+- Seguimientos menores: "Tu plan" muestra "No incluido" en vez de la fecha de
+  despublicación para un Esencial con propiedades publicadas (la fecha sí sale
+  en /properties y en la campana); ante un error al leer la suscripción, "Tu
+  plan" se muestra sin topes; el test del hub de IA sólo comprueba que no se
+  llamó al gate.
 - **Fotos por propiedad:** depende de la fase 4 (storage); fuera de esta fase.
 - Menores anotados sin resolver: los conteos de correo no son atómicos entre
   invocaciones concurrentes (sobrepaso acotado); un Esencial degradado conserva
