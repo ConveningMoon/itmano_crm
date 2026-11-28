@@ -61,11 +61,19 @@ de 20 leads activos se usan cortes de fallback en
 `src/lib/scoring/score-bands.ts`. Para contar leads “altos”, usa la banda, no un
 literal de score repartido por la UI.
 
-Si los quintiles no distinguen (dos cortes iguales o `p80 - p20 < 10`),
-`refresh_quality_bands` marca `tenant_quality_bands.degenerate` y `leads_list`
-usa también los cortes fijos. Pasa cuando los leads no declaran perfil y casi
-todos suman lo mismo; el Centro de control lo avisa. Los cortes fijos viven en
-tres sitios: `score-bands.ts`, `leads_list` y `preview_score_rule_changes`.
+La banda la calcula una sola función, `quality_band_for` (migración
+20261128130000), que usan `leads_list`, `refresh_quality_bands` y
+`preview_score_rule_changes`. Un empate que abarca varios cortes queda en la
+banda más baja que toca: con p20 = p40 = p60 = 30, los empatados en 30 son
+"media-baja", no "media-alta". Sin empates es la comparación `>=` de siempre.
+
+Si ningún lead se separa del grueso (nadie queda en "alta", o el más bajo de
+"alta" le saca menos de 5 puntos a la mediana), `refresh_quality_bands` marca
+`tenant_quality_bands.degenerate` y se usan los cortes fijos; el Centro de
+control lo avisa. Antes bastaba con dos cortes iguales, y una cartera de
+nutrición (donde la mayoría nunca hace clic) quedaba marcada para siempre aunque
+los de arriba se distinguieran. Los cortes fijos viven en dos sitios:
+`score-bands.ts` y `quality_band_for`.
 
 ## Modelo automático (migración 20261118120000)
 
@@ -82,6 +90,16 @@ tres sitios: `score-bands.ts`, `leads_list` y `preview_score_rule_changes`.
   `scoring_calibrations`. La lógica pura está en `planAutoCalibration`.
 - `scoring_health(tenant)` y `scoring_rule_usage(tenant, días)` alimentan la
   salud por tenant (`src/lib/scoring/health.ts`) y el uso de cada regla.
+  La salud desglosa la cartera activa por fuente: de dónde sale el empate,
+  qué leads de fuentes "solo registro" no han pasado por una secuencia
+  (`sin_nutricion`) y qué fuente con filtrado llega sin perfil (`poco_perfil`,
+  con la fuente concreta). Un empate de media cartera con los de arriba
+  separados es `empate_amplio`: información si viene de fuentes "solo
+  registro", atención si viene de fuentes que filtran.
+- `acquisition_channels.asks_fit_questions` (Fuentes → Editar → Preguntas de
+  filtrado) dice si la fuente pregunta perfil. null = según el tipo: lead
+  magnet, contacto y ManyChat sí; eventos, newsletter y manual no. La regla
+  vive en `channel_asks_fit_questions` (SQL) y `src/lib/sources/fit-questions.ts`.
 - `open_house_attended` (+25, decae) puntúa la asistencia marcada en la lista de
   un open house: la señal automática más cercana a una visita.
 

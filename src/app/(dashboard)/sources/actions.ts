@@ -677,7 +677,7 @@ const PageUrlSchema = z.string().trim().url().max(600)
 
 export async function updateChannel(
   channelId: string,
-  fields: { name: string; active: boolean; agentId?: string | null; pageUrl?: string | null }
+  fields: { name: string; active: boolean; agentId?: string | null; pageUrl?: string | null; asksFitQuestions?: boolean }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!fields.name.trim()) return { ok: false, error: 'El nombre es obligatorio' }
 
@@ -695,6 +695,9 @@ export async function updateChannel(
   // puede reasignar la fuente: ownerAgentFor la deja en su nombre, así que ni la
   // regala ni la convierte en "Toda la agencia".
   const update: Record<string, unknown> = { name: fields.name.trim(), active: fields.active }
+  // Preguntas de filtrado (migración 20261128130000). Se guarda explícito al
+  // editar: el null "según el tipo" sólo existe para fuentes que nadie tocó.
+  if (typeof fields.asksFitQuestions === 'boolean') update.asks_fit_questions = fields.asksFitQuestions
   if (fields.agentId !== undefined) {
     const agent = await resolveChannelAgentId(supabase, channel.tenant_id, ownerAgentFor(ctx, fields.agentId))
     if (agent && typeof agent === 'object') return { ok: false, error: agent.error }
