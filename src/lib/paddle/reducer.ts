@@ -83,7 +83,7 @@ function planFromCustomData(customData: Record<string, unknown> | null): Subscri
  * no es un impago — Paddle Retain hace el dunning primero (spec §10.4).
  */
 export function isDegraded(status: SubscriptionStatus): boolean {
-  return status === 'paused' || status === 'cancelled'
+  return status === 'paused' || status === 'cancelled' || status === 'expired'
 }
 
 /**

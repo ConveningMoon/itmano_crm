@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { Sparkles, Upload, X, FileText } from 'lucide-react'
 import { LANGUAGE_CONFIG, SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
+import { PlanBlockNotice, type PlanBlock } from './plan-block'
 
 // Popup de "Crear con IA": sube el PDF del listado y elige los idiomas del
 // contenido a generar (máx 3) — todo en un mismo paso. Al generar, el padre
@@ -13,10 +14,13 @@ const MAX_LANGS = 3
 export function AiCreateModal({
   onClose,
   onGenerate,
+  block,
 }: {
   onClose: () => void
   // Corre la extracción; devuelve error si falla (el modal lo muestra y no cierra).
   onGenerate: (file: File, langs: string[]) => Promise<{ ok: boolean; error?: string }>
+  // Si el plan no incluye Crear con IA: se explica y se ofrece cambiar de plan.
+  block?: PlanBlock | null
 }) {
   const [file, setFile]   = useState<File | null>(null)
   const [langs, setLangs] = useState<string[]>(['es', 'en'])
@@ -77,6 +81,8 @@ export function AiCreateModal({
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 20px' }}>
           Sube el PDF del listado y elige los idiomas. La IA prellena el formulario para que lo revises antes de guardar.
         </p>
+
+        {block && <PlanBlockNotice block={block} />}
 
         {/* Dropzone / archivo */}
         <div
@@ -156,7 +162,7 @@ export function AiCreateModal({
           </button>
           <button className="btn btn-primary"
             onClick={generate}
-            disabled={busy || !file}
+            disabled={busy || !file || !!block}
           >
             <Sparkles size={13} /> {busy ? 'Procesando PDF…' : 'Generar'}
           </button>

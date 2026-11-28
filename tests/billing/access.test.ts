@@ -123,7 +123,7 @@ describe('isRunStale', () => {
   })
 })
 
-describe('getTenantAccess — matriz completa de los 7 estados', () => {
+describe('getTenantAccess — matriz completa de los 8 estados', () => {
   // La defensa real contra "alguien amplía isDegraded en reducer.ts sin darse
   // cuenta" es que la matriz ENTERA esté escrita, incluidos los dos estados
   // sales-led (cancel_requested, change_requested) que hoy deben conservar
@@ -138,6 +138,7 @@ describe('getTenantAccess — matriz completa de los 7 estados', () => {
     cancel_requested:  false,
     change_requested:  false,
     cancelled:         true,
+    expired:           true,
   }
 
   for (const [status, degraded] of Object.entries(expectedDegraded) as [SubscriptionStatus, boolean][]) {
@@ -176,5 +177,50 @@ describe('getTenantAccess — el modo degradado NO es solo-lectura', () => {
     // clientes en la UE. Que no exista el flag es la garantía estructural.
     const a = getTenantAccess({ ...growthActive, status: 'cancelled' })
     expect('canExport' in a).toBe(false)
+  })
+})
+
+describe('getTenantAccess — prueba vencida y estado expired', () => {
+  const now = new Date('2026-11-28T12:00:00Z')
+  const trial = { status: 'trial' as const, plan: 'growth' as const, billingExempt: false }
+
+  it('trial vencido es degradado al instante', () => {
+    const a = getTenantAccess({ ...trial, trialEndsAt: '2026-11-27T12:00:00Z', now })
+    expect(a.canUseAi).toBe(false)
+    expect(a.sequencesRunnable).toBe(false)
+    expect(a.banner?.tone).toBe('red')
+    expect(a.banner?.message).toContain('prueba')
+  })
+
+  it('trial vigente conserva todo', () => {
+    const a = getTenantAccess({ ...trial, trialEndsAt: '2026-12-10T12:00:00Z', now })
+    expect(a.canUseAi).toBe(true)
+    expect(a.banner).toBeNull()
+  })
+
+  it('trial sin fecha no se degrada', () => {
+    expect(getTenantAccess(trial).canUseAi).toBe(true)
+  })
+
+  it('expired es degradado', () => {
+    const a = getTenantAccess({ ...growthActive, status: 'expired' })
+    expect(a.canUseAi).toBe(false)
+    expect(a.monthlyEmailQuota).toBe(DEGRADED_LIMITS.monthlyEmailQuota)
+  })
+
+  it('el exento nunca se degrada aunque su prueba haya vencido', () => {
+    const a = getTenantAccess({ ...trial, billingExempt: true, trialEndsAt: '2026-01-01T00:00:00Z', now })
+    expect(a.canUseAi).toBe(true)
+  })
+
+  it('banner de prueba a 3 días', () => {
+    const a = getTenantAccess({ ...trial, trialEndsAt: '2026-12-01T12:00:00Z', now })
+    expect(a.canUseAi).toBe(true)
+    expect(a.banner?.tone).toBe('amber')
+    expect(a.banner?.message).toContain('3 días')
+  })
+
+  it('sin banner a 4 días', () => {
+    expect(getTenantAccess({ ...trial, trialEndsAt: '2026-12-02T12:00:00Z', now }).banner).toBeNull()
   })
 })

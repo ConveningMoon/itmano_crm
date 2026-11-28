@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentTenantContext } from '@/lib/auth/tenant-context'
 import { requireWriteAccess, resolveTargetTenant } from '@/lib/auth/guards'
+import { assertEntitlement } from '@/lib/subscriptions/entitlements-server'
 import { enrollLeadInSequence } from '@/lib/services/enroll-lead-in-sequence'
 import { emitLeadCreated } from '@/lib/services/emit-lead-created'
 import type { Language } from '@/lib/types'
@@ -75,6 +76,11 @@ export async function createLead(input: LeadInput): Promise<CreateLeadResult> {
   const tenant = resolveTargetTenant(ctx, input.tenantId)
   if (typeof tenant === 'object') return { ok: false, error: tenant.error }
   const tenantId = tenant
+
+  // Límite blando de leads del plan: se consulta antes de cualquier escritura.
+  const limite = await assertEntitlement(tenantId, 'createLead', { isSuperAdmin: ctx.role === 'super_admin' })
+  if (limite) return { ok: false, error: limite.error }
+
   // An agent is auto-attributed to their own leads (ignore any submitted agentId);
   // owner / super_admin pick the agent as before. ctx.agent_id is non-null for
   // role 'agent' (getCurrentTenantContext throws on an unlinked agent).
@@ -261,6 +267,14 @@ export async function createLeadsBulk(
   if (rows.length === 0) {
     return { ok: true, result: { inserted: 0, skippedExisting } }
   }
+
+  // Límite blando: se valida con las filas que realmente se insertarán (tras el
+  // dedupe) y antes de escribir, para que una importación no cruce el tope.
+  const limite = await assertEntitlement(tenantId, 'createLead', {
+    isSuperAdmin: ctx.role === 'super_admin',
+    extraRows:    rows.length,
+  })
+  if (limite) return { ok: false, error: limite.error }
 
   const { data: inserted, error } = await supabase.from('leads').insert(rows).select('id, stage')
   if (error) return { ok: false, error: error.message }

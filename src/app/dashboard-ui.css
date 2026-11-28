@@ -2524,3 +2524,17 @@ select option { background: var(--bg-elevated); color: var(--text-primary); }
 }
 .pago-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--text-primary); }
 .pago-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+
+/* Configuración → Tu plan: una fila por límite, con barra de uso. */
+.plan-usage-row { padding: 12px 0; border-top: 1px solid var(--border-subtle); }
+.plan-usage-row:first-child { border-top: 0; padding-top: 2px; }
+.plan-usage-row:last-child { padding-bottom: 2px; }
+.plan-usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.plan-usage-label { font-weight: 500; color: var(--text-primary); }
+.plan-usage-detail { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.plan-usage-bar { position: relative; height: 6px; margin-top: 8px; overflow: hidden; border-radius: 3px; background: var(--bg-overlay); }
+.plan-usage-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent-gold); }
+.plan-usage-row[data-tone='warn'] .plan-usage-bar > span { background: var(--gold-2); }
+.plan-usage-row[data-tone='blocked'] .plan-usage-bar > span { background: var(--alert); }
+.plan-usage-row[data-tone='blocked'] .plan-usage-detail { color: var(--alert); }
+.plan-usage-hint { margin: 4px 0 0; font-size: 11.5px; color: var(--text-muted); }

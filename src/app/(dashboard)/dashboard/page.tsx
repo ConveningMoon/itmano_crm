@@ -3,12 +3,13 @@ import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { canUseNewsletters } from '@/lib/access/newsletters'
 import { getSubscription } from '@/lib/data/subscriptions'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
-import { parseDashboardParams, tabUsesPeriod, visibleTabs } from '@/lib/dashboard/params'
+import { isAgentsTabLocked, parseDashboardParams, tabUsesPeriod, visibleTabs } from '@/lib/dashboard/params'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
 import { DashboardTabs } from './dashboard-tabs'
 import { TabSkeleton } from './tab-skeletons'
 import { GeneralTab } from './tabs/general'
 import { AgentesTab } from './tabs/agentes'
+import { AgentesLocked } from './tabs/agentes-locked'
 import { EmailsTab } from './tabs/emails'
 import { FuentesTab } from './tabs/fuentes'
 import { NewsletterTab } from './tabs/newsletter'
@@ -34,6 +35,8 @@ async function DashboardPage({
 
   const opts = {
     canSeeAgents: ctx.role !== 'agent',
+    // Hub de super_admin (sin tenant) no tiene suscripción: no se bloquea.
+    agentsLocked: subscription ? isAgentsTabLocked(plan, subscription.billingExempt) : false,
     canSeeNewsletter: canUseNewsletters({ role: ctx.role }, plan),
   }
   const { tab, period } = parseDashboardParams(raw, opts)
@@ -42,7 +45,7 @@ async function DashboardPage({
     <DashboardTabs tabs={visibleTabs(opts)} active={tab} period={period} showPeriod={tabUsesPeriod(tab)}>
       <Suspense key={tab} fallback={<TabSkeleton tab={tab} />}>
         {tab === 'general' && <GeneralTab ctx={ctx} period={period} />}
-        {tab === 'agentes' && <AgentesTab ctx={ctx} period={period} />}
+        {tab === 'agentes' && (opts.agentsLocked ? <AgentesLocked /> : <AgentesTab ctx={ctx} period={period} />)}
         {tab === 'emails' && <EmailsTab ctx={ctx} period={period} />}
         {tab === 'fuentes' && <FuentesTab ctx={ctx} period={period} />}
         {tab === 'newsletter' && <NewsletterTab ctx={ctx} period={period} />}

@@ -14,9 +14,14 @@ planes son Esencial, Growth y Partner. Los nuevos clientes entran a una prueba
 de 14 días sobre la experiencia Growth para no depender de provisionar un
 dominio propio de envío.
 
-Los límites de leads, emails y propiedades son contractuales. El presupuesto de
-IA sí se aplica en código. ITMANO paga ese consumo; consulta `ai_usage_events`
-antes de cambiar precios, modelos o límites.
+Los límites del plan (leads, correos, propiedades publicadas, agentes, IA de
+propiedades) se aplican en código desde `src/lib/subscriptions/entitlements.ts`
+con `assertEntitlement`/`assertEmailQuota`; el intake de formularios y los
+webhooks nunca se bloquean. Toda vía nueva que cree leads, publique
+propiedades o envíe correo a leads debe pasar por esas compuertas
+(`tests/billing/entitlement-gates.test.ts` lo exige). ITMANO paga el consumo
+de IA; consulta
+`ai_usage_events` antes de cambiar precios, modelos o límites.
 
 ## Estado operativo
 

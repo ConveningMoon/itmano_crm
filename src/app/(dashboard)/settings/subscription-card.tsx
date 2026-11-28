@@ -10,6 +10,7 @@ import {
 import { PLAN_CONFIG, PLAN_ORDER, checkoutPlans, SUBSCRIPTION_STATUS_LABELS, BILLING_CYCLE_LABELS, type TenantSubscription, type SubscriptionPlan, type BillingCycle } from '@/lib/subscriptions'
 import { PLANS, PARTNER_SEAT, trialDaysLeft } from '@/lib/plans'
 import { billingMode } from '@/lib/paddle/self-service'
+import { canRequestPlanChange } from '@/lib/subscriptions/request-guard'
 import type { PlanChangePreview } from '@/lib/paddle/manage'
 import { PaddleCheckoutButton } from '@/components/dashboard/paddle-checkout-button'
 import { FechaLocal } from '@/components/ui/local-date'
@@ -471,7 +472,7 @@ export function SubscriptionCard({ subscription, canManage, billingOptions }: {
 
         {/* Acciones — solo owner/super, sin solicitud pendiente, sin cancelación
             programada y sin pausa en Paddle (ahí la única acción es reanudar) */}
-        {canManage && mode === 'view' && !hasPendingRequest && !pausedInPaddle && subscription.status !== 'cancelled' && !subscription.cancelAt && (
+        {canManage && mode === 'view' && !hasPendingRequest && !pausedInPaddle && subscription.status !== 'cancelled' && canRequestPlanChange(subscription.status) && !subscription.cancelAt && (
           <div className="settings-inline settings-inline-tight">
             <button type="button" className="btn btn-primary" onClick={() => { setMode('changing'); setError(null); setNotice(null) }}>Cambiar de plan</button>
             <button type="button" className="btn btn-danger" onClick={() => { setMode('confirmCancel'); setError(null); setNotice(null) }}>

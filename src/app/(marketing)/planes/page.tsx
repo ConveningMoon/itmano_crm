@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Check, Minus } from 'lucide-react'
 import { Reveal } from '@/components/marketing/reveal'
 import { Backdrop } from '@/components/marketing/backdrop'
-import { PLANS, PLAN_ORDER, PARTNER_SEAT, TRIAL } from '@/lib/plans'
+import { PLANS, PLAN_ORDER, TRIAL } from '@/lib/plans'
+import { buildPlanRows, type CellValue, type CompareGroup } from '@/lib/marketing/plan-rows'
 import { PricingTable } from './pricing-table'
 
 export const metadata: Metadata = {
@@ -13,90 +14,10 @@ export const metadata: Metadata = {
 }
 
 // ─── Datos de la comparativa de planes ────────────────────────────────────────
-// Los números salen de la fuente única (src/lib/plans.ts) para no divergir.
+// Las filas las arma buildPlanRows() (src/lib/marketing/plan-rows.ts) a partir
+// de PLANS, la fuente única: aquí no se escribe ningún tope a mano.
 
-type CellValue = string | boolean // false → guion, true → check, string → texto
-
-interface CompareRow {
-  label: string
-  values: [CellValue, CellValue, CellValue] // esencial, growth, partner
-}
-
-interface CompareGroup {
-  title: string
-  rows: CompareRow[]
-}
-
-// Los límites de plans.ts son `number | 'unlimited'`; aquí sólo se formatean.
-const n = (v: number | 'unlimited') => (typeof v === 'number' ? v.toLocaleString('en-US') : 'Ilimitados')
-
-const COMPARISON: CompareGroup[] = [
-  {
-    title: 'Capacidad',
-    rows: [
-      {
-        label: 'Accesos con sesión propia',
-        values: ['1', '1', `${PARTNER_SEAT.includedLogins} incluidos · +$${PARTNER_SEAT.extraLoginUsd}/mes por agente extra`],
-      },
-      { label: 'Agentes del equipo con seguimiento', values: ['1', String(PLANS.growth.limits.trackedAgents), 'Ilimitados'] },
-      { label: 'Leads / contactos', values: [n(PLANS.esencial.limits.leads), n(PLANS.growth.limits.leads), 'Ilimitados'] },
-      {
-        label: 'Correos por mes',
-        values: [n(PLANS.esencial.limits.emailsPerMonth), n(PLANS.growth.limits.emailsPerMonth), n(PLANS.partner.limits.emailsPerMonth)],
-      },
-      { label: 'Propiedades publicadas en tu web', values: [false, String(PLANS.growth.limits.webProperties), 'Ilimitadas'] },
-      {
-        // Público en tokens — el presupuesto en USD es referencia interna de ITMANO.
-        label: 'Capacidad de IA incluida al mes',
-        values: [`≈ ${PLANS.esencial.limits.aiTokensLabel}`, `≈ ${PLANS.growth.limits.aiTokensLabel}`, `≈ ${PLANS.partner.limits.aiTokensLabel} · ampliable`],
-      },
-    ],
-  },
-  {
-    title: 'Producto',
-    rows: [
-      { label: 'Calificación automática de cada lead que entra', values: [true, true, true] },
-      { label: 'Tu lista del día, ordenada sola', values: [true, true, true] },
-      { label: 'Secuencias de correo automáticas', values: [true, true, true] },
-      { label: 'Captación conectada (páginas, guías, eventos y formularios)', values: [true, true, true] },
-      { label: 'Importación de tus contactos (CSV / Excel)', values: [true, true, true] },
-      { label: 'Aviso instantáneo cuando un lead se pone caliente', values: [true, true, true] },
-      { label: 'Asignación por idioma (español, inglés, portugués)', values: [true, true, true] },
-      {
-        // Solución A: Esencial envía desde el dominio compartido de ITMANO con la
-        // marca del tenant en el nombre visible; Growth/Partner reciben su propio
-        // dominio de envío verificado (mail.tudominio.com), gestionado por ITMANO.
-        label: 'Identidad de tus correos',
-        values: [
-          'Marca propia visible (dominio gestionado ITMANO)',
-          'Dominio de envío propio (mail.tudominio.com)',
-          'Dominio de envío propio (mail.tudominio.com)',
-        ],
-      },
-      { label: 'Propiedades sincronizadas con tu sitio web', values: [false, true, true] },
-      { label: 'Newsletters', values: [false, true, true] },
-      { label: 'Reportes', values: ['Los números esenciales', 'Completos (agente, fuente y correo)', 'Completos + vista de equipo'] },
-    ],
-  },
-  {
-    title: 'Inteligencia artificial',
-    rows: [
-      { label: 'Análisis de cada lead y briefing para el agente', values: [true, true, true] },
-      { label: 'Calificación adaptada a tu mercado y tus zonas', values: [true, true, true] },
-      { label: 'Redacción de correos con la voz de cada agente', values: [true, true, true] },
-      { label: 'Secuencias generadas en un clic', values: [true, true, true] },
-      { label: 'Alta de propiedades desde un PDF', values: [false, true, true] },
-    ],
-  },
-  {
-    title: 'Acompañamiento',
-    rows: [
-      { label: 'Puesta en marcha', values: ['Guiada', 'Asistida', 'Dedicada'] },
-      { label: 'Migración de tus datos (HubSpot y otros)', values: [false, false, true] },
-      { label: 'Soporte', values: ['Email', 'Email prioritario', 'Prioritario + contacto directo'] },
-    ],
-  },
-]
+const COMPARISON = buildPlanRows()
 
 // ─── ITMANO vs. el mercado ────────────────────────────────────────────────────
 // Precios públicos aproximados (julio 2026) según los sitios y comparativas
@@ -220,9 +141,11 @@ export default function PlanesPage() {
             ))}
           </PricingTable>
           <p style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            Los límites de capacidad son por mes calendario. Si tu operación crece
-            más allá de tu plan, nuestro equipo te propone el ajuste — nada se corta
-            de un día para otro.
+            Los correos y la IA se miden por mes calendario; los leads y las
+            propiedades son totales. Te avisamos al acercarte al límite (en leads,
+            desde el 80 %). El envío automático se pausa al llegar al tope del mes
+            y se reanuda al subir de plan o al mes siguiente. Los leads que entran
+            por tus formularios nunca se pierden.
           </p>
           <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
             Los impuestos correspondientes se calculan al momento de completar tu inversión.

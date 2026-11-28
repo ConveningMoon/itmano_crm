@@ -17,6 +17,7 @@ import { chunk, decideRecipients } from '@/lib/open-houses/audience'
 import { createRsvpToken } from '@/lib/open-houses/rsvp-token'
 import { loadOpenHouseEmailContext, renderOpenHouseEmailForLead } from '@/lib/services/open-house-email'
 import { senderFromForAgent } from '@/lib/services/sender-identity'
+import { monthlyEmailAllowance } from '@/lib/subscriptions/quota'
 import type { AudienceMatch, OpenHouseEmailKind } from '@/lib/open-houses/model'
 
 // Despachador de los correos de un open house.
@@ -220,6 +221,7 @@ export async function dispatchOpenHouseEmail(
   let outOfTime = false
   let rateLimited = false
   let quotaHit: QuotaKind | null = null
+  let planCapHit = false
 
   // 4. Lotes. Cualquier excepción inesperada (una variable de entorno que
   // falta, un fallo de red) devuelve el correo a `pending` con el error a la
@@ -227,11 +229,17 @@ export async function dispatchOpenHouseEmail(
   // y la pantalla diría "enviando" sin explicar nada.
   try {
     const budget = quotaBudget(await readQuotaRemaining(db, identity.account))
+    // Tope mensual del PLAN (envío automático): se lee una vez y se descuenta
+    // en memoria lote a lote, igual que `budget`. Sin esto un anuncio a 500
+    // leads podría pasar el tope contractual aunque la cuenta de Resend aguante.
+    const allowance = await monthlyEmailAllowance(email.tenant_id)
+    let planLeft = Math.max(0, allowance.limit - allowance.used)
     while (Date.now() < opts.deadline) {
+      if (planLeft === 0) { planCapHit = true; break }
       // Cuota de la cuenta de envío: el lote nunca pasa de lo que queda hoy y
       // en el mes. Con la cuota agotada, el correo queda en espera y el
       // orquestador lo retoma en el siguiente periodo (fase 3 del plan SaaS).
-      const allowed = budget.allowed(BATCH_SIZE)
+      const allowed = Math.min(budget.allowed(BATCH_SIZE), planLeft)
       if (allowed === 0) { quotaHit = budget.binding; break }
 
       const { data: pendingRows, error: pendingErr } = await db
@@ -343,6 +351,7 @@ export async function dispatchOpenHouseEmail(
       }
 
       budget.spend(sentRows.length)
+      planLeft = Math.max(0, planLeft - sentRows.length)
       const sentAt = new Date().toISOString()
       if (sentRows.length > 0) {
         const { error: upErr } = await db.from('open_house_email_recipients').upsert(
@@ -412,7 +421,7 @@ export async function dispatchOpenHouseEmail(
     skipped_count: counts.skipped,
     failed_count:  counts.failed,
     finished_at:   done ? new Date().toISOString() : null,
-    last_error:    quotaHit && !done ? quotaWaitMessage(quotaHit, { sentNow, pending: counts.pending }) : rateLimited ? 'Resend limitó la velocidad de envío; se reanuda en la próxima ejecución.' : (outOfTime && !done ? 'Se reanuda en la próxima ejecución.' : null),
+    last_error:    planCapHit && !done ? 'Alcanzaste el tope mensual de correos de tu plan. Se reanuda cuando se renueve el mes o amplíes tu plan.' : quotaHit && !done ? quotaWaitMessage(quotaHit, { sentNow, pending: counts.pending }) : rateLimited ? 'Resend limitó la velocidad de envío; se reanuda en la próxima ejecución.' : (outOfTime && !done ? 'Se reanuda en la próxima ejecución.' : null),
   })
 
   console.log(JSON.stringify({

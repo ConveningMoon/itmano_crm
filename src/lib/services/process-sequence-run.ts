@@ -6,6 +6,7 @@ import { parseEmailContent } from '@/lib/email-content'
 import type { EmailLocale } from '@/lib/services/email-render'
 import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
 import { isRunStale } from '@/lib/subscriptions/access'
+import { getFreshEmailEntitlements, nextMonthStartUtc } from '@/lib/subscriptions/quota'
 
 // Resend template IDs are UUIDs; anything else is a placeholder.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -161,14 +162,59 @@ export async function processSequenceRun(params: {
   const diag = { leadEmail: pending.lead_email, sequenceName: seqName ?? sequenceId, stepOrder }
 
   // ── Guard: suscripción degradada — secuencias automáticas en pausa ────────
-  // El run NO cambia de estado en la base: se re-evalúa en el siguiente tick
-  // del cron, y al reactivar la suscripción se reanuda solo, sin barrido ni
-  // columna nueva. `access` ya viene resuelto del Promise.all de arriba.
+  // Esta pausa NO toca el run: se re-evalúa en el siguiente tick del cron y al
+  // reactivar la suscripción se reanuda solo. `access` ya viene resuelto del
+  // Promise.all de arriba.
   if (!access.sequencesRunnable) {
     return {
       action:  'paused',
       reason:  'subscription_inactive',
       details: 'Suscripción inactiva: las secuencias automáticas están en pausa',
+      ...diag,
+    }
+  }
+
+  // ── Guard: tope mensual de correos del plan ────────────────────────────────
+  // Las automatizaciones paran al 100 % del tope. Conteo FRESCO por run (no el
+  // cache() de getTenantUsage): el orquestador procesa hasta 100 runs en un
+  // request y un uso congelado dejaría pasar un lote entero sobre el tope.
+  // El run se reprograma al primer instante del mes siguiente (sigue 'active'
+  // y, al vencer, no es stale). Si el cliente sube de plan o reactiva antes,
+  // resumeQuotaPausedRuns lo adelanta a "ahora" (marcador: ese mismo instante).
+  // Un run ya stale NO se reprograma: sigue hasta el guard de stale, que lo
+  // completa; si no, la pausa lo resucitaría.
+  const staleRun = !!pending.next_send_at && isRunStale(pending.next_send_at, new Date())
+  const fresh = staleRun ? null : await getFreshEmailEntitlements(tenantId)
+  // Suscripción ilegible (error transitorio): no se puede saber el tope. Se
+  // salta el tick SIN reprogramar ni enviar; el siguiente tick reintenta. Si se
+  // reprogramara al mes siguiente, nada reanudaría el run.
+  if (fresh?.readFailed) {
+    return {
+      action:  'skipped',
+      reason:  'entitlement_read_failed',
+      details: 'No se pudo leer la suscripción: se reintenta en el siguiente tick',
+      ...diag,
+    }
+  }
+  const automatedAllowed = fresh === null || fresh.automatedEmail.allowed
+  if (!automatedAllowed) {
+    if (!dryRun) {
+      const { error: rescheduleError } = await db
+        .from('lead_sequence_runs')
+        .update({ next_send_at: nextMonthStartUtc(new Date()) })
+        .eq('id', runId)
+        .eq('tenant_id', tenantId)
+      if (rescheduleError) {
+        console.error(JSON.stringify({
+          service: 'process-sequence-run', run_id: runId, tenant_id: tenantId,
+          error: 'monthly_quota_reschedule_failed', detail: rescheduleError.message,
+        }))
+      }
+    }
+    return {
+      action:  'paused',
+      reason:  'monthly_quota',
+      details: 'Tope mensual de correos alcanzado: la secuencia se reanuda el mes siguiente',
       ...diag,
     }
   }

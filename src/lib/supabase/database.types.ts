@@ -3111,6 +3111,7 @@ export type Database = {
           degraded_at: string | null
           id: string
           last_event_at: string | null
+          over_cap_since: string | null
           paddle_customer_id: string | null
           paddle_price_id: string | null
           paddle_subscription_id: string | null
@@ -3131,6 +3132,7 @@ export type Database = {
           degraded_at?: string | null
           id?: string
           last_event_at?: string | null
+          over_cap_since?: string | null
           paddle_customer_id?: string | null
           paddle_price_id?: string | null
           paddle_subscription_id?: string | null
@@ -3151,6 +3153,7 @@ export type Database = {
           degraded_at?: string | null
           id?: string
           last_event_at?: string | null
+          over_cap_since?: string | null
           paddle_customer_id?: string | null
           paddle_price_id?: string | null
           paddle_subscription_id?: string | null

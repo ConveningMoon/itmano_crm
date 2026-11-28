@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/auth/tenant-context', () => ({ getCurrentTenantContext: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
+vi.mock('@/lib/subscriptions/entitlements-server', () => ({ assertEntitlement: vi.fn(async () => null) }))
 vi.mock('@/lib/services/emit-lead-created', () => ({ emitLeadCreated: vi.fn() }))
 vi.mock('@/lib/services/enroll-lead-in-sequence', () => ({
   enrollLeadInSequence: vi.fn(async () => ({ enrolled: false })),

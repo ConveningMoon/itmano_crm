@@ -2,6 +2,9 @@ import { Suspense } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getProperties } from '@/lib/data/properties'
+import { getTenantEntitlements } from '@/lib/subscriptions/entitlements-server'
+import { overCapNoticeFor } from '@/lib/subscriptions/over-cap'
+import type { PlanBlock } from './plan-block'
 import { PropertiesClient } from './properties-client'
 import { PropertiesListSkeleton } from './properties-skeleton'
 import { freshOnNavigation } from '@/components/layout/fresh-page'
@@ -20,7 +23,9 @@ async function PropertiesContent() {
   // resuelve el tenant desde el contexto).
   const needsTenantPicker = role === 'super_admin' && !tenant_id
 
-  const [properties, tenants] = await Promise.all([
+  // Derechos del plan en el mismo Promise.all (sin salto serial). La UI solo
+  // explica el bloqueo; la Server Action vuelve a validar.
+  const [properties, tenants, entitlements] = await Promise.all([
     getProperties(tenant_id),
     needsTenantPicker
       ? createAdminClient()
@@ -32,13 +37,28 @@ async function PropertiesContent() {
             (data ?? []).map((t: any) => ({ id: t.id as string, name: t.name as string }))
           )
       : Promise.resolve<Array<{ id: string; name: string }>>([] ),
+    tenant_id ? getTenantEntitlements(tenant_id) : Promise.resolve(null),
   ])
+
+  const toBlock = (e: { allowed: boolean; message: string | null; upgradeTo: string | null } | undefined): PlanBlock | null =>
+    e && !e.allowed ? { message: e.message ?? 'Tu plan no permite esta operación.', upgradeTo: e.upgradeTo } : null
+  // super_admin salta el tope de publicación (la action lo ignora igual).
+  const baseBlock = role === 'super_admin' ? null : toBlock(entitlements?.publishProperty)
+  // Aviso previo a la despublicación automática (fecha y cuántas): se suma al
+  // motivo del bloqueo para que no ocurra sin que el cliente lo haya visto.
+  const overCapNotice = role === 'super_admin' || !entitlements ? null : overCapNoticeFor(entitlements.publishProperty)
+  const publishBlock = baseBlock && overCapNotice
+    ? { ...baseBlock, message: `${baseBlock.message} ${overCapNotice}` }
+    : baseBlock
+  const aiBlock = toBlock(entitlements?.aiPropertyIntake)
 
   return (
     <PropertiesClient
       properties={properties}
       tenants={tenants}
       viewerRole={role}
+      publishBlock={publishBlock}
+      aiBlock={aiBlock}
     />
   )
 }

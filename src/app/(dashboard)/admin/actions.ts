@@ -15,6 +15,13 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { resendForAccount, resolveResendAccount, resendAccountConfigured } from '@/lib/resend'
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
+import { resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
+import { degradedTransition, manualDegradedAt, expiredTrialEndsAt } from '@/lib/subscriptions/transition'
+import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
+import { planPublishCap } from '@/lib/subscriptions/over-cap'
+import type { SubscriptionStatus } from '@/lib/subscriptions'
+import { isDegraded } from '@/lib/paddle/reducer'
+import { notifyDegradation } from '@/lib/subscriptions/notify-degradation'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as the scoring actions (scoring-actions.ts). The admin client (service_role) is the correct
@@ -403,7 +410,9 @@ export async function setTenantSender(
 const UpdateSubscriptionSchema = z.object({
   tenantId: z.string().trim().min(1),
   plan:     z.enum(['esencial', 'growth', 'partner']),
-  status:   z.enum(['trial', 'active', 'cancelled']),
+  // paused/past_due los escribe Paddle: el formulario sólo los CONSERVA (si no,
+  // guardar cualquier otro campo de un tenant pausado lo "reactivaría").
+  status:   z.enum(['trial', 'active', 'cancelled', 'expired', 'paused', 'past_due']),
   // Requerido cuando status = 'trial' (constraint de coherencia en la 055).
   // Permite fijar o EXTENDER el vencimiento de la prueba.
   trialEndsAt: z.string().datetime({ offset: true }).nullish(),
@@ -442,11 +451,44 @@ export async function updateTenantSubscription(
   // a mano para ese tenant.
   const { data: existing } = await supabase
     .from('subscriptions')
-    .select('plan')
+    .select(columns('subscriptions', ['plan', 'status', 'trial_ends_at', 'degraded_at']))
     .eq('tenant_id', parsed.data.tenantId)
     .maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sin tipos generados de Supabase, la fila llega untyped
   const planAnterior = ((existing as any)?.plan as SubscriptionPlan | undefined) ?? null
+
+  // Entrar/salir del modo degradado a mano se comporta como con Paddle:
+  // degraded_at ancla las gracias (se fija al entrar, se limpia al salir) y al
+  // salir se restaura lo que el sistema bajó. Una prueba vencida cuenta como
+  // degradada aunque el cron aún no la marque 'expired'.
+  const ahora = new Date()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prev = existing as any
+  const transicion = prev
+    ? degradedTransition(
+        { status: prev.status as SubscriptionStatus, trialEndsAt: prev.trial_ends_at as string | null },
+        { status: parsed.data.status, trialEndsAt: parsed.data.trialEndsAt ?? null },
+        ahora,
+      )
+    : null
+  // 'expired' sólo tiene sentido desde una prueba: otro origen recibiría el
+  // correo de "tu prueba terminó" sin haber tenido nunca una.
+  if (parsed.data.status === 'expired' && prev?.status !== 'trial' && prev?.status !== 'expired') {
+    return { ok: false, error: 'Prueba vencida sólo aplica a un equipo que estaba en período de prueba.' }
+  }
+  const degradedAt = manualDegradedAt({
+    transition:       transicion,
+    nextStatus:       parsed.data.status,
+    storedDegradedAt: (prev?.degraded_at as string | null | undefined) ?? null,
+    prev:             prev ? { status: prev.status as SubscriptionStatus, trialEndsAt: prev.trial_ends_at as string | null } : null,
+    now:              ahora,
+  })
+  // trial_ends_at (CHECK de la migracion 20261128160000): trial lo exige; expired
+  // lo conserva (ancla el fin de la prueba) y el resto lo deja en null.
+  const trialEndsAt =
+    parsed.data.status === 'trial' ? parsed.data.trialEndsAt
+    : parsed.data.status === 'expired' ? expiredTrialEndsAt(prev?.trial_ends_at as string | null | undefined, ahora)
+    : null
 
   // Upsert: tenants creados antes de la migración 054 podrían no tener fila.
   const { error } = await supabase
@@ -456,10 +498,11 @@ export async function updateTenantSubscription(
       plan:           parsed.data.plan,
       status:         parsed.data.status,
       requested_plan: null,
-      trial_ends_at:  parsed.data.status === 'trial' ? parsed.data.trialEndsAt : null,
+      trial_ends_at:  trialEndsAt,
       paddle_price_id: parsed.data.paddlePriceId?.trim() || null,
       billing_exempt:  parsed.data.billingExempt,
-      updated_at:      new Date().toISOString(),
+      updated_at:      ahora.toISOString(),
+      ...(degradedAt !== undefined ? { degraded_at: degradedAt } : {}),
     }, { onConflict: 'tenant_id' })
   if (error) return { ok: false, error: error.message }
 
@@ -490,6 +533,46 @@ export async function updateTenantSubscription(
       console.error(JSON.stringify({
         service: 'admin-plan-budget', tenant_id: parsed.data.tenantId,
         from: planAnterior, to: parsed.data.plan, error: budgetError.message,
+      }))
+    }
+  }
+
+  // Salida del modo degradado: restaura lo que bajó el sistema (con el tope del
+  // plan nuevo). Best-effort, con log: el guardado ya quedó escrito.
+  if (transicion === 'leave') {
+    try {
+      await restoreAfterReactivation(parsed.data.tenantId, { cap: planPublishCap(parsed.data.plan) })
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'admin-restore', tenant_id: parsed.data.tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }
+
+  // Entrada manual al modo degradado: mismo aviso que con Paddle (campana +
+  // Telegram a ITMANO y correo al cliente; 'expired' omite el correo al cliente
+  // dentro de notifyDegradation). Best-effort: el estado ya quedó escrito.
+  if (transicion === 'enter' && isDegraded(parsed.data.status)) {
+    try {
+      await notifyDegradation(parsed.data.tenantId, parsed.data.status as SubscriptionStatus)
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'admin-degradation-notify', tenant_id: parsed.data.tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }
+
+  // El tope de correos cambia con el plan (o al reactivar): reanuda ya las
+  // secuencias dormidas por cuota. Best-effort, con log.
+  if (parsed.data.plan !== planAnterior || transicion === 'leave') {
+    try {
+      await resumeQuotaPausedRuns(parsed.data.tenantId)
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'admin-quota-resume', tenant_id: parsed.data.tenantId,
+        error: err instanceof Error ? err.message : String(err),
       }))
     }
   }

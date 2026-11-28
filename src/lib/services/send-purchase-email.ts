@@ -55,6 +55,7 @@ export async function sendPurchaseEmail(
   processId: string,
   milestone: PurchaseMilestone,
   closingDateHint: string | null = null,
+  kind: 'manual' | 'automated' = 'manual',
 ): Promise<void> {
   // Load process + lead + tenant in one join.
   const { data: proc, error: procErr } = await db
@@ -175,12 +176,14 @@ export async function sendPurchaseEmail(
     return
   }
 
-  // Cuota de envío corporativo en modo degradado. Estos correos son
-  // AUTOMÁTICOS y no supervisados por un agente (el cron los dispara la
-  // víspera del cierre) — exactamente el escenario que motiva el tope: un
-  // tenant que ya no paga no debe poder quemar la cuota mensual sin que nadie
-  // lo esté mirando. Se somete al mismo gate que el envío manual one-off.
-  const quotaDenied = await assertEmailQuota(tenantId)
+  // Tope mensual del plan. El cron (pre_close, sin supervisión) pasa
+  // 'automated' y para al 100 %; las acciones humanas del lead (inicio y
+  // cierre) usan 'manual' y tienen 10 % de margen.
+  // Un pre_close 'automated' bloqueado al 100 % se OMITE, no se reintenta: el
+  // orquestador sólo selecciona closing_date = mañana, así que al día siguiente
+  // ya no es candidato y ese aviso se pierde ese mes (decisión documentada en
+  // docs/plan-saas/fase-06-limites-plan.md).
+  const quotaDenied = await assertEmailQuota(tenantId, kind)
   if (quotaDenied) {
     console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'quota_exceeded' }))
     return

@@ -1,8 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getSubscription } from '@/lib/data/subscriptions'
-import { PLANS } from '@/lib/plans'
-import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
+import { getSubscriptionRead } from '@/lib/data/subscriptions'
+import { failOpenEntitlements, getEntitlements, type Entitlement } from '@/lib/subscriptions/entitlements'
 
 // Cuota de envío CORPORATIVO (por Resend) en modo degradado. El modo Personal
 // del composer (mailto:) NO pasa por aquí y es ilimitado a propósito: no toca
@@ -17,73 +16,151 @@ import { getTenantAccessFor } from '@/lib/subscriptions/access-server'
  * con CERO envíos durante once días — lo contrario de lo que busca el modo
  * degradado, que existe para que el cliente siga siendo recuperable.
  */
-export function quotaWindowStart(now: Date, degradedAt: string | null): string {
+export function quotaWindowStart(
+  now: Date,
+  degradedAt: string | null,
+  trialEndsAt: string | null = null,
+): string {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-  if (!degradedAt) return monthStart.toISOString()
+  if (!degradedAt) {
+    // Prueba vencida que el cron aún no marcó como degradada: getTenantAccess ya
+    // la trata como degradada, así que su cuota de cortesía arranca al vencer la
+    // prueba y no cuenta los envíos hechos mientras era válida.
+    const trialEnd = trialEndsAt ? new Date(trialEndsAt) : null
+    if (trialEnd && !Number.isNaN(trialEnd.getTime()) && trialEnd < now && trialEnd > monthStart) {
+      return trialEnd.toISOString()
+    }
+    return monthStart.toISOString()
+  }
   const degraded = new Date(degradedAt)
   if (Number.isNaN(degraded.getTime())) return monthStart.toISOString()
   return (degraded > monthStart ? degraded : monthStart).toISOString()
 }
 
+/**
+ * trialEndsAt sólo mueve la ventana mientras la suscripción SIGUE en prueba
+ * (misma regla que getTenantAccess). Un tenant que ya pagó conserva un
+ * trial_ends_at viejo; usarlo subcontaría sus correos y le dejaría pasar el tope.
+ */
+export function windowTrialEnd(
+  sub: { status: string; trialEndsAt: string | null } | null | undefined,
+): string | null {
+  return sub?.status === 'trial' ? sub.trialEndsAt : null
+}
+
 export async function countMonthlyCorporateSends(
   tenantId: string,
   degradedAt: string | null,
+  trialEndsAt: string | null = null,
 ): Promise<number> {
   const supabase = createAdminClient()
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('email_sends')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
-    .gte('sent_at', quotaWindowStart(new Date(), degradedAt))
+    .gte('sent_at', quotaWindowStart(new Date(), degradedAt, trialEndsAt))
+  // Falla en abierto (cuenta 0) pero con rastro: sin el log el tope de correos
+  // quedaría desactivado sin síntoma.
+  if (error) {
+    console.error(JSON.stringify({
+      service: 'email-quota', tenant_id: tenantId, error: error.message, fallback: 'zero',
+    }))
+  }
   return count ?? 0
 }
 
 /**
- * Cupo mensual de un envío masivo. A diferencia de assertEmailQuota, aquí sí
- * rige `emailsPerMonth` del plan: un solo clic puede gastar el mes entero, así
- * que el límite contractual deja de depender de que alguien lo vigile. En modo
- * degradado manda la cuota de cortesía, que es menor.
+ * Primer instante (UTC) del mes siguiente a `now`. A dónde se reprograma un run
+ * de secuencia pausado por cuota: siempre queda a menos de 30 días de "ahora"
+ * cuando llega, así que `isRunStale` no lo cierra. Date.UTC normaliza el
+ * desborde de diciembre a enero del año siguiente.
+ */
+export function nextMonthStartUtc(now: Date): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString()
+}
+
+/**
+ * Derechos de correo con conteo FRESCO (nunca el `cache()` de getTenantUsage):
+ * un lote que envía de a uno (cron de secuencias) o varios correos en el mismo
+ * request vería un uso congelado y pasaría el tope. Es una consulta `head` y la
+ * suscripción sale de getSubscription (cacheada, no cambia dentro del request).
+ */
+export async function getFreshEmailEntitlements(
+  tenantId: string,
+): Promise<{ automatedEmail: Entitlement; manualEmail: Entitlement; readFailed: boolean }> {
+  const { subscription, failed } = await getSubscriptionRead(tenantId)
+  // Suscripción ilegible: falla en abierto y avisa a quien decide (el cron de
+  // secuencias salta el tick en vez de reprogramar con datos inventados).
+  if (failed) {
+    const open = failOpenEntitlements()
+    return { automatedEmail: open.automatedEmail, manualEmail: open.manualEmail, readFailed: true }
+  }
+  const emailsMonth = await countMonthlyCorporateSends(
+    tenantId, subscription?.degradedAt ?? null, windowTrialEnd(subscription),
+  )
+  const all = getEntitlements({
+    // Sin fila de suscripción: Esencial activo, igual que el resto de gates.
+    plan: subscription?.plan ?? 'esencial',
+    status: subscription?.status ?? 'active',
+    billingExempt: subscription?.billingExempt ?? false,
+    trialEndsAt: subscription?.trialEndsAt ?? null,
+    usage: { leads: 0, agents: 0, publishedProperties: 0, emailsMonth },
+  })
+  return { automatedEmail: all.automatedEmail, manualEmail: all.manualEmail, readFailed: false }
+}
+
+/**
+ * Cupo mensual para envíos automáticos (masivos, open houses): el tope de
+ * `automatedEmail` — el del plan o, en modo degradado, la cuota de cortesía.
+ * Cuenta fresca; quien envía por lotes lo lee una vez y descuenta en memoria.
+ * Un tenant `billing_exempt` no tiene tope (límite "infinito" seguro).
  */
 export async function monthlyEmailAllowance(tenantId: string): Promise<{ limit: number; used: number }> {
-  const supabase = createAdminClient()
-  const [access, subscription, { data: sub }] = await Promise.all([
-    getTenantAccessFor(tenantId),
-    getSubscription(tenantId),
-    supabase.from('subscriptions').select('degraded_at').eq('tenant_id', tenantId).maybeSingle(),
-  ])
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
-  const used = await countMonthlyCorporateSends(tenantId, degradedAt)
-  const limit = access.monthlyEmailQuota ?? PLANS[subscription?.plan ?? 'esencial'].limits.emailsPerMonth
-  return { limit, used }
+  const { automatedEmail } = await getFreshEmailEntitlements(tenantId)
+  return {
+    limit: automatedEmail.limit ?? Number.MAX_SAFE_INTEGER,
+    used: automatedEmail.used ?? 0,
+  }
 }
 
 /**
  * Gate para los servicios de envío. Devuelve null si puede enviar, o un
  * `{ ok: false, error }` listo para retornar (mismo patrón que assertAiWithinLimit).
- *
- * Firma pública sin cambios (`tenantId` solamente): resuelve `degraded_at` con
- * una consulta propia en paralelo a `getTenantAccessFor` — ese helper es puro
- * respecto al acceso calculado y no expone la fecha cruda de degradación, así
- * que no se toca (Task 11) para obtenerla.
+ * `manual` (un humano pulsó enviar) tiene 10 % de margen sobre el plan;
+ * `automated` para exactamente en el tope. Rige siempre, con plan o degradado.
  */
 export async function assertEmailQuota(
   tenantId: string,
+  kind: 'manual' | 'automated' = 'manual',
 ): Promise<{ ok: false; error: string } | null> {
-  const supabase = createAdminClient()
-  const [access, { data: sub }] = await Promise.all([
-    getTenantAccessFor(tenantId),
-    supabase.from('subscriptions').select('degraded_at').eq('tenant_id', tenantId).maybeSingle(),
-  ])
-  if (access.monthlyEmailQuota === null) return null
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const degradedAt = ((sub as any)?.degraded_at as string | null) ?? null
-  const used = await countMonthlyCorporateSends(tenantId, degradedAt)
-  if (used < access.monthlyEmailQuota) return null
-
+  const { automatedEmail, manualEmail } = await getFreshEmailEntitlements(tenantId)
+  const entitlement = kind === 'manual' ? manualEmail : automatedEmail
+  if (entitlement.allowed) return null
+  const message = entitlement.message ?? 'Alcanzaste el límite mensual de correos de tu plan.'
   return {
     ok: false,
-    error: 'Alcanzaste el límite mensual de envíos de tu suscripción inactiva. Puedes seguir escribiendo a tus leads desde tu propio correo con la opción Personal, o reactivar tu suscripción.',
+    error: kind === 'manual'
+      ? `${message} Puedes seguir escribiendo a tus leads desde tu propio correo con la opción Personal.`
+      : message,
   }
+}
+
+/**
+ * Reanuda ahora los runs que la cuota mensual dejó dormidos hasta el mes
+ * siguiente. Se llama cuando el tope sube (cambio de plan, reactivación). El
+ * marcador es exacto: sólo `next_send_at = nextMonthStartUtc(now)`, lo que
+ * escribe la pausa, así que no toca runs con un horario propio. Si el tope
+ * sigue sin alcanzar, el siguiente tick los vuelve a pausar. Lanza ante error.
+ */
+export async function resumeQuotaPausedRuns(tenantId: string, now: Date = new Date()): Promise<number> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('lead_sequence_runs')
+    .update({ next_send_at: now.toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('status', 'active')
+    .eq('next_send_at', nextMonthStartUtc(now))
+    .select('id')
+  if (error) throw new Error(error.message)
+  return data?.length ?? 0
 }

@@ -13,8 +13,10 @@ import { findAuthUserByEmail, normalizeEmail } from '@/lib/auth/admin-users'
 import { detectCutout } from '@/lib/studio/agent-photo'
 import { SUPPORTED_LANGUAGE_CODES } from '@/lib/config'
 import { PLANS } from '@/lib/plans'
+import { assertEntitlement } from '@/lib/subscriptions/entitlements-server'
 import { scheduleItemsReconcile } from '@/lib/paddle/manage'
 import { normalizeLocalPart } from '@/lib/email/sender-address'
+import { canRequestPlanChange, REQUEST_BLOCKED_MESSAGE } from '@/lib/subscriptions/request-guard'
 
 const LANGUAGE_ENUM = SUPPORTED_LANGUAGE_CODES as [string, ...string[]]
 
@@ -314,6 +316,8 @@ export async function requestSubscriptionChange(
     .from('subscriptions').select('plan, status').eq('tenant_id', tenantId).maybeSingle()
   if (!sub) return { ok: false, error: 'Este equipo no tiene una suscripción registrada. Contacta a ITMANO.' }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!canRequestPlanChange((sub as any).status)) return { ok: false, error: REQUEST_BLOCKED_MESSAGE }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((sub as any).plan === newPlan) return { ok: false, error: 'Ese ya es tu plan actual.' }
 
   const { error } = await supabase
@@ -343,6 +347,8 @@ export async function requestSubscriptionCancel(): Promise<{ ok: true } | { ok: 
   const { data: sub } = await supabase
     .from('subscriptions').select('status').eq('tenant_id', tenantId).maybeSingle()
   if (!sub) return { ok: false, error: 'Este equipo no tiene una suscripción registrada. Contacta a ITMANO.' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!canRequestPlanChange((sub as any).status)) return { ok: false, error: REQUEST_BLOCKED_MESSAGE }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((sub as any).status === 'cancelled') return { ok: false, error: 'La suscripción ya está cancelada.' }
 
@@ -574,16 +580,10 @@ export async function createAgent(
 
   const supabase = createAdminClient()
 
-  // Planes de un solo agente (Esencial/Growth): no se pueden crear más agentes.
-  // super_admin (opera cualquier tenant) siempre puede. Defensa server-side del
-  // gate de UI (#9).
-  if (ctx.role !== 'super_admin') {
-    const { data: sub } = await supabase.from('subscriptions').select('plan').eq('tenant_id', tenantId).maybeSingle()
-    const plan = ((sub as { plan?: string } | null)?.plan ?? 'esencial') as 'esencial' | 'growth' | 'partner'
-    if (!PLANS[plan].features.multiLogin) {
-      return { ok: false, error: 'Tu plan incluye un solo agente. Adquiere el plan Partner para agregar más.' }
-    }
-  }
+  // Tope de agentes del plan (Esencial/Growth: 1; Partner sin tope). super_admin
+  // (opera cualquier tenant) siempre puede. Defensa server-side del gate de UI.
+  const limite = await assertEntitlement(tenantId, 'createAgent', { isSuperAdmin: ctx.role === 'super_admin' })
+  if (limite) return limite
 
   const id       = await generateAgentId(supabase, tenantId, parsed.data.name)
 

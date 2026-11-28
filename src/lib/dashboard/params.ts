@@ -1,10 +1,20 @@
 import { DEFAULT_PERIOD, PERIODS, type PeriodDays } from './period'
+import { PLANS } from '@/lib/plans'
+import type { SubscriptionPlan } from '@/lib/subscriptions'
 
 export type DashboardTab = 'general' | 'agentes' | 'emails' | 'fuentes' | 'newsletter'
 
 interface TabOptions {
   canSeeAgents: boolean
+  // La pestaña Agentes se lista pero muestra un adelanto cuando el plan no
+  // incluye la vista de equipo (Partner). Sólo afecta al render, no a la visibilidad.
+  agentsLocked?: boolean
   canSeeNewsletter: boolean
+}
+
+// La vista de equipo es de Partner; los tenants exentos de facturación la tienen.
+export function isAgentsTabLocked(plan: SubscriptionPlan, billingExempt: boolean): boolean {
+  return !billingExempt && !PLANS[plan].features.teamAnalytics
 }
 
 const TABS: { key: DashboardTab; label: string }[] = [

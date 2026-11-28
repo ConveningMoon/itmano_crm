@@ -11,6 +11,7 @@ import { generatePropertyFromPdf } from './ai-actions'
 import { PropertyFormModal, type AiInit } from './property-form-modal'
 import { TYPE_LABELS, STATUS_CONFIG } from './property-labels'
 import { AiCreateModal } from './ai-create-modal'
+import { PlanBlockNotice, type PlanBlock } from './plan-block'
 
 // Lista de propiedades: pestañas por estado y tarjetas que abren el detalle. El formulario de
 // crear/editar vive en property-form-modal.tsx (compartido con el detalle).
@@ -28,6 +29,10 @@ interface Props {
   properties: Property[]
   tenants:    Array<{ id: string; name: string }>
   viewerRole: TenantRole
+  /** Motivo si el plan no permite publicar más (null = permitido). */
+  publishBlock: PlanBlock | null
+  /** Motivo si el plan no incluye Crear con IA (null = permitido). */
+  aiBlock: PlanBlock | null
 }
 
 function fmtPrice(n: number | null): string {
@@ -41,7 +46,7 @@ const AI_ENABLED = true
 
 type ModalState = { aiInit?: AiInit | null; error?: string | null }
 
-export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
+export function PropertiesClient({ properties, tenants, viewerRole, publishBlock, aiBlock }: Props) {
   const isSuperAdmin = viewerRole === 'super_admin'
 
   const [tab, setTab]     = useState<FilterTab>('all')
@@ -74,6 +79,7 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
 
   return (
     <>
+      {publishBlock && <PlanBlockNotice block={publishBlock} />}
       <div className="toolbar">
         <div className="filter-tabs filter-tabs-fit" role="tablist" aria-label="Estado de la propiedad">
           {TABS.map(t => (
@@ -141,6 +147,7 @@ export function PropertiesClient({ properties, tenants, viewerRole }: Props) {
         <AiCreateModal
           onClose={() => setShowAiModal(false)}
           onGenerate={runAiGenerate}
+          block={aiBlock}
         />
       )}
 

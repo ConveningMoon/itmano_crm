@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketLabel, parseDashboardParams, tabUsesPeriod, visibleTabs } from '@/lib/dashboard/params'
+import { bucketLabel, isAgentsTabLocked, parseDashboardParams, tabUsesPeriod, visibleTabs } from '@/lib/dashboard/params'
 import { DEFAULT_PERIOD, PERIODS } from '@/lib/dashboard/period'
 
 const ALL = { canSeeAgents: true, canSeeNewsletter: true }
@@ -43,5 +43,24 @@ describe('bucketLabel', () => {
   it('formatea semanas', () => {
     expect(bucketLabel('2026-10-08', 7)).toBe('8–14 oct')
     expect(bucketLabel('2026-10-29', 7)).toBe('29 oct–4 nov')
+  })
+})
+
+describe('pestaña Agentes por plan', () => {
+  it('bloqueada en esencial y growth', () => {
+    expect(isAgentsTabLocked('esencial', false)).toBe(true)
+    expect(isAgentsTabLocked('growth', false)).toBe(true)
+  })
+  it('partner ve agentes', () => {
+    expect(isAgentsTabLocked('partner', false)).toBe(false)
+  })
+  it('exento de facturación no se bloquea', () => {
+    expect(isAgentsTabLocked('esencial', true)).toBe(false)
+  })
+  it('la pestaña sigue listada aunque esté bloqueada, y no para agentes', () => {
+    const locked = { canSeeAgents: true, agentsLocked: true, canSeeNewsletter: true }
+    expect(visibleTabs(locked).map(t => t.key)).toContain('agentes')
+    expect(parseDashboardParams({ tab: 'agentes' }, locked).tab).toBe('agentes')
+    expect(visibleTabs({ canSeeAgents: false, agentsLocked: false, canSeeNewsletter: true }).map(t => t.key)).not.toContain('agentes')
   })
 })

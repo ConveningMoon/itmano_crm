@@ -82,6 +82,7 @@ function makeFakeSupabase(subscriptionRow: Record<string, unknown>) {
   return { calls, client }
 }
 
+vi.mock('@/lib/subscriptions/quota', () => ({ resumeQuotaPausedRuns: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 import { createAdminClient } from '@/lib/supabase/admin'
 const mockCreateAdminClient = createAdminClient as unknown as ReturnType<typeof vi.fn>
@@ -106,6 +107,7 @@ const reactivationEvent: PaddleSubscriptionEvent = {
 // occurredAt de arriba (para que el reductor no lo descarte por viejo).
 const degradedSnapshotRow = {
   status:        'cancelled',
+  plan:          'growth',
   last_event_at: '2026-10-01T00:00:00.000Z',
   degraded_at:   '2026-09-01T00:00:00.000Z',
 }
@@ -131,7 +133,7 @@ describe('applySubscriptionEvent — resiliencia de la reactivación', () => {
     // Lo crítico: el webhook tiene éxito aunque la restauración haya fallado.
     expect(result).toBe('applied')
     // La restauración sí se intentó (la transición se detectó correctamente).
-    expect(mockRestore).toHaveBeenCalledWith('tenant-x')
+    expect(mockRestore).toHaveBeenCalledWith('tenant-x', { cap: 50 })
     // El fallo queda registrado de forma inequívoca — es la única señal de
     // que este cliente quedó con propiedades aún despublicadas.
     expect(errorSpy).toHaveBeenCalledWith(
@@ -157,7 +159,7 @@ describe('applySubscriptionEvent — resiliencia de la reactivación', () => {
     const result = await applySubscriptionEvent(reactivationEvent)
 
     expect(result).toBe('applied')
-    expect(mockRestore).toHaveBeenCalledWith('tenant-x')
+    expect(mockRestore).toHaveBeenCalledWith('tenant-x', { cap: 50 })
     expect(errorSpy).not.toHaveBeenCalled()
   })
 })

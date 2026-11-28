@@ -85,6 +85,7 @@ function makeFakeSupabase(subscriptionRow: Record<string, unknown>) {
   return { calls, client }
 }
 
+vi.mock('@/lib/subscriptions/quota', () => ({ resumeQuotaPausedRuns: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 import { createAdminClient } from '@/lib/supabase/admin'
 const mockCreateAdminClient = createAdminClient as unknown as ReturnType<typeof vi.fn>

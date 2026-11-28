@@ -14,6 +14,7 @@ vi.mock('@/lib/subscriptions/reactivate', () => ({
 vi.mock('@/lib/subscriptions/notify-degradation', () => ({
   notifyDegradation: vi.fn(),
 }))
+vi.mock('@/lib/subscriptions/quota', () => ({ resumeQuotaPausedRuns: vi.fn() }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: vi.fn() }))
 
 import { createAdminClient } from '@/lib/supabase/admin'
