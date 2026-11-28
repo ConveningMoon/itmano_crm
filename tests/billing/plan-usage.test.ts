@@ -43,3 +43,24 @@ describe('buildPlanUsageRows', () => {
     expect(JSON.stringify(ai)).not.toMatch(/\$|USD/)
   })
 })
+
+describe('buildPlanUsageRows — pistas', () => {
+  it('correos bloqueados sin plan que lo resuelva (degradado): la pista es el motivo', () => {
+    const entitlements = getEntitlements({
+      plan: 'growth', status: 'cancelled', billingExempt: false, trialEndsAt: null,
+      usage: { leads: 0, agents: 1, publishedProperties: 0, emailsMonth: 0 },
+    })
+    const row = buildPlanUsageRows({ plan: 'growth', entitlements, ai: null }).find(r => r.key === 'emails')!
+    expect(row).toMatchObject({ tone: 'blocked', hint: entitlements.automatedEmail.message })
+  })
+
+  it('propiedades con despublicación programada: la pista lleva la fecha', () => {
+    const entitlements = getEntitlements({
+      plan: 'growth', status: 'active', billingExempt: false, trialEndsAt: null,
+      overCapSince: '2026-12-10T12:00:00.000Z',
+      usage: { leads: 0, agents: 1, publishedProperties: 52, emailsMonth: 0 },
+    })
+    const row = buildPlanUsageRows({ plan: 'growth', entitlements, ai: null }).find(r => r.key === 'properties')!
+    expect(row.hint).toContain('El 24/12 se despublicarán las 2 propiedades')
+  })
+})

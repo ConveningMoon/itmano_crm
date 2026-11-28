@@ -179,6 +179,10 @@ export async function sendPurchaseEmail(
   // Tope mensual del plan. El cron (pre_close, sin supervisión) pasa
   // 'automated' y para al 100 %; las acciones humanas del lead (inicio y
   // cierre) usan 'manual' y tienen 10 % de margen.
+  // Un pre_close 'automated' bloqueado al 100 % se OMITE, no se reintenta: el
+  // orquestador sólo selecciona closing_date = mañana, así que al día siguiente
+  // ya no es candidato y ese aviso se pierde ese mes (decisión documentada en
+  // docs/plan-saas/fase-06-limites-plan.md).
   const quotaDenied = await assertEmailQuota(tenantId, kind)
   if (quotaDenied) {
     console.warn(JSON.stringify({ service: 'sendPurchaseEmail', processId, milestone, warning: 'quota_exceeded' }))

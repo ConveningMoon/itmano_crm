@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const counts: Record<string, number> = { leads: 0, agents: 0, properties: 0 }
+const countErrors: Record<string, string> = {}
 const getSubscription = vi.fn()
 const countSends = vi.fn()
 
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
-vi.mock('@/lib/data/subscriptions', () => ({ getSubscription: (...a: unknown[]) => getSubscription(...a) }))
+let readFailed = false
+vi.mock('@/lib/data/subscriptions', () => ({
+  getSubscription: (...a: unknown[]) => getSubscription(...a),
+  getSubscriptionRead: async (...a: unknown[]) => (
+    readFailed ? { subscription: null, failed: true } : { subscription: await getSubscription(...a), failed: false }
+  ),
+}))
 vi.mock('@/lib/subscriptions/quota', async (orig) => ({
   ...(await orig<typeof import('@/lib/subscriptions/quota')>()),
   countMonthlyCorporateSends: (...a: unknown[]) => countSends(...a),
@@ -16,7 +23,10 @@ vi.mock('@/lib/supabase/admin', () => ({
       const q: Record<string, unknown> = {}
       q.select = () => q
       q.eq = () => q
-      q.then = (res: (v: unknown) => unknown) => res({ count: counts[table] ?? 0 })
+      q.then = (res: (v: unknown) => unknown) => res({
+        count: counts[table] ?? 0,
+        error: countErrors[table] ? { message: countErrors[table] } : null,
+      })
       return q
     },
   }),
@@ -25,6 +35,8 @@ vi.mock('@/lib/supabase/admin', () => ({
 import { assertEntitlement } from '@/lib/subscriptions/entitlements-server'
 
 beforeEach(() => {
+  readFailed = false
+  for (const k of Object.keys(countErrors)) delete countErrors[k]
   Object.assign(counts, { leads: 0, agents: 0, properties: 0 })
   countSends.mockReset().mockResolvedValue(0)
   getSubscription.mockReset().mockResolvedValue({
@@ -54,6 +66,23 @@ describe('assertEntitlement', () => {
     getSubscription.mockResolvedValue(null)
     const r = await assertEntitlement('t1', 'publishProperty')
     expect(r?.ok).toBe(false)
+  })
+
+  it('lectura de suscripción fallida: falla en abierto (no asume Esencial)', async () => {
+    readFailed = true
+    counts.leads = 9999
+    counts.properties = 5
+    expect(await assertEntitlement('t1', 'createLead')).toBeNull()
+    expect(await assertEntitlement('t1', 'publishProperty')).toBeNull()
+    expect(await assertEntitlement('t1', 'aiPropertyIntake')).toBeNull()
+  })
+
+  it('un conteo fallido se registra y cuenta 0', async () => {
+    countErrors.leads = 'boom'
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await assertEntitlement('t1', 'createLead')).toBeNull()
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('"service":"tenant-usage"'))
+    spy.mockRestore()
   })
 
   it('super_admin salta el tope de leads', async () => {

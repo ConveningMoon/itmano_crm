@@ -11,12 +11,18 @@ import { TRIAL, trialDaysLeft, trialEndsAtFromNow } from '@/lib/plans'
 import { FechaLocal } from '@/components/ui/local-date'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 
+type EditableStatus = 'trial' | 'active' | 'cancelled' | 'expired' | 'paused' | 'past_due'
+
 // Estado editable del select de suscripción: las solicitudes pendientes
 // (change/cancel_requested) se editan como 'active' — guardar las resuelve.
-function editableStatus(status: string | null): 'trial' | 'active' | 'cancelled' | 'expired' {
+// paused/past_due los escribe Paddle: se CONSERVAN (si se mapearan a 'active',
+// guardar cualquier otro campo "reactivaría" al tenant y pisaría a Paddle).
+export function editableStatus(status: string | null): EditableStatus {
   if (status === 'trial') return 'trial'
   if (status === 'cancelled') return 'cancelled'
   if (status === 'expired') return 'expired'
+  if (status === 'paused') return 'paused'
+  if (status === 'past_due') return 'past_due'
   return 'active'
 }
 
@@ -260,7 +266,7 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
   const [aiUnlimited, setAiUnlimited] = useState(tenant.aiUnlimited)
   const [pagesManaged, setPagesManaged] = useState(tenant.pagesManagedByItmano)
   const [subPlan, setSubPlan]     = useState<SubscriptionPlan>((tenant.subscriptionPlan as SubscriptionPlan) ?? 'esencial')
-  const [subStatus, setSubStatus] = useState<'trial' | 'active' | 'cancelled' | 'expired'>(editableStatus(tenant.subscriptionStatus))
+  const [subStatus, setSubStatus] = useState<EditableStatus>(editableStatus(tenant.subscriptionStatus))
   const [trialEnd, setTrialEnd]   = useState(dateInputValue(tenant.subscriptionTrialEndsAt))
   const [paddlePriceId, setPaddlePriceId] = useState(tenant.subscriptionPaddlePriceId ?? '')
   const [billingExempt, setBillingExempt] = useState(tenant.subscriptionBillingExempt)
@@ -572,13 +578,16 @@ function TenantRow({ tenant, isFirst }: { tenant: TenantWithOwner; isFirst: bool
               </select>
               <select
                 value={subStatus}
-                onChange={e => setSubStatus(e.target.value as 'trial' | 'active' | 'cancelled' | 'expired')}
+                onChange={e => setSubStatus(e.target.value as EditableStatus)}
                 style={{ ...INPUT, width: '170px', cursor: 'pointer' }}
               >
                 <option value="active">Activa</option>
                 <option value="trial">Período de prueba</option>
                 <option value="cancelled">Cancelada</option>
                 <option value="expired">{SUBSCRIPTION_STATUS_LABELS.expired}</option>
+                {/* Estados de Paddle: sólo aparecen para conservarlos, no para asignarlos a mano. */}
+                {tenant.subscriptionStatus === 'paused' && <option value="paused">{SUBSCRIPTION_STATUS_LABELS.paused}</option>}
+                {tenant.subscriptionStatus === 'past_due' && <option value="past_due">{SUBSCRIPTION_STATUS_LABELS.past_due}</option>}
               </select>
               {subStatus === 'trial' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -27,6 +27,7 @@ function makeDb(opts: {
     const b = {
       select(c: string, o?: { head?: boolean }) { head = !!o?.head; rec('select', c, o); return b },
       update(p: unknown) { rec('update', p); return b },
+      insert(p: unknown) { rec('insert', p); return b },
       not(c: string, op: string, v: unknown) { rec('not', c, op, v); return b },
       eq(c: string, v: unknown) { if (c === 'tenant_id') tenant = v as string; rec('eq', c, v); return b },
       in(c: string, v: unknown) { rec('in', c, v); return b },
@@ -81,6 +82,35 @@ describe('runOverCapStep', () => {
     expect(db.calls).toContainEqual({ table: 'subscriptions', method: 'eq', args: ['tenant_id', 't1'] })
     expect(r.marked).toBe(1)
     expect(db.calls.some(c => c.table === 'properties' && c.method === 'update')).toBe(false)
+  })
+
+  it('al marcar avisa una vez al tenant con la fecha y cuántas se despublicarán', async () => {
+    const db = makeDb({
+      subs: [{ tenant_id: 't1', plan: 'growth', over_cap_since: null }],
+      published: { t1: 53 }, rows: {},
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await runOverCapStep(db.client as any, now, logError)
+    const inserts = db.calls.filter(c => c.table === 'notifications' && c.method === 'insert')
+    expect(inserts).toHaveLength(1)
+    expect(inserts[0].args[0]).toEqual({
+      tenant_id: 't1', type: 'subscription_request', read: false, agent_id: null,
+      message: 'El 03/01 se despublicarán las 3 propiedades más antiguas que superan tu plan (tope 50). Cambia de plan para conservarlas.',
+    })
+  })
+
+  it('en wait, unpublish o clear no vuelve a avisar', async () => {
+    const db = makeDb({
+      subs: [
+        { tenant_id: 't1', plan: 'growth', over_cap_since: daysAgo(5) },
+        { tenant_id: 't2', plan: 'esencial', over_cap_since: daysAgo(15) },
+        { tenant_id: 't3', plan: 'growth', over_cap_since: daysAgo(3) },
+      ],
+      published: { t1: 60, t2: 2, t3: 5 }, rows: { t2: [{ id: 'a' }, { id: 'b' }] },
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await runOverCapStep(db.client as any, now, logError)
+    expect(db.calls.some(c => c.table === 'notifications')).toBe(false)
   })
 
   it('de vuelta dentro del tope con marca: la limpia', async () => {

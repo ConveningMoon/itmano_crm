@@ -2,6 +2,10 @@
 // mandar correo corporativo sin pasar por la compuerta del plan. Si falla, el
 // arreglo es poner el gate (assertEntitlement / assertEmailQuota), no ampliar
 // la lista blanca. Cada excepción de abajo lleva su motivo.
+//
+// LÍMITE CONOCIDO: la comprobación es a nivel de ARCHIVO. Un segundo insert sin
+// gate dentro de un archivo que ya contiene otro gate pasa el test; la revisión
+// de código tiene que cubrir ese caso.
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'

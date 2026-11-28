@@ -20,6 +20,8 @@ import { degradedTransition, manualDegradedAt, expiredTrialEndsAt } from '@/lib/
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 import { planPublishCap } from '@/lib/subscriptions/over-cap'
 import type { SubscriptionStatus } from '@/lib/subscriptions'
+import { isDegraded } from '@/lib/paddle/reducer'
+import { notifyDegradation } from '@/lib/subscriptions/notify-degradation'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as the scoring actions (scoring-actions.ts). The admin client (service_role) is the correct
@@ -408,7 +410,9 @@ export async function setTenantSender(
 const UpdateSubscriptionSchema = z.object({
   tenantId: z.string().trim().min(1),
   plan:     z.enum(['esencial', 'growth', 'partner']),
-  status:   z.enum(['trial', 'active', 'cancelled', 'expired']),
+  // paused/past_due los escribe Paddle: el formulario sólo los CONSERVA (si no,
+  // guardar cualquier otro campo de un tenant pausado lo "reactivaría").
+  status:   z.enum(['trial', 'active', 'cancelled', 'expired', 'paused', 'past_due']),
   // Requerido cuando status = 'trial' (constraint de coherencia en la 055).
   // Permite fijar o EXTENDER el vencimiento de la prueba.
   trialEndsAt: z.string().datetime({ offset: true }).nullish(),
@@ -541,6 +545,20 @@ export async function updateTenantSubscription(
     } catch (err) {
       console.error(JSON.stringify({
         service: 'admin-restore', tenant_id: parsed.data.tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }
+
+  // Entrada manual al modo degradado: mismo aviso que con Paddle (campana +
+  // Telegram a ITMANO y correo al cliente; 'expired' omite el correo al cliente
+  // dentro de notifyDegradation). Best-effort: el estado ya quedó escrito.
+  if (transicion === 'enter' && isDegraded(parsed.data.status)) {
+    try {
+      await notifyDegradation(parsed.data.tenantId, parsed.data.status as SubscriptionStatus)
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'admin-degradation-notify', tenant_id: parsed.data.tenantId,
         error: err instanceof Error ? err.message : String(err),
       }))
     }

@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getSubscription } from '@/lib/data/subscriptions'
-import { getEntitlements, type Entitlement } from '@/lib/subscriptions/entitlements'
+import { getSubscriptionRead } from '@/lib/data/subscriptions'
+import { failOpenEntitlements, getEntitlements, type Entitlement } from '@/lib/subscriptions/entitlements'
 
 // Cuota de envío CORPORATIVO (por Resend) en modo degradado. El modo Personal
 // del composer (mailto:) NO pasa por aquí y es ilimitado a propósito: no toca
@@ -54,11 +54,18 @@ export async function countMonthlyCorporateSends(
   trialEndsAt: string | null = null,
 ): Promise<number> {
   const supabase = createAdminClient()
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('email_sends')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
     .gte('sent_at', quotaWindowStart(new Date(), degradedAt, trialEndsAt))
+  // Falla en abierto (cuenta 0) pero con rastro: sin el log el tope de correos
+  // quedaría desactivado sin síntoma.
+  if (error) {
+    console.error(JSON.stringify({
+      service: 'email-quota', tenant_id: tenantId, error: error.message, fallback: 'zero',
+    }))
+  }
   return count ?? 0
 }
 
@@ -80,8 +87,14 @@ export function nextMonthStartUtc(now: Date): string {
  */
 export async function getFreshEmailEntitlements(
   tenantId: string,
-): Promise<{ automatedEmail: Entitlement; manualEmail: Entitlement }> {
-  const subscription = await getSubscription(tenantId)
+): Promise<{ automatedEmail: Entitlement; manualEmail: Entitlement; readFailed: boolean }> {
+  const { subscription, failed } = await getSubscriptionRead(tenantId)
+  // Suscripción ilegible: falla en abierto y avisa a quien decide (el cron de
+  // secuencias salta el tick en vez de reprogramar con datos inventados).
+  if (failed) {
+    const open = failOpenEntitlements()
+    return { automatedEmail: open.automatedEmail, manualEmail: open.manualEmail, readFailed: true }
+  }
   const emailsMonth = await countMonthlyCorporateSends(
     tenantId, subscription?.degradedAt ?? null, windowTrialEnd(subscription),
   )
@@ -93,7 +106,7 @@ export async function getFreshEmailEntitlements(
     trialEndsAt: subscription?.trialEndsAt ?? null,
     usage: { leads: 0, agents: 0, publishedProperties: 0, emailsMonth },
   })
-  return { automatedEmail: all.automatedEmail, manualEmail: all.manualEmail }
+  return { automatedEmail: all.automatedEmail, manualEmail: all.manualEmail, readFailed: false }
 }
 
 /**

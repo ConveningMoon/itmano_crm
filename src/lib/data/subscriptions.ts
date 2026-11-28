@@ -5,13 +5,26 @@ import type { SubscriptionPlan, SubscriptionStatus, TenantSubscription } from '@
 
 // Lectura de la suscripción de un tenant (fila única en `subscriptions`).
 // Deduplicada por request con React cache() — misma razón que getTenantAccessFor.
-export const getSubscription = cache(async function getSubscription(
+
+/**
+ * Resultado de la lectura que distingue "no hay fila" (`subscription: null`,
+ * `failed: false`) de "la lectura falló" (`failed: true`). El código de límites
+ * lo necesita: tratar un error transitorio como "Esencial activo" bloquearía a
+ * un tenant de pago y, en automatizaciones, reprogramaría sus runs al mes
+ * siguiente sin que nada los reanude.
+ */
+export interface SubscriptionRead {
+  subscription: TenantSubscription | null
+  failed: boolean
+}
+
+export const getSubscriptionRead = cache(async function getSubscriptionRead(
   tenantId: string,
-): Promise<TenantSubscription | null> {
+): Promise<SubscriptionRead> {
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, cancel_at, paddle_price_id, paddle_customer_id, paddle_subscription_id, billing_exempt, degraded_at')
+    .select('plan, status, requested_plan, trial_ends_at, billing_cycle, current_period_end, cancel_at, paddle_price_id, paddle_customer_id, paddle_subscription_id, billing_exempt, degraded_at, over_cap_since')
     .eq('tenant_id', tenantId)
     .maybeSingle()
   // getTenantAccessFor y el límite de IA leen de aquí y fallan en abierto: este
@@ -22,10 +35,11 @@ export const getSubscription = cache(async function getSubscription(
       error: error.message, fallback: 'full_access',
     }))
   }
-  if (!data) return null
+  if (error) return { subscription: null, failed: true }
+  if (!data) return { subscription: null, failed: false }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = data as any
-  return {
+  return { failed: false, subscription: {
     plan:             s.plan as SubscriptionPlan,
     status:           s.status as SubscriptionStatus,
     requestedPlan:    (s.requested_plan as SubscriptionPlan | null) ?? null,
@@ -38,5 +52,11 @@ export const getSubscription = cache(async function getSubscription(
     paddleSubscriptionId: (s.paddle_subscription_id as string | null) ?? null,
     billingExempt:    (s.billing_exempt as boolean | null) ?? false,
     degradedAt:       (s.degraded_at as string | null) ?? null,
-  }
+    overCapSince:     (s.over_cap_since as string | null) ?? null,
+  } }
 })
+
+// Los llamadores existentes siguen viendo `null` ante error o ausencia de fila.
+export async function getSubscription(tenantId: string): Promise<TenantSubscription | null> {
+  return (await getSubscriptionRead(tenantId)).subscription
+}

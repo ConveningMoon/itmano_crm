@@ -141,9 +141,11 @@ export default function PlanesPage() {
             ))}
           </PricingTable>
           <p style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-            Los límites de capacidad son por mes calendario. Si tu operación crece
-            más allá de tu plan, nuestro equipo te propone el ajuste — nada se corta
-            de un día para otro.
+            Los correos y la IA se miden por mes calendario; los leads y las
+            propiedades son totales. Te avisamos al acercarte al límite (en leads,
+            desde el 80 %). El envío automático se pausa al llegar al tope del mes
+            y se reanuda al subir de plan o al mes siguiente. Los leads que entran
+            por tus formularios nunca se pierden.
           </p>
           <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
             Los impuestos correspondientes se calculan al momento de completar tu inversión.

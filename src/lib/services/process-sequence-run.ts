@@ -184,7 +184,19 @@ export async function processSequenceRun(params: {
   // Un run ya stale NO se reprograma: sigue hasta el guard de stale, que lo
   // completa; si no, la pausa lo resucitaría.
   const staleRun = !!pending.next_send_at && isRunStale(pending.next_send_at, new Date())
-  const automatedAllowed = staleRun || (await getFreshEmailEntitlements(tenantId)).automatedEmail.allowed
+  const fresh = staleRun ? null : await getFreshEmailEntitlements(tenantId)
+  // Suscripción ilegible (error transitorio): no se puede saber el tope. Se
+  // salta el tick SIN reprogramar ni enviar; el siguiente tick reintenta. Si se
+  // reprogramara al mes siguiente, nada reanudaría el run.
+  if (fresh?.readFailed) {
+    return {
+      action:  'skipped',
+      reason:  'entitlement_read_failed',
+      details: 'No se pudo leer la suscripción: se reintenta en el siguiente tick',
+      ...diag,
+    }
+  }
+  const automatedAllowed = fresh === null || fresh.automatedEmail.allowed
   if (!automatedAllowed) {
     if (!dryRun) {
       const { error: rescheduleError } = await db

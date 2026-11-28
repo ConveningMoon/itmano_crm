@@ -78,6 +78,20 @@ tope de correos grupales.
   la API de Resend sin pasar por la compuerta. Las excepciones (intake,
   webhooks, correos de plataforma, escritores del sistema) están en listas
   blancas comentadas; no se amplían para tapar un hueco, se pone el gate.
+  La comprobación es **a nivel de archivo**: un segundo insert sin gate en un
+  archivo que ya tiene otro gate pasa el test. La revisión de código cubre ese
+  hueco.
+- **Lecturas fallidas:** si la suscripción no se puede leer (`getSubscriptionRead`
+  → `failed`), los gates fallan en abierto (como `getTenantAccessFor`) y
+  `process-sequence-run` salta el tick sin reprogramar. Los conteos fallidos
+  cuentan 0 y se registran (`tenant-usage`, `email-quota`).
+- **Aviso previo a despublicar:** al marcar `over_cap_since` el cron inserta una
+  notificación al tenant con la fecha (marca + 14 días) y cuántas se
+  despublicarán; `/properties` y "Tu plan" muestran el mismo texto
+  (`overCapNoticeText`).
+- **Correo `pre_close` automático al 100 %:** se omite, no se reintenta. El
+  orquestador sólo selecciona `closing_date = mañana`, así que al día siguiente
+  ya no es candidato. Con el tope alcanzado ese aviso se pierde ese mes.
 - Agent API: el tope de leads responde `ApiError('unprocessable', …)` con
   `reason: 'plan_limit'` (422); no existe un código `forbidden` y añadirlo
   cambia el contrato público.

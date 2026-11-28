@@ -33,4 +33,9 @@ describe('/planes lee sus valores de PLANS', () => {
     expect(rows.some(r => r.values.some(v => typeof v === 'string' && /completos/i.test(v)))).toBe(false)
     expect(row('Vista consolidada de equipo')).toEqual([false, false, true])
   })
+
+  it('los reportes para todos los planes no prometen la pestaña por agente (Partner)', () => {
+    expect(row('Reportes del negocio (fuente y correo)')).toEqual([true, true, true])
+    expect(rows.some(r => /Reportes del negocio \(agente/.test(r.label))).toBe(false)
+  })
 })

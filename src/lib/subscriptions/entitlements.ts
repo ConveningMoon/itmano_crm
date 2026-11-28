@@ -8,7 +8,7 @@
 // incluye más; nunca llevan dólares (superficie del tenant).
 
 import { PLANS } from '@/lib/plans'
-import { planPublishCap } from '@/lib/subscriptions/over-cap'
+import { overCapUnpublishOn, planPublishCap } from '@/lib/subscriptions/over-cap'
 import { getTenantAccess, type AccessInput } from '@/lib/subscriptions/access'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
@@ -32,6 +32,12 @@ export interface Entitlement {
   message: string | null
   /** Plan que levanta el bloqueo; null si no hay plan que lo resuelva. */
   upgradeTo: SubscriptionPlan | null
+  /**
+   * Sólo publishProperty: fecha ISO en que el cron despublicará las propiedades
+   * que superan el tope del plan (over_cap_since + gracia). Ausente = nada
+   * programado.
+   */
+  unpublishOn?: string | null
 }
 
 export interface TenantUsage {
@@ -47,6 +53,8 @@ export interface EntitlementsInput extends AccessInput {
   isSuperAdmin?: boolean
   /** Filas que la operación en curso añadiría (importación). Sólo aplica a leads. */
   extraRows?: number
+  /** `subscriptions.over_cap_since`: desde cuándo publica sobre el tope del plan. */
+  overCapSince?: string | null
 }
 
 // Aritmética entera a propósito: `1.1 * 2500` da 2750.0000000000005 en punto
@@ -71,6 +79,18 @@ const OK: Entitlement = { allowed: true, state: 'ok', limit: null, used: null, m
 
 function blocked(over: Partial<Entitlement> & { message: string }): Entitlement {
   return { allowed: false, state: 'blocked', limit: null, used: null, upgradeTo: null, ...over }
+}
+
+/**
+ * Derechos cuando la suscripción NO pudo leerse: todo permitido (falla en
+ * abierto, como getTenantAccessFor). Cortarle el servicio a quien paga por un
+ * error transitorio cuesta mucho más que dejar pasar una operación de más.
+ */
+export function failOpenEntitlements(): Record<EntitlementKey, Entitlement> {
+  return {
+    publishProperty: OK, aiPropertyIntake: OK, createLead: OK, automatedEmail: OK,
+    manualEmail: OK, createAgent: OK, teamAnalytics: OK,
+  }
 }
 
 export function getEntitlements(input: EntitlementsInput): Record<EntitlementKey, Entitlement> {
@@ -117,6 +137,15 @@ export function getEntitlements(input: EntitlementsInput): Record<EntitlementKey
         limit: cap, used, upgradeTo: next,
         message: `Llegaste al tope de ${num(cap)} propiedades publicadas de tu plan ${definition.label}.${next ? ` ${planLabel(next)} incluye más.` : ''}`,
       })
+    }
+  }
+
+  // Despublicación programada: sólo con propiedades por encima del tope del PLAN
+  // y suscripción no degradada (el paso del cron excluye a los degradados).
+  if (!skip && !degraded && input.overCapSince) {
+    const planCap = planPublishCap(plan)
+    if (planCap !== null && usage.publishedProperties > planCap) {
+      publishProperty = { ...publishProperty, unpublishOn: overCapUnpublishOn(input.overCapSince) }
     }
   }
 

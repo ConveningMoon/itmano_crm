@@ -83,7 +83,7 @@ describe('getEntitlements — leads (límite blando)', () => {
     const e = lead(2700, { extraRows: 60 })
     expect(e.allowed).toBe(false)
     expect(e.state).toBe('blocked')
-    expect(e.message).toContain('50')
+    expect(e.message).toContain('Caben 50 filas')
   })
 
   it('importación que cabe justo', () => {
@@ -173,5 +173,50 @@ describe('getEntitlements — exento, super_admin y agentes', () => {
       plan: 'esencial',
     })
     for (const v of Object.values(e)) expect(v.message ?? '').not.toContain('$')
+  })
+})
+
+describe('getEntitlements — prueba vencida (degradado)', () => {
+  it('status trial con trialEndsAt pasado se comporta como degradado', () => {
+    const e = getEntitlements({
+      ...withUsage({ emailsMonth: 199 }), plan: 'growth', status: 'trial',
+      trialEndsAt: '2020-01-01T00:00:00.000Z',
+    })
+    // Cuota de cortesía de 200, sin secuencias automáticas ni IA.
+    expect(e.automatedEmail.allowed).toBe(false)
+    expect(e.manualEmail).toMatchObject({ allowed: true, limit: 200 })
+    expect(e.aiPropertyIntake.allowed).toBe(false)
+    expect(getEntitlements({
+      ...withUsage({ emailsMonth: 200 }), plan: 'growth', status: 'trial',
+      trialEndsAt: '2020-01-01T00:00:00.000Z',
+    }).manualEmail.allowed).toBe(false)
+  })
+
+  it('prueba vigente no degrada', () => {
+    const e = getEntitlements({
+      ...withUsage({}), plan: 'growth', status: 'trial',
+      trialEndsAt: '2999-01-01T00:00:00.000Z',
+    })
+    expect(e.automatedEmail.allowed).toBe(true)
+    expect(e.manualEmail.limit).toBe(15000)
+  })
+})
+
+describe('getEntitlements — despublicación programada (over_cap_since)', () => {
+  const since = '2026-12-10T12:00:00.000Z'
+
+  it('sobre el tope del plan con marca: unpublishOn = marca + 14 días', () => {
+    const e = getEntitlements({ ...withUsage({ publishedProperties: 53 }), overCapSince: since }).publishProperty
+    expect(e.unpublishOn).toBe('2026-12-24T12:00:00.000Z')
+  })
+
+  it('dentro del tope o sin marca: sin fecha', () => {
+    expect(getEntitlements({ ...withUsage({ publishedProperties: 50 }), overCapSince: since }).publishProperty.unpublishOn).toBeUndefined()
+    expect(getEntitlements({ ...withUsage({ publishedProperties: 53 }) }).publishProperty.unpublishOn).toBeUndefined()
+  })
+
+  it('degradado no muestra fecha (lo trata otro paso del cron)', () => {
+    const e = getEntitlements({ ...withUsage({ publishedProperties: 53 }), status: 'cancelled', overCapSince: since }).publishProperty
+    expect(e.unpublishOn).toBeUndefined()
   })
 })

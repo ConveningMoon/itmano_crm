@@ -194,8 +194,16 @@ export async function generatePropertyFromPdf(
   // borrador sale con published_to_web = false y el tope se evalúa al guardar.
   const intakeTenant = resolveTargetTenant(ctx, (formData.get('tenant_id') as string) || undefined)
   if (typeof intakeTenant !== 'string') return { ok: false, error: intakeTenant.error }
-  const denied = await assertEntitlement(intakeTenant, 'aiPropertyIntake')
-  if (denied) return denied
+  // En el hub de super_admin (sin tenant en contexto) el tenant del formulario
+  // es sólo el primero de la lista, no el que el equipo elegirá al guardar:
+  // gatear contra él bloquearía o dejaría pasar por el plan equivocado. Ahí no
+  // se gatea; la publicación sí se gatea al guardar (assertEntitlement
+  // 'publishProperty'). Actuando como tenant, o siendo owner/agente, se gatea.
+  const hubMode = ctx.role === 'super_admin' && !ctx.tenant_id
+  if (!hubMode) {
+    const denied = await assertEntitlement(intakeTenant, 'aiPropertyIntake')
+    if (denied) return denied
+  }
 
   // Límite mensual de IA del tenant (super_admin pasa siempre).
   const overLimit = await assertAiWithinLimit(ctx, 'property_intake')

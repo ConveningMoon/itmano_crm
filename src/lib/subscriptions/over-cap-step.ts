@@ -2,7 +2,7 @@ import 'server-only'
 import { revalidateTag } from 'next/cache'
 import { hostedTag } from '@/lib/hosted-cache'
 import { columns } from '@/lib/supabase/columns'
-import { planPublishCap, selectOverCapAction } from '@/lib/subscriptions/over-cap'
+import { overCapNoticeText, overCapUnpublishOn, planPublishCap, selectOverCapAction } from '@/lib/subscriptions/over-cap'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 import type { createAdminClient } from '@/lib/supabase/admin'
 
@@ -55,8 +55,22 @@ export async function runOverCapStep(
           .update({ over_cap_since: action === 'mark' ? now.toISOString() : null })
           .eq('tenant_id', row.tenant_id)
         if (error) { logError('over-cap', row.tenant_id, error); continue }
-        if (action === 'mark') result.marked += 1
-        else result.cleared += 1
+        if (action === 'mark') {
+          result.marked += 1
+          // Aviso al cliente (una vez por episodio: 'mark' sólo ocurre cuando no
+          // hay marca). Best-effort: un fallo aquí no revierte la marca.
+          const unpublishOn = overCapUnpublishOn(now)
+          if (cap !== null && unpublishOn) {
+            const { error: notifyError } = await supabase.from('notifications').insert({
+              tenant_id: row.tenant_id,
+              type:      'subscription_request',
+              message:   overCapNoticeText({ unpublishOn, excess: (count ?? 0) - cap, cap }),
+              read:      false,
+              agent_id:  null,
+            })
+            if (notifyError) logError('over-cap', row.tenant_id, notifyError)
+          }
+        } else result.cleared += 1
         continue
       }
 

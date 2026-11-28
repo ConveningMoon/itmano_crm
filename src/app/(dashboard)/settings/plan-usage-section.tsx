@@ -26,7 +26,7 @@ export async function PlanUsageSection({ tenantId, ai }: {
   const rows = buildPlanUsageRows({ plan, entitlements, ai })
 
   return (
-    <SettingsCard title="Tu plan" hint={`Uso de lo incluido en tu plan ${PLANS[plan].label}. Los topes se reinician o se amplían al cambiar de plan.`}>
+    <SettingsCard title="Tu plan" hint={`Uso de lo incluido en tu plan ${PLANS[plan].label}. Los correos y la IA se reinician cada mes; al cambiar de plan se amplían los topes.`}>
       {rows.map(row => <UsageRow key={row.key} row={row} />)}
     </SettingsCard>
   )

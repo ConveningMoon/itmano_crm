@@ -1,9 +1,10 @@
 import 'server-only'
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getSubscription } from '@/lib/data/subscriptions'
+import { getSubscriptionRead } from '@/lib/data/subscriptions'
 import { countMonthlyCorporateSends, windowTrialEnd } from '@/lib/subscriptions/quota'
 import {
+  failOpenEntitlements,
   getEntitlements,
   type Entitlement,
   type EntitlementKey,
@@ -29,7 +30,7 @@ export const getTenantUsage = cache(async function getTenantUsage(
   // El conteo de correos depende de la suscripción (degradedAt/trialEndsAt):
   // se encadena a su promesa para correr en el mismo Promise.all que los demás
   // conteos, sin un salto serial extra.
-  const sub = getSubscription(tenantId)
+  const sub = getSubscriptionRead(tenantId).then((r) => r.subscription)
   const [leads, agents, properties, emailsMonth] = await Promise.all([
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
     supabase.from('agents').select('id', { count: 'exact', head: true })
@@ -38,6 +39,16 @@ export const getTenantUsage = cache(async function getTenantUsage(
       .eq('tenant_id', tenantId).eq('published_to_web', true),
     sub.then((s) => countMonthlyCorporateSends(tenantId, s?.degradedAt ?? null, windowTrialEnd(s))),
   ])
+  // Un conteo fallido se lee como 0 (falla en abierto) pero deja rastro: es la
+  // única señal de que el enforcement de ese límite quedó desactivado.
+  for (const [name, res] of [['leads', leads], ['agents', agents], ['properties', properties]] as const) {
+    if (res.error) {
+      console.error(JSON.stringify({
+        service: 'tenant-usage', tenant_id: tenantId, count: name,
+        error: res.error.message, fallback: 'zero',
+      }))
+    }
+  }
   return {
     leads: leads.count ?? 0,
     agents: agents.count ?? 0,
@@ -50,13 +61,18 @@ async function compute(
   tenantId: string,
   opts?: { isSuperAdmin?: boolean; extraRows?: number },
 ): Promise<Record<EntitlementKey, Entitlement>> {
-  const [subscription, usage] = await Promise.all([getSubscription(tenantId), getTenantUsage(tenantId)])
+  const [read, usage] = await Promise.all([getSubscriptionRead(tenantId), getTenantUsage(tenantId)])
+  // Lectura fallida: falla en abierto (getSubscriptionRead ya la registró). No
+  // se asume "Esencial activo": bloquearía a un tenant de pago por un error.
+  if (read.failed) return failOpenEntitlements()
+  const subscription = read.subscription
   return getEntitlements({
     // Sin fila de suscripción: Esencial activo, igual que ai-limit y platform-ops.
     plan: subscription?.plan ?? 'esencial',
     status: subscription?.status ?? 'active',
     billingExempt: subscription?.billingExempt ?? false,
     trialEndsAt: subscription?.trialEndsAt ?? null,
+    overCapSince: subscription?.overCapSince ?? null,
     usage,
     isSuperAdmin: opts?.isSuperAdmin,
     extraRows: opts?.extraRows,

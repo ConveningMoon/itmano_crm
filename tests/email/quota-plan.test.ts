@@ -9,7 +9,13 @@ const countSends = vi.fn()
 const sendSequenceEmail = vi.fn()
 
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
-vi.mock('@/lib/data/subscriptions', () => ({ getSubscription: (...a: unknown[]) => getSubscription(...a) }))
+let readFailed = false
+vi.mock('@/lib/data/subscriptions', () => ({
+  getSubscription: (...a: unknown[]) => getSubscription(...a),
+  getSubscriptionRead: async (...a: unknown[]) => (
+    readFailed ? { subscription: null, failed: true } : { subscription: await getSubscription(...a), failed: false }
+  ),
+}))
 // El conteo real de quota.ts (email_sends) sale de este cliente falso.
 const runUpdates: { patch: unknown; filters: [string, unknown][] }[] = []
 vi.mock('@/lib/supabase/admin', () => ({
@@ -52,6 +58,7 @@ function setPlan(plan: 'esencial' | 'growth' | 'partner', extra: Record<string, 
 }
 
 beforeEach(() => {
+  readFailed = false
   getSubscription.mockReset()
   countSends.mockReset().mockResolvedValue(0)
   sendSequenceEmail.mockReset().mockResolvedValue({ ok: true, outcome: 'sent', resendEmailId: 'r1' })
@@ -98,6 +105,15 @@ describe('assertEmailQuota (tope del plan)', () => {
     countSends.mockResolvedValue(999_999)
     expect(await assertEmailQuota('t1', 'manual')).toBeNull()
     expect(await assertEmailQuota('t1', 'automated')).toBeNull()
+  })
+})
+
+describe('suscripción ilegible', () => {
+  it('assertEmailQuota falla en abierto', async () => {
+    readFailed = true
+    countSends.mockResolvedValue(999_999)
+    expect(await assertEmailQuota('t1', 'automated')).toBeNull()
+    expect(await assertEmailQuota('t1', 'manual')).toBeNull()
   })
 })
 
@@ -171,6 +187,18 @@ function fakeDb(updates: Update[], nextSendAt = '2026-11-03T10:00:00.000Z') {
 }
 
 describe('processSequenceRun con el tope mensual', () => {
+  it('lectura de suscripción fallida: salta el tick sin reprogramar ni enviar', async () => {
+    readFailed = true
+    countSends.mockResolvedValue(999_999)
+    const updates: Update[] = []
+    const res = await processSequenceRun({ db: fakeDb(updates) as never, runId: 'run1' })
+
+    expect(res.action).toBe('skipped')
+    expect(res.reason).toBe('entitlement_read_failed')
+    expect(updates.filter(u => u.table === 'lead_sequence_runs')).toEqual([])
+    expect(sendSequenceEmail).not.toHaveBeenCalled()
+  })
+
   it('pausa por cuota reprograma al mes siguiente', async () => {
     countSends.mockResolvedValue(3000)
     const updates: Update[] = []

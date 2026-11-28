@@ -91,7 +91,7 @@ export function buildPlanRows(): CompareGroup[] {
         // Los reportes del negocio son iguales en los tres planes: el único
         // derecho que gradúa analytics es la vista consolidada de equipo
         // (entitlement teamAnalytics, sólo Partner). No se prometen "niveles".
-        { label: 'Reportes del negocio (agente, fuente y correo)', values: [true, true, true] },
+        { label: 'Reportes del negocio (fuente y correo)', values: [true, true, true] },
         { label: 'Vista consolidada de equipo', values: perFeature(f => f.teamAnalytics) },
       ],
     },

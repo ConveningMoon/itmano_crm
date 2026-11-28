@@ -113,4 +113,27 @@ describe('Crear con IA', () => {
     expect(anthropicCtor).not.toHaveBeenCalled()
     expect(mockAdmin).not.toHaveBeenCalled()
   })
+
+  it('hub de super_admin (sin tenant en contexto) no gatea contra un tenant arbitrario', async () => {
+    mockCtx.mockResolvedValue({ role: 'super_admin', tenant_id: null, user_id: 'u1' })
+    mockAssert.mockResolvedValue({ ok: false, error: 'bloqueado' })
+    process.env.ANTHROPIC_API_KEY = 'test'
+    const fd = new FormData()
+    fd.set('tenant_id', 'primer-tenant-de-la-lista')
+    fd.set('file', new File([new Uint8Array([1])], 'a.pdf', { type: 'application/pdf' }))
+    // Sigue hacia la IA (el doble no implementa el cliente): sólo importa el gate.
+    await generatePropertyFromPdf(fd).catch(() => null)
+    expect(mockAssert).not.toHaveBeenCalled()
+  })
+
+  it('super_admin actuando como tenant sí pasa por el gate de ese tenant', async () => {
+    mockCtx.mockResolvedValue({ role: 'super_admin', tenant_id: 't9', user_id: 'u1' })
+    const blocked = { ok: false, error: 'bloqueado' }
+    mockAssert.mockResolvedValue(blocked)
+    process.env.ANTHROPIC_API_KEY = 'test'
+    const fd = new FormData()
+    fd.set('file', new File([new Uint8Array([1])], 'a.pdf', { type: 'application/pdf' }))
+    expect(await generatePropertyFromPdf(fd)).toEqual(blocked)
+    expect(mockAssert).toHaveBeenCalledWith('t9', 'aiPropertyIntake')
+  })
 })

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireTenantContext } from '@/lib/auth/tenant-context'
 import { getProperties } from '@/lib/data/properties'
 import { getTenantEntitlements } from '@/lib/subscriptions/entitlements-server'
+import { overCapNoticeFor } from '@/lib/subscriptions/over-cap'
 import type { PlanBlock } from './plan-block'
 import { PropertiesClient } from './properties-client'
 import { PropertiesListSkeleton } from './properties-skeleton'
@@ -42,7 +43,13 @@ async function PropertiesContent() {
   const toBlock = (e: { allowed: boolean; message: string | null; upgradeTo: string | null } | undefined): PlanBlock | null =>
     e && !e.allowed ? { message: e.message ?? 'Tu plan no permite esta operación.', upgradeTo: e.upgradeTo } : null
   // super_admin salta el tope de publicación (la action lo ignora igual).
-  const publishBlock = role === 'super_admin' ? null : toBlock(entitlements?.publishProperty)
+  const baseBlock = role === 'super_admin' ? null : toBlock(entitlements?.publishProperty)
+  // Aviso previo a la despublicación automática (fecha y cuántas): se suma al
+  // motivo del bloqueo para que no ocurra sin que el cliente lo haya visto.
+  const overCapNotice = role === 'super_admin' || !entitlements ? null : overCapNoticeFor(entitlements.publishProperty)
+  const publishBlock = baseBlock && overCapNotice
+    ? { ...baseBlock, message: `${baseBlock.message} ${overCapNotice}` }
+    : baseBlock
   const aiBlock = toBlock(entitlements?.aiPropertyIntake)
 
   return (

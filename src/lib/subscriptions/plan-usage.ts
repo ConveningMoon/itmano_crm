@@ -1,5 +1,6 @@
 import { PLANS } from '@/lib/plans'
 import { type Entitlement, type EntitlementKey } from '@/lib/subscriptions/entitlements'
+import { overCapNoticeFor } from '@/lib/subscriptions/over-cap'
 import type { AiUsageLimitView } from '@/lib/ai-usage/view'
 import type { SubscriptionPlan } from '@/lib/subscriptions'
 
@@ -43,7 +44,9 @@ function limitRow(
     percent: e.limit > 0 ? clampPct((used / e.limit) * 100) : 100,
     tone,
     detail: `${num(used)} de ${num(e.limit)} ${unit}`,
-    hint: tone === 'ok' ? null : upgradeHint(e),
+    // Bloqueado sin plan que lo resuelva (suscripción inactiva): sin el motivo
+    // la barra roja quedaría sin explicación.
+    hint: tone === 'ok' ? null : upgradeHint(e) ?? (tone === 'blocked' ? e.message : null),
   }
 }
 
@@ -68,7 +71,10 @@ export function buildPlanUsageRows({ plan, entitlements: ent, ai }: PlanUsageInp
       detail: 'No incluido en tu plan', hint: upgradeHint(ent.publishProperty) ?? `${PLANS.growth.label} las incluye.`,
     })
   } else {
-    rows.push(limitRow('properties', 'Propiedades en la web', ent.publishProperty, 'propiedades', 'Ilimitadas'))
+    const row = limitRow('properties', 'Propiedades en la web', ent.publishProperty, 'propiedades', 'Ilimitadas')
+    // Despublicación programada: la fecha manda sobre la pista genérica.
+    const notice = overCapNoticeFor(ent.publishProperty)
+    rows.push(notice && row.kind === 'bar' ? { ...row, hint: notice } : row)
   }
 
   if (ai) {

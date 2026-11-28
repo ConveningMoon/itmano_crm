@@ -37,6 +37,8 @@ export interface TenantSubscription {
   billingExempt:    boolean
   /** ISO timestamp de cuándo la suscripción perdió acceso completo (paused/cancelled). */
   degradedAt:       string | null
+  /** Desde cuándo el tenant publica más propiedades que su plan (ISO). null = dentro del tope. */
+  overCapSince:     string | null
 }
 
 export const PLAN_CONFIG: Record<SubscriptionPlan, {

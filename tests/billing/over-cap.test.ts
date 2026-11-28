@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planPublishCap, selectOverCapAction } from '@/lib/subscriptions/over-cap'
+import { overCapNoticeFor, overCapNoticeText, overCapUnpublishOn, planPublishCap, selectOverCapAction } from '@/lib/subscriptions/over-cap'
 
 const now = new Date('2026-12-20T12:00:00Z')
 const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000).toISOString()
@@ -35,5 +35,28 @@ describe('selectOverCapAction', () => {
   })
   it('Esencial con una publicada se marca', () => {
     expect(selectOverCapAction({ published: 1, cap: 0, overCapSince: null, now })).toBe('mark')
+  })
+})
+
+describe('aviso de despublicación', () => {
+  it('la fecha es la marca + 14 días (UTC)', () => {
+    expect(overCapUnpublishOn('2026-12-10T12:00:00.000Z')).toBe('2026-12-24T12:00:00.000Z')
+    expect(overCapUnpublishOn(null)).toBeNull()
+    expect(overCapUnpublishOn('basura')).toBeNull()
+  })
+
+  it('el texto lleva DD/MM, cuántas y el tope', () => {
+    expect(overCapNoticeText({ unpublishOn: '2026-12-24T12:00:00.000Z', excess: 3, cap: 50 })).toBe(
+      'El 24/12 se despublicarán las 3 propiedades más antiguas que superan tu plan (tope 50). Cambia de plan para conservarlas.',
+    )
+    expect(overCapNoticeText({ unpublishOn: '2027-01-05T00:00:00.000Z', excess: 1, cap: 50 })).toContain('El 05/01 se despublicará la propiedad más antigua')
+  })
+
+  it('overCapNoticeFor: sólo con fecha y uso sobre el tope', () => {
+    const e = { unpublishOn: '2026-12-24T12:00:00.000Z', limit: 50, used: 53 }
+    expect(overCapNoticeFor(e)).toContain('las 3 propiedades')
+    expect(overCapNoticeFor({ ...e, used: 50 })).toBeNull()
+    expect(overCapNoticeFor({ ...e, unpublishOn: null })).toBeNull()
+    expect(overCapNoticeFor({ ...e, limit: null })).toBeNull()
   })
 })
