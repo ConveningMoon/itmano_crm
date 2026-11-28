@@ -16,7 +16,7 @@ import { resendForAccount, resolveResendAccount, resendAccountConfigured } from 
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
 import { resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
-import { degradedTransition } from '@/lib/subscriptions/transition'
+import { degradedTransition, manualDegradedAt } from '@/lib/subscriptions/transition'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
 import { planPublishCap } from '@/lib/subscriptions/over-cap'
 import type { SubscriptionStatus } from '@/lib/subscriptions'
@@ -447,7 +447,7 @@ export async function updateTenantSubscription(
   // a mano para ese tenant.
   const { data: existing } = await supabase
     .from('subscriptions')
-    .select('plan, status, trial_ends_at')
+    .select(columns('subscriptions', ['plan', 'status', 'trial_ends_at', 'degraded_at']))
     .eq('tenant_id', parsed.data.tenantId)
     .maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sin tipos generados de Supabase, la fila llega untyped
@@ -467,6 +467,19 @@ export async function updateTenantSubscription(
         ahora,
       )
     : null
+  const degradedAt = manualDegradedAt({
+    transition:       transicion,
+    nextStatus:       parsed.data.status,
+    storedDegradedAt: (prev?.degraded_at as string | null | undefined) ?? null,
+    prev:             prev ? { status: prev.status as SubscriptionStatus, trialEndsAt: prev.trial_ends_at as string | null } : null,
+    now:              ahora,
+  })
+  // trial_ends_at (CHECK de la migracion 20261128160000): trial lo exige; expired
+  // lo conserva (ancla el fin de la prueba) y el resto lo deja en null.
+  const trialEndsAt =
+    parsed.data.status === 'trial' ? parsed.data.trialEndsAt
+    : parsed.data.status === 'expired' ? ((prev?.trial_ends_at as string | null | undefined) ?? ahora.toISOString())
+    : null
 
   // Upsert: tenants creados antes de la migración 054 podrían no tener fila.
   const { error } = await supabase
@@ -476,12 +489,11 @@ export async function updateTenantSubscription(
       plan:           parsed.data.plan,
       status:         parsed.data.status,
       requested_plan: null,
-      trial_ends_at:  parsed.data.status === 'trial' ? parsed.data.trialEndsAt : null,
+      trial_ends_at:  trialEndsAt,
       paddle_price_id: parsed.data.paddlePriceId?.trim() || null,
       billing_exempt:  parsed.data.billingExempt,
       updated_at:      ahora.toISOString(),
-      ...(transicion === 'enter' ? { degraded_at: ahora.toISOString() } : {}),
-      ...(transicion === 'leave' ? { degraded_at: null } : {}),
+      ...(degradedAt !== undefined ? { degraded_at: degradedAt } : {}),
     }, { onConflict: 'tenant_id' })
   if (error) return { ok: false, error: error.message }
 

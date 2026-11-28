@@ -22,7 +22,7 @@ function makeDb(existing: boolean, inserts: unknown[]) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function builder(table: string): any {
     const b = {
-      select() { return b }, eq() { return b }, limit() { return b },
+      select() { return b }, eq() { return b }, limit() { return b }, order() { return b },
       insert(row: unknown) { inserts.push(row); return Promise.resolve({ error: null }) },
       maybeSingle() {
         if (table === 'user_profiles') return Promise.resolve({ data: { id: 'u1' } })

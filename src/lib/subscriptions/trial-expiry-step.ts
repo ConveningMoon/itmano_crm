@@ -20,7 +20,7 @@ export async function runTrialExpiryStep(
   now: Date,
   logError: LogError,
   notify: typeof notifyDegradation = notifyDegradation,
-): Promise<{ expired: number }> {
+): Promise<{ expired: number; failed: number }> {
   const { data, error } = await supabase
     .from('subscriptions')
     .select(TRIAL_COLUMNS)
@@ -31,6 +31,7 @@ export async function runTrialExpiryStep(
   if (error) throw error
 
   let expired = 0
+  let failed = 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const row of (data ?? []) as any[]) {
     try {
@@ -44,7 +45,7 @@ export async function runTrialExpiryStep(
         .eq('tenant_id', row.tenant_id)
         .eq('status', 'trial')
         .select('tenant_id')
-      if (updateError) { logError('trial-expiry', row.tenant_id, updateError); continue }
+      if (updateError) { failed += 1; logError('trial-expiry', row.tenant_id, updateError); continue }
       if (!updated || updated.length === 0) continue
       expired += 1
       try {
@@ -53,10 +54,11 @@ export async function runTrialExpiryStep(
         logError('trial-expiry-notify', row.tenant_id, err)
       }
     } catch (err) {
+      failed += 1
       logError('trial-expiry', row.tenant_id, err)
     }
   }
-  return { expired }
+  return { expired, failed }
 }
 
 // Avisos de fin de prueba: 3 días antes y el día del vencimiento. Incluye
@@ -67,7 +69,7 @@ export async function runTrialNoticeStep(
   now: Date,
   logError: LogError,
   send: typeof sendTrialNotice = sendTrialNotice,
-): Promise<{ sent: number }> {
+): Promise<{ sent: number; failed: number }> {
   const from = new Date(now.getTime() - 86_400_000).toISOString()
   const to = new Date(now.getTime() + 3 * 86_400_000).toISOString()
   const { data, error } = await supabase
@@ -81,6 +83,7 @@ export async function runTrialNoticeStep(
   if (error) throw error
 
   let sent = 0
+  let failed = 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const row of (data ?? []) as any[]) {
     try {
@@ -89,8 +92,9 @@ export async function runTrialNoticeStep(
       const r = await send(supabase, { tenantId: row.tenant_id, moment, trialEndsAt: row.trial_ends_at })
       if (r === 'sent') sent += 1
     } catch (err) {
+      failed += 1
       logError('trial-notice', row.tenant_id, err)
     }
   }
-  return { sent }
+  return { sent, failed }
 }

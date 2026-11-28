@@ -1,5 +1,6 @@
 import 'server-only'
 import { resendForAccount } from '@/lib/resend'
+import { columns } from '@/lib/supabase/columns'
 import { resolveSenderIdentity } from '@/lib/services/sender-identity'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { trialNoticeDue, type TrialNoticeMoment } from '@/lib/subscriptions/trial-notice-due'
@@ -9,16 +10,20 @@ export type { TrialNoticeMoment }
 
 type Db = ReturnType<typeof createAdminClient>
 
+const NOTIFICATION_ID = columns('notifications', ['id'])
+const TENANT_NAME = columns('tenants', ['name', 'slug'])
+const OWNER_ID = columns('user_profiles', ['id'])
+
 const COPY: Record<TrialNoticeMoment, { subject: string; lead: string; marker: string }> = {
   '3d': {
     subject: 'Tu prueba de ITMANO CRM termina en 3 días',
     lead:    'Tu prueba de ITMANO CRM termina en 3 días.',
-    marker:  'Aviso enviado: la prueba vence en 3 días.',
+    marker:  'Tu prueba termina en 3 días. Activa tu plan en Configuración.',
   },
   today: {
     subject: 'Tu prueba de ITMANO CRM terminó',
     lead:    'Tu prueba de ITMANO CRM terminó hoy.',
-    marker:  'Aviso enviado: la prueba terminó.',
+    marker:  'Tu prueba terminó. Activa tu plan en Configuración para seguir con todo.',
   },
 }
 
@@ -57,11 +62,11 @@ export async function sendTrialNotice(
   args: { tenantId: string; moment: TrialNoticeMoment; trialEndsAt: string },
 ): Promise<'sent' | 'skipped'> {
   const { tenantId, moment, trialEndsAt } = args
-  const marker = `${COPY[moment].marker} (${trialEndsAt.slice(0, 10)})`
+  const marker = `${COPY[moment].marker} (${trialEndsAt.slice(0, 10).split('-').reverse().join('/')})`
 
   const { data: existing, error: existingError } = await db
     .from('notifications')
-    .select('id')
+    .select(NOTIFICATION_ID)
     .eq('tenant_id', tenantId)
     .eq('type', 'subscription_request')
     .eq('message', marker)
@@ -69,7 +74,7 @@ export async function sendTrialNotice(
   if (existingError) throw existingError
   if (existing && existing.length > 0) return 'skipped'
 
-  const { data: tenant } = await db.from('tenants').select('name, slug').eq('id', tenantId).maybeSingle()
+  const { data: tenant } = await db.from('tenants').select(TENANT_NAME).eq('id', tenantId).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fila sin tipos generados
   const t = tenant as any
   const identity = resolveSenderIdentity(
@@ -79,7 +84,8 @@ export async function sendTrialNotice(
   if (!identity) throw new Error('no_sender_identity')
 
   const { data: owner } = await db
-    .from('user_profiles').select('id').eq('tenant_id', tenantId).eq('role', 'agent_owner').maybeSingle()
+    .from('user_profiles').select(OWNER_ID).eq('tenant_id', tenantId).eq('role', 'agent_owner')
+    .order('created_at', { ascending: true }).limit(1).maybeSingle()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ownerId = (owner as any)?.id as string | undefined
   if (!ownerId) throw new Error('no_owner_profile')

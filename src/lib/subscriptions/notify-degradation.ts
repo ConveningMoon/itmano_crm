@@ -98,6 +98,10 @@ export async function notifyDegradation(
     console.error(JSON.stringify({ service: 'degradation-notify', tenant_id: tenantId, error: error.message }))
   }
 
+  // Una prueba vencida ya tiene su propio correo al cliente (aviso 'today' de
+  // trial-notice): el de "suscripción inactiva" no encaja con ese momento.
+  if (status === 'expired') return
+
   // Email al cliente — best-effort e independiente del insert de arriba: un
   // fallo aquí no debe borrar el aviso a ITMANO que ya se intentó insertar.
   try {
@@ -106,6 +110,8 @@ export async function notifyDegradation(
       .select('id')
       .eq('tenant_id', tenantId)
       .eq('role', 'agent_owner')
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sin tipos generados de Supabase, la fila llega untyped
     const ownerId = (owner as any)?.id as string | undefined

@@ -71,3 +71,13 @@ describe('runTrialExpiryStep', () => {
     expect(logError).toHaveBeenCalled()
   })
 })
+
+describe('runTrialExpiryStep: fallos visibles', () => {
+  it('cuenta los tenants que fallaron', async () => {
+    const db = makeDb([{ tenant_id: 't1', trial_ends_at: '2026-12-18T00:00:00Z', degraded_at: null }], [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(db.client as any).from = () => { throw new Error('boom') }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await expect(runTrialExpiryStep(db.client as any, now, vi.fn(), vi.fn() as any)).rejects.toThrow()
+  })
+})

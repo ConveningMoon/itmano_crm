@@ -28,3 +28,25 @@ export function degradedTransition(
   if (before && !after) return 'leave'
   return null
 }
+
+/**
+ * Valor de degraded_at a escribir en un cambio manual: undefined = no tocar.
+ * 'leave' lo limpia. Si el estado nuevo es degradado y no hay ancla guardada
+ * (o se acaba de entrar), la ancla es el vencimiento de la prueba previa si ya
+ * pasó, o ahora: así nunca queda un estado degradado sin degraded_at.
+ */
+export function manualDegradedAt(args: {
+  transition: 'enter' | 'leave' | null
+  nextStatus: SubscriptionStatus
+  storedDegradedAt: string | null
+  prev: { status: SubscriptionStatus; trialEndsAt: string | null } | null
+  now: Date
+}): string | null | undefined {
+  const { transition, nextStatus, storedDegradedAt, prev, now } = args
+  if (transition === 'leave') return null
+  if (!isDegraded(nextStatus)) return undefined
+  if (storedDegradedAt && transition !== 'enter') return undefined
+  const pastTrialEnd = prev?.status === 'trial' && prev.trialEndsAt
+    && new Date(prev.trialEndsAt).getTime() < now.getTime()
+  return pastTrialEnd ? prev!.trialEndsAt! : now.toISOString()
+}

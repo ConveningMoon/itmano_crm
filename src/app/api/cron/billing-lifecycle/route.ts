@@ -63,6 +63,8 @@ async function runBillingLifecycle(request: NextRequest) {
   const report = {
     trialsExpired:          0,
     trialNoticesSent:       0,
+    trialExpiryFailed:      0,
+    trialNoticeFailed:      0,
     propertiesUnpublished:  0,
     overCapMarked:          0,
     overCapCleared:         0,
@@ -92,13 +94,19 @@ async function runBillingLifecycle(request: NextRequest) {
   // de fin de prueba (3 dias antes y el dia del vencimiento).
   const startedAt = new Date()
   try {
-    report.trialsExpired += (await runTrialExpiryStep(supabase, startedAt, logError)).expired
+    const r = await runTrialExpiryStep(supabase, startedAt, logError)
+    report.trialsExpired += r.expired
+    report.trialExpiryFailed += r.failed
+    if (r.failed > 0) report.steps.trialExpiry = 'failed'
   } catch (err) {
     logError('trial-expiry', null, err)
     report.steps.trialExpiry = 'failed'
   }
   try {
-    report.trialNoticesSent += (await runTrialNoticeStep(supabase, startedAt, logError)).sent
+    const r = await runTrialNoticeStep(supabase, startedAt, logError)
+    report.trialNoticesSent += r.sent
+    report.trialNoticeFailed += r.failed
+    if (r.failed > 0) report.steps.trialNotice = 'failed'
   } catch (err) {
     logError('trial-notice', null, err)
     report.steps.trialNotice = 'failed'

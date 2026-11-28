@@ -21,14 +21,29 @@ describe.skipIf(!URL || !KEY)('fase 6: subscriptions admite expired y over_cap_s
     // Postgres evalúa los CHECK antes que las FK (éstas son triggers diferidos al
     // final de la sentencia). Con un tenant_id inexistente: 23503 (FK) significa
     // que el CHECK pasó; 23514 significa que el CHECK lo rechazó. No queda fila.
-    const insertar = (status: string) => client().from('subscriptions')
-      .insert({ tenant_id: '__fase06_inexistente__', status })
+    const insertar = (status: string, trialEndsAt: string | null = null) => client().from('subscriptions')
+      .insert({ tenant_id: '__fase06_inexistente__', status, trial_ends_at: trialEndsAt })
 
-    const expired = await insertar('expired')
+    const expired = await insertar('expired', '2026-12-01T00:00:00Z')
     expect(expired.error?.code, expired.error?.message).toBe('23503')
 
     const invalido = await insertar('__no_existe__')
     expect(invalido.error?.code, invalido.error?.message).toBe('23514')
+  })
+
+  it('trial_ends_at es coherente con el estado (migración 20261128160000)', async () => {
+    const insertar = (status: string, trialEndsAt: string | null) => client().from('subscriptions')
+      .insert({ tenant_id: '__fase06_inexistente__', status, trial_ends_at: trialEndsAt })
+
+    // expired exige vencimiento; un estado normal no puede tenerlo.
+    const sinFecha = await insertar('expired', null)
+    expect(sinFecha.error?.code, sinFecha.error?.message).toBe('23514')
+
+    const activaConFecha = await insertar('active', '2026-12-01T00:00:00Z')
+    expect(activaConFecha.error?.code, activaConFecha.error?.message).toBe('23514')
+
+    const activa = await insertar('active', null)
+    expect(activa.error?.code, activa.error?.message).toBe('23503')
   })
 
   it('over_cap_since existe y es nullable (timestamptz)', async () => {
