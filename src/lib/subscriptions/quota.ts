@@ -131,3 +131,23 @@ export async function assertEmailQuota(
       : message,
   }
 }
+
+/**
+ * Reanuda ahora los runs que la cuota mensual dejó dormidos hasta el mes
+ * siguiente. Se llama cuando el tope sube (cambio de plan, reactivación). El
+ * marcador es exacto: sólo `next_send_at = nextMonthStartUtc(now)`, lo que
+ * escribe la pausa, así que no toca runs con un horario propio. Si el tope
+ * sigue sin alcanzar, el siguiente tick los vuelve a pausar. Lanza ante error.
+ */
+export async function resumeQuotaPausedRuns(tenantId: string, now: Date = new Date()): Promise<number> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('lead_sequence_runs')
+    .update({ next_send_at: now.toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('status', 'active')
+    .eq('next_send_at', nextMonthStartUtc(now))
+    .select('id')
+  if (error) throw new Error(error.message)
+  return data?.length ?? 0
+}

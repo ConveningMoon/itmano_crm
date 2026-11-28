@@ -15,6 +15,7 @@ import type { SubscriptionPlan } from '@/lib/subscriptions'
 import { resendForAccount, resolveResendAccount, resendAccountConfigured } from '@/lib/resend'
 import { cleanDisplayName, normalizeLocalPart, ownSendingDomain } from '@/lib/email/sender-address'
 import { DEFAULT_TENANT_PRIMARY_COLOR } from '@/lib/tenants/defaults'
+import { resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
 
 // All actions here are super_admin-only (ITMANO internal onboarding), gated the
 // same way as the scoring actions (scoring-actions.ts). The admin client (service_role) is the correct
@@ -490,6 +491,19 @@ export async function updateTenantSubscription(
       console.error(JSON.stringify({
         service: 'admin-plan-budget', tenant_id: parsed.data.tenantId,
         from: planAnterior, to: parsed.data.plan, error: budgetError.message,
+      }))
+    }
+  }
+
+  // El tope de correos cambia con el plan: reanuda ya las secuencias dormidas
+  // por cuota. Best-effort, con log.
+  if (parsed.data.plan !== planAnterior) {
+    try {
+      await resumeQuotaPausedRuns(parsed.data.tenantId)
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'admin-quota-resume', tenant_id: parsed.data.tenantId,
+        error: err instanceof Error ? err.message : String(err),
       }))
     }
   }

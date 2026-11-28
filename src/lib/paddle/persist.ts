@@ -4,6 +4,7 @@ import { reduceSubscriptionEvent, type PaddleSubscriptionEvent, type Subscriptio
 import type { SubscriptionStatus, SubscriptionPlan } from '@/lib/subscriptions'
 import { planAiBudgetUsd } from '@/lib/services/ai-budget'
 import { restoreAfterReactivation } from '@/lib/subscriptions/reactivate'
+import { resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
 import { planPublishCap } from '@/lib/subscriptions/over-cap'
 import { notifyDegradation } from '@/lib/subscriptions/notify-degradation'
 
@@ -144,6 +145,22 @@ export async function applySubscriptionEvent(
       // propiedades aún despublicadas — no hay retry automático para esto.
       console.error(JSON.stringify({
         service: 'paddle-reactivation', tenant_id: tenantId, event_id: event.eventId,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+    }
+  }
+
+  // Cambio de plan o reactivación: el tope de correos sube (o cambia), así que
+  // las secuencias dormidas por cuota se reanudan ya en vez de esperar al mes
+  // siguiente. Best-effort con log, igual que los pasos de arriba.
+  const planChanged = !!patch.plan && patch.plan !== planAnterior
+  const reactivated = !!snapshot.degradedAt && patch.degraded_at === null
+  if (planChanged || reactivated) {
+    try {
+      await resumeQuotaPausedRuns(tenantId)
+    } catch (err) {
+      console.error(JSON.stringify({
+        service: 'paddle-quota-resume', tenant_id: tenantId, event_id: event.eventId,
         error: err instanceof Error ? err.message : String(err),
       }))
     }

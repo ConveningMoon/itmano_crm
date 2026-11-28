@@ -11,13 +11,24 @@ const sendSequenceEmail = vi.fn()
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
 vi.mock('@/lib/data/subscriptions', () => ({ getSubscription: (...a: unknown[]) => getSubscription(...a) }))
 // El conteo real de quota.ts (email_sends) sale de este cliente falso.
+const runUpdates: { patch: unknown; filters: [string, unknown][] }[] = []
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => ({
-    from: () => {
+    from: (table: string) => {
       const q: Record<string, unknown> = {}
+      const filters: [string, unknown][] = []
+      let patch: unknown = null
       q.select = () => q
-      q.eq = () => q
+      q.update = (p: unknown) => { patch = p; return q }
+      q.eq = (c: string, v: unknown) => { filters.push([c, v]); return q }
       q.gte = () => q
+      if (table === 'lead_sequence_runs') {
+        q.then = (res: (v: unknown) => unknown) => {
+          runUpdates.push({ patch, filters })
+          return res({ data: [{ id: 'a' }, { id: 'b' }], error: null })
+        }
+        return q
+      }
       q.then = async (res: (v: unknown) => unknown) => res({ count: await countSends() })
       return q
     },
@@ -30,7 +41,7 @@ vi.mock('@/lib/subscriptions/access-server', () => ({
   getTenantAccessFor: async () => ({ sequencesRunnable: true, customDomainAllowed: true, monthlyEmailQuota: null }),
 }))
 
-import { nextMonthStartUtc, assertEmailQuota, monthlyEmailAllowance } from '@/lib/subscriptions/quota'
+import { nextMonthStartUtc, assertEmailQuota, monthlyEmailAllowance, resumeQuotaPausedRuns } from '@/lib/subscriptions/quota'
 import { isRunStale } from '@/lib/subscriptions/access'
 import { processSequenceRun } from '@/lib/services/process-sequence-run'
 
@@ -125,11 +136,11 @@ describe('nextMonthStartUtc', () => {
 
 type Update = { table: string; patch: Record<string, unknown>; filters: [string, unknown][] }
 
-function fakeDb(updates: Update[]) {
+function fakeDb(updates: Update[], nextSendAt = '2026-11-03T10:00:00.000Z') {
   const rows: Record<string, unknown> = {
     lead_sequence_runs: {
       id: 'run1', tenant_id: 't1', lead_id: 'l1', sequence_id: 's1',
-      current_step_order: 1, status: 'active', next_send_at: '2026-11-03T10:00:00.000Z',
+      current_step_order: 1, status: 'active', next_send_at: nextSendAt,
     },
     leads: {
       id: 'l1', first_name: 'Ana', email: 'ana@example.com', agent_id: 'a1', email_blocked: false,
@@ -196,5 +207,31 @@ describe('processSequenceRun con el tope mensual', () => {
     const res = await processSequenceRun({ db: fakeDb([]) as never, runId: 'run1' })
     expect(sendSequenceEmail).toHaveBeenCalledTimes(1)
     expect(res.action).toBe('sent')
+  })
+})
+
+describe('resumeQuotaPausedRuns', () => {
+  it('sólo toca el marcador exacto del mes siguiente, del tenant, activos', async () => {
+    runUpdates.length = 0
+    const now = new Date('2026-11-10T12:00:00.000Z')
+    const n = await resumeQuotaPausedRuns('t9', now)
+    expect(n).toBe(2)
+    expect(runUpdates[0].patch).toEqual({ next_send_at: now.toISOString() })
+    expect(runUpdates[0].filters).toEqual([
+      ['tenant_id', 't9'], ['status', 'active'], ['next_send_at', '2026-12-01T00:00:00.000Z'],
+    ])
+  })
+})
+
+describe('processSequenceRun: run stale y cuota', () => {
+  it('un run stale se completa y no se reprograma aunque el tope esté lleno', async () => {
+    countSends.mockResolvedValue(3000)
+    const updates: Update[] = []
+    const db = fakeDb(updates, '2026-01-01T00:00:00.000Z')
+    const res = await processSequenceRun({ db: db as never, runId: 'run1' })
+    expect(res.reason).toBe('stale_run')
+    expect(updates.some(u => 'next_send_at' in u.patch)).toBe(false)
+    expect(updates.find(u => u.patch.status === 'completed')).toBeTruthy()
+    expect(sendSequenceEmail).not.toHaveBeenCalled()
   })
 })

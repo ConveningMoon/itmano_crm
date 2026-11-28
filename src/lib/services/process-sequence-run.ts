@@ -162,9 +162,9 @@ export async function processSequenceRun(params: {
   const diag = { leadEmail: pending.lead_email, sequenceName: seqName ?? sequenceId, stepOrder }
 
   // ── Guard: suscripción degradada — secuencias automáticas en pausa ────────
-  // El run NO cambia de estado en la base: se re-evalúa en el siguiente tick
-  // del cron, y al reactivar la suscripción se reanuda solo, sin barrido ni
-  // columna nueva. `access` ya viene resuelto del Promise.all de arriba.
+  // Esta pausa NO toca el run: se re-evalúa en el siguiente tick del cron y al
+  // reactivar la suscripción se reanuda solo. `access` ya viene resuelto del
+  // Promise.all de arriba.
   if (!access.sequencesRunnable) {
     return {
       action:  'paused',
@@ -178,17 +178,26 @@ export async function processSequenceRun(params: {
   // Las automatizaciones paran al 100 % del tope. Conteo FRESCO por run (no el
   // cache() de getTenantUsage): el orquestador procesa hasta 100 runs en un
   // request y un uso congelado dejaría pasar un lote entero sobre el tope.
-  // El run se reprograma al primer instante del mes siguiente (sigue 'active',
-  // y a menos de 30 días de vencer no es stale); el cron lo retoma solo, y si
-  // el cliente sube de plan antes, el siguiente reintento manual lo libera.
-  const { automatedEmail } = await getFreshEmailEntitlements(tenantId)
-  if (!automatedEmail.allowed) {
+  // El run se reprograma al primer instante del mes siguiente (sigue 'active'
+  // y, al vencer, no es stale). Si el cliente sube de plan o reactiva antes,
+  // resumeQuotaPausedRuns lo adelanta a "ahora" (marcador: ese mismo instante).
+  // Un run ya stale NO se reprograma: sigue hasta el guard de stale, que lo
+  // completa; si no, la pausa lo resucitaría.
+  const staleRun = !!pending.next_send_at && isRunStale(pending.next_send_at, new Date())
+  const automatedAllowed = staleRun || (await getFreshEmailEntitlements(tenantId)).automatedEmail.allowed
+  if (!automatedAllowed) {
     if (!dryRun) {
-      await db
+      const { error: rescheduleError } = await db
         .from('lead_sequence_runs')
         .update({ next_send_at: nextMonthStartUtc(new Date()) })
         .eq('id', runId)
         .eq('tenant_id', tenantId)
+      if (rescheduleError) {
+        console.error(JSON.stringify({
+          service: 'process-sequence-run', run_id: runId, tenant_id: tenantId,
+          error: 'monthly_quota_reschedule_failed', detail: rescheduleError.message,
+        }))
+      }
     }
     return {
       action:  'paused',

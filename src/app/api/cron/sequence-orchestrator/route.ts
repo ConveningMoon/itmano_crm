@@ -145,7 +145,7 @@ async function runOrchestrator(request: NextRequest) {
     const p = proc as any
     try {
       if (!dryRun) {
-        await sendPurchaseEmail(db, p.id as string, 'pre_close', p.closing_date as string)
+        await sendPurchaseEmail(db, p.id as string, 'pre_close', p.closing_date as string, 'automated')
         preCloseSent++
       } else {
         console.log(JSON.stringify({ service: 'sequence-orchestrator', stage: 'pre_close', dry_run: true, process_id: p.id }))
